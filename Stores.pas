@@ -9,6 +9,9 @@ USES
   SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib, DlgMes,
   Core, GameExt, Heroes, Erm;
 
+const
+  DEBUG_SECTIONS_DIR = 'Games\Debug_Sections';
+
 TYPE
   (* IMPORT *)
   TAssocArray = AssocArrays.TAssocArray;
@@ -96,6 +99,12 @@ BEGIN
     END; // .IF
     
     Section.AppendBuf(DataSize, Data);
+
+    if GameExt.Debug then begin
+      
+      Files.AppendFileContents(StrLib.BufToStr(Data, DataSize),
+                               DEBUG_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
+    end; // .if
   END; // .IF
 END; // .PROCEDURE WriteSavegameSection
 
@@ -282,9 +291,6 @@ BEGIN
 END; // .FUNCTION Hook_SaveGame
 
 FUNCTION Hook_SaveGameWrite (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-const
-  DEBUG_SECTIONS_DIR = 'Games\Debug_Sections';
-
 VAR
 {U} StrBuilder:     StrLib.TStrBuilder;
     NumSections:    INTEGER;
@@ -303,6 +309,11 @@ VAR
 BEGIN
   StrBuilder := NIL;
   // * * * * * //
+  if GameExt.Debug then begin
+    Files.DeleteDir(DEBUG_SECTIONS_DIR);
+    SysUtils.CreateDir(DEBUG_SECTIONS_DIR);
+  end; // .if
+
   WritingStorage.Clear;
   Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_WRITE, []);
   GameExt.FireEvent('$OnEraSaveScripts', GameExt.NO_EVENT_DATA, 0);
@@ -310,11 +321,6 @@ BEGIN
   TotalWritten := 0;
   NumSections  := WritingStorage.ItemCount;
   GzipWrite(SIZEOF(NumSections), @NumSections);
-  
-  if GameExt.Debug then begin
-    Files.DeleteDir(DEBUG_SECTIONS_DIR);
-    SysUtils.CreateDir(DEBUG_SECTIONS_DIR);
-  end; // .if
 
   WITH DataLib.IterateDict(WritingStorage) DO BEGIN
     WHILE IterNext DO BEGIN
@@ -328,7 +334,7 @@ BEGIN
       GzipWrite(LENGTH(BuiltData), POINTER(BuiltData));
 
       if GameExt.Debug then begin
-        Files.WriteFileContents(BuiltData, DEBUG_SECTIONS_DIR + '\' + IterKey);
+        Files.WriteFileContents(BuiltData, DEBUG_SECTIONS_DIR + '\' + IterKey + '.joined.txt');
       end; // .if
     END; // .WHILE
   END; // .WITH 
