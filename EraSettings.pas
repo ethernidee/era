@@ -57,6 +57,7 @@ BEGIN
   
   Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
   
+  GameExt.Debug               := GetOptValue('Debug') = '1';
   SndVid.LoadCDOpt            := GetOptValue('LoadCD') = '1';
   Tweaks.CPUPatchOpt          := GetOptValue('CPUPatch') = '1';
   Tweaks.FixGetHostByNameOpt  := GetOptValue('FixGetHostByName') = '1';

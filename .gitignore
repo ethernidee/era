@@ -1,4 +1,5 @@
 Backups/
 *.dcu
+*.dll
 __history/
 Era.identcache

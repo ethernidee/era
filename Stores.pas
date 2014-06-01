@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  INTERFACE  (***)
 USES
-  SysUtils, Math, Utils, Crypto, AssocArrays, DataLib, StrLib, DlgMes,
+  SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib, DlgMes,
   Core, GameExt, Heroes, Erm;
 
 TYPE
@@ -282,11 +282,13 @@ BEGIN
 END; // .FUNCTION Hook_SaveGame
 
 FUNCTION Hook_SaveGameWrite (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
+const
+  DEBUG_SECTIONS_DIR = 'Games\Debug_Sections';
+
 VAR
 {U} StrBuilder:     StrLib.TStrBuilder;
     NumSections:    INTEGER;
     SectionNameLen: INTEGER;
-    SectionName:    STRING;
     DataLen:        INTEGER;
     BuiltData:      STRING;
     TotalWritten:   INTEGER; // Trying to fix game diff algorithm in online games
@@ -309,6 +311,11 @@ BEGIN
   NumSections  := WritingStorage.ItemCount;
   GzipWrite(SIZEOF(NumSections), @NumSections);
   
+  if GameExt.Debug then begin
+    Files.DeleteDir(DEBUG_SECTIONS_DIR);
+    SysUtils.CreateDir(DEBUG_SECTIONS_DIR);
+  end; // .if
+
   WITH DataLib.IterateDict(WritingStorage) DO BEGIN
     WHILE IterNext DO BEGIN
       SectionNameLen := LENGTH(IterKey);
@@ -319,6 +326,10 @@ BEGIN
       DataLen   := LENGTH(BuiltData);
       GzipWrite(SIZEOF(DataLen), @DataLen);
       GzipWrite(LENGTH(BuiltData), POINTER(BuiltData));
+
+      if GameExt.Debug then begin
+        Files.WriteFileContents(BuiltData, DEBUG_SECTIONS_DIR + '\' + IterKey);
+      end; // .if
     END; // .WHILE
   END; // .WITH 
   

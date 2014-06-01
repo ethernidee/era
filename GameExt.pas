@@ -18,9 +18,9 @@ CONST
   CONST_STR = -1;
   
   NO_EVENT_DATA = NIL;
-  
-  ERA_VERSION_STR = '2.55';
-  ERA_VERSION_INT = 2550;
+
+  ERA_VERSION_STR = '2.55.1';
+  ERA_VERSION_INT = 2551;
 
 
 TYPE
@@ -90,6 +90,7 @@ VAR
 
 {O} MemRedirections:        {O} Lists.TList {OF PMemRedirection};
 
+  Debug: boolean;
   MapFolder: STRING = '';
 
 
