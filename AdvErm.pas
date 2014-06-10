@@ -19,8 +19,8 @@ CONST
   IS_STR    = TRUE;
   OPER_GET  = TRUE;
   
-  SLOTS_SAVE_SECTION  = 'EraSlots';
-  ASSOC_SAVE_SECTION  = 'EraAssoc';
+  SLOTS_SAVE_SECTION  = 'Era.DynArrays_SN_M';
+  ASSOC_SAVE_SECTION  = 'Era.AssocArray_SN_W';
   
   (* TParamModifier *)
   NO_MODIFIER     = 0;

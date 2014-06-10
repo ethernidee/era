@@ -14,7 +14,7 @@ CONST
   MAX_NUM_LODS  = 100;
   DEF_NUM_LODS  = 8;
   
-  LODREDIR_SAVE_SECTION = 'EraRedirs';
+  LODREDIR_SAVE_SECTION = 'Era.ResourceRedirections';
 
 
 TYPE

@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 USES Core, GameExt, Heroes, Stores;
 
 CONST
-  FILE_SECTION_NAME = 'EraPO';
+  FILE_SECTION_NAME = 'Era.PO';
 
 
 TYPE
@@ -115,11 +115,10 @@ BEGIN
   Stores.ReadSavegameSection(Squares2Size, @Squares2[0], FILE_SECTION_NAME);
 END; // .PROCEDURE OnSavegameRead
 
-FUNCTION Hook_ResetErm (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
+PROCEDURE OnBeforeErm (Event: GameExt.PEvent); STDCALL;
 BEGIN
   PatchSquaresRefs;
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ResetErm
+END; // .PROCEDURE OnBeforeErm
 
 PROCEDURE OnAfterWoG (Event: GameExt.PEvent); STDCALL;
 BEGIN
@@ -140,5 +139,5 @@ BEGIN
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
   GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
   GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
-  Core.Hook(@Hook_ResetErm, Core.HOOKTYPE_BRIDGE, 5, Ptr($7525A4));
+  GameExt.RegisterHandler(OnBeforeErm, 'OnBeforeErm');
 END.
