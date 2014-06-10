@@ -190,7 +190,6 @@ FUNCTION Hook_LoadLods (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
 VAR
 {O} Locator:  Files.TFileLocator;
 {O} FileInfo: Files.TFileItemInfo;
-    FileName: STRING;
     i:        INTEGER;
   
 BEGIN
