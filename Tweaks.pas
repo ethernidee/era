@@ -621,7 +621,7 @@ BEGIN
     );
   END; // .IF
   
-  (* Remove duplicate ResetErm call *)
+  (* Remove duplicate ResetAll call *)
   PINTEGER($7055BF)^ :=  INTEGER($90909090);
   PBYTE($7055C3)^    :=  $90;
   
