@@ -11,7 +11,7 @@ uses Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman
 
 procedure FatalError (Err: pchar); stdcall;
 procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
-procedure FireEvent (EventName: pchar; {n} EventData: POINTER; DataSize: integer); stdcall;
+procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer); stdcall;
 procedure ExecErmCmd (CmdStr: pchar); stdcall;
 procedure FireErmEvent (EventID: integer); stdcall;
 procedure ClearIniCache (FileName: pchar);
@@ -19,12 +19,12 @@ function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdc
 function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall;
 function  SaveIni (FilePath: pchar): boolean; stdcall;
 procedure NameColor (Color32: integer; Name: pchar); stdcall;
-procedure WriteSavegameSection (DataSize: integer; {n} Data: POINTER; SectionName: pchar); stdcall;
+procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
 
 function  ReadSavegameSection
 (
       DataSize:     integer;
-  {n} Dest:         POINTER;
+  {n} Dest:         pointer;
       SectionName:  pchar
 ): integer; stdcall;
 
@@ -100,12 +100,12 @@ begin
   result  :=  Ini.SaveIni(FilePath);
 end; // .function SaveIni
 
-procedure WriteSavegameSection (DataSize: integer; {n} Data: POINTER; SectionName: pchar);
+procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar);
 begin
   Stores.WriteSavegameSection(DataSize, Data, SectionName);
 end; // .procedure WriteSavegameSection
 
-function ReadSavegameSection (DataSize: integer; {n} Dest: POINTER; SectionName: pchar): integer;
+function ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar): integer;
 begin
   result  :=  Stores.ReadSavegameSection(DataSize, Dest, SectionName);
 end; // .function ReadSavegameSection
@@ -125,7 +125,7 @@ begin
   GameExt.RegisterHandler(Handler, EventName);
 end; // .procedure RegisterHandler
 
-procedure FireEvent (EventName: pchar; {n} EventData: POINTER; DataSize: integer);
+procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer);
 begin
   GameExt.FireEvent(EventName, EventData, DataSize);
 end; // .procedure FireEvent

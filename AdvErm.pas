@@ -297,7 +297,7 @@ begin
                       PPOINTER(Params[1].Value)^  :=  @Slot.IntItems[Params[2].Value];
                     end // .if
                     else begin
-                      PPOINTER(Params[1].Value)^  :=  POINTER(Slot.StrItems[Params[2].Value]);
+                      PPOINTER(Params[1].Value)^  :=  pointer(Slot.StrItems[Params[2].Value]);
                     end; // .else
                   end; // .if
                 end // .if
@@ -421,7 +421,7 @@ begin
               result  :=  (not Params[0].OperGet) and (not Params[1].IsStr) and (Params[1].OperGet);
               
               if result then begin
-                PINTEGER(Params[1].Value)^  :=  SysUtils.StrLen(POINTER(Params[0].Value));
+                PINTEGER(Params[1].Value)^  :=  SysUtils.StrLen(pointer(Params[0].Value));
               end; // .if
             end; // .case 2
           // C(str)/(ind)/[?](strchar)
@@ -452,7 +452,7 @@ begin
                 (Params[0].Value >= 0);
               
               if result and (Params[0].Value > 0) then begin
-                Utils.CopyMem(Params[0].Value, POINTER(Params[1].Value), POINTER(Params[2].Value));
+                Utils.CopyMem(Params[0].Value, pointer(Params[1].Value), pointer(Params[2].Value));
               end; // .if
             end; // .case 4
         else
@@ -508,8 +508,8 @@ begin
                       Utils.CopyMem
                       (
                         Length(AssocVarValue.StrValue) + 1,
-                        POINTER(AssocVarValue.StrValue),
-                        POINTER(Params[1].Value)
+                        pointer(AssocVarValue.StrValue),
+                        pointer(Params[1].Value)
                       );
                     end; // .else
                   end // .if
@@ -570,7 +570,7 @@ begin
   end; // .SWITCH Cmd
   
   if not result then begin
-    Utils.CopyMem(Length(Error) + 1, POINTER(Error), @ErrBuf);
+    Utils.CopyMem(Length(Error) + 1, pointer(Error), @ErrBuf);
     Err := @ErrBuf;
   end; // .if
 end; // .function ExtendedEraService
@@ -599,7 +599,7 @@ begin
   
   Slots.BeginIterate;
   
-  while Slots.IterateNext(POINTER(SlotN), POINTER(Slot)) do begin
+  while Slots.IterateNext(pointer(SlotN), pointer(Slot)) do begin
     Stores.WriteSavegameSection(sizeof(SlotN), @SlotN, SLOTS_SAVE_SECTION);
     Stores.WriteSavegameSection(sizeof(Slot.ItemsType), @Slot.ItemsType, SLOTS_SAVE_SECTION);
     Stores.WriteSavegameSection(sizeof(Slot.IsTemp), @Slot.IsTemp, SLOTS_SAVE_SECTION);
@@ -621,7 +621,7 @@ begin
           Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
           
           if StrLen > 0 then begin
-            Stores.WriteSavegameSection(StrLen, POINTER(Slot.StrItems[i]), SLOTS_SAVE_SECTION);
+            Stores.WriteSavegameSection(StrLen, pointer(Slot.StrItems[i]), SLOTS_SAVE_SECTION);
           end; // .if
         end; // .for
       end; // .else
@@ -649,10 +649,10 @@ begin
   
   AssocMem.BeginIterate;
   
-  while AssocMem.IterateNext(AssocVarName, POINTER(AssocVarValue)) do begin
+  while AssocMem.IterateNext(AssocVarName, pointer(AssocVarValue)) do begin
     StrLen  :=  Length(AssocVarName);
     Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
-    Stores.WriteSavegameSection(StrLen, POINTER(AssocVarName), ASSOC_SAVE_SECTION);
+    Stores.WriteSavegameSection(StrLen, pointer(AssocVarName), ASSOC_SAVE_SECTION);
     
     Stores.WriteSavegameSection
     (
@@ -663,7 +663,7 @@ begin
     
     StrLen  :=  Length(AssocVarValue.StrValue);
     Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
-    Stores.WriteSavegameSection(StrLen, POINTER(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
+    Stores.WriteSavegameSection(StrLen, pointer(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
     
     AssocVarValue :=  nil;
   end; // .while
@@ -720,7 +720,7 @@ begin
         for y:=0 to NumItems - 1 do begin
           Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
           SetLength(Slot.StrItems[y], StrLen);
-          Stores.ReadSavegameSection(StrLen, POINTER(Slot.StrItems[y]), SLOTS_SAVE_SECTION);
+          Stores.ReadSavegameSection(StrLen, pointer(Slot.StrItems[y]), SLOTS_SAVE_SECTION);
         end; // .for
       end; // .else
     end; // .if
@@ -747,7 +747,7 @@ begin
     
     Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
     SetLength(AssocVarName, StrLen);
-    Stores.ReadSavegameSection(StrLen, POINTER(AssocVarName), ASSOC_SAVE_SECTION);
+    Stores.ReadSavegameSection(StrLen, pointer(AssocVarName), ASSOC_SAVE_SECTION);
     
     Stores.ReadSavegameSection
     (
@@ -758,7 +758,7 @@ begin
     
     Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
     SetLength(AssocVarValue.StrValue, StrLen);
-    Stores.ReadSavegameSection(StrLen, POINTER(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
+    Stores.ReadSavegameSection(StrLen, pointer(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
     
     if (AssocVarValue.IntValue <> 0) or (AssocVarValue.StrValue <> '') then begin
       AssocMem[AssocVarName]  :=  AssocVarValue; AssocVarValue  :=  nil;
@@ -852,7 +852,7 @@ var
     );
   end; // .function ErmStrToWinStr
   
-  procedure DumpVars (const Caption, VarPrefix: string; VarType: TVarType; VarsPtr: POINTER;
+  procedure DumpVars (const Caption, VarPrefix: string; VarType: TVarType; VarsPtr: pointer;
                       NumVars, StartInd: integer);
   var
     IntArr:        PEndlessIntArr;

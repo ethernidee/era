@@ -182,7 +182,7 @@ type
     Disabled:     boolean;
     PrevDisabled: boolean;
     Conditions:   TErmCmdConditions;
-    Structure:    POINTER;
+    Structure:    pointer;
     Params:       TErmCmdParams;
     NumParams:    integer;
     CmdHeader:    TErmString; // ##:...
@@ -392,7 +392,7 @@ procedure FireErmEventEx (EventId: integer; Params: array of integer);
 function  IsEraTrigger (TrigId: integer): boolean;
 function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 function  GrabErmCmd ({n} CmdPtr: pchar): string;
-function  ErmCurrHero: {n} POINTER;
+function  ErmCurrHero: {n} pointer;
 function  ErmCurrHeroInd: integer; // or -1
 
 
@@ -658,7 +658,7 @@ begin
     if Res then begin
       // Allocate memory, because ERM engine changes command contents during execution
       GetMem(Cmd.CmdHeader.Value, Length(CmdStr) + 1);
-      Utils.CopyMem(Length(CmdStr) + 1, POINTER(CmdStr), Cmd.CmdHeader.Value);
+      Utils.CopyMem(Length(CmdStr) + 1, pointer(CmdStr), Cmd.CmdHeader.Value);
       
       Cmd.CmdBody.Value := Utils.PtrOfs(Cmd.CmdHeader.Value, ErmScanner.Pos - 1);
       Cmd.CmdId.Name[0] := CmdName[1];
@@ -751,7 +751,7 @@ begin
     result := nil;
   end // .if
   else begin
-    result := POINTER(fContents);
+    result := pointer(fContents);
   end; // .else
 end; // .function TErmScript.StartAddr
 
@@ -761,7 +761,7 @@ begin
     result := nil;
   end // .if
   else begin
-    result := Utils.PtrOfs(POINTER(fContents), Length(fContents) - 1);
+    result := Utils.PtrOfs(pointer(fContents), Length(fContents) - 1);
   end; // .else
 end; // .function TErmScript.EndAddr
 
@@ -820,7 +820,7 @@ end; // .function TSortStrListByPriority.CompareItems
 procedure TSortStrListByPriority.SwapItems (Ind1, Ind2: integer);
 var
   TransferKey:   string;
-  TransferValue: POINTER;
+  TransferValue: pointer;
    
 begin
   // Transfer   := List[Ind1]
@@ -1182,7 +1182,7 @@ begin
     ScriptMan.LoadScriptsFromDisk;
     ZvsIsGameLoading^ := TRUE;
     ZvsFindErm;
-    Utils.CopyMem(Length(SUCCESS_MES) + 1, POINTER(SUCCESS_MES), @z[1]);
+    Utils.CopyMem(Length(SUCCESS_MES) + 1, pointer(SUCCESS_MES), @z[1]);
     ExecErmCmd('if:Lz1;');
   end; // .if
 end; // .procedure TScriptMan.ReloadScriptsFromDisk
@@ -1377,7 +1377,7 @@ begin
   end; // .if
 end; // .function GrabErmCmd
 
-function ErmCurrHero: {n} POINTER;
+function ErmCurrHero: {n} pointer;
 begin
   result := PPOINTER($27F9970)^;
 end; // .function ErmCurrHero
@@ -1617,7 +1617,7 @@ const
   HERO_PTR_OFFSET     = -$380;
   
 var
-  Hero: POINTER;
+  Hero: pointer;
 
 begin
   Hero := PPOINTER(Context.EBP + HERO_PTR_OFFSET)^;

@@ -37,7 +37,7 @@ begin
   end; // .else
 end; // .procedure AddLinesToText
 
-function ExtendText (const TextName: string; var TxtSize: integer): POINTER;
+function ExtendText (const TextName: string; var TxtSize: integer): pointer;
 var
 {U} AddText:  TString;
 
@@ -48,7 +48,7 @@ begin
   if AddText <> nil then begin
     TxtSize :=  TxtSize + Length(AddText.Value);
     result  :=  Heroes.MAlloc(TxtSize);
-    Utils.CopyMem(Length(AddText.Value), POINTER(AddText.Value), Utils.PtrOfs(result, TxtSize));
+    Utils.CopyMem(Length(AddText.Value), pointer(AddText.Value), Utils.PtrOfs(result, TxtSize));
   end // .if
   else begin
     result  :=  Heroes.MAlloc(TxtSize);

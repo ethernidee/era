@@ -45,8 +45,8 @@ type
   end; // .class TTracker
   
   TAddrRange = record
-    StartAddr: POINTER;
-    EndAddr:   POINTER;
+    StartAddr: pointer;
+    EndAddr:   pointer;
   end; // .record TAddrRange
   
   TScriptsLineKeeper = class

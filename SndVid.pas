@@ -44,7 +44,7 @@ type
   TResourceBuf  = packed record
     IsLoaded: boolean;
     _0:       array [0..2] of byte;
-    Addr:     POINTER;
+    Addr:     pointer;
   end; // .record TResourceBuf
 
 
@@ -139,7 +139,7 @@ begin
       BufSize :=  NumItems * ItemSize;
       SetLength(BufStr, BufSize);
       {!} Assert(WinWrappers.FileRead(hFile, BufStr[1], BufSize));
-      CurrItem  :=  POINTER(BufStr);
+      CurrItem  :=  pointer(BufStr);
       
       for i:=0 to NumItems - 1 do begin
         ItemName  :=  pchar(@CurrItem.Name);
@@ -399,8 +399,8 @@ begin
   end; // .if
   
   if (ItemInfo <> nil) and (ItemInfo.Size > 0) then begin
-    ResourceBuf :=  POINTER(Context.EDX);
-    FileSizePtr :=  POINTER(Core.APIArg(Context, ARG_FILESIZE_PTR).v);
+    ResourceBuf :=  pointer(Context.EDX);
+    FileSizePtr :=  pointer(Core.APIArg(Context, ARG_FILESIZE_PTR).v);
   
     if ResourceBuf.IsLoaded then begin
       Heroes.MFree(ResourceBuf.Addr);

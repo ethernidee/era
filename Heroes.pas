@@ -119,7 +119,7 @@ type
   TValue  = packed record
     case byte of
       0:  (v:   integer);
-      1:  (p:   POINTER);
+      1:  (p:   pointer);
       2:  (pc:  pchar);
   end; // .record TValue
 
@@ -167,14 +167,14 @@ type
     (* Dummy *)
   end; // .record TWndManager
 
-  TMAlloc = function (Size: integer): POINTER; cdecl;
-  TMFree  = procedure (Addr: POINTER); cdecl;
+  TMAlloc = function (Size: integer): pointer; cdecl;
+  TMFree  = procedure (Addr: pointer); cdecl;
   
-  TGzipWrite  = procedure (Data: POINTER; DataSize: integer); cdecl;
-  TGzipRead   = function (Dest: POINTER; DataSize: integer): integer; cdecl;
+  TGzipWrite  = procedure (Data: pointer; DataSize: integer); cdecl;
+  TGzipRead   = function (Dest: pointer; DataSize: integer): integer; cdecl;
   TWndProc    = function (hWnd, Msg, wParam, lParam: integer): LONGBOOL; stdcall;
   
-  TGetBattleCellByPos = function (Pos: integer): POINTER; cdecl;
+  TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
 
 
 const
@@ -191,8 +191,8 @@ const
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
 
 
-procedure GZipWrite (Count: integer; {n} Addr: POINTER);
-function  GzipRead (Count: integer; {n} Addr: POINTER): integer;
+procedure GZipWrite (Count: integer; {n} Addr: pointer);
+function  GzipRead (Count: integer; {n} Addr: pointer): integer;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
 procedure ForceTxtUnload (Name: pchar); stdcall;
 procedure LoadLod (const LodName: string; Res: PLod);
@@ -207,14 +207,14 @@ function  GetMapFileName: string;
 function  GetCampaignFileName: string;
 function  GetCampaignMapInd: integer;
 {Low level}
-function  GetVal (BaseAddr: POINTER; Offset: integer): PValue; overload;
+function  GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
 function  GetVal (BaseAddr, Offset: integer): PValue; overload;
 
 
 (***) implementation (***)
 
 
-function GetVal (BaseAddr: POINTER; Offset: integer): PValue; overload;
+function GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
 begin
   result  :=  Utils.PtrOfs(BaseAddr, Offset);
 end; // .function GetVal
@@ -224,13 +224,13 @@ begin
   result  :=  Utils.PtrOfs(Ptr(BaseAddr), Offset);
 end; // .function GetVal
 
-procedure GZipWrite (Count: integer; {n} Addr: POINTER);
+procedure GZipWrite (Count: integer; {n} Addr: pointer);
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Count));
   ZvsGzipWrite(Addr, Count);
 end; // .procedure GZipWrite
 
-function GzipRead (Count: integer; {n} Addr: POINTER): integer;
+function GzipRead (Count: integer; {n} Addr: pointer): integer;
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Count));
   result := ZvsGzipRead(Addr, Count) + Count;

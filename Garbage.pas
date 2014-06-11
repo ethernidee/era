@@ -175,10 +175,10 @@ begin
       
       if Priority < 0 then begin
         FirstScriptSize  :=  FirstScriptSize + Length(ScriptContents[i]) - Length(SCRIPT_POSTFIX);
-        FirstScriptBuilder.AppendBuf(POINTER(ScriptContents), ScriptEndMarkerPos - 1);
+        FirstScriptBuilder.AppendBuf(pointer(ScriptContents), ScriptEndMarkerPos - 1);
       end // .if
       else begin
-        LastScriptBuilder.AppendBuf(POINTER(ScriptContents), ScriptEndMarkerPos - 1);
+        LastScriptBuilder.AppendBuf(pointer(ScriptContents), ScriptEndMarkerPos - 1);
       end; // .else
     end; // .else
   end; // .for

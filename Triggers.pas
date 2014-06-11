@@ -475,7 +475,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_LeaveChat
 
-procedure Hook_MainGameLoop (h: PatchApi.THiHook; This: POINTER); stdcall;
+procedure Hook_MainGameLoop (h: PatchApi.THiHook; This: pointer); stdcall;
 begin
   if MainGameLoopDepth = 0 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);

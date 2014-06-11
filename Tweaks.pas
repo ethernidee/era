@@ -86,7 +86,7 @@ begin
   end; // .if
   
   if Value <> '' then begin
-    Utils.CopyMem(Length(Value) + 1, POINTER(Value), Res);
+    Utils.CopyMem(Length(Value) + 1, pointer(Value), Res);
   end // .if
   else begin
     Res^  :=  #0;
@@ -156,7 +156,7 @@ begin
   
   Locator.FinitSearch;
   
-  Utils.CopyMem(Length(FreshestFileName) + 1, POINTER(FreshestFileName), Heroes.MarkedSavegame);
+  Utils.CopyMem(Length(FreshestFileName) + 1, pointer(FreshestFileName), Heroes.MarkedSavegame);
   // * * * * * //
   SysUtils.FreeAndNil(Locator);
 end; // .procedure MarkFreshestSavegame
@@ -310,7 +310,7 @@ begin
       RandomValue   :=  RandomValue shr 4;
     end; // .for
     
-    Utils.CopyMem(Length(RandomStr) + 1, POINTER(RandomStr), Heroes.UNIQUE_SYSTEM_ID_OPT);
+    Utils.CopyMem(Length(RandomStr) + 1, pointer(RandomStr), Heroes.UNIQUE_SYSTEM_ID_OPT);
     
     Ini.WriteStrToIni
     (
@@ -437,7 +437,7 @@ begin
   HostEnt := result;
   
   if HostEnt.h_length = sizeof(integer) then begin
-    Addrs := POINTER(HostEnt.h_addr_list);
+    Addrs := pointer(HostEnt.h_addr_list);
     
     if (Addrs[0] <> nil) and IsLocalAddr(Addrs[0]^) then begin
       i := 1;
@@ -566,7 +566,7 @@ begin
   ZvsLibGamePath  :=  SysUtils.ExtractFileDir(ParamStr(0));
   {!} Assert(Length(ZvsLibGamePath) > 0);
   // Increase string ref count for C++ Builder AnsiString
-  Inc(PINTEGER(Utils.PtrOfs(POINTER(ZvsLibGamePath), -8))^);
+  Inc(PINTEGER(Utils.PtrOfs(pointer(ZvsLibGamePath), -8))^);
   
   PPCHAR(Context.EBP - EBP_LOCAL_GAME_PATH)^ :=  pchar(ZvsLibGamePath);
   Context.RetAddr :=  Utils.PtrOfs(Context.RetAddr, 486);
@@ -583,7 +583,7 @@ const
 var
   Zvslib1Handle:  integer;
   Addr:           integer;
-  NewAddr:        POINTER;
+  NewAddr:        pointer;
 
 begin
   (* Ini handling *)
@@ -605,7 +605,7 @@ begin
   
   (* Fix HotSeat second hero name *)
   Core.Hook(@Hook_SetHotseatHeroName, Core.HOOKTYPE_BRIDGE, 6, Ptr($5125B0));
-  Core.WriteAtCode(Length(NOP7), POINTER(NOP7), Ptr($5125F9));
+  Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
   
   (* Universal CPU patch *)
   if CPUPatchOpt then begin
@@ -630,7 +630,7 @@ begin
   Addr            :=  Zvslib1Handle + 1666469;
   Addr            :=  PINTEGER(Addr + PINTEGER(Addr)^ + 6)^;
   NewAddr         :=  @New_Zvslib_GetPrivateProfileStringA;
-  Core.WriteAtCode(sizeof(NewAddr), @NewAddr, POINTER(Addr));
+  Core.WriteAtCode(sizeof(NewAddr), @NewAddr, pointer(Addr));
   
   (* Redirect reading/writing game settings to ini *)
   // No saving settings after reading them

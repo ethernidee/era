@@ -32,8 +32,8 @@ const
   ZvsErmTriggerBeforeSave:  Utils.TProcedure  = Ptr($750093);
 
 
-procedure WriteSavegameSection (DataSize: integer; {n} Data: POINTER; const SectionName: string);
-function  ReadSavegameSection  (DataSize: integer; {n} Dest: POINTER; const SectionName: string)
+procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; const SectionName: string);
+function  ReadSavegameSection  (DataSize: integer; {n} Dest: pointer; const SectionName: string)
                                :integer;
 function  NewRider (const SectionName: string): IRider;
 
@@ -83,7 +83,7 @@ var
     ZeroBuf:        string;
 
 
-procedure WriteSavegameSection (DataSize: integer; {n} Data: POINTER; const SectionName: string);
+procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; const SectionName: string);
 var
 {U} Section: StrLib.TStrBuilder;
   
@@ -109,7 +109,7 @@ begin
   end; // .if
 end; // .procedure WriteSavegameSection
 
-function ReadSavegameSection (DataSize: integer; {n} Dest: POINTER; const SectionName: string)
+function ReadSavegameSection (DataSize: integer; {n} Dest: pointer; const SectionName: string)
                               : integer; 
 var
 {U} Section: TStoredData;
@@ -125,7 +125,7 @@ begin
     
     if Section <> nil then begin
       result := Math.Min(DataSize, Length(Section.Data) - Section.ReadingPos);
-      Utils.CopyMem(result, POINTER(@Section.Data[1 + Section.ReadingPos]), Dest);
+      Utils.CopyMem(result, pointer(@Section.Data[1 + Section.ReadingPos]), Dest);
       Inc(Section.ReadingPos, result);
     end; // .if
   end; // .if
@@ -179,7 +179,7 @@ begin
   WriteInt(StrLen);
   
   if StrLen > 0 then begin
-    Write(StrLen, POINTER(Str));
+    Write(StrLen, pointer(Str));
   end; // .if
 end; // .procedure TRider.WriteStr
 
@@ -251,7 +251,7 @@ begin
   SetLength(result, StrLen);
   
   if StrLen > 0 then begin
-    NumBytesRead := Read(StrLen, POINTER(result));
+    NumBytesRead := Read(StrLen, pointer(result));
     {!} Assert(NumBytesRead = StrLen);
   end; // .if
 end; // .function TRider.ReadStr
@@ -301,7 +301,7 @@ var
     TotalWritten:   integer; // Trying to fix game diff algorithm in online games
     PaddingSize:    integer;
     
-  procedure GzipWrite (Count: integer; {n} Addr: POINTER);
+  procedure GzipWrite (Count: integer; {n} Addr: pointer);
   begin
     Inc(TotalWritten, Count);
     Heroes.GzipWrite(Count, Addr);
@@ -327,12 +327,12 @@ begin
     while IterNext do begin
       SectionNameLen := Length(IterKey);
       GzipWrite(sizeof(SectionNameLen), @SectionNameLen);
-      GzipWrite(SectionNameLen, POINTER(IterKey));
+      GzipWrite(SectionNameLen, pointer(IterKey));
 
       BuiltData := (IterValue AS StrLib.TStrBuilder).BuildStr;
       DataLen   := Length(BuiltData);
       GzipWrite(sizeof(DataLen), @DataLen);
-      GzipWrite(Length(BuiltData), POINTER(BuiltData));
+      GzipWrite(Length(BuiltData), pointer(BuiltData));
 
       if DumpSavegameSectionsOpt then begin
         Files.WriteFileContents(BuiltData, DUMP_SAVEGAME_SECTIONS_DIR
@@ -357,7 +357,7 @@ begin
         FillChar(ZeroBuf[1], PaddingSize, 0);
       end; // .if
       
-      GzipWrite(PaddingSize, POINTER(ZeroBuf));
+      GzipWrite(PaddingSize, pointer(ZeroBuf));
     end; // .ELSEIF
   end; // .if
   
@@ -383,7 +383,7 @@ var
     SectionData:    string;
     i:              integer;
     
-  procedure ForceGzipRead (Count: integer; {n} Addr: POINTER);
+  procedure ForceGzipRead (Count: integer; {n} Addr: pointer);
   begin
     BytesRead := Heroes.GzipRead(Count, Addr);
     {!} Assert(BytesRead = Count);
@@ -401,12 +401,12 @@ begin
     ForceGzipRead(sizeof(SectionNameLen), @SectionNameLen);
     {!} Assert(SectionNameLen >= 0);
     SetLength(SectionName, SectionNameLen);
-    ForceGzipRead(SectionNameLen, POINTER(SectionName));
+    ForceGzipRead(SectionNameLen, pointer(SectionName));
 
     ForceGzipRead(sizeof(DataLen), @DataLen);
     {!} Assert(DataLen >= 0);
     SetLength(SectionData, DataLen);
-    ForceGzipRead(DataLen, POINTER(SectionData));
+    ForceGzipRead(DataLen, pointer(SectionData));
     
     StoredData                  := TStoredData.Create;
     StoredData.Data             := SectionData; SectionData := '';

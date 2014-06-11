@@ -30,7 +30,7 @@ type
 var
   (* Chinese loader support: {~color}...{~} => {...} *)
   ChineseLoaderOpt: boolean;
-  ChineseHandler:   POINTER;
+  ChineseHandler:   pointer;
 
 
 procedure NameColor (Color32: integer; const Name: string); stdcall;
@@ -240,7 +240,7 @@ begin
   NamedColors[Name] :=  Ptr(Color32To16(Color32));
 end; // .procedure NameColor
 
-function IsChineseLoaderPresent (out ChineseHandler: POINTER): boolean;
+function IsChineseLoaderPresent (out ChineseHandler: pointer): boolean;
 begin
   result  :=  PBYTE($4B5202)^ = $E9;
   
@@ -380,7 +380,7 @@ BEGIN
         else begin
           Color16 :=  0;
           
-          if NamedColors.GetExistingValue(ColorName, POINTER(Color16)) then begin
+          if NamedColors.GetExistingValue(ColorName, pointer(Color16)) then begin
             TextBlocks[TextBlockInd].Color16  :=  Color16;
           end // .if
           else if SysUtils.TryStrToInt('$' + ColorName, Color16) then begin

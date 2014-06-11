@@ -36,7 +36,7 @@ type
 
   PBinPatch = ^TBinPatch;
   TBinPatch = packed record (* FORMAT *)
-    Addr:     POINTER;
+    Addr:     pointer;
     NumBytes: integer;
     (*
     Bytes:    array NumBytes of byte;
@@ -47,7 +47,7 @@ type
   PEvent  = ^TEvent;
   TEvent  = packed record
       Name:     string;
-  {n} Data:     POINTER;
+  {n} Data:     pointer;
       DataSize: integer;
   end; // .record TEvent
 
@@ -58,18 +58,18 @@ type
   
   PMemRedirection = ^TMemRedirection;
   TMemRedirection = record
-    OldAddr:    POINTER;
+    OldAddr:    pointer;
     BlockSize:  integer;
-    NewAddr:    POINTER;
+    NewAddr:    pointer;
   end; // .record TMemRedirection
 
 
 procedure RegisterHandler (Handler: TEventHandler; const EventName: string); stdcall;
-procedure FireEvent (const EventName: string; {n} EventData: POINTER; DataSize: integer); stdcall;
+procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer); stdcall;
 function  PatchExists (const PatchName: string): boolean; stdcall;
 function  PluginExists (const PluginName: string): boolean; stdcall;
-procedure RedirectMemoryBlock (OldAddr: POINTER; BlockSize: integer; NewAddr: POINTER); stdcall;
-function  GetRealAddr (Addr: POINTER): POINTER; stdcall;
+procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall;
+function  GetRealAddr (Addr: pointer): pointer; stdcall;
 function  GetMapFolder: string; stdcall;
 procedure SetMapFolder (const NewMapFolder: string);
 function  GetMapResourcePath (const OrigResourcePath: string): string; stdcall;
@@ -228,7 +228,7 @@ begin
   Handlers.Add(@Handler);
 end; // .procedure RegisterHandler
 
-procedure FireEvent (const EventName: string; {n} EventData: POINTER; DataSize: integer);
+procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer);
 var
 {O} Event:    PEvent;
 {U} Handlers: {U} Lists.TList {OF TEventHandler};
@@ -288,9 +288,9 @@ end; // .function PluginExists
 
 function CompareMemoryBlocks
 (
-  Addr1:  POINTER;
+  Addr1:  pointer;
   Size1:  integer;
-  Addr2:  POINTER;
+  Addr2:  pointer;
   Size2:  integer
 ): integer;
 
@@ -313,7 +313,7 @@ begin
   end; // .else
 end; // .function CompareMemoryBlocks
 
-function FindMemoryRedirection (Addr: POINTER; Size: integer; out {i} BlockInd: integer): boolean;
+function FindMemoryRedirection (Addr: pointer; Size: integer; out {i} BlockInd: integer): boolean;
 var
 {U} Redirection:    PMemRedirection;
     LeftInd:        integer;
@@ -348,7 +348,7 @@ begin
   end; // .if
 end; // .function FindMemoryRedirection
 
-procedure RedirectMemoryBlock (OldAddr: POINTER; BlockSize: integer; NewAddr: POINTER);
+procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer);
 var
 {U} OldRedirection: PMemRedirection;
 {O} NewRedirection: PMemRedirection;
@@ -386,7 +386,7 @@ begin
   FreeMem(NewRedirection);
 end; // .procedure RedirectMemoryBlock
 
-function GetRealAddr (Addr: POINTER): POINTER;
+function GetRealAddr (Addr: pointer): pointer;
 var
 {U} Redirection:  PMemRedirection;
     BlockInd:     integer;

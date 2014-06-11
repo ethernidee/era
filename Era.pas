@@ -125,13 +125,13 @@ type
   PHookHandlerArgs  = ^THookHandlerArgs;
   THookHandlerArgs  = packed record
     EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX: integer;
-    RetAddr:                                POINTER;
+    RetAddr:                                pointer;
   end; // .record THookHandlerArgs
 
   PEvent  = ^TEvent;
   TEvent  = packed record
       Name:     pchar;
-  {n} Data:     POINTER;
+  {n} Data:     pointer;
       DataSize: integer;
   end; // .record TEvent
 
@@ -181,22 +181,22 @@ const
 {$ENDIF}
 
 
-procedure WriteAtCode (Count: integer; Src, Dst: POINTER); stdcall;
+procedure WriteAtCode (Count: integer; Src, Dst: pointer); stdcall;
 
 procedure Hook
 (
-  HandlerAddr:  POINTER;
+  HandlerAddr:  pointer;
   HookType:     integer;
   PatchSize:    integer;
-  CodeAddr:     POINTER
+  CodeAddr:     pointer
 ); stdcall;
 
-procedure ApiHook (HandlerAddr: POINTER; HookType: integer; CodeAddr: POINTER); stdcall;
+procedure ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer); stdcall;
 procedure KillThisProcess;
 procedure FatalError (Err: pchar); stdcall;
 function  RecallAPI (Context: PHookHandlerArgs; NumArgs: integer): integer; stdcall;
 procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
-procedure FireEvent (EventName: pchar; {n} EventData: POINTER; DataSize: integer); stdcall;
+procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer); stdcall;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
 procedure ForceTxtUnload (Name: pchar); stdcall;
 procedure ExecErmCmd (CmdStr: pchar); stdcall;
@@ -209,12 +209,12 @@ function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdc
 function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall;
 function  SaveIni (FilePath: pchar): boolean; stdcall;
 procedure NameColor (Color32: integer; Name: pchar); stdcall;
-procedure WriteSavegameSection (DataSize: integer; {n} Data: POINTER; SectionName: pchar); stdcall;
+procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
 
 function  ReadSavegameSection
 (
       DataSize:     integer;
-  {n} Dest:         POINTER;
+  {n} Dest:         pointer;
       SectionName:  pchar
 ): integer; stdcall;
 
@@ -226,8 +226,8 @@ procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
 procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall;
 procedure SaveEventParams;
 procedure RestoreEventParams;
-procedure RedirectMemoryBlock (OldAddr: POINTER; BlockSize: integer; NewAddr: POINTER); stdcall;
-function  GetRealAddr (Addr: POINTER): POINTER; stdcall;
+procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall;
+function  GetRealAddr (Addr: pointer): pointer; stdcall;
 
 
 var

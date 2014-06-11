@@ -172,7 +172,7 @@ begin
   
   Locator.FinitSearch;
   
-  ExtButtonsTable^  :=  POINTER(ButtonsTable);
+  ExtButtonsTable^  :=  pointer(ButtonsTable);
   ExtNumButtons^    :=  NumButtons;
   // * * * * * //
   SysUtils.FreeAndNil(Locator);
