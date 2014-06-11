@@ -10,7 +10,7 @@ uses
   Core, GameExt, Heroes, Erm;
 
 const
-  DEBUG_SECTIONS_DIR = 'Games\Debug_Sections';
+  DUMP_SAVEGAME_SECTIONS_DIR = GameExt.DEBUG_DIR + '\Savegame_Sections';
 
 type
   (* IMPORT *)
@@ -39,7 +39,8 @@ function  NewRider (const SectionName: string): IRider;
 
 
 var
-  EraSectionsSize: integer = 0; // 0 to turn off padding to fixed size
+  DumpSavegameSectionsOpt: boolean;
+  EraSectionsSize:         integer = 0; // 0 to turn off padding to fixed size
 
 
 (***) implementation (***)
@@ -100,10 +101,10 @@ begin
     
     Section.AppendBuf(DataSize, Data);
 
-    if GameExt.Debug then begin
+    if DumpSavegameSectionsOpt then begin
       
       Files.AppendFileContents(StrLib.BufToStr(Data, DataSize),
-                               DEBUG_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
+                               DUMP_SAVEGAME_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
     end; // .if
   end; // .if
 end; // .procedure WriteSavegameSection
@@ -309,9 +310,9 @@ var
 begin
   StrBuilder := nil;
   // * * * * * //
-  if GameExt.Debug then begin
-    Files.DeleteDir(DEBUG_SECTIONS_DIR);
-    SysUtils.CreateDir(DEBUG_SECTIONS_DIR);
+  if DumpSavegameSectionsOpt then begin
+    Files.DeleteDir(DUMP_SAVEGAME_SECTIONS_DIR);
+    SysUtils.CreateDir(DUMP_SAVEGAME_SECTIONS_DIR);
   end; // .if
 
   WritingStorage.Clear;
@@ -333,8 +334,9 @@ begin
       GzipWrite(sizeof(DataLen), @DataLen);
       GzipWrite(Length(BuiltData), POINTER(BuiltData));
 
-      if GameExt.Debug then begin
-        Files.WriteFileContents(BuiltData, DEBUG_SECTIONS_DIR + '\' + IterKey + '.joined.txt');
+      if DumpSavegameSectionsOpt then begin
+        Files.WriteFileContents(BuiltData, DUMP_SAVEGAME_SECTIONS_DIR
+                                           + '\' + IterKey + '.joined.txt');
       end; // .if
     end; // .while
   end; // .with 

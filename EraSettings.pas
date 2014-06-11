@@ -7,11 +7,16 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, Log, Ini,
-  Heroes, GameExt, EraLog, SndVid, Tweaks, Stores, Erm;
-  
-  
-(***) implementation (***)
+  VFS, Heroes, GameExt, EraLog, SndVid, Tweaks, Stores, Erm;
 
+const
+  LOG_FILE_NAME = 'log.txt';
+  
+implementation
+
+var
+  DebugOpt:           boolean;
+  DebugEverythingOpt: boolean;
 
 function GetOptValue (const OptionName: string): string;
 const
@@ -20,11 +25,25 @@ const
 begin
   if Ini.ReadStrFromIni(OptionName, ERA_SECTION, Heroes.GAME_SETTINGS_FILE, result) then begin
     result := SysUtils.Trim(result);
-  end // .if
-  else begin
+  end else begin
     result := '';
   end; // .else
 end; // .function GetOptValue
+
+function GetOptBoolValue (const OptionName: string): boolean;
+begin
+  result := GetOptValue(OptionName) = '1';
+end; // .function GetOptBoolValue
+
+function GetDebugOpt (const OptionName: string): boolean;
+begin
+  result := DebugOpt and (DebugEverythingOpt or GetOptBoolValue(OptionName)); 
+end; // .function GetDebugOpt
+
+function GetOptIntValue (const OptionName: string): integer;
+begin
+  result := StrToInt(GetOptValue(OptionName));
+end; // .function GetOptIntValue
 
 procedure InstallLogger (Logger: Log.TLogger);
 var
@@ -43,11 +62,13 @@ end; // .procedure InstallLogger
 
 procedure OnEraStart (Event: GameExt.PEvent); stdcall;
 begin
-  if GetOptValue('Debug') = '1' then begin
-    if GetOptValue('Debug.Destination') = 'File' then begin
-      InstallLogger(EraLog.TFileLogger.Create(GetOptValue('Debug.File')));
-    end // .if
-    else begin     
+  DebugOpt           := GetOptBoolValue('Debug');
+  DebugEverythingOpt := GetOptBoolValue('Debug.Everything');
+
+  if DebugOpt then begin
+    if GetOptValue('Debug.LogDestination') = 'File' then begin
+      InstallLogger(EraLog.TFileLogger.Create(GameExt.DEBUG_DIR + '\' + LOG_FILE_NAME));
+    end else begin     
       InstallLogger(EraLog.TConsoleLogger.Create('Era Log'));
     end; // .else
   end // .if
@@ -56,14 +77,15 @@ begin
   end; // .else
   
   Log.Write('Core', 'CheckVersion', 'result: ' + GameExt.ERA_VERSION_STR);
-  
-  GameExt.Debug               := GetOptValue('Debug') = '1';
-  SndVid.LoadCDOpt            := GetOptValue('LoadCD') = '1';
-  Tweaks.CPUPatchOpt          := GetOptValue('CPUPatch') = '1';
-  Tweaks.FixGetHostByNameOpt  := GetOptValue('FixGetHostByName') = '1';
-  Tweaks.UseOnlyOneCpuCoreOpt := GetOptValue('UseOnlyOneCpuCore') = '1';
-  Stores.EraSectionsSize      := SysUtils.StrToInt(GetOptValue('SavedGameExtraBlockSize'));
-  Erm.IgnoreInvalidCmdsOpt    := GetOptValue('IgnoreInvalidReceivers') = '1';
+
+  SndVid.LoadCDOpt               := GetOptBoolValue('LoadCD');
+  Tweaks.CPUPatchOpt             := GetOptBoolValue('CPUPatch');
+  Tweaks.FixGetHostByNameOpt     := GetOptBoolValue('FixGetHostByName');
+  Tweaks.UseOnlyOneCpuCoreOpt    := GetOptBoolValue('UseOnlyOneCpuCore');
+  Stores.DumpSavegameSectionsOpt := GetDebugOpt('Debug.DumpSavegameSections');
+  Stores.EraSectionsSize         := GetOptIntValue('SavedGameExtraBlockSize');
+  Erm.IgnoreInvalidCmdsOpt       := GetOptBoolValue('IgnoreInvalidReceivers');
+  VFS.DebugOpt                   := GetDebugOpt('Debug.LogVirtualFileSystem');
 end; // .procedure OnEraStart
 
 begin

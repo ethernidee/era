@@ -7,13 +7,14 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils, Lists, CFiles, Files, Crypto, AssocArrays,
-  Math, Core;
+  Math, Core, VFS;
 
 const
   (* Pathes *)
   ERA_DLL_NAME  = 'era.dll';
   PLUGINS_PATH  = 'EraPlugins';
   PATCHES_PATH  = 'EraPlugins';
+  DEBUG_DIR     = 'Debug\Era';
   
   CONST_STR = -1;
   
@@ -90,7 +91,6 @@ var
 
 {O} MemRedirections:        {O} Lists.TList {OF PMemRedirection};
 
-  Debug: boolean;
   MapFolder: string = '';
 
 
@@ -437,6 +437,7 @@ begin
   Windows.DisableThreadLibraryCalls(hEra);
   
   FireEvent('OnEraStart', NO_EVENT_DATA, 0);
+  VFS.Init;
   
   (* Era 1.8x integration *)
   hAngel                :=  Windows.LoadLibrary('angel.dll');
