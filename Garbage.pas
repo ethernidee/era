@@ -5,32 +5,32 @@
 55d300}
 
 PGlobalEvent  = ^TGlobalEvent;
-TGlobalEvent  = PACKED RECORD (* FORMAT TOKEN *)
-  Dummy1: INTEGER;
+TGlobalEvent  = packed record (* FORMAT TOKEN *)
+  Dummy1: integer;
   Mes:    TGameString;
-  Dummy2: ARRAY [0..35] OF BYTE;
-END; // .RECORD TGlobalEvent
+  Dummy2: array [0..35] of byte;
+end; // .record TGlobalEvent
 
 PMapSettings  = ^TMapSettings;
-TMapSettings  = PACKED RECORD (* FORMAT TOKEN *)
-  Dummy:            ARRAY [0..$83] OF BYTE;
+TMapSettings  = packed record (* FORMAT TOKEN *)
+  Dummy:            array [0..$83] of byte;
   FirstGlobalEvent: PGlobalEvent;
   EndGlobalEvent:   PGlobalEvent;
   (* Dummy *)
-END; // .RECORD TMapSettings
+end; // .record TMapSettings
 
 //ZvsGameBeforeSave 750093 at 4beb3b
 
-FUNCTION Hook_AfterApplyDamage (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_AfterApplyDamage (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   WOG_MF_DAMAGE:  PINTEGER  = Ptr($2811888);
 
-VAR
-  HookAddr:  INTEGER;
+var
+  HookAddr:  integer;
 
-BEGIN
-  HookAddr :=  INTEGER(Context.RetAddr) - SIZEOF(Core.THookRec);
-  CASE HookAddr OF 
+begin
+  HookAddr :=  integer(Context.RetAddr) - sizeof(Core.THookRec);
+  case HookAddr of 
     $43F960:  PINTEGER(Context.EBP - $1C)^  :=  WOG_MF_DAMAGE^;
     $43FA63:  Context.EBX                   :=  WOG_MF_DAMAGE^;
     $43FD42:  PINTEGER(Context.EBP - $1C)^  :=  WOG_MF_DAMAGE^;
@@ -44,11 +44,11 @@ BEGIN
     $465964:  PINTEGER(Context.EBP + $8)^   :=  WOG_MF_DAMAGE^;
     $469A98:  Context.EBX                   :=  WOG_MF_DAMAGE^;
     $5A106A:  PINTEGER(Context.EBP - $34)^  :=  WOG_MF_DAMAGE^;
-  ELSE
-    {!} ASSERT(FALSE);
-  END; // .SWITCH HookAddr
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_AfterApplyDamage
+  else
+    {!} Assert(FALSE);
+  end; // .SWITCH HookAddr
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_AfterApplyDamage
 
 (* Fix MF:F corrected damage log *)
 Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 10, Ptr($43F960));
@@ -65,8 +65,8 @@ Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($465964));
 Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($469A98));
 Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 5, Ptr($5A106A));
 
-PROCEDURE LoadExtraErm;
-CONST
+procedure LoadExtraErm;
+const
   SCRIPTS_PATH        = 'Data\s';
   WOG_SCRIPTS_PREFIX  = 'script';
 
@@ -77,25 +77,25 @@ CONST
   PRIORITY_TOKEN        = 0;
   SCRIPTNAME_TOKEN      = 1;
 
-VAR
+var
 {O} ScriptList: Lists.TStringList {OF ScriptPriority: INTEGER}
 {O} Locator:    Files.TFileLocator;
 {O} FileInfo:   Files.TFileItemInfo;
 
-    ScriptName:         STRING;
+    ScriptName:         string;
     ScriptContents:     Utils.TArrayOfString;
     ScriptNameTokens:   Utils.TArrayOfString;
-    ScriptPriority:     INTEGER;
-    TestPriority:       INTEGER;
-    ScriptInd:          INTEGER;
-    ScriptEndMarkerPos: INTEGER;
-    i:                  INTEGER;
-    j:                  INTEGER;
+    ScriptPriority:     integer;
+    TestPriority:       integer;
+    ScriptInd:          integer;
+    ScriptEndMarkerPos: integer;
+    i:                  integer;
+    j:                  integer;
 
-BEGIN
+begin
   ScriptList  :=  Lists.NewSimpleStrList;
   Locator     :=  Files.TFileLocator.Create;
-  FileInfo    :=  NIL;
+  FileInfo    :=  nil;
   // * * * * * //
   Locator.DirPath :=  SCRIPTS_PATH;
 
@@ -105,41 +105,41 @@ BEGIN
 
   Locator.InitSearch('*.erm');
   
-  WHILE Locator.NotEnd DO BEGIN
+  while Locator.NotEnd do begin
     ScriptName :=  Locator.GetNextItem(Files.TItemInfo(FileInfo));
 
-    IF
-      NOT SysUtils.AnsiStartsText(WOG_SCRIPTS_PREFIX, ScriptName) OR
-      NOT SysUtils.TryStrToInt
+    if
+      not SysUtils.AnsiStartsText(WOG_SCRIPTS_PREFIX, ScriptName) or
+      not SysUtils.TryStrToInt
       (
-        System.Copy(ScriptName, LENGTH(WOG_SCRIPTS_PREFIX) + 1),
+        System.Copy(ScriptName, Length(WOG_SCRIPTS_PREFIX) + 1),
         ScriptInd
-      ) OR
-      NOT Math.InRange(ScriptInd, 0, ERM_MAX_NUM_SCRIPTS - 1)
-    THEN BEGIN
+      ) or
+      not Math.InRange(ScriptInd, 0, ERM_MAX_NUM_SCRIPTS - 1)
+    then begin
       ScriptNameTokens :=  StrLib.ExplodeEx
       (
         ScriptName,
         PRIORITY_SEPARATOR,
-        NOT StrLib.INCLUDE_DELIM,
+        not StrLib.INCLUDE_DELIM,
         StrLib.LIMIT_TOKENS,
         SCRIPTNAME_NUM_TOKENS
       );
 
       ScriptPriority  :=  DEFAULT_PRIORITY;
       
-      IF
-        (LENGTH(ScriptNameTokens) = SCRIPTNAME_NUM_TOKENS)  AND
+      if
+        (Length(ScriptNameTokens) = SCRIPTNAME_NUM_TOKENS)  and
         (SysUtils.TryStrToInt(ScriptNameTokens[PRIORITY_TOKEN], TestPriority))
-      THEN BEGIN
+      then begin
         ScriptPriority  :=  TestPriority;
-      END; // .IF
+      end; // .if
 
       ScriptList.AddObj(ScriptName, Ptr(ScriptPriority));
-    END; // .IF
+    end; // .if
 
     SysUtils.FreeAndNil(FileInfo);
-  END; // .WHILE
+  end; // .while
   
   Locator.FinitSearch;
 
@@ -148,40 +148,40 @@ BEGIN
   ScriptList.CaseInsensitive   :=  FALSE;
 
   (* Sort via insertion by Priority *)
-  FOR i:=1 TO ScriptList.Count - 1 DO BEGIN
-    ScriptPriority  :=  INTEGER(ScriptList.Values[i]);
+  for i:=1 to ScriptList.Count - 1 do begin
+    ScriptPriority  :=  integer(ScriptList.Values[i]);
     j               :=  i - 1;
 
-    WHILE (j >= 0) AND (ScriptPriority > INTEGER(ScriptList.Values[j])) DO BEGIN
-      DEC(j);
-    END; // .WHILE
+    while (j >= 0) and (ScriptPriority > integer(ScriptList.Values[j])) do begin
+      Dec(j);
+    end; // .while
 
     ScriptList.Move(i, j + 1);
-  END; // .FOR
+  end; // .for
 
   SetLength(ScriptContents, ScriptList.Count);
   FirstScriptSize :=  0;
   LastScriptSize  :=  0;
   
-  FOR i:=0 TO ScriptList.Count - 1 DO BEGIN
-    IF
-      NOT Files.ReadFileContents(SCRIPTS_PATH + '\' + ScriptList.Keys[i], ScriptContents[i]) OR
-      (LENGTH(ScriptContents[i]) <= LENGTH(SCRIPT_POSTFIX))
-    THEN BEGIN
-      ScriptContents[i] :=  NIL;
-    END // .IF
-    ELSE BEGIN
-      Priority  :=  INTEGER(ScriptList.Values[i]);
+  for i:=0 to ScriptList.Count - 1 do begin
+    if
+      not Files.ReadFileContents(SCRIPTS_PATH + '\' + ScriptList.Keys[i], ScriptContents[i]) or
+      (Length(ScriptContents[i]) <= Length(SCRIPT_POSTFIX))
+    then begin
+      ScriptContents[i] :=  nil;
+    end // .if
+    else begin
+      Priority  :=  integer(ScriptList.Values[i]);
       
-      IF Priority < 0 THEN BEGIN
-        FirstScriptSize  :=  FirstScriptSize + LENGTH(ScriptContents[i]) - LENGTH(SCRIPT_POSTFIX);
+      if Priority < 0 then begin
+        FirstScriptSize  :=  FirstScriptSize + Length(ScriptContents[i]) - Length(SCRIPT_POSTFIX);
         FirstScriptBuilder.AppendBuf(POINTER(ScriptContents), ScriptEndMarkerPos - 1);
-      END // .IF
-      ELSE BEGIN
+      end // .if
+      else begin
         LastScriptBuilder.AppendBuf(POINTER(ScriptContents), ScriptEndMarkerPos - 1);
-      END; // .ELSE
-    END; // .ELSE
-  END; // .FOR
+      end; // .else
+    end; // .else
+  end; // .for
   
       
   
@@ -193,15 +193,15 @@ BEGIN
   // * * * * * //
   SysUtils.FreeAndNil(ScriptList);
   SysUtils.FreeAndNil(Locator);
-END; // .PROCEDURE LoadExtraErm
+end; // .procedure LoadExtraErm
 
-FUNCTION Match (CONST Str, Pattern: STRING): BOOLEAN;
-CONST
+function Match (const Str, Pattern: string): boolean;
+const
   ONE_SYM_WILDCARD  = '?';
   ANY_SYMS_WILLCARD = '*';
   WILDCARDS         = [ONE_SYM_WILDCARD, ANY_SYMS_WILLCARD];
 
-TYPE
+type
   TState  =
   (
     STATE_STRICT_COMPARE,       // [L]
@@ -210,107 +210,107 @@ TYPE
     STATE_EXIT
   );
 
-VAR
+var
   State:          TState;
-  StrLen:         INTEGER;
-  PatternLen:     INTEGER;
-  StrBasePos:     INTEGER;
-  PatternBasePos: INTEGER;
-  s:              INTEGER;  // Pos in Pattern
-  p:              INTEGER;  // Pos in Str
+  StrLen:         integer;
+  PatternLen:     integer;
+  StrBasePos:     integer;
+  PatternBasePos: integer;
+  s:              integer;  // Pos in Pattern
+  p:              integer;  // Pos in Str
   
-  FUNCTION CharMatch: BOOLEAN;
-  BEGIN
-    RESULT  :=
-      (p <= PatternLen)                 AND
-      (s <= StrLen)                     AND
-      (Pattern[p] <> ANY_SYMS_WILDCARD) AND
+  function CharMatch: boolean;
+  begin
+    result  :=
+      (p <= PatternLen)                 and
+      (s <= StrLen)                     and
+      (Pattern[p] <> ANY_SYMS_WILDCARD) and
       (
-        (Str[s]     = Pattern[p]) OR
+        (Str[s]     = Pattern[p]) or
         (Pattern[p] = ONE_SYM_WILDCARD)
       )
-  END; // .FUNCTION CharMatch
+  end; // .function CharMatch
 
-  FUNCTION StrictMatch: BOOLEAN;
-  BEGIN
-    WHILE CharMatch DO BEGIN
-      INC(p);
-      INC(s);
-    END; // .WHILE
+  function StrictMatch: boolean;
+  begin
+    while CharMatch do begin
+      Inc(p);
+      Inc(s);
+    end; // .while
     
-    RESULT  :=  ( <= StrLen;
-  END; // .FUNCTION StrictMatch
+    result  :=  ( <= StrLen;
+  end; // .function StrictMatch
   
-  FUNCTION SkipWildcards: BOOLEAN;
-  VAR
-    NumOneSymWildcards: INTEGER;
+  function SkipWildcards: boolean;
+  var
+    NumOneSymWildcards: integer;
   
-  BEGIN
+  begin
     NumOneSymWildcards  :=  0;
     
-    WHILE (p <= PatternLen) AND (Pattern[p] IN WILDCARDS) DO BEGIN
-      IF Pattern[p] = ONE_SYM_WILDCARD THEN BEGIN
-        INC(NumOneSymWildcards);
-      END; // .IF
+    while (p <= PatternLen) and (Pattern[p] in WILDCARDS) do begin
+      if Pattern[p] = ONE_SYM_WILDCARD then begin
+        Inc(NumOneSymWildcards);
+      end; // .if
       
-      INC(p);
-    END; // .WHILE
+      Inc(p);
+    end; // .while
     
-    RESULT  :=  (p <= PatternLen) AND ((s + NumOneSymWildcards - 1) <= StrLen);
+    result  :=  (p <= PatternLen) and ((s + NumOneSymWildcards - 1) <= StrLen);
     
-    IF RESULT THEN BEGIN
+    if result then begin
       s :=  s + NumOneSymWildcards;
-    END; // .IF
-  END; // .FUNCTION SkipWildcards
+    end; // .if
+  end; // .function SkipWildcards
   
-  FUNCTION FindNextStr;
-  VAR
-    StrBasePos:     INTEGER;
-    PatternBasePos: INTEGER;
+  function FindNextStr;
+  var
+    StrBasePos:     integer;
+    PatternBasePos: integer;
     
-    FUNCTION FindFirstChar: BOOLEAN;
-    VAR
-      c:  CHAR;
+    function FindFirstChar: boolean;
+    var
+      c:  char;
     
-    BEGIN
+    begin
       c :=  Pattern[p];
       
-      WHILE (s <= StrLen) AND (Str[s] <> c) DO BEGIN
-        INC(s);
-      END; // .WHILE
+      while (s <= StrLen) and (Str[s] <> c) do begin
+        Inc(s);
+      end; // .while
       
-      RESULT  :=  s <= StrLen;
+      result  :=  s <= StrLen;
       
-      IF RESULT THEN BEGIN
-        INC(p);
-        INC(s);
-      END; // .IF
-    END; // .FUNCTION FindFirstChar
+      if result then begin
+        Inc(p);
+        Inc(s);
+      end; // .if
+    end; // .function FindFirstChar
   
-  BEGIN
-    RESULT          :=  FALSE;
+  begin
+    result          :=  FALSE;
     StrBasePos      :=  s;
     PatternBasePos  :=  p;
   
-    WHILE NOT RESULT AND (s <= StrLen) AND FindFirstChar DO BEGIN
-      WHILE CharMatch DO BEGIN
-        INC(p);
-        INC(s);
-      END; // .WHILE
-    END; // .WHILE
+    while not result and (s <= StrLen) and FindFirstChar do begin
+      while CharMatch do begin
+        Inc(p);
+        Inc(s);
+      end; // .while
+    end; // .while
     
-    RESULT  :=  s <= StrLen;
-  END; // .FUNCTION FindNextStr
+    result  :=  s <= StrLen;
+  end; // .function FindNextStr
 
-BEGIN
-  StrLen          :=  LENGTH(Str);
-  PatternLen      :=  LENGTH(Pattern);
+begin
+  StrLen          :=  Length(Str);
+  PatternLen      :=  Length(Pattern);
   s               :=  1;
   p               :=  1;
   State           :=  STATE_STRICT_COMPARE;
-  RESULT          :=  FALSE;
+  result          :=  FALSE;
   
-  IF StrictMatch THEN BEGIN
-    WHILE SkipWillcards AND FindNextStr DO BEGIN END;
-  END; // .IF
-END; // .FUNCTION Match
+  if StrictMatch then begin
+    while SkipWillcards and FindNextStr do begin end;
+  end; // .if
+end; // .function Match

@@ -1,15 +1,15 @@
-UNIT Rainbow;
+unit Rainbow;
 {
 DESCRIPTION:  Adds multi-color support to all Heroes texts
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan,
   Core, GameExt;
 
-CONST
+const
   TEXTMODE_15BITS = $3E0;
   TEXTMODE_16BITS = $7E0;
 
@@ -18,66 +18,66 @@ CONST
   TextColorMode: PWORD = Ptr($694DB0);
 
 
-TYPE
-  TColor32To16Func  = FUNCTION (Color32: INTEGER): INTEGER;
+type
+  TColor32To16Func  = function (Color32: integer): integer;
 
-  TTextBlock = RECORD
-    BlockLen: INTEGER;
-    Color16: INTEGER;
-  END; // .RECORD TTextBlock
+  TTextBlock = record
+    BlockLen: integer;
+    Color16: integer;
+  end; // .record TTextBlock
   
   
-VAR
+var
   (* Chinese loader support: {~color}...{~} => {...} *)
-  ChineseLoaderOpt: BOOLEAN;
+  ChineseLoaderOpt: boolean;
   ChineseHandler:   POINTER;
 
 
-PROCEDURE NameColor (Color32: INTEGER; CONST Name: STRING); STDCALL;
+procedure NameColor (Color32: integer; const Name: string); stdcall;
 
 (* Chinese only: temporal *)
-FUNCTION ChineseGetCharColor: INTEGER; STDCALL;
-PROCEDURE ChineseGotoNextChar; STDCALL;
+function ChineseGetCharColor: integer; stdcall;
+procedure ChineseGotoNextChar; stdcall;
 
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-EXPORTS
+exports
   ChineseGetCharColor,
   ChineseGotoNextChar;
 
 
-VAR
+var
 {O} NamedColors:  {U} AssocArrays.TAssocArray {OF Color16: INTEGER};
 {O} ColorStack:   {U} Lists.TList {OF Color16: INTEGER};
 {O} TextScanner:  TextScan.TTextScanner;
     Color32To16:  TColor32To16Func;
     
-    TextBlocks:   ARRAY [0..16 * 1024 - 1] OF TTextBlock;
-    TextBlockInd: INTEGER;
-    TextBuffer:   ARRAY [0..1024 * 1024 - 1] OF CHAR;
-    CurrBlockPos: INTEGER;
+    TextBlocks:   array [0..16 * 1024 - 1] of TTextBlock;
+    TextBlockInd: integer;
+    TextBuffer:   array [0..1024 * 1024 - 1] of char;
+    CurrBlockPos: integer;
 
 
-FUNCTION Color32To15Func (Color32: INTEGER): INTEGER;
-BEGIN
-  RESULT  :=
-    ((Color32 AND $0000F8) SHR 3) OR
-    ((Color32 AND $00F800) SHR 6) OR
-    ((Color32 AND $F80000) SHR 9);
-END; // .FUNCTION Color32To15Func
+function Color32To15Func (Color32: integer): integer;
+begin
+  result  :=
+    ((Color32 and $0000F8) shr 3) or
+    ((Color32 and $00F800) shr 6) or
+    ((Color32 and $F80000) shr 9);
+end; // .function Color32To15Func
 
-FUNCTION Color32To16Func (Color32: INTEGER): INTEGER;
-BEGIN
-  RESULT  :=
-    ((Color32 AND $0000F8) SHR 3) OR
-    ((Color32 AND $00FC00) SHR 5) OR
-    ((Color32 AND $F80000) SHR 8);
-END; // .FUNCTION Color32To16
+function Color32To16Func (Color32: integer): integer;
+begin
+  result  :=
+    ((Color32 and $0000F8) shr 3) or
+    ((Color32 and $00FC00) shr 5) or
+    ((Color32 and $F80000) shr 8);
+end; // .function Color32To16
 
-PROCEDURE NameStdColors;
-BEGIN
+procedure NameStdColors;
+begin
   NamedColors['AliceBlue']            :=  Ptr(Color32To16($F0F8FF));
   NamedColors['AntiqueWhite']         :=  Ptr(Color32To16($FAEBD7));
   NamedColors['Aqua']                 :=  Ptr(Color32To16($00FFFF));
@@ -233,50 +233,50 @@ BEGIN
   NamedColors['o']                    :=  NamedColors['Orange'];
   NamedColors['p']                    :=  NamedColors['Purple'];
   NamedColors['a']                    :=  NamedColors['Aqua'];
-END; // .PROCEDURE NameStdColors
+end; // .procedure NameStdColors
 
-PROCEDURE NameColor (Color32: INTEGER; CONST Name: STRING);
-BEGIN
+procedure NameColor (Color32: integer; const Name: string);
+begin
   NamedColors[Name] :=  Ptr(Color32To16(Color32));
-END; // .PROCEDURE NameColor
+end; // .procedure NameColor
 
-FUNCTION IsChineseLoaderPresent (OUT ChineseHandler: POINTER): BOOLEAN;
-BEGIN
-  RESULT  :=  PBYTE($4B5202)^ = $E9;
+function IsChineseLoaderPresent (out ChineseHandler: POINTER): boolean;
+begin
+  result  :=  PBYTE($4B5202)^ = $E9;
   
-  IF RESULT THEN BEGIN
-    ChineseHandler  :=  Ptr(PINTEGER($4B5203)^ + INTEGER($4B5207));
-  END; // .IF
-END; // .FUNCTION IsChineseLoaderPresent
+  if result then begin
+    ChineseHandler  :=  Ptr(PINTEGER($4B5203)^ + integer($4B5207));
+  end; // .if
+end; // .function IsChineseLoaderPresent
 
-FUNCTION Hook_BeginParseText (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_BeginParseText (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   ERR_COLOR       = $000000;
   LINE_END_MARKER = #10;
 
-VAR
-{U} Buf:          PCHAR;
-    Txt:          STRING;
-    TxtLen:       INTEGER;
-    StartPos:     INTEGER;
-    c:            CHAR;
+var
+{U} Buf:          pchar;
+    Txt:          string;
+    TxtLen:       integer;
+    StartPos:     integer;
+    c:            char;
     
-    BlockLen: INTEGER;
-    IsBlockEnd:   BOOLEAN;
-    NumSpaceChars:  INTEGER;
+    BlockLen: integer;
+    IsBlockEnd:   boolean;
+    NumSpaceChars:  integer;
     
-    ColorName:    STRING;
-    Color16:      INTEGER;
+    ColorName:    string;
+    Color16:      integer;
     
-  PROCEDURE ConvertTextToChinese;
-  VAR
-    i:  INTEGER;
+  procedure ConvertTextToChinese;
+  var
+    i:  integer;
   
-  BEGIN
+  begin
     i :=  1;
 
-    WHILE i <= TxtLen DO BEGIN
-      WHILE (i <= TxtLen) AND (Txt[i] <> '{') DO BEGIN
+    while i <= TxtLen do begin
+      while (i <= TxtLen) and (Txt[i] <> '{') DO BEGIN
         Buf^  :=  Txt[i];
         INC(Buf);
         INC(i);
@@ -288,23 +288,23 @@ VAR
         IF (i <= TxtLen) AND (Txt[i] = '~') THEN BEGIN
           INC(i);
           
-          IF (i <= TxtLen) AND (Txt[i] = '}') THEN BEGIN
+          IF (i <= TxtLen) AND (Txt[i] = '}') then begin
             Buf^  :=  '}';
-            INC(Buf);
-            INC(i);
-          END // .IF
-          ELSE BEGIN
+            Inc(Buf);
+            Inc(i);
+          end // .if
+          else begin
             Buf^  :=  '{';
             INC(Buf);
             
-            WHILE (i <= TxtLen) AND (Txt[i] <> '}') DO BEGIN
-              INC(i);
-            END; // .WHILE
+            WHILE (i <= TxtLen) AND (Txt[i] <> '}') do begin
+              Inc(i);
+            end; // .while
             
-            INC(i);
-          END; // .ELSE
-        END // .IF
-        ELSE BEGIN
+            Inc(i);
+          end; // .else
+        end // .if
+        else begin
           Buf^  :=  '{';
           INC(Buf);
         END; // .ELSE
@@ -361,100 +361,100 @@ BEGIN
         NOT TextScanner.EndOfText   AND
         TextScanner.GotoRelPos(+2)  AND
         TextScanner.ReadTokenTillDelim(['}'], ColorName)
-      THEN BEGIN
-        INC(TextBlockInd);
+      then begin
+        Inc(TextBlockInd);
         TextBlocks[TextBlockInd].BlockLen := 0;
         
-        IF ColorName = '' THEN BEGIN
-          CASE ColorStack.Count OF
+        if ColorName = '' then begin
+          case ColorStack.Count of
             0:  TextBlocks[TextBlockInd].Color16  :=  DEF_COLOR;
-            1:  BEGIN
+            1:  begin
                   ColorStack.Pop;
                   TextBlocks[TextBlockInd].Color16  :=  DEF_COLOR;
-                END;
-          ELSE
+                end;
+          else
             ColorStack.Pop;
-            TextBlocks[TextBlockInd].Color16  :=  INTEGER(ColorStack.Top);
-          END; // .SWITCH
-        END // .IF
-        ELSE BEGIN
+            TextBlocks[TextBlockInd].Color16  :=  integer(ColorStack.Top);
+          end; // .SWITCH
+        end // .if
+        else begin
           Color16 :=  0;
           
-          IF NamedColors.GetExistingValue(ColorName, POINTER(Color16)) THEN BEGIN
+          if NamedColors.GetExistingValue(ColorName, POINTER(Color16)) then begin
             TextBlocks[TextBlockInd].Color16  :=  Color16;
-          END // .IF
-          ELSE IF SysUtils.TryStrToInt('$' + ColorName, Color16) THEN BEGIN
+          end // .if
+          else if SysUtils.TryStrToInt('$' + ColorName, Color16) then begin
             Color16                           :=  Color32To16(Color16);
             TextBlocks[TextBlockInd].Color16  :=  Color16;
-          END // .ELSEIF
-          ELSE BEGIN
+          end // .ELSEIF
+          else begin
             TextBlocks[TextBlockInd].Color16  :=  ERR_COLOR;
-          END; // .ELSE
+          end; // .else
           
           ColorStack.Add(Ptr(Color16));
-        END; // .ELSE
+        end; // .else
         
         TextScanner.GotoNextChar;
-      END; // .IF
-    END; // .WHILE
-  END; // .IF
+      end; // .if
+    end; // .while
+  end; // .if
   
   CurrBlockPos                  :=  -1;
   TextBlockInd                  :=  0;
-  Context.ECX                   :=  INTEGER(Buf) - INTEGER(@TextBuffer[0]);
+  Context.ECX                   :=  integer(Buf) - integer(@TextBuffer[0]);
   TextBuffer[Context.ECX]       :=  #0;
-  Context.EDX                   :=  INTEGER(@TextBuffer[0]);
+  Context.EDX                   :=  integer(@TextBuffer[0]);
   PINTEGER(Context.EBP - $14)^  :=  Context.ECX;
   PINTEGER(Context.EBP + $8)^   :=  Context.EDX;
   
-  IF ChineseLoaderOpt THEN BEGIN
+  if ChineseLoaderOpt then begin
     //ConvertTextToChinese;
-    PINTEGER(Context.EBP - $14)^  :=  INTEGER(Buf) - INTEGER(@TextBuffer[0]);
-    PINTEGER(Context.EBP + $8)^   :=  INTEGER(@TextBuffer[0]);
+    PINTEGER(Context.EBP - $14)^  :=  integer(Buf) - integer(@TextBuffer[0]);
+    PINTEGER(Context.EBP + $8)^   :=  integer(@TextBuffer[0]);
     Context.ECX                   :=  Context.EBX;
     Context.RetAddr               :=  ChineseHandler;
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     // Overwritten Code
-    IF (PINTEGER(Context.EBP + $24)^ AND 4) = 0 THEN BEGIN
+    if (PINTEGER(Context.EBP + $24)^ and 4) = 0 then begin
       Context.RetAddr :=  Ptr($4B52B2);
-    END // .IF
-    ELSE BEGIN
+    end // .if
+    else begin
       Context.RetAddr :=  Ptr($4B525B);
-    END; // .ELSE
-  END; // .ELSE
+    end; // .else
+  end; // .else
   
-  RESULT  :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_BeginParseText
+  result  :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_BeginParseText
 
-FUNCTION Hook_GetCharColor (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
-  RESULT  :=  TextBlocks[TextBlockInd].Color16 = DEF_COLOR;
+function Hook_GetCharColor (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
+  result  :=  TextBlocks[TextBlockInd].Color16 = DEF_COLOR;
   
-  IF NOT RESULT THEN BEGIN
+  if not result then begin
     Context.EAX :=  TextBlocks[TextBlockInd].Color16;
-  END; // .IF
-END; // .FUNCTION Hook_GetCharColor
+  end; // .if
+end; // .function Hook_GetCharColor
 
-FUNCTION Hook_HandleTags (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-VAR
-  c:  CHAR;
+function Hook_HandleTags (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
+  c:  char;
 
-BEGIN
+begin
   c                           :=  PCharByte(Context.EDX)^;
   PCharByte(Context.EBP - 4)^ :=  c;
   Context.RetAddr             :=  Ptr($4B50BA);
   
-  IF ORD(c) > 32 THEN BEGIN
-    INC(CurrBlockPos);
-  END; // .IF
+  if ORD(c) > 32 then begin
+    Inc(CurrBlockPos);
+  end; // .if
   
-  WHILE CurrBlockPos = TextBlocks[TextBlockInd].BlockLen DO BEGIN
+  while CurrBlockPos = TextBlocks[TextBlockInd].BlockLen do begin
     CurrBlockPos  :=  0;
-    INC(TextBlockInd);
-  END; // .WHILE
+    Inc(TextBlockInd);
+  end; // .while
   
-  IF (TextBlocks[TextBlockInd].Color16 = DEF_COLOR) AND (c IN ['{', '}']) THEN BEGIN
+  if (TextBlocks[TextBlockInd].Color16 = DEF_COLOR) and (c in ['{', '}']) then begin
     PBOOLEAN(Context.EBP + $24)^  :=  c = '{';
     Context.RetAddr               :=  Ptr($4B5190);
   END; // .IF
@@ -481,37 +481,37 @@ FUNCTION Hook_SetupColorMode (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL
 BEGIN
   IF TextColorMode^ = TEXTMODE_15BITS THEN BEGIN
     Color32To16 := Color32To15Func;
-    {!} ASSERT(FALSE);// !FIXME
-  END // .IF
-  ELSE IF TextColorMode^ = TEXTMODE_16BITS THEN BEGIN
+    {!} Assert(FALSE);// !FIXME
+  end // .if
+  else if TextColorMode^ = TEXTMODE_16BITS then begin
     Color32To16 := Color32To16Func;
-  END // .ELSEIF
-  ELSE BEGIN
-    {!} ASSERT(FALSE);
-  END; // .ELSE
+  end // .ELSEIF
+  else begin
+    {!} Assert(FALSE);
+  end; // .else
   
   NameStdColors;
   GameExt.FireEvent('OnAfterCreateWindow', GameExt.NO_EVENT_DATA, 0);
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_SetupColorMode
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_SetupColorMode
 
-FUNCTION Hook_DrawPic (Context: PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
-  Name: STRING = 'smalres.def';
+function Hook_DrawPic (Context: PHookHandlerArgs): LONGBOOL; stdcall;
+const
+  Name: string = 'smalres.def';
   
-VAR
+var
   Def:  PBYTE;
   Pcx8: PBYTE;
   Pcx16:  PBYTE;
-  x, y: INTEGER;
-  Width, Height:  INTEGER;
-  REbp:  INTEGER;
+  x, y: integer;
+  Width, Height:  integer;
+  REbp:  integer;
 
-BEGIN
+begin
   REbp :=  Context.EBP;
 
-  ASM
+  asm
     MOV ECX, Name
     MOV EAX, $55C9C0
     CALL EAX
@@ -550,53 +550,53 @@ BEGIN
     MOV ECX, Def
     MOV EAX, $47B820
     CALL EAX
-  END; // .ASM
+  end; // .asm
   
   Context.RetAddr :=  Ptr($4B4FA5);
-  RESULT  :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_DrawPic
+  result  :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_DrawPic
 
-FUNCTION Hook_RegisterDefFrame (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
-  IF TextColorMode^ = TEXTMODE_15BITS THEN BEGIN
+function Hook_RegisterDefFrame (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
+  if TextColorMode^ = TEXTMODE_15BITS then begin
     Color32To16 := Color32To15Func;
-    {!} ASSERT(FALSE);// !FIXME
-  END // .IF
-  ELSE IF TextColorMode^ = TEXTMODE_16BITS THEN BEGIN
+    {!} Assert(FALSE);// !FIXME
+  end // .if
+  else if TextColorMode^ = TEXTMODE_16BITS then begin
     Color32To16 :=  Color32To16Func;
-  END // .ELSEIF
-  ELSE BEGIN
-    {!} ASSERT(FALSE);
-  END; // .ELSE
+  end // .ELSEIF
+  else begin
+    {!} Assert(FALSE);
+  end; // .else
   
   NameStdColors;
   GameExt.FireEvent('OnAfterCreateWindow', GameExt.NO_EVENT_DATA, 0);
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_RegisterDefFrame
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_RegisterDefFrame
 
-PROCEDURE OnAfterWoG (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+begin
   ChineseLoaderOpt  :=  IsChineseLoaderPresent(ChineseHandler);
   
-  IF ChineseLoaderOpt THEN BEGIN
+  if ChineseLoaderOpt then begin
     (* Remove Chinese loader hook *)
-    PWORD($4B5202)^     :=  WORD($840F);  // JE
+    PWORD($4B5202)^     :=  word($840F);  // JE
     PINTEGER($4B5204)^  :=  $02E7;        // 4B54EF
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     Core.Hook(@Hook_HandleTags, Core.HOOKTYPE_BRIDGE, 7, Ptr($4B509B));
     //Core.ApiHook(@Hook_DrawPic, Core.HOOKTYPE_BRIDGE, Ptr($4B4F03));
-  END; // .ELSE 
+  end; // .else 
 
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
   Core.Hook(@Hook_SetupColorMode, Core.HOOKTYPE_BRIDGE, 5, Ptr($4F8226));
-END; // .PROCEDURE OnAfterWoG
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   NamedColors :=  AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
   ColorStack  :=  Lists.NewSimpleList;
   TextScanner :=  TextScan.TTextScanner.Create;
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
-END.
+end.

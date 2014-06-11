@@ -1,4 +1,4 @@
-UNIT Era;
+unit Era;
 {
 DESCRIPTION:  Era SDK
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
@@ -8,10 +8,10 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
   {$MODE DELPHI}
 {$ENDIF}
 
-(***)  INTERFACE  (***)
-USES Windows;
+(***)  interface  (***)
+uses Windows;
 
-CONST
+const
   (* Hooks *)
   HOOKTYPE_JUMP   = 0;  // jmp, 5 bytes
   HOOKTYPE_CALL   = 1;  // call, 5 bytes
@@ -91,9 +91,9 @@ CONST
   TRIGGER_TL2       = 30902;
   TRIGGER_TL3       = 30903;
   TRIGGER_TL4       = 30904;
-  TRIGGER_OB_POS    = INTEGER($10000000);
-  TRIGGER_LE_POS    = INTEGER($20000000);
-  TRIGGER_OB_LEAVE  = INTEGER($08000000);
+  TRIGGER_OB_POS    = integer($10000000);
+  TRIGGER_LE_POS    = integer($20000000);
+  TRIGGER_OB_LEAVE  = integer($08000000);
   
   (* Era Triggers *)
   TRIGGER_BEFORE_SAVE_GAME          = 77000;  // DEPRECATED;
@@ -114,54 +114,54 @@ CONST
   TRIGGER_ONCHAT                    = 77014;
 
 
-TYPE
+type
   PTxtFile  = ^TTxtFile;
-  TTxtFile  = PACKED RECORD
-    Dummy:    ARRAY [0..$17] OF BYTE;
-    RefCount: INTEGER;
+  TTxtFile  = packed record
+    Dummy:    array [0..$17] of byte;
+    RefCount: integer;
     (* Dummy *)
-  END; // .RECORD TTxtFile
+  end; // .record TTxtFile
 
   PHookHandlerArgs  = ^THookHandlerArgs;
-  THookHandlerArgs  = PACKED RECORD
-    EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX: INTEGER;
+  THookHandlerArgs  = packed record
+    EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX: integer;
     RetAddr:                                POINTER;
-  END; // .RECORD THookHandlerArgs
+  end; // .record THookHandlerArgs
 
   PEvent  = ^TEvent;
-  TEvent  = PACKED RECORD
-      Name:     PCHAR;
+  TEvent  = packed record
+      Name:     pchar;
   {n} Data:     POINTER;
-      DataSize: INTEGER;
-  END; // .RECORD TEvent
+      DataSize: integer;
+  end; // .record TEvent
 
   PEventParams  = ^TEventParams;
-  TEventParams  = ARRAY[0..15] OF INTEGER;
-  TEventHandler = PROCEDURE (Event: PEvent) STDCALL;
+  TEventParams  = array[0..15] of integer;
+  TEventHandler = procedure (Event: PEvent) stdcall;
 
   PErmVVars = ^TErmVVars;
-  TErmVVars = ARRAY [1..10000] OF INTEGER;
-  TErmZVar  = ARRAY [0..511] OF CHAR;
+  TErmVVars = array [1..10000] of integer;
+  TErmZVar  = array [0..511] of char;
   PErmZVars = ^TErmZVars;
-  TErmZVars = ARRAY [1..1000] OF TErmZVar;
+  TErmZVars = array [1..1000] of TErmZVar;
   PErmYVars = ^TErmYVars;
-  TErmYVars = ARRAY [1..100] OF INTEGER;
+  TErmYVars = array [1..100] of integer;
   PErmXVars = ^TErmXVars;
-  TErmXVars = ARRAY [1..16] OF INTEGER;
+  TErmXVars = array [1..16] of integer;
   PErmFlags = ^TErmFlags;
-  TErmFlags = ARRAY [1..1000] OF BOOLEAN;
+  TErmFlags = array [1..1000] of boolean;
   PErmEVars = ^TErmEVars;
-  TErmEVars = ARRAY [1..100] OF SINGLE;
+  TErmEVars = array [1..100] of single;
   
   PGameState  = ^TGameState;
-  TGameState  = PACKED RECORD
-    RootDlgId:    INTEGER;
-    CurrentDlgId: INTEGER;
-  END; // .RECORD TGameState
+  TGameState  = packed record
+    RootDlgId:    integer;
+    CurrentDlgId: integer;
+  end; // .record TGameState
 
 
 {$IFDEF FPC}
-VAR
+var
 (* WoG vars *)
   v:  TErmVVars ABSOLUTE $887668;
   z:  TErmZVars ABSOLUTE $9273E8;
@@ -170,7 +170,7 @@ VAR
   f:  TErmFlags ABSOLUTE $91F2E0;
   e:  TErmEVars ABSOLUTE $A48F18;
 {$ELSE}
-CONST
+const
   (* WoG vars *)
   v:  PErmVVars = Ptr($887668);
   z:  PErmZVars = Ptr($9273E8);
@@ -181,96 +181,96 @@ CONST
 {$ENDIF}
 
 
-PROCEDURE WriteAtCode (Count: INTEGER; Src, Dst: POINTER); STDCALL;
+procedure WriteAtCode (Count: integer; Src, Dst: POINTER); stdcall;
 
-PROCEDURE Hook
+procedure Hook
 (
   HandlerAddr:  POINTER;
-  HookType:     INTEGER;
-  PatchSize:    INTEGER;
+  HookType:     integer;
+  PatchSize:    integer;
   CodeAddr:     POINTER
-); STDCALL;
+); stdcall;
 
-PROCEDURE ApiHook (HandlerAddr: POINTER; HookType: INTEGER; CodeAddr: POINTER); STDCALL;
-PROCEDURE KillThisProcess;
-PROCEDURE FatalError (Err: PCHAR); STDCALL;
-FUNCTION  RecallAPI (Context: PHookHandlerArgs; NumArgs: INTEGER): INTEGER; STDCALL;
-PROCEDURE RegisterHandler (Handler: TEventHandler; EventName: PCHAR); STDCALL;
-PROCEDURE FireEvent (EventName: PCHAR; {n} EventData: POINTER; DataSize: INTEGER); STDCALL;
-FUNCTION  LoadTxt (Name: PCHAR): {n} PTxtFile; STDCALL;
-PROCEDURE ForceTxtUnload (Name: PCHAR); STDCALL;
-PROCEDURE ExecErmCmd (CmdStr: PCHAR); STDCALL;
-PROCEDURE ReloadErm;
-PROCEDURE ExtractErm;
-PROCEDURE FireErmEvent (EventID: INTEGER); STDCALL;
-PROCEDURE ClearAllIniCache;
-PROCEDURE ClearIniCache (FileName: PCHAR); STDCALL;
-FUNCTION  ReadStrFromIni (Key, SectionName, FilePath, Res: PCHAR): BOOLEAN; STDCALL;
-FUNCTION  WriteStrToIni (Key, Value, SectionName, FilePath: PCHAR): BOOLEAN; STDCALL;
-FUNCTION  SaveIni (FilePath: PCHAR): BOOLEAN; STDCALL;
-PROCEDURE NameColor (Color32: INTEGER; Name: PCHAR); STDCALL;
-PROCEDURE WriteSavegameSection (DataSize: INTEGER; {n} Data: POINTER; SectionName: PCHAR); STDCALL;
+procedure ApiHook (HandlerAddr: POINTER; HookType: integer; CodeAddr: POINTER); stdcall;
+procedure KillThisProcess;
+procedure FatalError (Err: pchar); stdcall;
+function  RecallAPI (Context: PHookHandlerArgs; NumArgs: integer): integer; stdcall;
+procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
+procedure FireEvent (EventName: pchar; {n} EventData: POINTER; DataSize: integer); stdcall;
+function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
+procedure ForceTxtUnload (Name: pchar); stdcall;
+procedure ExecErmCmd (CmdStr: pchar); stdcall;
+procedure ReloadErm;
+procedure ExtractErm;
+procedure FireErmEvent (EventID: integer); stdcall;
+procedure ClearAllIniCache;
+procedure ClearIniCache (FileName: pchar); stdcall;
+function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall;
+function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall;
+function  SaveIni (FilePath: pchar): boolean; stdcall;
+procedure NameColor (Color32: integer; Name: pchar); stdcall;
+procedure WriteSavegameSection (DataSize: integer; {n} Data: POINTER; SectionName: pchar); stdcall;
 
-FUNCTION  ReadSavegameSection
+function  ReadSavegameSection
 (
-      DataSize:     INTEGER;
+      DataSize:     integer;
   {n} Dest:         POINTER;
-      SectionName:  PCHAR
-): INTEGER; STDCALL;
+      SectionName:  pchar
+): integer; stdcall;
 
-PROCEDURE GetGameState (VAR GameState: TGameState); STDCALL;
-FUNCTION  GetButtonID (ButtonName: PCHAR): INTEGER; STDCALL;
-FUNCTION  PatchExists (PatchName: PCHAR): BOOLEAN; STDCALL;
-FUNCTION  PluginExists (PluginName: PCHAR): BOOLEAN; STDCALL;
-PROCEDURE RedirectFile (OldFileName, NewFileName: PCHAR); STDCALL;
-PROCEDURE GlobalRedirectFile (OldFileName, NewFileName: PCHAR); STDCALL;
-PROCEDURE SaveEventParams;
-PROCEDURE RestoreEventParams;
-PROCEDURE RedirectMemoryBlock (OldAddr: POINTER; BlockSize: INTEGER; NewAddr: POINTER); STDCALL;
-FUNCTION  GetRealAddr (Addr: POINTER): POINTER; STDCALL;
+procedure GetGameState (var GameState: TGameState); stdcall;
+function  GetButtonID (ButtonName: pchar): integer; stdcall;
+function  PatchExists (PatchName: pchar): boolean; stdcall;
+function  PluginExists (PluginName: pchar): boolean; stdcall;
+procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
+procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall;
+procedure SaveEventParams;
+procedure RestoreEventParams;
+procedure RedirectMemoryBlock (OldAddr: POINTER; BlockSize: integer; NewAddr: POINTER); stdcall;
+function  GetRealAddr (Addr: POINTER): POINTER; stdcall;
 
 
-VAR
+var
   EventParams:  PEventParams;
 
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-PROCEDURE WriteAtCode;          EXTERNAL 'Era.dll' NAME 'WriteAtCode';
-PROCEDURE Hook;                 EXTERNAL 'Era.dll' NAME 'Hook';
-PROCEDURE ApiHook;              EXTERNAL 'Era.dll' NAME 'ApiHook';
-PROCEDURE KillThisProcess;      EXTERNAL 'Era.dll' NAME 'KillThisProcess';
-PROCEDURE FatalError;           EXTERNAL 'Era.dll' NAME 'FatalError';
-FUNCTION  RecallAPI;            EXTERNAL 'Era.dll' NAME 'RecallAPI';
-PROCEDURE RegisterHandler;      EXTERNAL 'Era.dll' NAME 'RegisterHandler';
-PROCEDURE FireEvent;            EXTERNAL 'Era.dll' NAME 'FireEvent';
-FUNCTION  LoadTxt;              EXTERNAL 'Era.dll' NAME 'LoadTxt';
-PROCEDURE ForceTxtUnload;       EXTERNAL 'Era.dll' NAME 'ForceTxtUnload';
-PROCEDURE ExecErmCmd;           EXTERNAL 'Era.dll' NAME 'ExecErmCmd';
-PROCEDURE ReloadErm;            EXTERNAL 'Era.dll' NAME 'ReloadErm';
-PROCEDURE ExtractErm;           EXTERNAL 'Era.dll' NAME 'ExtractErm';
-PROCEDURE FireErmEvent;         EXTERNAL 'Era.dll' NAME 'FireErmEvent';
-PROCEDURE ClearAllIniCache;     EXTERNAL 'Era.dll' NAME 'ClearAllIniCache';
-PROCEDURE ClearIniCache;        EXTERNAL 'Era.dll' NAME 'ClearIniCache';
-FUNCTION  ReadStrFromIni;       EXTERNAL 'Era.dll' NAME 'ReadStrFromIni';
-FUNCTION  WriteStrToIni;        EXTERNAL 'Era.dll' NAME 'WriteStrToIni';
-FUNCTION  SaveIni;              EXTERNAL 'Era.dll' NAME 'SaveIni';
-PROCEDURE NameColor;            EXTERNAL 'Era.dll' NAME 'NameColor';
-PROCEDURE WriteSavegameSection; EXTERNAL 'Era.dll' NAME 'WriteSavegameSection';
-FUNCTION  ReadSavegameSection;  EXTERNAL 'Era.dll' NAME 'ReadSavegameSection';
-PROCEDURE GetGameState;         EXTERNAL 'Era.dll' NAME 'GetGameState';
-FUNCTION  GetButtonID;          EXTERNAL 'Era.dll' NAME 'GetButtonID';
-FUNCTION  PatchExists;          EXTERNAL 'Era.dll' NAME 'PatchExists';
-FUNCTION  PluginExists;         EXTERNAL 'Era.dll' NAME 'PluginExists';
-PROCEDURE RedirectFile;         EXTERNAL 'Era.dll' NAME 'RedirectFile';
-PROCEDURE GlobalRedirectFile;   EXTERNAL 'Era.dll' NAME 'GlobalRedirectFile';
-PROCEDURE RedirectMemoryBlock;  EXTERNAL 'Era.dll' NAME 'RedirectMemoryBlock';
-FUNCTION  GetRealAddr;          EXTERNAL 'Era.dll' NAME 'GetRealAddr';
-PROCEDURE SaveEventParams;      EXTERNAL 'Angel.dll' NAME 'SaveEventParams';
-PROCEDURE RestoreEventParams;   EXTERNAL 'Angel.dll' NAME 'RestoreEventParams';
+procedure WriteAtCode;          external 'Era.dll' NAME 'WriteAtCode';
+procedure Hook;                 external 'Era.dll' NAME 'Hook';
+procedure ApiHook;              external 'Era.dll' NAME 'ApiHook';
+procedure KillThisProcess;      external 'Era.dll' NAME 'KillThisProcess';
+procedure FatalError;           external 'Era.dll' NAME 'FatalError';
+function  RecallAPI;            external 'Era.dll' NAME 'RecallAPI';
+procedure RegisterHandler;      external 'Era.dll' NAME 'RegisterHandler';
+procedure FireEvent;            external 'Era.dll' NAME 'FireEvent';
+function  LoadTxt;              external 'Era.dll' NAME 'LoadTxt';
+procedure ForceTxtUnload;       external 'Era.dll' NAME 'ForceTxtUnload';
+procedure ExecErmCmd;           external 'Era.dll' NAME 'ExecErmCmd';
+procedure ReloadErm;            external 'Era.dll' NAME 'ReloadErm';
+procedure ExtractErm;           external 'Era.dll' NAME 'ExtractErm';
+procedure FireErmEvent;         external 'Era.dll' NAME 'FireErmEvent';
+procedure ClearAllIniCache;     external 'Era.dll' NAME 'ClearAllIniCache';
+procedure ClearIniCache;        external 'Era.dll' NAME 'ClearIniCache';
+function  ReadStrFromIni;       external 'Era.dll' NAME 'ReadStrFromIni';
+function  WriteStrToIni;        external 'Era.dll' NAME 'WriteStrToIni';
+function  SaveIni;              external 'Era.dll' NAME 'SaveIni';
+procedure NameColor;            external 'Era.dll' NAME 'NameColor';
+procedure WriteSavegameSection; external 'Era.dll' NAME 'WriteSavegameSection';
+function  ReadSavegameSection;  external 'Era.dll' NAME 'ReadSavegameSection';
+procedure GetGameState;         external 'Era.dll' NAME 'GetGameState';
+function  GetButtonID;          external 'Era.dll' NAME 'GetButtonID';
+function  PatchExists;          external 'Era.dll' NAME 'PatchExists';
+function  PluginExists;         external 'Era.dll' NAME 'PluginExists';
+procedure RedirectFile;         external 'Era.dll' NAME 'RedirectFile';
+procedure GlobalRedirectFile;   external 'Era.dll' NAME 'GlobalRedirectFile';
+procedure RedirectMemoryBlock;  external 'Era.dll' NAME 'RedirectMemoryBlock';
+function  GetRealAddr;          external 'Era.dll' NAME 'GetRealAddr';
+procedure SaveEventParams;      external 'Angel.dll' NAME 'SaveEventParams';
+procedure RestoreEventParams;   external 'Angel.dll' NAME 'RestoreEventParams';
 
 
-BEGIN
+begin
   EventParams :=  Windows.GetProcAddress(Windows.LoadLibrary('Angel.dll'), 'EventParams');
-END.
+end.

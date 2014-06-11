@@ -1,102 +1,102 @@
-UNIT Stores;
+unit Stores;
 {
 DESCRIPTION:  Provides ability to store safely data in savegames
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib, DlgMes,
   Core, GameExt, Heroes, Erm;
 
 const
   DEBUG_SECTIONS_DIR = 'Games\Debug_Sections';
 
-TYPE
+type
   (* IMPORT *)
   TAssocArray = AssocArrays.TAssocArray;
   
   // Cached I/O for sections
-  IRider = INTERFACE
-    PROCEDURE Write (Size: INTEGER; {n} Addr: PBYTE);
-    PROCEDURE WriteInt (Value: INTEGER);
-    PROCEDURE WriteStr (CONST Str: STRING);
-    FUNCTION  Read (Size: INTEGER; {n} Addr: PBYTE): INTEGER;
-    FUNCTION  ReadInt: INTEGER;
-    FUNCTION  ReadStr: STRING;
-    PROCEDURE Flush;
-  END; // .INTERFACE IRider
+  IRider = interface
+    procedure Write (Size: integer; {n} Addr: PBYTE);
+    procedure WriteInt (Value: integer);
+    procedure WriteStr (const Str: string);
+    function  Read (Size: integer; {n} Addr: PBYTE): integer;
+    function  ReadInt: integer;
+    function  ReadStr: string;
+    procedure Flush;
+  end; // .interface IRider
 
 
-CONST
+const
   ZvsErmTriggerBeforeSave:  Utils.TProcedure  = Ptr($750093);
 
 
-PROCEDURE WriteSavegameSection (DataSize: INTEGER; {n} Data: POINTER; CONST SectionName: STRING);
-FUNCTION  ReadSavegameSection  (DataSize: INTEGER; {n} Dest: POINTER; CONST SectionName: STRING)
-                               :INTEGER;
-FUNCTION  NewRider (CONST SectionName: STRING): IRider;
+procedure WriteSavegameSection (DataSize: integer; {n} Data: POINTER; const SectionName: string);
+function  ReadSavegameSection  (DataSize: integer; {n} Dest: POINTER; const SectionName: string)
+                               :integer;
+function  NewRider (const SectionName: string): IRider;
 
 
-VAR
-  EraSectionsSize: INTEGER = 0; // 0 to turn off padding to fixed size
+var
+  EraSectionsSize: integer = 0; // 0 to turn off padding to fixed size
 
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-TYPE
-  TStoredData = CLASS
-    Data:       STRING;
-    ReadingPos: INTEGER;
-  END; // .CLASS TStoredData
+type
+  TStoredData = class
+    Data:       string;
+    ReadingPos: integer;
+  end; // .class TStoredData
   
-  TRider = CLASS (TInterfacedObject, IRider)
-   PUBLIC 
-    CONSTRUCTOR Create (CONST aSectionName: STRING);
-    DESTRUCTOR  Destroy; OVERRIDE;
+  TRider = class (TInterfacedObject, IRider)
+   public 
+    constructor Create (const aSectionName: string);
+    destructor  Destroy; override;
 
-    PROCEDURE Write (Size: INTEGER; {n} Addr: PBYTE);
-    PROCEDURE WriteInt (Value: INTEGER);
-    PROCEDURE WriteStr (CONST Str: STRING);
-    FUNCTION  Read (Size: INTEGER; {n} Addr: PBYTE): INTEGER;
-    // If nothing to read, returns 0
-    FUNCTION  ReadInt: INTEGER;
-    // If nothing to read, return ''
-    FUNCTION  ReadStr: STRING;
-    PROCEDURE Flush;
+    procedure Write (Size: integer; {n} Addr: PBYTE);
+    procedure WriteInt (Value: integer);
+    procedure WriteStr (const Str: string);
+    function  Read (Size: integer; {n} Addr: PBYTE): integer;
+    // if nothing to read, returns 0
+    function  ReadInt: integer;
+    // if nothing to read, return ''
+    function  ReadStr: string;
+    procedure Flush;
     
-   PRIVATE
-    fSectionName:   STRING;
-    fReadingBuf:    ARRAY [0..8149] OF BYTE;
-    fWritingBuf:    ARRAY [0..8149] OF BYTE;
-    fReadingBufPos: INTEGER; // Starts from zero
-    fWritingBufPos: INTEGER; // Starts from zero
-    fNumBytesRead:  INTEGER;
-  END; // .CLASS TRider
+   private
+    fSectionName:   string;
+    fReadingBuf:    array [0..8149] of byte;
+    fWritingBuf:    array [0..8149] of byte;
+    fReadingBufPos: integer; // Starts from zero
+    fWritingBufPos: integer; // Starts from zero
+    fNumBytesRead:  integer;
+  end; // .class TRider
 
 
-VAR
+var
 {O} WritingStorage: {O} TAssocArray {OF Data: StrLib.TStrBuilder};
 {O} ReadingStorage: {O} TAssocArray {OF StoredData: TStoredData};
-    ZeroBuf:        STRING;
+    ZeroBuf:        string;
 
 
-PROCEDURE WriteSavegameSection (DataSize: INTEGER; {n} Data: POINTER; CONST SectionName: STRING);
-VAR
+procedure WriteSavegameSection (DataSize: integer; {n} Data: POINTER; const SectionName: string);
+var
 {U} Section: StrLib.TStrBuilder;
   
-BEGIN
-  {!} ASSERT(Utils.IsValidBuf(Data, DataSize));
-  Section := NIL;
+begin
+  {!} Assert(Utils.IsValidBuf(Data, DataSize));
+  Section := nil;
   // * * * * * //
-  IF DataSize > 0 THEN BEGIN
+  if DataSize > 0 then begin
     Section := WritingStorage[SectionName];
     
-    IF Section = NIL THEN BEGIN
+    if Section = nil then begin
       Section                     := StrLib.TStrBuilder.Create;
       WritingStorage[SectionName] := Section;
-    END; // .IF
+    end; // .if
     
     Section.AppendBuf(DataSize, Data);
 
@@ -105,209 +105,209 @@ BEGIN
       Files.AppendFileContents(StrLib.BufToStr(Data, DataSize),
                                DEBUG_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
     end; // .if
-  END; // .IF
-END; // .PROCEDURE WriteSavegameSection
+  end; // .if
+end; // .procedure WriteSavegameSection
 
-FUNCTION ReadSavegameSection (DataSize: INTEGER; {n} Dest: POINTER; CONST SectionName: STRING)
-                              : INTEGER; 
-VAR
+function ReadSavegameSection (DataSize: integer; {n} Dest: POINTER; const SectionName: string)
+                              : integer; 
+var
 {U} Section: TStoredData;
   
-BEGIN
-  {!} ASSERT(Utils.IsValidBuf(Dest, DataSize));
-  Section := NIL;
+begin
+  {!} Assert(Utils.IsValidBuf(Dest, DataSize));
+  Section := nil;
   // * * * * * //
-  RESULT := 0;
+  result := 0;
   
-  IF DataSize > 0 THEN BEGIN
+  if DataSize > 0 then begin
     Section := ReadingStorage[SectionName];
     
-    IF Section <> NIL THEN BEGIN
-      RESULT := Math.Min(DataSize, LENGTH(Section.Data) - Section.ReadingPos);
-      Utils.CopyMem(RESULT, POINTER(@Section.Data[1 + Section.ReadingPos]), Dest);
-      INC(Section.ReadingPos, RESULT);
-    END; // .IF
-  END; // .IF
-END; // .FUNCTION ReadSavegameSection
+    if Section <> nil then begin
+      result := Math.Min(DataSize, Length(Section.Data) - Section.ReadingPos);
+      Utils.CopyMem(result, POINTER(@Section.Data[1 + Section.ReadingPos]), Dest);
+      Inc(Section.ReadingPos, result);
+    end; // .if
+  end; // .if
+end; // .function ReadSavegameSection
 
-CONSTRUCTOR TRider.Create (CONST aSectionName: STRING);
-BEGIN
+constructor TRider.Create (const aSectionName: string);
+begin
   fSectionName    := aSectionName;
   fReadingBufPos  := 0;
   fWritingBufPos  := 0;
   fNumBytesRead   := 0;
-END; // .CONSTRUCTOR TRider.Create
+end; // .constructor TRider.Create
 
-DESTRUCTOR TRider.Destroy;
-BEGIN
+destructor TRider.Destroy;
+begin
   Flush;
-END; // .DESTRUCTOR TRider.Destroy
+end; // .destructor TRider.Destroy
 
-PROCEDURE TRider.Write (Size: INTEGER; {n} Addr: PBYTE);
-BEGIN
-  {!} ASSERT(Utils.IsValidBuf(Addr, Size));
-  IF Size > 0 THEN BEGIN
-    // If no more space in cache - flush the cache
-    IF SIZEOF(fWritingBuf) - fWritingBufPos < Size THEN BEGIN
+procedure TRider.Write (Size: integer; {n} Addr: PBYTE);
+begin
+  {!} Assert(Utils.IsValidBuf(Addr, Size));
+  if Size > 0 then begin
+    // if no more space in cache - flush the cache
+    if sizeof(fWritingBuf) - fWritingBufPos < Size then begin
       Flush;
-    END; // .IF
+    end; // .if
     
-    // If it's enough space in cache to hold passed data then write data to cache
-    IF SIZEOF(fWritingBuf) - fWritingBufPos > Size THEN BEGIN
+    // if it's enough space in cache to hold passed data then write data to cache
+    if sizeof(fWritingBuf) - fWritingBufPos > Size then begin
       Utils.CopyMem(Size, Addr, @fWritingBuf[fWritingBufPos]);
-      INC(fWritingBufPos, Size);
-    END // .IF
-    // Else cache is too small, write directly to section
-    ELSE BEGIN
+      Inc(fWritingBufPos, Size);
+    end // .if
+    // else cache is too small, write directly to section
+    else begin
       WriteSavegameSection(Size, Addr, fSectionName);
-    END; // .ELSE
-  END; // .IF
-END; // .PROCEDURE TRider.Write
+    end; // .else
+  end; // .if
+end; // .procedure TRider.Write
 
-PROCEDURE TRider.WriteInt (Value: INTEGER);
-BEGIN
-  Write(SIZEOF(Value), @Value);
-END; // .PROCEDURE TRider.WriteInt
+procedure TRider.WriteInt (Value: integer);
+begin
+  Write(sizeof(Value), @Value);
+end; // .procedure TRider.WriteInt
 
-PROCEDURE TRider.WriteStr (CONST Str: STRING);
-VAR
-  StrLen: INTEGER;
+procedure TRider.WriteStr (const Str: string);
+var
+  StrLen: integer;
 
-BEGIN
-  StrLen := LENGTH(Str);
+begin
+  StrLen := Length(Str);
   WriteInt(StrLen);
   
-  IF StrLen > 0 THEN BEGIN
+  if StrLen > 0 then begin
     Write(StrLen, POINTER(Str));
-  END; // .IF
-END; // .PROCEDURE TRider.WriteStr
+  end; // .if
+end; // .procedure TRider.WriteStr
 
-PROCEDURE TRider.Flush;
-BEGIN
+procedure TRider.Flush;
+begin
   WriteSaveGameSection(fWritingBufPos, @fWritingBuf[0], fSectionName);
   fWritingBufPos := 0;
-END; // .PROCEDURE TRider.Flush
+end; // .procedure TRider.Flush
 
-FUNCTION TRider.Read (Size: INTEGER; {n} Addr: PBYTE): INTEGER;
-VAR
-  NumBytesToCopy: INTEGER;
+function TRider.Read (Size: integer; {n} Addr: PBYTE): integer;
+var
+  NumBytesToCopy: integer;
 
-BEGIN
-  {!} ASSERT(Utils.IsValidBuf(Addr, Size));
-  RESULT := 0;
+begin
+  {!} Assert(Utils.IsValidBuf(Addr, Size));
+  result := 0;
   
-  IF Size > 0 THEN BEGIN
-    // If there is some data in cache
-    IF fNumBytesRead > 0 THEN BEGIN
-      RESULT := Math.Min(Size, fNumBytesRead);
-      Utils.CopyMem(RESULT, @fReadingBuf[fReadingBufPos], Addr);
-      DEC(Size,           RESULT);
-      DEC(fNumBytesRead,  RESULT);
-      INC(Addr,           RESULT);
-      INC(fReadingBufPos, RESULT);
-    END; // .IF
+  if Size > 0 then begin
+    // if there is some data in cache
+    if fNumBytesRead > 0 then begin
+      result := Math.Min(Size, fNumBytesRead);
+      Utils.CopyMem(result, @fReadingBuf[fReadingBufPos], Addr);
+      Dec(Size,           result);
+      Dec(fNumBytesRead,  result);
+      Inc(Addr,           result);
+      Inc(fReadingBufPos, result);
+    end; // .if
 
-    // If client expects more data to be read than it's in cache. Cache is empty
-    IF Size > 0 THEN BEGIN
-      // If requested data chunk is too big, no sense to cache it
-      IF Size >= SIZEOF(fReadingBuf) THEN BEGIN
-        INC(RESULT, ReadSavegameSection(Size, Addr, fSectionName));
-      END // .IF
-      // Try to fill cache with new data and pass its portion to the client
-      ELSE BEGIN
-        fNumBytesRead := ReadSavegameSection(SIZEOF(fReadingBuf), @fReadingBuf[0], fSectionName);
+    // if client expects more data to be read than it's in cache. Cache is empty
+    if Size > 0 then begin
+      // if requested data chunk is too big, no sense to cache it
+      if Size >= sizeof(fReadingBuf) then begin
+        Inc(result, ReadSavegameSection(Size, Addr, fSectionName));
+      end // .if
+      // try to fill cache with New data and pass its portion to the client
+      else begin
+        fNumBytesRead := ReadSavegameSection(sizeof(fReadingBuf), @fReadingBuf[0], fSectionName);
         
-        IF fNumBytesRead > 0 THEN BEGIN
+        if fNumBytesRead > 0 then begin
           NumBytesToCopy := Math.Min(Size, fNumBytesRead);
           Utils.CopyMem(NumBytesToCopy, @fReadingBuf[0], Addr);
           fReadingBufPos := NumBytesToCopy;
-          DEC(fNumBytesRead, NumBytesToCopy);
-          INC(RESULT, NumBytesToCopy);
-        END; // .IF
-      END; // .ELSE
-    END; // .IF
-  END; // .IF
-END; // .PROCEDURE TRider.Read
+          Dec(fNumBytesRead, NumBytesToCopy);
+          Inc(result, NumBytesToCopy);
+        end; // .if
+      end; // .else
+    end; // .if
+  end; // .if
+end; // .procedure TRider.Read
 
-FUNCTION TRider.ReadInt: INTEGER;
-VAR
-  NumBytesRead: INTEGER;
+function TRider.ReadInt: integer;
+var
+  NumBytesRead: integer;
 
-BEGIN
-  RESULT       := 0;
-  NumBytesRead := Read(SIZEOF(RESULT), @RESULT);
-  {!} ASSERT((NumBytesRead = SIZEOF(RESULT)) OR (NumBytesRead = 0));
-END; // .FUNCTION TRider.ReadInt
+begin
+  result       := 0;
+  NumBytesRead := Read(sizeof(result), @result);
+  {!} Assert((NumBytesRead = sizeof(result)) or (NumBytesRead = 0));
+end; // .function TRider.ReadInt
 
-FUNCTION TRider.ReadStr: STRING;
-VAR
-  StrLen:       INTEGER;
-  NumBytesRead: INTEGER;
+function TRider.ReadStr: string;
+var
+  StrLen:       integer;
+  NumBytesRead: integer;
 
-BEGIN
+begin
   StrLen := ReadInt;
-  {!} ASSERT(StrLen >= 0);
-  SetLength(RESULT, StrLen);
+  {!} Assert(StrLen >= 0);
+  SetLength(result, StrLen);
   
-  IF StrLen > 0 THEN BEGIN
-    NumBytesRead := Read(StrLen, POINTER(RESULT));
-    {!} ASSERT(NumBytesRead = StrLen);
-  END; // .IF
-END; // .FUNCTION TRider.ReadStr
+  if StrLen > 0 then begin
+    NumBytesRead := Read(StrLen, POINTER(result));
+    {!} Assert(NumBytesRead = StrLen);
+  end; // .if
+end; // .function TRider.ReadStr
 
-FUNCTION NewRider (CONST SectionName: STRING): IRider;
-BEGIN
-  RESULT := TRider.Create(SectionName);
-END; // .FUNCTION NewRider
+function NewRider (const SectionName: string): IRider;
+begin
+  result := TRider.Create(SectionName);
+end; // .function NewRider
 
-FUNCTION Hook_SaveGame (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_SaveGame (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   PARAM_SAVEGAME_NAME = 0;
 
-VAR
-{U} OldSavegameName:  PCHAR;
-{U} SavegameName:     PCHAR;
-    SavegameNameLen:  INTEGER;
+var
+{U} OldSavegameName:  pchar;
+{U} SavegameName:     pchar;
+    SavegameNameLen:  integer;
   
-BEGIN
+begin
   OldSavegameName := PPOINTER(Context.EBP + 8)^;
-  SavegameName    := NIL;
+  SavegameName    := nil;
   // * * * * * //
   GameExt.EraSaveEventParams;
   
-  GameExt.EraEventParams[PARAM_SAVEGAME_NAME] := INTEGER(OldSavegameName);
+  GameExt.EraEventParams[PARAM_SAVEGAME_NAME] := integer(OldSavegameName);
   ZvsErmTriggerBeforeSave;
   SavegameName    := Ptr(GameExt.EraEventParams[PARAM_SAVEGAME_NAME]);
   SavegameNameLen := SysUtils.StrLen(SavegameName);
   
-  IF SavegameName <> OldSavegameName THEN BEGIN
+  if SavegameName <> OldSavegameName then begin
     Utils.CopyMem(SavegameNameLen + 1, SavegameName, OldSavegameName);
     PINTEGER(Context.EBP + 12)^ := -1;
-  END; // .IF
+  end; // .if
   
   GameExt.EraRestoreEventParams;
   
-  RESULT := Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_SaveGame
+  result := Core.EXEC_DEF_CODE;
+end; // .function Hook_SaveGame
 
-FUNCTION Hook_SaveGameWrite (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-VAR
+function Hook_SaveGameWrite (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
 {U} StrBuilder:     StrLib.TStrBuilder;
-    NumSections:    INTEGER;
-    SectionNameLen: INTEGER;
-    DataLen:        INTEGER;
-    BuiltData:      STRING;
-    TotalWritten:   INTEGER; // Trying to fix game diff algorithm in online games
-    PaddingSize:    INTEGER;
+    NumSections:    integer;
+    SectionNameLen: integer;
+    DataLen:        integer;
+    BuiltData:      string;
+    TotalWritten:   integer; // Trying to fix game diff algorithm in online games
+    PaddingSize:    integer;
     
-  PROCEDURE GzipWrite (Count: INTEGER; {n} Addr: POINTER);
-  BEGIN
-    INC(TotalWritten, Count);
+  procedure GzipWrite (Count: integer; {n} Addr: POINTER);
+  begin
+    Inc(TotalWritten, Count);
     Heroes.GzipWrite(Count, Addr);
-  END; // .PROCEDURE GzipWrite
+  end; // .procedure GzipWrite
 
-BEGIN
-  StrBuilder := NIL;
+begin
+  StrBuilder := nil;
   // * * * * * //
   if GameExt.Debug then begin
     Files.DeleteDir(DEBUG_SECTIONS_DIR);
@@ -320,89 +320,89 @@ BEGIN
   
   TotalWritten := 0;
   NumSections  := WritingStorage.ItemCount;
-  GzipWrite(SIZEOF(NumSections), @NumSections);
+  GzipWrite(sizeof(NumSections), @NumSections);
 
-  WITH DataLib.IterateDict(WritingStorage) DO BEGIN
-    WHILE IterNext DO BEGIN
-      SectionNameLen := LENGTH(IterKey);
-      GzipWrite(SIZEOF(SectionNameLen), @SectionNameLen);
+  with DataLib.IterateDict(WritingStorage) do begin
+    while IterNext do begin
+      SectionNameLen := Length(IterKey);
+      GzipWrite(sizeof(SectionNameLen), @SectionNameLen);
       GzipWrite(SectionNameLen, POINTER(IterKey));
 
       BuiltData := (IterValue AS StrLib.TStrBuilder).BuildStr;
-      DataLen   := LENGTH(BuiltData);
-      GzipWrite(SIZEOF(DataLen), @DataLen);
-      GzipWrite(LENGTH(BuiltData), POINTER(BuiltData));
+      DataLen   := Length(BuiltData);
+      GzipWrite(sizeof(DataLen), @DataLen);
+      GzipWrite(Length(BuiltData), POINTER(BuiltData));
 
       if GameExt.Debug then begin
         Files.WriteFileContents(BuiltData, DEBUG_SECTIONS_DIR + '\' + IterKey + '.joined.txt');
       end; // .if
-    END; // .WHILE
-  END; // .WITH 
+    end; // .while
+  end; // .with 
   
   (* Trying to fix Heroes 3 diff problem: both images should have equal size
      Pad the data to specified size *)
-  IF EraSectionsSize <> 0 THEN BEGIN
-    IF TotalWritten > EraSectionsSize THEN BEGIN
+  if EraSectionsSize <> 0 then begin
+    if TotalWritten > EraSectionsSize then begin
       Core.FatalError('Too small SavedGameExtraBlockSize: ' + IntToStr(EraSectionsSize) + #13#10
                       + 'Size required is at least: ' + IntToStr(TotalWritten));
-    END // .IF
-    ELSE IF TotalWritten < EraSectionsSize THEN BEGIN
+    end // .if
+    else if TotalWritten < EraSectionsSize then begin
       PaddingSize := EraSectionsSize - TotalWritten;
       
-      IF LENGTH(ZeroBuf) < PaddingSize THEN BEGIN
+      if Length(ZeroBuf) < PaddingSize then begin
         ZeroBuf := '';
         SetLength(ZeroBuf, PaddingSize);
         FillChar(ZeroBuf[1], PaddingSize, 0);
-      END; // .IF
+      end; // .if
       
       GzipWrite(PaddingSize, POINTER(ZeroBuf));
-    END; // .ELSEIF
-  END; // .IF
+    end; // .ELSEIF
+  end; // .if
   
-  // Default code
-  IF PINTEGER(Context.EBP - 4)^ = 0 THEN BEGIN
+  // default code
+  if PINTEGER(Context.EBP - 4)^ = 0 then begin
     Context.RetAddr := Ptr($704EF2);
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     Context.RetAddr := Ptr($704F10);
-  END; // .ELSE
+  end; // .else
   
-  RESULT := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_SaveGameWrite
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_SaveGameWrite
 
-FUNCTION Hook_SaveGameRead (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-VAR
+function Hook_SaveGameRead (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
 {U} StoredData:     TStoredData;
-    BytesRead:      INTEGER;
-    NumSections:    INTEGER;
-    SectionNameLen: INTEGER;
-    SectionName:    STRING;
-    DataLen:        INTEGER;
-    SectionData:    STRING;
-    i:              INTEGER;
+    BytesRead:      integer;
+    NumSections:    integer;
+    SectionNameLen: integer;
+    SectionName:    string;
+    DataLen:        integer;
+    SectionData:    string;
+    i:              integer;
     
-  PROCEDURE ForceGzipRead (Count: INTEGER; {n} Addr: POINTER);
-  BEGIN
+  procedure ForceGzipRead (Count: integer; {n} Addr: POINTER);
+  begin
     BytesRead := Heroes.GzipRead(Count, Addr);
-    {!} ASSERT(BytesRead = Count);
-  END; // .PROCEDURE ForceGzipRead
+    {!} Assert(BytesRead = Count);
+  end; // .procedure ForceGzipRead
 
-BEGIN
-  StoredData := NIL;
+begin
+  StoredData := nil;
   // * * * * * //
   ReadingStorage.Clear;
   NumSections := 0;
-  BytesRead   := Heroes.GzipRead(SIZEOF(NumSections), @NumSections);
-  {!} ASSERT((BytesRead = SIZEOF(NumSections)) OR (BytesRead = 0));
+  BytesRead   := Heroes.GzipRead(sizeof(NumSections), @NumSections);
+  {!} Assert((BytesRead = sizeof(NumSections)) or (BytesRead = 0));
   
-  FOR i:=1 TO NumSections DO BEGIN
-    ForceGzipRead(SIZEOF(SectionNameLen), @SectionNameLen);
-    {!} ASSERT(SectionNameLen >= 0);
+  for i:=1 to NumSections do begin
+    ForceGzipRead(sizeof(SectionNameLen), @SectionNameLen);
+    {!} Assert(SectionNameLen >= 0);
     SetLength(SectionName, SectionNameLen);
     ForceGzipRead(SectionNameLen, POINTER(SectionName));
 
-    ForceGzipRead(SIZEOF(DataLen), @DataLen);
-    {!} ASSERT(DataLen >= 0);
+    ForceGzipRead(sizeof(DataLen), @DataLen);
+    {!} Assert(DataLen >= 0);
     SetLength(SectionData, DataLen);
     ForceGzipRead(DataLen, POINTER(SectionData));
     
@@ -410,34 +410,34 @@ BEGIN
     StoredData.Data             := SectionData; SectionData := '';
     StoredData.ReadingPos       := 0;
     ReadingStorage[SectionName] := StoredData;
-  END; // .FOR
+  end; // .for
   
   GameExt.FireEvent('$OnEraLoadScripts', GameExt.NO_EVENT_DATA, 0);
   Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_READ, []);
   
-  // Default code
-  IF PINTEGER(Context.EBP - $14)^ = 0 THEN BEGIN
+  // default code
+  if PINTEGER(Context.EBP - $14)^ = 0 then begin
     Context.RetAddr := Ptr($7051BE);
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     Context.RetAddr := Ptr($7051DC);
-  END; // .ELSE
+  end; // .else
   
-  RESULT := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_SaveGameRead
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_SaveGameRead
 
-PROCEDURE OnAfterWoG (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+begin
   Core.Hook(@Hook_SaveGame, Core.HOOKTYPE_BRIDGE, 5, Ptr($4BEB65));
   Core.Hook(@Hook_SaveGameWrite, Core.HOOKTYPE_BRIDGE, 6, Ptr($704EEC));
   Core.Hook(@Hook_SaveGameRead, Core.HOOKTYPE_BRIDGE, 6, Ptr($7051B8));
   
   (* Remove Erm trigger "BeforeSaveGame" call *)
   Core.p.WriteDataPatch($7051F5, ['9090909090']);
-END; // .PROCEDURE OnAfterWoG
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   WritingStorage := AssocArrays.NewStrictAssocArr(StrLib.TStrBuilder);
   ReadingStorage := AssocArrays.NewStrictAssocArr(TStoredData);
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
-END.
+end.

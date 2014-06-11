@@ -1,17 +1,17 @@
-UNIT Erm;
+unit Erm;
 {
 DESCRIPTION:  Native ERM support
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   Windows, SysUtils, StrUtils, Math,
   Utils, Alg, Crypto, StrLib, Lists, DataLib, AssocArrays, TextScan,
   CFiles, Files, FilesEx, Ini,
   Core, PatchApi, Heroes, GameExt;
 
-CONST
+const
   ERM_SCRIPTS_SECTION     = 'Era.ErmScripts';
   ERM_SCRIPTS_PATH        = 'Data\s';
   EXTRACTED_SCRIPTS_PATH  = 'Data\ExtractedScripts';
@@ -23,7 +23,7 @@ CONST
   COND_OR     = 1;
 
   ERM_CMD_MAX_PARAMS_NUM = 16;
-  MIN_ERM_SCRIPT_SIZE    = LENGTH('ZVSE'#13#10);
+  MIN_ERM_SCRIPT_SIZE    = Length('ZVSE'#13#10);
   LINE_END_MARKER        = #10;
 
   CurrErmEventID: PINTEGER = Ptr($27C1950);
@@ -90,9 +90,9 @@ CONST
   TRIGGER_TL2       = 30902;
   TRIGGER_TL3       = 30903;
   TRIGGER_TL4       = 30904;
-  TRIGGER_OB_POS    = INTEGER($10000000);
-  TRIGGER_LE_POS    = INTEGER($20000000);
-  TRIGGER_OB_LEAVE  = INTEGER($08000000);
+  TRIGGER_OB_POS    = integer($10000000);
+  TRIGGER_LE_POS    = integer($20000000);
+  TRIGGER_OB_LEAVE  = integer($08000000);
   TRIGGER_INVALID   = -1;
   
   (* Era Triggers *)
@@ -138,7 +138,7 @@ CONST
   NO_PIC_TYPE = -1;
 
 
-TYPE
+type
   (* IMPORT *)
   TAssocArray = AssocArrays.TAssocArray;
   TList       = DataLib.TList;
@@ -149,86 +149,86 @@ TYPE
   TErmCheckType = (NO_CHECK, CHECK_GET, CHECK_EQUAL, CHECK_NOTEQUAL, CHECK_MORE, CHECK_LESS, 
                    CHECK_MOREEUQAL, CHECK_LESSEQUAL);
 
-  TErmCmdParam = PACKED RECORD
-    Value:    INTEGER;
+  TErmCmdParam = packed record
+    Value:    integer;
     {
     [4 bits]  Type:             TErmValType;  // ex: y5;  y5 - type
     [4 bits]  IndexedPartType:  TErmValType;  // ex: vy5; y5 - indexed part;
     [3 bits]  CheckType:        TErmCheckType;
     }
-    ValType:  INTEGER;
-  END; // .RECORD TErmCmdParam
+    ValType:  integer;
+  end; // .record TErmCmdParam
 
-  TErmString = PACKED RECORD
-    Value: PCHAR;
-    Len:   INTEGER;
-  END; // .RECORD TErmString
+  TErmString = packed record
+    Value: pchar;
+    Len:   integer;
+  end; // .record TErmString
   
   PErmCmdConditions = ^TErmCmdConditions;
-  TErmCmdConditions = ARRAY [COND_AND..COND_OR, 0..15, LEFT_COND..RIGHT_COND] OF TErmCmdParam;
+  TErmCmdConditions = array [COND_AND..COND_OR, 0..15, LEFT_COND..RIGHT_COND] of TErmCmdParam;
 
   PErmCmdParams = ^TErmCmdParams;
-  TErmCmdParams = ARRAY [0..ERM_CMD_MAX_PARAMS_NUM - 1] OF TErmCmdParam;
+  TErmCmdParams = array [0..ERM_CMD_MAX_PARAMS_NUM - 1] of TErmCmdParam;
 
-  TErmCmdId = PACKED RECORD
-    CASE BOOLEAN OF
-      TRUE:  (Name: ARRAY [0..1] OF CHAR);
-      FALSE: (Id: WORD);
-  END; // .RECORD TErmCmdId
+  TErmCmdId = packed record
+    case boolean of
+      TRUE:  (Name: array [0..1] of char);
+      FALSE: (Id: word);
+  end; // .record TErmCmdId
   
   PErmCmd = ^TErmCmd;
-  TErmCmd = PACKED RECORD
+  TErmCmd = packed record
     CmdId:        TErmCmdId;
-    Disabled:     BOOLEAN;
-    PrevDisabled: BOOLEAN;
+    Disabled:     boolean;
+    PrevDisabled: boolean;
     Conditions:   TErmCmdConditions;
     Structure:    POINTER;
     Params:       TErmCmdParams;
-    NumParams:    INTEGER;
+    NumParams:    integer;
     CmdHeader:    TErmString; // ##:...
     CmdBody:      TErmString; // #^...^/...
-  END; // .RECORD TErmCmd
+  end; // .record TErmCmd
   
   PErmVVars = ^TErmVVars;
-  TErmVVars = ARRAY [1..10000] OF INTEGER;
+  TErmVVars = array [1..10000] of integer;
   PWVars    = ^TWVars;
-  TWVars    = ARRAY [0..255, 1..200] OF INTEGER;
-  TErmZVar  = ARRAY [0..511] OF CHAR;
+  TWVars    = array [0..255, 1..200] of integer;
+  TErmZVar  = array [0..511] of char;
   PErmZVars = ^TErmZVars;
-  TErmZVars = ARRAY [1..1000] OF TErmZVar;
+  TErmZVars = array [1..1000] of TErmZVar;
   PErmNZVars = ^TErmNZVars;
-  TErmNZVars = ARRAY [1..10] OF TErmZVar;
+  TErmNZVars = array [1..10] of TErmZVar;
   PErmYVars = ^TErmYVars;
-  TErmYVars = ARRAY [1..100] OF INTEGER;
+  TErmYVars = array [1..100] of integer;
   PErmNYVars = ^TErmNYVars;
-  TErmNYVars = ARRAY [1..100] OF INTEGER;
+  TErmNYVars = array [1..100] of integer;
   PErmXVars = ^TErmXVars;
-  TErmXVars = ARRAY [1..16] OF INTEGER;
+  TErmXVars = array [1..16] of integer;
   PErmFlags = ^TErmFlags;
-  TErmFlags = ARRAY [1..1000] OF BOOLEAN;
+  TErmFlags = array [1..1000] of boolean;
   PErmEVars = ^TErmEVars;
-  TErmEVars = ARRAY [1..100] OF SINGLE;
+  TErmEVars = array [1..100] of single;
   PErmNEVars = ^TErmNEVars;
-  TErmNEVars = ARRAY [1..100] OF SINGLE;
+  TErmNEVars = array [1..100] of single;
   PErmQuickVars = ^TErmQuickVars;
-  TErmQuickVars = ARRAY [0..14] OF INTEGER;
+  TErmQuickVars = array [0..14] of integer;
 
-  TZvsLoadErtFile = FUNCTION (Dummy, FileName: PCHAR): INTEGER; CDECL;
-  TZvsShowMessage = FUNCTION (Mes: PCHAR; MesType: INTEGER; DummyZero: INTEGER): INTEGER; CDECL;
-  TFireErmEvent   = FUNCTION (EventId: INTEGER): INTEGER; CDECL;
-  TZvsDumpErmVars = PROCEDURE (Error, {n} ErmCmdPtr: PCHAR); CDECL;
+  TZvsLoadErtFile = function (Dummy, FileName: pchar): integer; cdecl;
+  TZvsShowMessage = function (Mes: pchar; MesType: integer; DummyZero: integer): integer; cdecl;
+  TFireErmEvent   = function (EventId: integer): integer; cdecl;
+  TZvsDumpErmVars = procedure (Error, {n} ErmCmdPtr: pchar); cdecl;
   
   POnBeforeTriggerArgs = ^TOnBeforeTriggerArgs;
-  TOnBeforeTriggerArgs = PACKED RECORD
-    TriggerID:         INTEGER;
+  TOnBeforeTriggerArgs = packed record
+    TriggerID:         integer;
     BlockErmExecution: LONGBOOL;
-  END; // .RECORD TOnBeforeTriggerArgs
+  end; // .record TOnBeforeTriggerArgs
   
-  TYVars = CLASS
+  TYVars = class
     Value: Utils.TArrayOfInteger;
-  END; // .CLASS TYVars
+  end; // .class TYVars
   
-  TWoGOptions = ARRAY [CURRENT_WOG_OPTIONS..GLOBAL_WOG_OPTIONS, 0..NUM_WOG_OPTIONS - 1] OF INTEGER;
+  TWoGOptions = array [CURRENT_WOG_OPTIONS..GLOBAL_WOG_OPTIONS, 0..NUM_WOG_OPTIONS - 1] of integer;
   
   TMesType  =
   (
@@ -239,102 +239,102 @@ TYPE
     MES_MAY_CHOOSE  = 10
   );
   
-  TTextLineBounds = RECORD
-    StartPos: INTEGER; // Starts from 1
-    EndPos:   INTEGER;
-  END; // .RECORD TTextLineBounds
+  TTextLineBounds = record
+    StartPos: integer; // Starts from 1
+    EndPos:   integer;
+  end; // .record TTextLineBounds
   
-  TErmScript = CLASS
-   PRIVATE
-        fFileName:    STRING;
-        fContents:    STRING;
-        fCrc32:       INTEGER;
-    {n} fLineNumbers: ARRAY OF TTextLineBounds; // Loaded on demand
+  TErmScript = class
+   private
+        fFileName:    string;
+        fContents:    string;
+        fCrc32:       integer;
+    {n} fLineNumbers: array of TTextLineBounds; // Loaded on demand
 
-    PROCEDURE Init (CONST aFileName, aScriptContents: STRING; aCrc32: INTEGER);
-    PROCEDURE UpdateLineNumbers;
+    procedure Init (const aFileName, aScriptContents: string; aCrc32: integer);
+    procedure UpdateLineNumbers;
 
-   PUBLIC
-    CONSTRUCTOR Create (CONST aFileName, aScriptContents: STRING; aCrc32: INTEGER); OVERLOAD;
-    CONSTRUCTOR Create (CONST aFileName, aScriptContents: STRING); OVERLOAD;
-    // Note: Uses hash checking instead of comparing contents of scripts
-    FUNCTION  IsEqual (OtherScript: TErmScript): BOOLEAN;
-    FUNCTION  StartAddr: {n} PCHAR;
-    FUNCTION  EndAddr: {n} PCHAR;
-    FUNCTION  AddrToLineNumber ({n} Addr: PCHAR; OUT LineNumber: INTEGER): BOOLEAN;
+   public
+    constructor Create (const aFileName, aScriptContents: string; aCrc32: integer); overload;
+    constructor Create (const aFileName, aScriptContents: string); overload;
+    // Note: uses hash checking instead of comparing contents of scripts
+    function  IsEqual (OtherScript: TErmScript): boolean;
+    function  StartAddr: {n} pchar;
+    function  EndAddr: {n} pchar;
+    function  AddrToLineNumber ({n} Addr: pchar; out LineNumber: integer): boolean;
     
-    PROPERTY FileName: STRING READ fFileName;
-    PROPERTY Contents: STRING READ fContents;
-    PROPERTY Crc32:    INTEGER READ fCrc32;
-  END; // .CLASS TErmScript
+    property FileName: string read fFileName;
+    property Contents: string read fContents;
+    property Crc32:    integer read fCrc32;
+  end; // .class TErmScript
 
-  // Sorts list of Name => Priority: INTEGER
-  TSortStrListByPriority = CLASS (Alg.TQuickSortAdapter)
-    CONSTRUCTOR Create (aList: TStrList);
-    FUNCTION  CompareItems (Ind1, Ind2: INTEGER): INTEGER; OVERRIDE;
-    PROCEDURE SwapItems (Ind1, Ind2: INTEGER); OVERRIDE;
-    PROCEDURE SavePivotItem (PivotItemInd: INTEGER); OVERRIDE;
-    FUNCTION  CompareToPivot (Ind: INTEGER): INTEGER; OVERRIDE;
-    PROCEDURE Sort;
+  // Sorts list of Name => Priority: integer
+  TSortStrListByPriority = class (Alg.TQuickSortAdapter)
+    constructor Create (aList: TStrList);
+    function  CompareItems (Ind1, Ind2: integer): integer; override;
+    procedure SwapItems (Ind1, Ind2: integer); override;
+    procedure SavePivotItem (PivotItemInd: integer); override;
+    function  CompareToPivot (Ind: integer): integer; override;
+    procedure Sort;
     
-   PRIVATE
+   private
     {U} List:      TStrList;
-        PivotItem: INTEGER;
-  END; // .CLASS TSortStrListByPriority
+        PivotItem: integer;
+  end; // .class TSortStrListByPriority
 
-  TScriptAddrBounds = RECORD
-        ScriptInd: INTEGER;
-    {n} StartAddr: PCHAR; // First script byte or NIL
-    {n} EndAddr:   PCHAR; // Last script byte or NIL
-  END; // .RECORD TScriptAddrBounds
+  TScriptAddrBounds = record
+        ScriptInd: integer;
+    {n} StartAddr: pchar; // First script byte or nil
+    {n} EndAddr:   pchar; // Last script byte or nil
+  end; // .record TScriptAddrBounds
   
-  TScriptsAddrBounds = ARRAY OF TScriptAddrBounds;
+  TScriptsAddrBounds = array of TScriptAddrBounds;
   
   // Sorts array of TScriptAddrBounds
-  TSortScriptsAddrBounds = CLASS (Alg.TQuickSortAdapter)
-    CONSTRUCTOR Create ({n} aArr: TScriptsAddrBounds);
-    FUNCTION  CompareItems (Ind1, Ind2: INTEGER): INTEGER; OVERRIDE;
-    PROCEDURE SwapItems (Ind1, Ind2: INTEGER); OVERRIDE;
-    PROCEDURE SavePivotItem (PivotItemInd: INTEGER); OVERRIDE;
-    FUNCTION  CompareToPivot (Ind: INTEGER): INTEGER; OVERRIDE;
-    PROCEDURE Sort;
+  TSortScriptsAddrBounds = class (Alg.TQuickSortAdapter)
+    constructor Create ({n} aArr: TScriptsAddrBounds);
+    function  CompareItems (Ind1, Ind2: integer): integer; override;
+    procedure SwapItems (Ind1, Ind2: integer); override;
+    procedure SavePivotItem (PivotItemInd: integer); override;
+    function  CompareToPivot (Ind: integer): integer; override;
+    procedure Sort;
     
-   PRIVATE
+   private
     {Un} fArr:      TScriptsAddrBounds;
          PivotItem: TScriptAddrBounds;
-  END; // .CLASS TSortScriptsAddrBounds
+  end; // .class TSortScriptsAddrBounds
   
-  TScriptMan = CLASS
-   PRIVATE
+  TScriptMan = class
+   private
     {O} fScripts:           {O} TList {OF TErmScript};
     {O} fScriptIsLoaded:    {U} TDict {OF FileName => Ptr(BOOLEAN)};
     {n} fScriptsAddrBounds: TScriptsAddrBounds; // Loaded on demands
     
-    FUNCTION  GetScriptCount: INTEGER;
-    FUNCTION  GetScript (Ind: INTEGER): TErmScript;
-    PROCEDURE UpdateScriptAddrBounds;
+    function  GetScriptCount: integer;
+    function  GetScript (Ind: integer): TErmScript;
+    procedure UpdateScriptAddrBounds;
    
-   PUBLIC
-    CONSTRUCTOR Create;
-    DESTRUCTOR  Destroy; OVERRIDE;
+   public
+    constructor Create;
+    destructor  Destroy; override;
    
-    PROCEDURE ClearScripts;
-    PROCEDURE SaveScripts;
-    FUNCTION  IsScriptLoaded (CONST ScriptName: STRING): BOOLEAN;
-    FUNCTION  LoadScript (CONST ScriptName: STRING): BOOLEAN;
-    PROCEDURE LoadScriptsFromSavedGame;
-    PROCEDURE LoadScriptsFromDisk;
-    PROCEDURE ReloadScriptsFromDisk;
-    PROCEDURE ExtractScripts;
-    FUNCTION  AddrToScriptNameAndLine ({n} Addr: PCHAR; OUT ScriptName: STRING; OUT Line: INTEGER)
-                                      : BOOLEAN;
+    procedure ClearScripts;
+    procedure SaveScripts;
+    function  IsScriptLoaded (const ScriptName: string): boolean;
+    function  LoadScript (const ScriptName: string): boolean;
+    procedure LoadScriptsFromSavedGame;
+    procedure LoadScriptsFromDisk;
+    procedure ReloadScriptsFromDisk;
+    procedure ExtractScripts;
+    function  AddrToScriptNameAndLine ({n} Addr: pchar; out ScriptName: string; out Line: integer)
+                                      : boolean;
 
-    PROPERTY ScriptCount: INTEGER READ GetScriptCount;
-    PROPERTY Scripts[Ind: INTEGER]: TErmScript READ GetScript;
-  END; // .CLASS TScriptMan
+    property ScriptCount: integer read GetScriptCount;
+    property Scripts[Ind: integer]: TErmScript read GetScript;
+  end; // .class TScriptMan
 
   
-CONST
+const
   (* WoG vars *)
   QuickVars: PErmQuickVars = Ptr($27718D0);
   v:  PErmVVars = Ptr($887668);
@@ -349,8 +349,8 @@ CONST
   ne: PErmNEVars = Ptr($27F93B8); 
 
   ZvsIsGameLoading: PBOOLEAN      = Ptr($A46BC0);
-  IsWoG:            PLONGBOOL     = Ptr($803288);
-  ErmEnabled:       PLONGBOOL     = Ptr($27F995C);
+  IsWoG:            plongbool     = Ptr($803288);
+  ErmEnabled:       plongbool     = Ptr($27F995C);
   ErmDlgCmd:        PINTEGER      = Ptr($887658);
   WoGOptions:       ^TWoGOptions  = Ptr($2771920);
   ErmErrCmdPtr:     PPCHAR        = Ptr($840E0C);
@@ -366,91 +366,91 @@ CONST
   ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
 
 
-VAR
+var
 {O} ScriptMan:            TScriptMan;
-    IgnoreInvalidCmdsOpt: BOOLEAN;
+    IgnoreInvalidCmdsOpt: boolean;
   
   
-PROCEDURE ZvsProcessCmd (Cmd: PErmCmd);
-PROCEDURE PrintChatMsg (CONST Msg: STRING);
-FUNCTION  Msg
+procedure ZvsProcessCmd (Cmd: PErmCmd);
+procedure PrintChatMsg (const Msg: string);
+function  Msg
 (
-  CONST Mes:          STRING;
+  const Mes:          string;
         MesType:      TMesType  = MES_MES;
-        Pic1Type:     INTEGER   = NO_PIC_TYPE;
-        Pic1SubType:  INTEGER   = 0;
-        Pic2Type:     INTEGER   = NO_PIC_TYPE;
-        Pic2SubType:  INTEGER   = 0;
-        Pic3Type:     INTEGER   = NO_PIC_TYPE;
-        Pic3SubType:  INTEGER   = 0
-): INTEGER;
-PROCEDURE ShowMessage (CONST Mes: STRING);
-PROCEDURE ExecErmCmd (CONST CmdStr: STRING);
-PROCEDURE ReloadErm; STDCALL;
-PROCEDURE ExtractErm; STDCALL;
-PROCEDURE FireErmEventEx (EventId: INTEGER; Params: ARRAY OF INTEGER);
-FUNCTION  IsEraTrigger (TrigId: INTEGER): BOOLEAN;
-FUNCTION  FindErmCmdBeginning ({n} CmdPtr: PCHAR): {n} PCHAR;
-FUNCTION  GrabErmCmd ({n} CmdPtr: PCHAR): STRING;
-FUNCTION  ErmCurrHero: {n} POINTER;
-FUNCTION  ErmCurrHeroInd: INTEGER; // Or -1
+        Pic1Type:     integer   = NO_PIC_TYPE;
+        Pic1SubType:  integer   = 0;
+        Pic2Type:     integer   = NO_PIC_TYPE;
+        Pic2SubType:  integer   = 0;
+        Pic3Type:     integer   = NO_PIC_TYPE;
+        Pic3SubType:  integer   = 0
+): integer;
+procedure ShowMessage (const Mes: string);
+procedure ExecErmCmd (const CmdStr: string);
+procedure ReloadErm; stdcall;
+procedure ExtractErm; stdcall;
+procedure FireErmEventEx (EventId: integer; Params: array of integer);
+function  IsEraTrigger (TrigId: integer): boolean;
+function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
+function  GrabErmCmd ({n} CmdPtr: pchar): string;
+function  ErmCurrHero: {n} POINTER;
+function  ErmCurrHeroInd: integer; // or -1
 
 
-(***) IMPLEMENTATION (***)
-USES Stores;
+(***) implementation (***)
+uses Stores;
 
-CONST
+const
   ERM_CMD_CACH_LIMIT = 16384;
 
 
-VAR
+var
 {O} ErmScanner:       TextScan.TTextScanner;
 {O} ErmCmdCache:      {O} TAssocArray {OF PErmCmd};
 {O} SavedYVars:       {O} Lists.TList {OF TYVars};
-    ErmTriggerDepth:  INTEGER = 0;
-    ErmErrReported:   BOOLEAN = FALSE;
+    ErmTriggerDepth:  integer = 0;
+    ErmErrReported:   boolean = FALSE;
     
-  FreezedWogOptionWogify: INTEGER = WOGIFY_ALL;
+  FreezedWogOptionWogify: integer = WOGIFY_ALL;
 
 
-PROCEDURE PrintChatMsg (CONST Msg: STRING);
-VAR
-  PtrMsg: PCHAR;
+procedure PrintChatMsg (const Msg: string);
+var
+  PtrMsg: pchar;
 
-BEGIN
-  PtrMsg := PCHAR(Msg);
+begin
+  PtrMsg := pchar(Msg);
   // * * * * * //
-  ASM
+  asm
     PUSH PtrMsg
     PUSH $69D800
     MOV EAX, $553C40
     CALL EAX
     ADD ESP, $8
-  END; // .ASM
-END; // .PROCEDURE PrintChatMsg
+  end; // .asm
+end; // .procedure PrintChatMsg
 
-FUNCTION Msg
+function Msg
 (
-  CONST Mes:          STRING;
+  const Mes:          string;
         MesType:      TMesType  = MES_MES;
-        Pic1Type:     INTEGER   = NO_PIC_TYPE;
-        Pic1SubType:  INTEGER   = 0;
-        Pic2Type:     INTEGER   = NO_PIC_TYPE;
-        Pic2SubType:  INTEGER   = 0;
-        Pic3Type:     INTEGER   = NO_PIC_TYPE;
-        Pic3SubType:  INTEGER   = 0
-): INTEGER;
+        Pic1Type:     integer   = NO_PIC_TYPE;
+        Pic1SubType:  integer   = 0;
+        Pic2Type:     integer   = NO_PIC_TYPE;
+        Pic2SubType:  integer   = 0;
+        Pic3Type:     integer   = NO_PIC_TYPE;
+        Pic3SubType:  integer   = 0
+): integer;
 
-VAR
-  MesStr:     PCHAR;
-  MesTypeInt: INTEGER;
-  Res:        INTEGER;
+var
+  MesStr:     pchar;
+  MesTypeInt: integer;
+  Res:        integer;
   
-BEGIN
-  MesStr     := PCHAR(Mes);
+begin
+  MesStr     := pchar(Mes);
   MesTypeInt := ORD(MesType);
 
-  ASM
+  asm
     MOV ECX, MesStr
     PUSH Pic3SubType
     PUSH Pic3Type
@@ -468,40 +468,40 @@ BEGIN
     MOV EAX, [Heroes.HERO_WND_MANAGER]
     MOV EAX, [EAX + $38]
     MOV Res, EAX
-  END; // .ASM
+  end; // .asm
   
-  RESULT := MSG_RES_OK;
+  result := MSG_RES_OK;
   
-  IF MesType = MES_QUESTION THEN BEGIN
-    IF Res = 30726 THEN BEGIN
-      RESULT := MSG_RES_CANCEL;
-    END // .IF
-  END // .IF
-  ELSE IF MesType IN [MES_CHOOSE, MES_MAY_CHOOSE] THEN BEGIN
-    CASE Res OF 
-      30729: RESULT := MSG_RES_LEFTPIC;
-      30730: RESULT := MSG_RES_RIGHTPIC;
-    ELSE
-      RESULT := MSG_RES_CANCEL;
-    END; // .SWITCH Res
-  END; // .ELSEIF
-END; // .FUNCTION Msg  
+  if MesType = MES_QUESTION then begin
+    if Res = 30726 then begin
+      result := MSG_RES_CANCEL;
+    end // .if
+  end // .if
+  else if MesType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
+    case Res of 
+      30729: result := MSG_RES_LEFTPIC;
+      30730: result := MSG_RES_RIGHTPIC;
+    else
+      result := MSG_RES_CANCEL;
+    end; // .SWITCH Res
+  end; // .ELSEIF
+end; // .function Msg  
   
-PROCEDURE ShowMessage (CONST Mes: STRING);
-BEGIN
+procedure ShowMessage (const Mes: string);
+begin
   Msg(Mes);
-END; // .PROCEDURE ShowMessage
+end; // .procedure ShowMessage
     
-FUNCTION Ask (CONST Question: STRING): BOOLEAN;
-BEGIN
-  RESULT := Msg(Question, MES_QUESTION) = MSG_RES_OK;
-END; // .FUNCTION Ask
+function Ask (const Question: string): boolean;
+begin
+  result := Msg(Question, MES_QUESTION) = MSG_RES_OK;
+end; // .function Ask
     
-FUNCTION GetErmValType (c: CHAR; OUT ValType: TErmValType): BOOLEAN;
-BEGIN
-  RESULT := TRUE;
+function GetErmValType (c: char; out ValType: TErmValType): boolean;
+begin
+  result := TRUE;
   
-  CASE c OF
+  case c of
     '+', '-': ValType :=  ValNum;
     '0'..'9': ValType :=  ValNum;
     'f'..'t': ValType :=  ValQuick;
@@ -510,14 +510,14 @@ BEGIN
     'x':      ValType :=  ValX;
     'y':      ValType :=  ValY;
     'z':      ValType :=  ValZ;
-  ELSE
-    RESULT := FALSE;
+  else
+    result := FALSE;
     ShowMessage('Invalid ERM value type: "' + c + '"');
-  END; // .SWITCH c
-END; // .FUNCTION GetErmValType
+  end; // .SWITCH c
+end; // .function GetErmValType
 
-PROCEDURE ZvsProcessCmd (Cmd: PErmCmd); ASSEMBLER;
-ASM
+procedure ZvsProcessCmd (Cmd: PErmCmd); ASSEMBLER;
+asm
   // Push parameters
   MOV EAX, Cmd
   PUSH 0
@@ -545,284 +545,284 @@ ASM
   @@Ret:
   ADD ESP, $0C
   // RET
-END; // .PROCEDURE ZvsProcessCmd
+end; // .procedure ZvsProcessCmd
 
-PROCEDURE ClearErmCmdCache;
-BEGIN
-  WITH DataLib.IterateDict(ErmCmdCache) DO BEGIN
-    WHILE IterNext DO BEGIN
+procedure ClearErmCmdCache;
+begin
+  with DataLib.IterateDict(ErmCmdCache) do begin
+    while IterNext do begin
       FreeMem(PErmCmd(IterValue).CmdHeader.Value);
-      DISPOSE(PErmCmd(IterValue));
-    END; // .WHILE
-  END; // .WITH 
+      Dispose(PErmCmd(IterValue));
+    end; // .while
+  end; // .with 
 
   ErmCmdCache.Clear;
-END; // .PROCEDURE ClearErmCmdCache
+end; // .procedure ClearErmCmdCache
 
-PROCEDURE ExecSingleErmCmd (CONST CmdStr: STRING);
-CONST
+procedure ExecSingleErmCmd (const CmdStr: string);
+const
   LETTERS = ['A'..'Z'];
   DIGITS  = ['0'..'9'];
   SIGNS   = ['+', '-'];
   NUMBER  = DIGITS + SIGNS;
   DELIMS  = ['/', ':'];
 
-VAR
+var
 {U} Cmd:      PErmCmd;
-    CmdName:  STRING;
-    NumArgs:  INTEGER;
-    Res:      BOOLEAN;
-    c:        CHAR;
+    CmdName:  string;
+    NumArgs:  integer;
+    Res:      boolean;
+    c:        char;
     
-  FUNCTION ReadNum (OUT Num: INTEGER): BOOLEAN;
-  VAR
-    StartPos: INTEGER;
-    Token:    STRING;
-    c:        CHAR;
+  function ReadNum (out Num: integer): boolean;
+  var
+    StartPos: integer;
+    Token:    string;
+    c:        char;
 
-  BEGIN
-    RESULT := ErmScanner.GetCurrChar(c) AND (c IN NUMBER);
+  begin
+    result := ErmScanner.GetCurrChar(c) and (c in NUMBER);
 
-    IF RESULT THEN BEGIN
-      IF c IN SIGNS THEN BEGIN
+    if result then begin
+      if c in SIGNS then begin
         StartPos := ErmScanner.Pos;
         ErmScanner.GotoNextChar;
         ErmScanner.SkipCharset(DIGITS);
         Token := ErmScanner.GetSubstrAtPos(StartPos, ErmScanner.Pos - StartPos);
-      END // .IF
-      ELSE BEGIN
+      end // .if
+      else begin
         ErmScanner.ReadToken(DIGITS, Token);
-      END; // .ELSE
+      end; // .else
       
-      RESULT := SysUtils.TryStrToInt(Token, Num) AND ErmScanner.GetCurrChar(c) AND (c IN DELIMS);
-    END; // .IF
-  END; // .FUNCTION ReadNum
+      result := SysUtils.TryStrToInt(Token, Num) and ErmScanner.GetCurrChar(c) and (c in DELIMS);
+    end; // .if
+  end; // .function ReadNum
   
-  FUNCTION ReadArg (OUT Arg: TErmCmdParam): BOOLEAN;
-  VAR
+  function ReadArg (out Arg: TErmCmdParam): boolean;
+  var
     ValType: TErmValType;
     IndType: TErmValType;
   
-  BEGIN
-    RESULT := ErmScanner.GetCurrChar(c) AND GetErmValType(c, ValType);
+  begin
+    result := ErmScanner.GetCurrChar(c) and GetErmValType(c, ValType);
     
-    IF RESULT THEN BEGIN
+    if result then begin
       IndType := ValNum;
       
-      IF ValType <> ValNum THEN BEGIN
-        RESULT := ErmScanner.GotoNextChar AND ErmScanner.GetCurrChar(c) AND
+      if ValType <> ValNum then begin
+        result := ErmScanner.GotoNextChar and ErmScanner.GetCurrChar(c) and
                   GetErmValType(c, IndType);
 
-        IF RESULT AND (IndType <> ValNum) THEN BEGIN
+        if result and (IndType <> ValNum) then begin
           ErmScanner.GotoNextChar;
-        END; // .IF
-      END; // .IF
+        end; // .if
+      end; // .if
       
-      IF RESULT THEN BEGIN
-        RESULT := ReadNum(Arg.Value);
+      if result then begin
+        result := ReadNum(Arg.Value);
         
-        IF RESULT THEN BEGIN
-          Arg.ValType := ORD(IndType) SHL 4 + ORD(ValType);
-        END; // .IF
-      END; // .IF
-    END; // .IF
-  END; // .FUNCTION ReadArg
+        if result then begin
+          Arg.ValType := ORD(IndType) shl 4 + ORD(ValType);
+        end; // .if
+      end; // .if
+    end; // .if
+  end; // .function ReadArg
   
-BEGIN
+begin
   Cmd := ErmCmdCache[CmdStr];
   // * * * * * //
   Res := TRUE;
   
-  IF Cmd = NIL THEN BEGIN
-    NEW(Cmd);
-    FillChar(Cmd^, SIZEOF(Cmd^), 0);
+  if Cmd = nil then begin
+    New(Cmd);
+    FillChar(Cmd^, sizeof(Cmd^), 0);
     ErmScanner.Connect(CmdStr, LINE_END_MARKER);
-    Res     := ErmScanner.ReadToken(LETTERS, CmdName) AND (LENGTH(CmdName) = 2);
+    Res     := ErmScanner.ReadToken(LETTERS, CmdName) and (Length(CmdName) = 2);
     NumArgs := 0;
     
-    WHILE Res AND ErmScanner.GetCurrChar(c) AND (c <> ':') AND (NumArgs < ERM_CMD_MAX_PARAMS_NUM)
-    DO BEGIN
-      Res := ReadArg(Cmd.Params[NumArgs]) AND ErmScanner.GetCurrChar(c);
+    while Res and ErmScanner.GetCurrChar(c) and (c <> ':') and (NumArgs < ERM_CMD_MAX_PARAMS_NUM)
+    do begin
+      Res := ReadArg(Cmd.Params[NumArgs]) and ErmScanner.GetCurrChar(c);
 
-      IF Res THEN BEGIN
-        INC(NumArgs);
+      if Res then begin
+        Inc(NumArgs);
 
-        IF c = '/' THEN BEGIN
+        if c = '/' then begin
           ErmScanner.GotoNextChar;
-        END; // .IF
-      END; // .IF
-    END; // .WHILE
+        end; // .if
+      end; // .if
+    end; // .while
 
-    Res := Res AND ErmScanner.GotoNextChar;
+    Res := Res and ErmScanner.GotoNextChar;
 
-    IF Res THEN BEGIN
+    if Res then begin
       // Allocate memory, because ERM engine changes command contents during execution
-      GetMem(Cmd.CmdHeader.Value, LENGTH(CmdStr) + 1);
-      Utils.CopyMem(LENGTH(CmdStr) + 1, POINTER(CmdStr), Cmd.CmdHeader.Value);
+      GetMem(Cmd.CmdHeader.Value, Length(CmdStr) + 1);
+      Utils.CopyMem(Length(CmdStr) + 1, POINTER(CmdStr), Cmd.CmdHeader.Value);
       
       Cmd.CmdBody.Value := Utils.PtrOfs(Cmd.CmdHeader.Value, ErmScanner.Pos - 1);
       Cmd.CmdId.Name[0] := CmdName[1];
       Cmd.CmdId.Name[1] := CmdName[2];
       Cmd.NumParams     := NumArgs;
       Cmd.CmdHeader.Len := ErmScanner.Pos - 1;
-      Cmd.CmdBody.Len   := LENGTH(CmdStr) - ErmScanner.Pos + 1;
+      Cmd.CmdBody.Len   := Length(CmdStr) - ErmScanner.Pos + 1;
       
-      IF ErmCmdCache.ItemCount = ERM_CMD_CACH_LIMIT THEN BEGIN
+      if ErmCmdCache.ItemCount = ERM_CMD_CACH_LIMIT then begin
         ClearErmCmdCache;
-      END; // .IF
+      end; // .if
       
       ErmCmdCache[CmdStr] := Cmd;
-    END; // .IF
-  END; // .IF
+    end; // .if
+  end; // .if
   
-  IF NOT Res THEN BEGIN
+  if not Res then begin
     ShowMessage('ExecErmCmd: Invalid command "' + CmdStr + '"');
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     ZvsProcessCmd(Cmd);
-  END; // .ELSE
-END; // .PROCEDURE ExecSingleErmCmd
+  end; // .else
+end; // .procedure ExecSingleErmCmd
 
-PROCEDURE ExecErmCmd (CONST CmdStr: STRING);
-VAR
+procedure ExecErmCmd (const CmdStr: string);
+var
   Commands: Utils.TArrayOfString;
-  i:        INTEGER;
+  i:        integer;
    
-BEGIN
-  Commands := StrLib.ExplodeEx(CmdStr, ';', StrLib.INCLUDE_DELIM, NOT StrLib.LIMIT_TOKENS, 0);
+begin
+  Commands := StrLib.ExplodeEx(CmdStr, ';', StrLib.INCLUDE_DELIM, not StrLib.LIMIT_TOKENS, 0);
 
-  FOR i := 0 TO HIGH(Commands) - 1 DO BEGIN
+  for i := 0 to High(Commands) - 1 do begin
     ExecSingleErmCmd(Commands[i]);
-  END; // .FOR
-END; // .PROCEDURE ExecErmCmd
+  end; // .for
+end; // .procedure ExecErmCmd
 
-PROCEDURE TErmScript.Init (CONST aFileName, aScriptContents: STRING; aCrc32: INTEGER);
-BEGIN
+procedure TErmScript.Init (const aFileName, aScriptContents: string; aCrc32: integer);
+begin
   fFileName    := aFileName;
   fContents    := aScriptContents;
   fCrc32       := aCrc32;
-  fLineNumbers := NIL;
-END; // .PROCEDURE TErmScript.Init
+  fLineNumbers := nil;
+end; // .procedure TErmScript.Init
 
-CONSTRUCTOR TErmScript.Create (CONST aFileName, aScriptContents: STRING; aCrc32: INTEGER);
-BEGIN
+constructor TErmScript.Create (const aFileName, aScriptContents: string; aCrc32: integer);
+begin
   Init(aFileName, aScriptContents, aCrc32);
-END; // .CONSTRUCTOR TErmScript.Create
+end; // .constructor TErmScript.Create
 
-CONSTRUCTOR TErmScript.Create (CONST aFileName, aScriptContents: STRING);
-BEGIN
+constructor TErmScript.Create (const aFileName, aScriptContents: string);
+begin
   Init(aFileName, aScriptContents, Crypto.AnsiCRC32(aScriptContents));
-END; // .CONSTRUCTOR TErmScript.Create
+end; // .constructor TErmScript.Create
 
-PROCEDURE TErmScript.UpdateLineNumbers;
-VAR
-  NumLines: INTEGER;
-  i:        INTEGER;
+procedure TErmScript.UpdateLineNumbers;
+var
+  NumLines: integer;
+  i:        integer;
    
-BEGIN
-  fLineNumbers := NIL;
+begin
+  fLineNumbers := nil;
 
-  IF fContents <> '' THEN BEGIN
+  if fContents <> '' then begin
     ErmScanner.Connect(fContents, LINE_END_MARKER);
     ErmScanner.GotoLine(MAXLONGINT);
     NumLines := ErmScanner.LineN;
     SetLength(fLineNumbers, NumLines);
     ErmScanner.Connect(fContents, LINE_END_MARKER);
 
-    FOR i := 0 TO NumLines - 1 DO BEGIN
+    for i := 0 to NumLines - 1 do begin
       fLineNumbers[i].StartPos := ErmScanner.Pos;
       ErmScanner.GotoNextLine;
       fLineNumbers[i].EndPos   := ErmScanner.Pos - 1;
-    END; // .FOR
-  END; // .IF
-END; // .PROCEDURE TErmScript.UpdateLineNumbers
+    end; // .for
+  end; // .if
+end; // .procedure TErmScript.UpdateLineNumbers
 
-FUNCTION TErmScript.IsEqual (OtherScript: TErmScript): BOOLEAN;
-BEGIN
-  {!} ASSERT(OtherScript <> NIL);
-  RESULT := (Self = OtherScript) OR ((fFileName         = OtherScript.FileName)          AND
-                                     (LENGTH(fContents) = LENGTH(OtherScript.fContents)) AND
+function TErmScript.IsEqual (OtherScript: TErmScript): boolean;
+begin
+  {!} Assert(OtherScript <> nil);
+  result := (Self = OtherScript) or ((fFileName         = OtherScript.FileName)          and
+                                     (Length(fContents) = Length(OtherScript.fContents)) and
                                      (fCrc32            = OtherScript.fCrc32));
-END; // .FUNCTION TErmScript.IsEqual
+end; // .function TErmScript.IsEqual
 
-FUNCTION TErmScript.StartAddr: {n} PCHAR;
-BEGIN
-  IF fContents = '' THEN BEGIN
-    RESULT := NIL;
-  END // .IF
-  ELSE BEGIN
-    RESULT := POINTER(fContents);
-  END; // .ELSE
-END; // .FUNCTION TErmScript.StartAddr
+function TErmScript.StartAddr: {n} pchar;
+begin
+  if fContents = '' then begin
+    result := nil;
+  end // .if
+  else begin
+    result := POINTER(fContents);
+  end; // .else
+end; // .function TErmScript.StartAddr
 
-FUNCTION TErmScript.EndAddr: {n} PCHAR;
-BEGIN
-  IF fContents = '' THEN BEGIN
-    RESULT := NIL;
-  END // .IF
-  ELSE BEGIN
-    RESULT := Utils.PtrOfs(POINTER(fContents), LENGTH(fContents) - 1);
-  END; // .ELSE
-END; // .FUNCTION TErmScript.EndAddr
+function TErmScript.EndAddr: {n} pchar;
+begin
+  if fContents = '' then begin
+    result := nil;
+  end // .if
+  else begin
+    result := Utils.PtrOfs(POINTER(fContents), Length(fContents) - 1);
+  end; // .else
+end; // .function TErmScript.EndAddr
 
-FUNCTION TErmScript.AddrToLineNumber ({n} Addr: PCHAR; OUT LineNumber: INTEGER): BOOLEAN;
-VAR
-  TargetPos:  INTEGER; // Starts from 1
+function TErmScript.AddrToLineNumber ({n} Addr: pchar; out LineNumber: integer): boolean;
+var
+  TargetPos:  integer; // Starts from 1
   (* Binary search vars *)
-  Left:       INTEGER;
-  Right:      INTEGER;
-  Middle:     INTEGER;
+  Left:       integer;
+  Right:      integer;
+  Middle:     integer;
 
-BEGIN
-  RESULT := (fContents <> '') AND (Math.InRange(INT(Addr), INT(fContents),
-                                                INT(fContents) + LENGTH(fContents) - 1));
+begin
+  result := (fContents <> '') and (Math.InRange(int(Addr), int(fContents),
+                                                int(fContents) + Length(fContents) - 1));
   
-  IF RESULT THEN BEGIN
-    IF fLineNumbers = NIL THEN BEGIN
+  if result then begin
+    if fLineNumbers = nil then begin
       UpdateLineNumbers;
-    END; // .IF
+    end; // .if
     
-    RESULT    := FALSE;
-    TargetPos := INT(Addr) - INT(fContents) + 1;
+    result    := FALSE;
+    TargetPos := int(Addr) - int(fContents) + 1;
     Left      := 0;
-    Right     := HIGH(fLineNumbers);
+    Right     := High(fLineNumbers);
     
-    WHILE NOT RESULT AND (Left <= Right) DO BEGIN
-      Middle := Left + (Right - Left) DIV 2;
+    while not result and (Left <= Right) do begin
+      Middle := Left + (Right - Left) div 2;
       
-      IF TargetPos < fLineNumbers[Middle].StartPos THEN BEGIN
+      if TargetPos < fLineNumbers[Middle].StartPos then begin
         Right := Middle - 1;
-      END // .IF
-      ELSE IF TargetPos > fLineNumbers[Middle].EndPos THEN BEGIN
+      end // .if
+      else if TargetPos > fLineNumbers[Middle].EndPos then begin
         Left := Middle + 1;
-      END // .ELSEIF
-      ELSE BEGIN
+      end // .ELSEIF
+      else begin
         // Add 1, because line number starts from 1
         LineNumber := Middle + 1;
-        RESULT     := TRUE;
-      END; // .ELSE
-    END; // .WHILE
+        result     := TRUE;
+      end; // .else
+    end; // .while
     
-    {!} ASSERT(RESULT);
-  END; // .IF
-END; // .FUNCTION TErmScript.AddrToLineNumber
+    {!} Assert(result);
+  end; // .if
+end; // .function TErmScript.AddrToLineNumber
 
-CONSTRUCTOR TSortStrListByPriority.Create (aList: TStrList);
-BEGIN
+constructor TSortStrListByPriority.Create (aList: TStrList);
+begin
   Self.List := aList;
-END; // .CONSTRUCTOR TSortStrListByPriority.Create
+end; // .constructor TSortStrListByPriority.Create
 
-FUNCTION TSortStrListByPriority.CompareItems (Ind1, Ind2: INTEGER): INTEGER;
-BEGIN
-  RESULT := Alg.IntCompare(INT(List.Values[Ind1]), INT(List.Values[Ind2]));
-END; // .FUNCTION TSortStrListByPriority.CompareItems
+function TSortStrListByPriority.CompareItems (Ind1, Ind2: integer): integer;
+begin
+  result := Alg.IntCompare(int(List.Values[Ind1]), int(List.Values[Ind2]));
+end; // .function TSortStrListByPriority.CompareItems
 
-PROCEDURE TSortStrListByPriority.SwapItems (Ind1, Ind2: INTEGER);
-VAR
-  TransferKey:   STRING;
+procedure TSortStrListByPriority.SwapItems (Ind1, Ind2: integer);
+var
+  TransferKey:   string;
   TransferValue: POINTER;
    
-BEGIN
+begin
   // Transfer   := List[Ind1]
   TransferKey       := List[Ind1];
   TransferValue     := List.Values[Ind1];
@@ -832,196 +832,196 @@ BEGIN
   // List[Ind2] := Transfer
   List[Ind2]        := TransferKey;
   List.Values[Ind2] := TransferValue;
-END; // .PROCEDURE TSortStrListByPriority.SwapItems
+end; // .procedure TSortStrListByPriority.SwapItems
 
-PROCEDURE TSortStrListByPriority.SavePivotItem (PivotItemInd: INTEGER);
-BEGIN
-  PivotItem := INT(List.Values[PivotItemInd]);
-END; // .PROCEDURE TSortStrListByPriority.SavePivotItem
+procedure TSortStrListByPriority.SavePivotItem (PivotItemInd: integer);
+begin
+  PivotItem := int(List.Values[PivotItemInd]);
+end; // .procedure TSortStrListByPriority.SavePivotItem
 
-FUNCTION TSortStrListByPriority.CompareToPivot (Ind: INTEGER): INTEGER;
-BEGIN
-  RESULT := Alg.IntCompare(INT(List.Values[Ind]), PivotItem);
-END; // .FUNCTION TSortStrListByPriority.CompareToPivot
+function TSortStrListByPriority.CompareToPivot (Ind: integer): integer;
+begin
+  result := Alg.IntCompare(int(List.Values[Ind]), PivotItem);
+end; // .function TSortStrListByPriority.CompareToPivot
 
-PROCEDURE TSortStrListByPriority.Sort;
-BEGIN
+procedure TSortStrListByPriority.Sort;
+begin
   Alg.QuickSortEx(Self, 0, List.Count - 1);
-END; // .PROCEDURE TSortStrListByPriority.Sort
+end; // .procedure TSortStrListByPriority.Sort
 
-CONSTRUCTOR TSortScriptsAddrBounds.Create ({n} aArr: TScriptsAddrBounds);
-BEGIN
+constructor TSortScriptsAddrBounds.Create ({n} aArr: TScriptsAddrBounds);
+begin
   Self.fArr := aArr;
-END; // .CONSTRUCTOR TSortScriptsAddrBounds.Create
+end; // .constructor TSortScriptsAddrBounds.Create
 
-FUNCTION TSortScriptsAddrBounds.CompareItems (Ind1, Ind2: INTEGER): INTEGER;
-BEGIN
-  RESULT := Alg.PtrCompare(fArr[Ind1].StartAddr, fArr[Ind2].StartAddr);
-END; // .FUNCTION TSortScriptsAddrBounds.CompareItems
+function TSortScriptsAddrBounds.CompareItems (Ind1, Ind2: integer): integer;
+begin
+  result := Alg.PtrCompare(fArr[Ind1].StartAddr, fArr[Ind2].StartAddr);
+end; // .function TSortScriptsAddrBounds.CompareItems
 
-PROCEDURE TSortScriptsAddrBounds.SwapItems (Ind1, Ind2: INTEGER);
-VAR
+procedure TSortScriptsAddrBounds.SwapItems (Ind1, Ind2: integer);
+var
   TransferItem: TScriptAddrBounds;
    
-BEGIN
+begin
   TransferItem := fArr[Ind1];
   fArr[Ind1]   := fArr[Ind2];
   fArr[Ind2]   := TransferItem;
-END; // .PROCEDURE TSortScriptsAddrBounds.SwapItems
+end; // .procedure TSortScriptsAddrBounds.SwapItems
 
-PROCEDURE TSortScriptsAddrBounds.SavePivotItem (PivotItemInd: INTEGER);
-BEGIN
+procedure TSortScriptsAddrBounds.SavePivotItem (PivotItemInd: integer);
+begin
   PivotItem := fArr[PivotItemInd];
-END; // .PROCEDURE TSortScriptsAddrBounds.SavePivotItem
+end; // .procedure TSortScriptsAddrBounds.SavePivotItem
 
-FUNCTION TSortScriptsAddrBounds.CompareToPivot (Ind: INTEGER): INTEGER;
-BEGIN
-  RESULT := Alg.PtrCompare(fArr[Ind].StartAddr, PivotItem.StartAddr);
-END; // .FUNCTION TSortScriptsAddrBounds.CompareToPivot
+function TSortScriptsAddrBounds.CompareToPivot (Ind: integer): integer;
+begin
+  result := Alg.PtrCompare(fArr[Ind].StartAddr, PivotItem.StartAddr);
+end; // .function TSortScriptsAddrBounds.CompareToPivot
 
-PROCEDURE TSortScriptsAddrBounds.Sort;
-BEGIN
-  Alg.QuickSortEx(Self, 0, HIGH(fArr));
-END; // .PROCEDURE TSortScriptsAddrBounds.Sort
+procedure TSortScriptsAddrBounds.Sort;
+begin
+  Alg.QuickSortEx(Self, 0, High(fArr));
+end; // .procedure TSortScriptsAddrBounds.Sort
 
-FUNCTION IsEraTrigger (TrigId: INTEGER): BOOLEAN;
-BEGIN
-  RESULT := Math.InRange(TrigId, FIRST_ERA_TRIGGER, LAST_ERA_TRIGGER);
-END; // .FUNCTION IsEraTrigger
+function IsEraTrigger (TrigId: integer): boolean;
+begin
+  result := Math.InRange(TrigId, FIRST_ERA_TRIGGER, LAST_ERA_TRIGGER);
+end; // .function IsEraTrigger
 
-FUNCTION LoadMapRscFile (CONST ResourcePath: STRING; OUT FileContents: STRING): BOOLEAN;
-BEGIN
-  RESULT := Files.ReadFileContents(GameExt.GetMapResourcePath(ResourcePath), FileContents);
-END; // .FUNCTION LoadMapRscFile
+function LoadMapRscFile (const ResourcePath: string; out FileContents: string): boolean;
+begin
+  result := Files.ReadFileContents(GameExt.GetMapResourcePath(ResourcePath), FileContents);
+end; // .function LoadMapRscFile
 
-CONSTRUCTOR TScriptMan.Create;
-BEGIN
+constructor TScriptMan.Create;
+begin
   fScripts        := DataLib.NewList(Utils.OWNS_ITEMS);
-  fScriptIsLoaded := DataLib.NewDict(NOT Utils.OWNS_ITEMS, NOT DataLib.CASE_SENSITIVE);
-END; // .CONSTRUCTOR TScriptMan.Create
+  fScriptIsLoaded := DataLib.NewDict(not Utils.OWNS_ITEMS, not DataLib.CASE_SENSITIVE);
+end; // .constructor TScriptMan.Create
   
-DESTRUCTOR TScriptMan.Destroy;
-BEGIN
+destructor TScriptMan.Destroy;
+begin
   SysUtils.FreeAndNil(fScripts);
   SysUtils.FreeAndNil(fScriptIsLoaded);
-  INHERITED;
-END; // .DESTRUCTOR TScriptMan.Destroy
+  inherited;
+end; // .destructor TScriptMan.Destroy
   
-PROCEDURE TScriptMan.ClearScripts;
-BEGIN
+procedure TScriptMan.ClearScripts;
+begin
   GameExt.FireEvent('OnBeforeClearErmScripts', GameExt.NO_EVENT_DATA, 0);
   fScripts.Clear;
   fScriptIsLoaded.Clear;
-  fScriptsAddrBounds := NIL;
-END; // .PROCEDURE TScriptMan.ClearScripts
+  fScriptsAddrBounds := nil;
+end; // .procedure TScriptMan.ClearScripts
 
-PROCEDURE TScriptMan.SaveScripts;
-VAR
+procedure TScriptMan.SaveScripts;
+var
 {U} Script: TErmScript;
-    i:      INTEGER;
+    i:      integer;
   
-BEGIN
-  Script := NIL;
+begin
+  Script := nil;
   // * * * * * //
-  WITH Stores.NewRider(ERM_SCRIPTS_SECTION) DO BEGIN
+  with Stores.NewRider(ERM_SCRIPTS_SECTION) do begin
     WriteInt(fScripts.Count);
 
-    FOR i := 0 TO fScripts.Count - 1 DO BEGIN
+    for i := 0 to fScripts.Count - 1 do begin
       Script := TErmScript(fScripts[i]);
       WriteStr(Script.FileName);
       WriteInt(Script.Crc32);
       WriteStr(Script.Contents);
-    END; // .FOR
-  END; // .WITH 
-END; // .PROCEDURE TScriptMan.SaveScripts
+    end; // .for
+  end; // .with 
+end; // .procedure TScriptMan.SaveScripts
 
-PROCEDURE LoadErtFile (CONST ErmScriptName: STRING);
-VAR
-  ErtFilePath:        STRING;
-  FilePathForZvsFunc: STRING;
+procedure LoadErtFile (const ErmScriptName: string);
+var
+  ErtFilePath:        string;
+  FilePathForZvsFunc: string;
    
-BEGIN
+begin
   ErtFilePath := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH + '\'
                                             + SysUtils.ChangeFileExt(ErmScriptName, '.ert'));
 
-  IF SysUtils.FileExists(ErtFilePath) THEN BEGIN
+  if SysUtils.FileExists(ErtFilePath) then begin
     FilePathForZvsFunc := '..\' + ErtFilePath;
-    ZvsLoadErtFile('', PCHAR(FilePathForZvsFunc));
-  END; // .IF
-END; // .PROCEDURE LoadErtFile
+    ZvsLoadErtFile('', pchar(FilePathForZvsFunc));
+  end; // .if
+end; // .procedure LoadErtFile
 
-FUNCTION TScriptMan.IsScriptLoaded (CONST ScriptName: STRING): BOOLEAN;
-BEGIN
-  RESULT := fScriptIsLoaded[ScriptName] <> NIL;
-END; // .FUNCTION TScriptMan.IsScriptLoaded
+function TScriptMan.IsScriptLoaded (const ScriptName: string): boolean;
+begin
+  result := fScriptIsLoaded[ScriptName] <> nil;
+end; // .function TScriptMan.IsScriptLoaded
 
-FUNCTION TScriptMan.LoadScript (CONST ScriptName: STRING): BOOLEAN;
-VAR
-  ScriptContents: STRING;
+function TScriptMan.LoadScript (const ScriptName: string): boolean;
+var
+  ScriptContents: string;
 
-BEGIN
-  RESULT := (fScriptIsLoaded[ScriptName] = NIL) AND
+begin
+  result := (fScriptIsLoaded[ScriptName] = nil) and
             (LoadMapRscFile(ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents));
 
-  IF RESULT THEN BEGIN
+  if result then begin
     fScriptIsLoaded[ScriptName] := Ptr(1);
     fScripts.Add(TErmScript.Create(ScriptName, ScriptContents));
     LoadErtFile(ScriptName);
-  END; // .IF
-END; // .FUNCTION TScriptMan.LoadScript
+  end; // .if
+end; // .function TScriptMan.LoadScript
 
-PROCEDURE TScriptMan.LoadScriptsFromSavedGame;
-VAR
+procedure TScriptMan.LoadScriptsFromSavedGame;
+var
 {O} LoadedScripts:      {O} TList {OF TErmScript};
-    NumScripts:         INTEGER;
-    ScriptContents:     STRING;
-    ScriptFileName:     STRING;
-    ScriptCrc32:        INTEGER;
-    ScriptSetsAreEqual: BOOLEAN;
-    i:                  INTEGER;
+    NumScripts:         integer;
+    ScriptContents:     string;
+    ScriptFileName:     string;
+    ScriptCrc32:        integer;
+    ScriptSetsAreEqual: boolean;
+    i:                  integer;
   
-BEGIN
+begin
   LoadedScripts := DataLib.NewList(Utils.OWNS_ITEMS);
   // * * * * * //
-  WITH Stores.NewRider(ERM_SCRIPTS_SECTION) DO BEGIN
+  with Stores.NewRider(ERM_SCRIPTS_SECTION) do begin
     NumScripts := ReadInt;
 
-    FOR i := 1 TO NumScripts DO BEGIN
+    for i := 1 to NumScripts do begin
       ScriptFileName := ReadStr;
       ScriptCrc32    := ReadInt;
       ScriptContents := ReadStr;
       LoadedScripts.Add(TErmScript.Create(ScriptFileName, ScriptContents, ScriptCrc32));
-    END; // .FOR
-  END; // .WITH Stores.NewRider
+    end; // .for
+  end; // .with Stores.NewRider
   
   ScriptSetsAreEqual := fScripts.Count = LoadedScripts.Count;
   
-  IF ScriptSetsAreEqual THEN BEGIN
+  if ScriptSetsAreEqual then begin
     i := 0;
   
-    WHILE (i < fScripts.Count) AND TErmScript(fScripts[i]).IsEqual(TErmScript(LoadedScripts[i]))
-    DO BEGIN
-      INC(i);
-    END; // .WHILE
+    while (i < fScripts.Count) and TErmScript(fScripts[i]).IsEqual(TErmScript(LoadedScripts[i]))
+    do begin
+      Inc(i);
+    end; // .while
     
     ScriptSetsAreEqual := i = fScripts.Count;
-  END; // .IF
+  end; // .if
   
-  IF NOT ScriptSetsAreEqual THEN BEGIN
-    Utils.Exchange(INT(fScripts), INT(LoadedScripts));
+  if not ScriptSetsAreEqual then begin
+    Utils.Exchange(int(fScripts), int(LoadedScripts));
     ZvsFindErm;
-  END; // .IF
+  end; // .if
   // * * * * * //
   SysUtils.FreeAndNil(LoadedScripts);
-END; // .PROCEDURE TScriptMan.LoadScriptsFromSavedGame
+end; // .procedure TScriptMan.LoadScriptsFromSavedGame
 
-PROCEDURE TScriptMan.LoadScriptsFromDisk;
-CONST
+procedure TScriptMan.LoadScriptsFromDisk;
+const
   SCRIPTS_LIST_FILEPATH = ERM_SCRIPTS_PATH + '\load only these scripts.txt';
   SYSTEM_SCRIPTS_MASK   = '*.sys.erm';
   
-VAR
-(* Lists OF Priority: INTEGER *)
+var
+(* Lists of Priority: integer *)
 {O} FinalScriptList:        TStrList;
 {O} ForcedScriptList:       TStrList;
 {O} MapSystemScriptList:    TStrList;
@@ -1030,11 +1030,11 @@ VAR
 {O} CommonScriptList:       TStrList;
 
 {O} ScriptListSorter: TSortStrListByPriority;
-    FileContents:     STRING;
-    i:                INTEGER;
+    FileContents:     string;
+    i:                integer;
     
-  PROCEDURE GetPrioritiesFromScriptNames (List: TStrList);
-  CONST
+  procedure GetPrioritiesFromScriptNames (List: TStrList);
+  const
     PRIORITY_SEPARATOR = ' ';
     DEFAULT_PRIORITY   = 0;
 
@@ -1042,53 +1042,53 @@ VAR
     PRIORITY_TOKEN      = 0;
     FILENAME_TOKEN      = 1;
   
-  VAR
+  var
     FileNameTokens: Utils.TArrayOfString;
-    Priority:       INTEGER;
-    TestPriority:   INTEGER;
-    i:              INTEGER;
+    Priority:       integer;
+    TestPriority:   integer;
+    i:              integer;
      
-  BEGIN
-    FOR i := 0 TO List.Count - 1 DO BEGIN
+  begin
+    for i := 0 to List.Count - 1 do begin
       FileNameTokens := StrLib.ExplodeEx
       (
         List[i],
         PRIORITY_SEPARATOR,
-        NOT StrLib.INCLUDE_DELIM,
+        not StrLib.INCLUDE_DELIM,
         StrLib.LIMIT_TOKENS,
         FILENAME_NUM_TOKENS
       );
 
       Priority := DEFAULT_PRIORITY;
       
-      IF
-        (LENGTH(FileNameTokens) = FILENAME_NUM_TOKENS) AND
+      if
+        (Length(FileNameTokens) = FILENAME_NUM_TOKENS) and
         (SysUtils.TryStrToInt(FileNameTokens[PRIORITY_TOKEN], TestPriority))
-      THEN BEGIN
+      then begin
         Priority := TestPriority;
-      END; // .IF
+      end; // .if
       
       List.Values[i] := Ptr(Priority);
-    END; // .FOR
-  END; // .PROCEDURE GetPrioritiesFromScriptNames
+    end; // .for
+  end; // .procedure GetPrioritiesFromScriptNames
    
-BEGIN
-  FinalScriptList         := DataLib.NewStrList(NOT Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
-  ForcedScriptList        := NIL;
-  MapSystemScriptList     := NIL;
-  CommonSystemScriptList  := NIL;
-  MapScriptList           := NIL;
-  CommonScriptList        := NIL;
-  ScriptListSorter        := NIL;
+begin
+  FinalScriptList         := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  ForcedScriptList        := nil;
+  MapSystemScriptList     := nil;
+  CommonSystemScriptList  := nil;
+  MapScriptList           := nil;
+  CommonScriptList        := nil;
+  ScriptListSorter        := nil;
   // * * * * * //
   ClearScripts;
   ZvsClearErtStrings;
 
-  IF LoadMapRscFile(SCRIPTS_LIST_FILEPATH, FileContents) THEN BEGIN
+  if LoadMapRscFile(SCRIPTS_LIST_FILEPATH, FileContents) then begin
     ForcedScriptList        := DataLib.NewStrListFromStrArr
     (
       StrLib.Explode(SysUtils.Trim(FileContents), #13#10),
-      NOT Utils.OWNS_ITEMS,
+      not Utils.OWNS_ITEMS,
       DataLib.CASE_INSENSITIVE
     );
     MapSystemScriptList     := FilesEx.GetFileList
@@ -1104,8 +1104,8 @@ BEGIN
     FilesEx.MergeFileLists(FinalScriptList, ForcedScriptList);
     FilesEx.MergeFileLists(FinalScriptList, MapSystemScriptList);
     FilesEx.MergeFileLists(FinalScriptList, CommonSystemScriptList);
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     MapScriptList := FilesEx.GetFileList
     (
       GameExt.GetMapFolder + '\' + ERM_SCRIPTS_PATH + '\*.erm',
@@ -1114,15 +1114,15 @@ BEGIN
     CommonScriptList := FilesEx.GetFileList(ERM_SCRIPTS_PATH + '\*.erm', Files.ONLY_FILES);
     FilesEx.MergeFileLists(FinalScriptList, MapScriptList);
     FilesEx.MergeFileLists(FinalScriptList, CommonScriptList);
-  END; // .ELSE
+  end; // .else
   
   GetPrioritiesFromScriptNames(FinalScriptList);
   ScriptListSorter := TSortStrListByPriority.Create(FinalScriptList);
   ScriptListSorter.Sort;
   
-  FOR i := FinalScriptList.Count - 1 DOWNTO 0 DO BEGIN
+  for i := FinalScriptList.Count - 1 downto 0 do begin
     LoadScript(FinalScriptList[i]);
-  END; // .FOR
+  end; // .for
   // * * * * * //
   SysUtils.FreeAndNil(FinalScriptList);
   SysUtils.FreeAndNil(ForcedScriptList);
@@ -1131,288 +1131,288 @@ BEGIN
   SysUtils.FreeAndNil(MapScriptList);
   SysUtils.FreeAndNil(CommonScriptList);
   SysUtils.FreeAndNil(ScriptListSorter);
-END; // .PROCEDURE TScriptMan.LoadScriptsFromDisk
+end; // .procedure TScriptMan.LoadScriptsFromDisk
 
-(*FUNCTION PreprocessErm (CONST Script: STRING): STRING;
-VAR
+(*function PreprocessErm (const Script: string): string;
+var
 {O} StrBuilder: StrLib.TStrBuilder;
 {O} Scanner:    TextScan.TTextScanner;
-    StartPos:   INTEGER;
-    c:          CHAR;
+    StartPos:   integer;
+    c:          char;
 
-BEGIN
+begin
   StrBuilder  :=  StrLib.TStrBuilder.Create;
   Scanner     :=  TextScan.TTextScanner.Create;
   // * * * * * //
   Scanner.Connect(Script, #10);
   StartPos  :=  1;
   
-  WHILE Scanner.FindChar('!') DO BEGIN
-    IF
-      Scanner.GetCharAtRelPos(+1, c) AND (c = '!') AND
-      Scanner.GetCharAtRelPos(+2, c) AND (c = '!')
-    THEN BEGIN
+  while Scanner.FindChar('!') do begin
+    if
+      Scanner.GetCharAtRelPos(+1, c) and (c = '!') and
+      Scanner.GetCharAtRelPos(+2, c) and (c = '!')
+    then begin
       StrBuilder.Append(Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos));
       Scanner.SkipChars('!');
       StartPos  :=  Scanner.Pos;
-    END // .IF
-    ELSE BEGIN
+    end // .if
+    else begin
       Scanner.GotoRelPos(+2);
-    END; // .ELSE
-  END; // .WHILE
+    end; // .else
+  end; // .while
   
-  IF StartPos = 1 THEN BEGIN
-    RESULT  :=  Script;
-  END // .IF
-  ELSE BEGIN
+  if StartPos = 1 then begin
+    result  :=  Script;
+  end // .if
+  else begin
     StrBuilder.Append(Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos));
-    RESULT  :=  StrBuilder.BuildStr;
-  END; // .ELSE
+    result  :=  StrBuilder.BuildStr;
+  end; // .else
   // * * * * * //
   SysUtils.FreeAndNil(StrBuilder);
   SysUtils.FreeAndNil(Scanner);
-END; // .FUNCTION PreprocessErm*)
+end; // .function PreprocessErm*)
 
-PROCEDURE TScriptMan.ReloadScriptsFromDisk;
-CONST
-  SUCCESS_MES: STRING = '{~white}ERM is updated{~}';
+procedure TScriptMan.ReloadScriptsFromDisk;
+const
+  SUCCESS_MES: string = '{~white}ERM is updated{~}';
 
-BEGIN
-  IF ErmTriggerDepth = 0 THEN BEGIN
+begin
+  if ErmTriggerDepth = 0 then begin
     ScriptMan.LoadScriptsFromDisk;
     ZvsIsGameLoading^ := TRUE;
     ZvsFindErm;
-    Utils.CopyMem(LENGTH(SUCCESS_MES) + 1, POINTER(SUCCESS_MES), @z[1]);
-    ExecErmCmd('IF:Lz1;');
-  END; // .IF
-END; // .PROCEDURE TScriptMan.ReloadScriptsFromDisk
+    Utils.CopyMem(Length(SUCCESS_MES) + 1, POINTER(SUCCESS_MES), @z[1]);
+    ExecErmCmd('if:Lz1;');
+  end; // .if
+end; // .procedure TScriptMan.ReloadScriptsFromDisk
 
-PROCEDURE ReloadErm;
-BEGIN
+procedure ReloadErm;
+begin
   ScriptMan.ReloadScriptsFromDisk;
-END; // .PROCEDURE ReloadErm
+end; // .procedure ReloadErm
 
-PROCEDURE TScriptMan.ExtractScripts;
-VAR
-  Res:        BOOLEAN;
-  Mes:        STRING;
-  ScriptPath: STRING;
-  i:          INTEGER;
+procedure TScriptMan.ExtractScripts;
+var
+  Res:        boolean;
+  Mes:        string;
+  ScriptPath: string;
+  i:          integer;
   
-BEGIN
+begin
   Files.DeleteDir(EXTRACTED_SCRIPTS_PATH);
   Res := SysUtils.CreateDir(EXTRACTED_SCRIPTS_PATH);
   
-  IF NOT Res THEN BEGIN
+  if not Res then begin
     Mes :=  '{~red}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     i := 0;
     
-    WHILE Res AND (i < fScripts.Count) DO BEGIN
+    while Res and (i < fScripts.Count) do begin
       ScriptPath := EXTRACTED_SCRIPTS_PATH + '\' + TErmScript(fScripts[i]).FileName;
       Res        := Files.WriteFileContents(TErmScript(fScripts[i]).Contents, ScriptPath);
       
-      IF NOT Res THEN BEGIN
+      if not Res then begin
         Mes := '{~red}Error writing to file "' + ScriptPath + '"{~}';
-      END; // .IF
+      end; // .if
     
-      INC(i);
-    END; // .WHILE
-  END; // .ELSE
+      Inc(i);
+    end; // .while
+  end; // .else
   
-  IF Res THEN BEGIN
+  if Res then begin
     Mes := '{~white}Scripts were successfully extracted{~}';
-  END; // .IF
+  end; // .if
   
-  Utils.SetPcharValue(@z[1], Mes, SIZEOF(z[1]));
-  ExecErmCmd('IF:Lz1;');
-END; // .PROCEDURE TScriptMan.ExtractScripts
+  Utils.SetPcharValue(@z[1], Mes, sizeof(z[1]));
+  ExecErmCmd('if:Lz1;');
+end; // .procedure TScriptMan.ExtractScripts
 
-PROCEDURE ExtractErm;
-BEGIN
+procedure ExtractErm;
+begin
   ScriptMan.ExtractScripts;
-END; // .PROCEDURE ExtractErm
+end; // .procedure ExtractErm
 
-FUNCTION TScriptMan.GetScriptCount: INTEGER;
-BEGIN
-  RESULT := fScripts.Count;
-END; // .FUNCTION TScriptMan.GetScriptCoun
+function TScriptMan.GetScriptCount: integer;
+begin
+  result := fScripts.Count;
+end; // .function TScriptMan.GetScriptCoun
 
-FUNCTION TScriptMan.GetScript (Ind: INTEGER): TErmScript;
-BEGIN
-  {!} ASSERT(Math.InRange(Ind, 0, fScripts.Count - 1));
-  RESULT := fScripts[Ind];
-END; // .FUNCTION TScriptMan.GetScript
+function TScriptMan.GetScript (Ind: integer): TErmScript;
+begin
+  {!} Assert(Math.InRange(Ind, 0, fScripts.Count - 1));
+  result := fScripts[Ind];
+end; // .function TScriptMan.GetScript
 
-PROCEDURE TScriptMan.UpdateScriptAddrBounds;
-VAR
+procedure TScriptMan.UpdateScriptAddrBounds;
+var
 {O} Sorter: TSortScriptsAddrBounds;
 {U} Script: TErmScript;
-    i:      INTEGER;
+    i:      integer;
    
-BEGIN
-  Sorter := NIL;
-  Script := NIL;
+begin
+  Sorter := nil;
+  Script := nil;
   // * * * * * //
-  fScriptsAddrBounds := NIL;
+  fScriptsAddrBounds := nil;
   
-  IF fScripts.Count > 0 THEN BEGIN
+  if fScripts.Count > 0 then begin
     SetLength(fScriptsAddrBounds, fScripts.Count);
     
-    FOR i := 0 TO fScripts.Count - 1 DO BEGIN
+    for i := 0 to fScripts.Count - 1 do begin
       Script := TErmScript(fScripts[i]);
       fScriptsAddrBounds[i].ScriptInd := i;
       fScriptsAddrBounds[i].StartAddr := Script.StartAddr;
       fScriptsAddrBounds[i].EndAddr   := Script.EndAddr;
-    END; // .FOR
+    end; // .for
     
     Sorter := TSortScriptsAddrBounds.Create(fScriptsAddrBounds);
     Sorter.Sort;
-  END; // .IF
+  end; // .if
   // * * * * * //
   SysUtils.FreeAndNil(Sorter);
-END; // .PROCEDURE TScriptMan.UpdateScriptAddrBounds
+end; // .procedure TScriptMan.UpdateScriptAddrBounds
 
-FUNCTION TScriptMan.AddrToScriptNameAndLine ({n} Addr: PCHAR; OUT ScriptName: STRING;
-                                             OUT Line: INTEGER): BOOLEAN;
-VAR
-  ScriptInd: INTEGER;
+function TScriptMan.AddrToScriptNameAndLine ({n} Addr: pchar; out ScriptName: string;
+                                             out Line: integer): boolean;
+var
+  ScriptInd: integer;
   (* Binary search vars *)
-  Left:      INTEGER;
-  Right:     INTEGER;
-  Middle:    INTEGER;
+  Left:      integer;
+  Right:     integer;
+  Middle:    integer;
 
-BEGIN
-  RESULT := (Addr <> NIL) AND (fScripts.Count > 0);
+begin
+  result := (Addr <> nil) and (fScripts.Count > 0);
   
-  IF RESULT THEN BEGIN
-    IF fScriptsAddrBounds = NIL THEN BEGIN
+  if result then begin
+    if fScriptsAddrBounds = nil then begin
       UpdateScriptAddrBounds;
-    END; // .IF
+    end; // .if
     
-    RESULT := FALSE;
+    result := FALSE;
     Left   := 0;
-    Right  := HIGH(fScriptsAddrBounds);
+    Right  := High(fScriptsAddrBounds);
     
-    WHILE NOT RESULT AND (Left <= Right) DO BEGIN
-      Middle := Left + (Right - Left) DIV 2;
+    while not result and (Left <= Right) do begin
+      Middle := Left + (Right - Left) div 2;
       
-      IF CARDINAL(Addr) < CARDINAL(fScriptsAddrBounds[Middle].StartAddr) THEN BEGIN
+      if cardinal(Addr) < cardinal(fScriptsAddrBounds[Middle].StartAddr) then begin
         Right := Middle - 1;
-      END // .IF
-      ELSE IF CARDINAL(Addr) > CARDINAL(fScriptsAddrBounds[Middle].EndAddr) THEN BEGIN
+      end // .if
+      else if cardinal(Addr) > cardinal(fScriptsAddrBounds[Middle].EndAddr) then begin
         Left := Middle + 1;
-      END // .ELSEIF
-      ELSE BEGIN
+      end // .ELSEIF
+      else begin
         ScriptInd  := fScriptsAddrBounds[Middle].ScriptInd;
-        {!} ASSERT(Math.InRange(ScriptInd, 0, fScripts.Count - 1));
+        {!} Assert(Math.InRange(ScriptInd, 0, fScripts.Count - 1));
         ScriptName := TErmScript(fScripts[ScriptInd]).FileName;
-        RESULT     := TErmScript(fScripts[ScriptInd]).AddrToLineNumber(Addr, Line);
-        {!} ASSERT(RESULT);
-      END; // .ELSE
-    END; // .WHILE
-  END; // .IF
-END; // .FUNCTION TScriptMan.AddrToScriptNameAndLine
+        result     := TErmScript(fScripts[ScriptInd]).AddrToLineNumber(Addr, Line);
+        {!} Assert(result);
+      end; // .else
+    end; // .while
+  end; // .if
+end; // .function TScriptMan.AddrToScriptNameAndLine
 
-PROCEDURE FireErmEventEx (EventId: INTEGER; Params: ARRAY OF INTEGER);
-VAR
-  i: INTEGER;
+procedure FireErmEventEx (EventId: integer; Params: array of integer);
+var
+  i: integer;
 
-BEGIN
-  {!} ASSERT(LENGTH(Params) <= LENGTH(GameExt.EraEventParams^));
+begin
+  {!} Assert(Length(Params) <= Length(GameExt.EraEventParams^));
   GameExt.EraSaveEventParams;
   
-  FOR i := 0 TO HIGH(Params) DO BEGIN
+  for i := 0 to High(Params) do begin
     EraEventParams[i] := Params[i];
-  END; // .FOR
+  end; // .for
   
   Erm.FireErmEvent(EventId);
   GameExt.EraRestoreEventParams;
-END; // .PROCEDURE FireErmEventEx
+end; // .procedure FireErmEventEx
 
-FUNCTION FindErmCmdBeginning ({n} CmdPtr: PCHAR): {n} PCHAR;
-BEGIN
-  RESULT := CmdPtr;
+function FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
+begin
+  result := CmdPtr;
   
-  IF RESULT <> NIL THEN BEGIN
-    DEC(RESULT);
+  if result <> nil then begin
+    Dec(result);
     
-    WHILE RESULT^ <> '!' DO BEGIN
-      DEC(RESULT);
-    END; // .WHILE
+    while result^ <> '!' do begin
+      Dec(result);
+    end; // .while
     
-    INC(RESULT);
+    Inc(result);
     
-    IF RESULT^ = '#' THEN BEGIN
+    if result^ = '#' then begin
       // [!]#
-      DEC(RESULT);
-    END // .IF
-    ELSE BEGIN
+      Dec(result);
+    end // .if
+    else begin
       // ![!]
-      DEC(RESULT, 2);
-    END; // .ELSE
-  END; // .IF
-END; // .FUNCTION FindErmCmdBeginning
+      Dec(result, 2);
+    end; // .else
+  end; // .if
+end; // .function FindErmCmdBeginning
 
-FUNCTION GrabErmCmd ({n} CmdPtr: PCHAR): STRING;
-VAR
-  StartPos: PCHAR;
-  EndPos:   PCHAR;
+function GrabErmCmd ({n} CmdPtr: pchar): string;
+var
+  StartPos: pchar;
+  EndPos:   pchar;
 
-BEGIN
-  IF CmdPtr <> NIL THEN BEGIN
+begin
+  if CmdPtr <> nil then begin
     StartPos := FindErmCmdBeginning(CmdPtr);
     EndPos   := CmdPtr;
     
-    REPEAT
-      INC(EndPos);
-    UNTIL (EndPos^ = ';') OR (EndPos^ = #0);
+    repeat
+      Inc(EndPos);
+    until (EndPos^ = ';') or (EndPos^ = #0);
     
-    IF EndPos^ = ';' THEN BEGIN
-      INC(EndPos);
-    END; // .IF
+    if EndPos^ = ';' then begin
+      Inc(EndPos);
+    end; // .if
     
-    RESULT := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
-  END; // .IF
-END; // .FUNCTION GrabErmCmd
+    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
+  end; // .if
+end; // .function GrabErmCmd
 
-FUNCTION ErmCurrHero: {n} POINTER;
-BEGIN
-  RESULT := PPOINTER($27F9970)^;
-END; // .FUNCTION ErmCurrHero
+function ErmCurrHero: {n} POINTER;
+begin
+  result := PPOINTER($27F9970)^;
+end; // .function ErmCurrHero
 
-FUNCTION ErmCurrHeroInd: INTEGER; // Or -1
-BEGIN
-  IF ErmCurrHero <> NIL THEN BEGIN
-    RESULT := PINTEGER(Utils.PtrOfs(ErmCurrHero, $1A))^;
-  END // .IF
-  ELSE BEGIN
-    RESULT := -1;
-  END; // .ELSE
-END; // .FUNCTION 
+function ErmCurrHeroInd: integer; // or -1
+begin
+  if ErmCurrHero <> nil then begin
+    result := PINTEGER(Utils.PtrOfs(ErmCurrHero, $1A))^;
+  end // .if
+  else begin
+    result := -1;
+  end; // .else
+end; // .function 
 
-FUNCTION Hook_ProcessErm (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-VAR
+function Hook_ProcessErm (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
 {O} YVars:     TYVars;
     EventArgs: TOnBeforeTriggerArgs;
 
-BEGIN
+begin
   YVars := TYVars.Create;
   // * * * * * //
-  IF CurrErmEventID^ >= Erm.TRIGGER_FU30000 THEN BEGIN
-    SetLength(YVars.Value, LENGTH(y^));
-    Utils.CopyMem(SIZEOF(y^), @y[1], @YVars.Value[0]);
-  END; // .IF
+  if CurrErmEventID^ >= Erm.TRIGGER_FU30000 then begin
+    SetLength(YVars.Value, Length(y^));
+    Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
+  end; // .if
   
-  SavedYVars.Add(YVars); YVars := NIL;
+  SavedYVars.Add(YVars); YVars := nil;
   
   (* ProcessErm - initializing v996..v1000 variables *)
-  ASM
+  asm
     CMP DWORD [$793C80], 0
     JL @L005
-    MOV CL, BYTE [$793C80]
-    MOV BYTE [$91F6C7], CL
+    MOV CL, byte [$793C80]
+    MOV byte [$91F6C7], CL
     JMP @L013
   @L005:
     MOV EAX, $710FD3
@@ -1423,8 +1423,8 @@ BEGIN
     ADD ESP, 4
     NEG EAX
     SBB AL, AL
-    INC AL
-    MOV BYTE [$91F6C7], AL
+    Inc AL
+    MOV byte [$91F6C7], AL
   @L013:
     MOV EAX, $710FD3
     CALL EAX
@@ -1432,55 +1432,55 @@ BEGIN
     MOV EAX, $7118A3
     CALL EAX
     ADD ESP,4
-    MOV BYTE [$91F6C6], AL
+    MOV byte [$91F6C6], AL
     MOV EDX, DWORD [$27F9964]
     MOV DWORD [$8885FC], EDX
     MOV EAX, DWORD [$27F9968]
     MOV DWORD [$888600], EAX
     MOV ECX, DWORD [$27F996C]
     MOV DWORD [$888604], ECX
-  END; // .ASM
+  end; // .asm
   
-  INC(ErmTriggerDepth);
+  Inc(ErmTriggerDepth);
   EventArgs.TriggerID         := CurrErmEventID^;
   EventArgs.BlockErmExecution := FALSE;
-  GameExt.FireEvent('OnBeforeTrigger', @EventArgs, SIZEOF(EventArgs));
+  GameExt.FireEvent('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
   
-  IF EventArgs.BlockErmExecution THEN BEGIN
+  if EventArgs.BlockErmExecution then begin
     CurrErmEventID^ := TRIGGER_INVALID;
-  END; // .IF
+  end; // .if
   
-  RESULT := Core.EXEC_DEF_CODE;
+  result := Core.EXEC_DEF_CODE;
   // * * * * * //
   SysUtils.FreeAndNil(YVars);
-END; // .FUNCTION Hook_ProcessErm
+end; // .function Hook_ProcessErm
 
-FUNCTION Hook_FindErm_BeforeMainLoop (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_FindErm_BeforeMainLoop (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   GLOBAL_EVENT_SIZE = 52;
   
-VAR
+var
   ResetEra: Utils.TProcedure;
 
-BEGIN
+begin
   // Skip internal map events: GEp_ = GEp1 - [sizeof(_GlbEvent_) = 52]
   PINTEGER(Context.EBP - $3F4)^ := PINTEGER(PINTEGER(Context.EBP - $24)^ + $88)^
                                    - GLOBAL_EVENT_SIZE;
   ErmErrReported := FALSE;
   ResetEra       := Windows.GetProcAddress(GameExt.hAngel, 'ResetEra');
-  {!} ASSERT(@ResetEra <> NIL);
+  {!} Assert(@ResetEra <> nil);
   ResetEra;
   GameExt.FireEvent('OnBeforeErm', GameExt.NO_EVENT_DATA, 0);
 
-  IF NOT ZvsIsGameLoading^ THEN BEGIN
+  if not ZvsIsGameLoading^ then begin
     GameExt.FireEvent('OnBeforeErmInstructions', GameExt.NO_EVENT_DATA, 0);
-  END; // .IF
+  end; // .if
   
-  RESULT := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_FindErm_BeforeMainLoop
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_FindErm_BeforeMainLoop
 
-FUNCTION LoadWoGOptions (FilePath: PCHAR): BOOLEAN; ASSEMBLER;
-ASM
+function LoadWoGOptions (FilePath: pchar): boolean; ASSEMBLER;
+asm
   PUSH $0FA0
   PUSH $2771920
   PUSH EAX // FilePath
@@ -1489,165 +1489,165 @@ ASM
   ADD ESP, $0C
   CMP EAX, 0
   JGE @OK // ==>
-  XOR EAX, EAX
+  xor EAX, EAX
   JMP @Done
 @OK:
-  XOR EAX, EAX
-  INC EAX
+  xor EAX, EAX
+  Inc EAX
 @Done:
-END; // .FUNCTION LoadWoGOptions
+end; // .function LoadWoGOptions
 
-FUNCTION Hook_UN_J3_End (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_UN_J3_End (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   RESET_OPTIONS_COMMAND = ':clear:';
   WOG_OPTION_MAP_RULES  = 101;
   USE_SELECTED_RULES    = 2;
 
-VAR
-  WoGOptionsFile: STRING;
-  i:              INTEGER;
+var
+  WoGOptionsFile: string;
+  i:              integer;
 
-BEGIN
-  WoGOptionsFile := PCHAR(Context.ECX);
+begin
+  WoGOptionsFile := pchar(Context.ECX);
 
-  IF WoGOptionsFile = RESET_OPTIONS_COMMAND THEN BEGIN
-    FOR i := 0 TO High(WoGOptions[CURRENT_WOG_OPTIONS]) DO BEGIN
+  if WoGOptionsFile = RESET_OPTIONS_COMMAND then begin
+    for i := 0 to High(WoGOptions[CURRENT_WOG_OPTIONS]) do begin
       WoGOptions[CURRENT_WOG_OPTIONS][i] := 0;
-    END; // .FOR
+    end; // .for
     
     WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_MAP_RULES] := USE_SELECTED_RULES;
-  END // .IF
-  ELSE IF NOT LoadWoGOptions(PCHAR(WoGOptionsFile)) THEN BEGIN
+  end // .if
+  else if not LoadWoGOptions(pchar(WoGOptionsFile)) then begin
     ShowMessage('Cannot load file with WoG options: ' + WoGOptionsFile);
-  END; // .ELSEIF
+  end; // .ELSEIF
   
-  RESULT := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_UN_J3_End
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_UN_J3_End
 
-FUNCTION Hook_FindErm_AfterMapScripts (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_FindErm_AfterMapScripts (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   GLOBAL_EVENT_SIZE = 52;
 
-VAR
+var
   ScriptIndPtr: PINTEGER;
   
-BEGIN
+begin
   ScriptIndPtr := Ptr(Context.EBP - $18);
   // * * * * * //
-  IF NOT ZvsIsGameLoading^ AND (ScriptIndPtr^ = 0) THEN BEGIN
+  if not ZvsIsGameLoading^ and (ScriptIndPtr^ = 0) then begin
     ZvsResetCommanders;
     ScriptMan.LoadScriptsFromDisk;
-  END; // .IF
+  end; // .if
   
-  IF ScriptIndPtr^ < ScriptMan.ScriptCount THEN BEGIN
+  if ScriptIndPtr^ < ScriptMan.ScriptCount then begin
     // M.m.i = 0
     PINTEGER(Context.EBP - $318)^ := 0;
     // M.m.s = ErmScript
-    PPCHAR(Context.EBP - $314)^ := PCHAR(ScriptMan.Scripts[ScriptIndPtr^].Contents);
-    // M.m.l = LENGTH(ErmScript)
-    PINTEGER(Context.EBP - $310)^ := LENGTH(ScriptMan.Scripts[ScriptIndPtr^].Contents);
+    PPCHAR(Context.EBP - $314)^ := pchar(ScriptMan.Scripts[ScriptIndPtr^].Contents);
+    // M.m.l = Length(ErmScript)
+    PINTEGER(Context.EBP - $310)^ := Length(ScriptMan.Scripts[ScriptIndPtr^].Contents);
     // GEp_--; Process one more script
-    DEC(PINTEGER(Context.EBP - $3F4)^, GLOBAL_EVENT_SIZE);
-    INC(ScriptIndPtr^);
+    Dec(PINTEGER(Context.EBP - $3F4)^, GLOBAL_EVENT_SIZE);
+    Inc(ScriptIndPtr^);
     // Jump to ERM header processing
     Context.RetAddr := Ptr($74A00C);
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     // Jimp right after loop end
     Context.RetAddr := Ptr($74C5A7);
-  END; // .ELSE
+  end; // .else
   
-  RESULT := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_FindErm_AfterMapScripts
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_FindErm_AfterMapScripts
 
-FUNCTION Hook_ProcessErm_End (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-VAR
+function Hook_ProcessErm_End (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
 {O} YVars: TYVars;
 
-BEGIN
+begin
   YVars := SavedYVars.Pop;
   // * * * * * //
-  GameExt.FireEvent('OnAfterTrigger', CurrErmEventID, SIZEOF(CurrErmEventID^));
+  GameExt.FireEvent('OnAfterTrigger', CurrErmEventID, sizeof(CurrErmEventID^));
   
-  IF YVars.Value <> NIL THEN BEGIN
-    Utils.CopyMem(SIZEOF(y^), @YVars.Value[0], @y[1]);
-  END; // .IF
+  if YVars.Value <> nil then begin
+    Utils.CopyMem(sizeof(y^), @YVars.Value[0], @y[1]);
+  end; // .if
   
-  DEC(ErmTriggerDepth);
-  RESULT := Core.EXEC_DEF_CODE;
+  Dec(ErmTriggerDepth);
+  result := Core.EXEC_DEF_CODE;
   // * * * * * //
   SysUtils.FreeAndNil(YVars);
-END; // .FUNCTION Hook_ProcessErm_End
+end; // .function Hook_ProcessErm_End
 
 {$W-}
-PROCEDURE Hook_ErmCastleBuilding; ASSEMBLER;
-ASM
-  MOVZX EDX, BYTE [ECX + $150]
-  MOVZX EAX, BYTE [ECX + $158]
-  OR EDX, EAX
+procedure Hook_ErmCastleBuilding; ASSEMBLER;
+asm
+  MOVZX EDX, byte [ECX + $150]
+  MOVZX EAX, byte [ECX + $158]
+  or EDX, EAX
   PUSH $70E8A9
   // RET
-END; // .PROCEDURE Hook_ErmCastleBuilding
+end; // .procedure Hook_ErmCastleBuilding
 {$W+}
 
-FUNCTION Hook_ErmHeroArt (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
-  RESULT := ((PINTEGER(Context.EBP - $E8)^ SHR 8) AND 7) = 0;
+function Hook_ErmHeroArt (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
+  result := ((PINTEGER(Context.EBP - $E8)^ shr 8) and 7) = 0;
   
-  IF NOT RESULT THEN BEGIN
+  if not result then begin
     Context.RetAddr := Ptr($744B85);
-  END; // .IF
-END; // .FUNCTION Hook_ErmHeroArt
+  end; // .if
+end; // .function Hook_ErmHeroArt
 
-FUNCTION Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
+function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
   f[1]   := FALSE;
-  RESULT := Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ErmHeroArt_FindFreeSlot
+  result := Core.EXEC_DEF_CODE;
+end; // .function Hook_ErmHeroArt_FindFreeSlot
 
-FUNCTION Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
+function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
   f[1]   := TRUE;
-  RESULT := Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ErmHeroArt_FoundFreeSlot
+  result := Core.EXEC_DEF_CODE;
+end; // .function Hook_ErmHeroArt_FoundFreeSlot
 
-FUNCTION Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   NUM_BAG_ARTS_OFFSET = +$3D4;
   HERO_PTR_OFFSET     = -$380;
   
-VAR
+var
   Hero: POINTER;
 
-BEGIN
+begin
   Hero := PPOINTER(Context.EBP + HERO_PTR_OFFSET)^;
-  DEC(PBYTE(Utils.PtrOfs(Hero, NUM_BAG_ARTS_OFFSET))^);
-  RESULT := Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ErmHeroArt_DeleteFromBag
+  Dec(PBYTE(Utils.PtrOfs(Hero, NUM_BAG_ARTS_OFFSET))^);
+  result := Core.EXEC_DEF_CODE;
+end; // .function Hook_ErmHeroArt_DeleteFromBag
 
-FUNCTION Hook_DlgCallback (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_DlgCallback (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   NO_CMD = 0;
 
-BEGIN
+begin
   ErmDlgCmd^ := NO_CMD;
-  RESULT     := Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_DlgCallback
+  result     := Core.EXEC_DEF_CODE;
+end; // .function Hook_DlgCallback
 
-FUNCTION Hook_CM3 (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_CM3 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   MOUSE_STRUCT_ITEM_OFS = +$8;
   CM3_RES_ADDR          = $A6929C;
 
-VAR
-  SwapManager: INTEGER;
-  MouseStruct: INTEGER;
+var
+  SwapManager: integer;
+  MouseStruct: integer;
 
-BEGIN
+begin
   SwapManager := Context.EBX;
   MouseStruct := Context.EDI;
   
-  ASM
+  asm
     PUSHAD
     PUSH SwapManager
     POP [$27F954C]
@@ -1656,158 +1656,158 @@ BEGIN
     MOV EAX, $74FB3C
     CALL EAX
     POPAD
-  END; // .ASM
+  end; // .asm
   
   PINTEGER(Context.EDI + MOUSE_STRUCT_ITEM_OFS)^ := PINTEGER(CM3_RES_ADDR)^;
-  RESULT := Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_CM3
+  result := Core.EXEC_DEF_CODE;
+end; // .function Hook_CM3
 
-FUNCTION Hook_InvalidReceiver (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_InvalidReceiver (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   MAX_CONTEXT_SIZE = 512;
   CMD_SIZE         = 4;
 
-VAR
-  CmdPtr:          PCHAR;
-  CmdOffset:       INTEGER;
-  Receiver:        STRING;
-  CmdContext:      STRING;
-  ScriptName:      STRING;
-  Line:            INTEGER;
-  PositionLocated: BOOLEAN;
+var
+  CmdPtr:          pchar;
+  CmdOffset:       integer;
+  Receiver:        string;
+  CmdContext:      string;
+  ScriptName:      string;
+  Line:            integer;
+  PositionLocated: boolean;
     
-BEGIN
-  IF NOT IgnoreInvalidCmdsOpt THEN BEGIN
+begin
+  if not IgnoreInvalidCmdsOpt then begin
     CmdOffset       := PINTEGER(Context.EBP - $318)^;
-    CmdPtr          := PCHAR(PINTEGER(Context.EBP - $314)^ + CmdOffset - CMD_SIZE);
+    CmdPtr          := pchar(PINTEGER(Context.EBP - $314)^ + CmdOffset - CMD_SIZE);
     Receiver        := StrLib.ExtractFromPchar(CmdPtr, CMD_SIZE);
     CmdContext      := StrLib.ExtractFromPchar(CmdPtr, MAX_CONTEXT_SIZE);
     PositionLocated := ScriptMan.AddrToScriptNameAndLine(CmdPtr, ScriptName, Line);
-    {!} ASSERT(PositionLocated);
+    {!} Assert(PositionLocated);
 
     ShowMessage('{~red}Invalid receiver: {~gold}' + Receiver + '{~}{~}'#10'File: '
                 + ScriptName + '. Line: ' + SysUtils.IntToStr(Line) + #10'Context:'#10#10 
                 + CmdContext);
-  END; // .IF
+  end; // .if
   
   Context.RetAddr := Ptr($74C550);
-  RESULT          := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_InvalidReceiver
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_InvalidReceiver
 
-PROCEDURE OnEraSaveScripts (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnEraSaveScripts (Event: GameExt.PEvent); stdcall;
+begin
   ScriptMan.SaveScripts;
-END; // .PROCEDURE OnEraSaveScripts
+end; // .procedure OnEraSaveScripts
 
-PROCEDURE OnEraLoadScripts (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnEraLoadScripts (Event: GameExt.PEvent); stdcall;
+begin
   ScriptMan.LoadScriptsFromSavedGame;
-END; // .PROCEDURE OnEraLoadScripts
+end; // .procedure OnEraLoadScripts
 
-FUNCTION Hook_LoadErtFile (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_LoadErtFile (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   ARG_FILENAME = 2;
 
-VAR
-  FileName: PCHAR;
+var
+  FileName: pchar;
   
-BEGIN
-  FileName := PCHAR(PINTEGER(Context.EBP + 12)^);
+begin
+  FileName := pchar(PINTEGER(Context.EBP + 12)^);
   Utils.CopyMem(SysUtils.StrLen(FileName) + 1, FileName, Ptr(Context.EBP - $410));
   
   Context.RetAddr := Ptr($72C760);
-  RESULT          := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_LoadErtFile
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_LoadErtFile
 
-PROCEDURE ReportErmError (Error: STRING; {n} ErrCmd: PCHAR);
-CONST
+procedure ReportErmError (Error: string; {n} ErrCmd: pchar);
+const
   CONTEXT_LEN = 00;
 
-VAR
-  PositionLocated: BOOLEAN;
-  ScriptName:      STRING;
-  Line:            INTEGER;
-  Question:        STRING;
+var
+  PositionLocated: boolean;
+  ScriptName:      string;
+  Line:            integer;
+  Question:        string;
   
   
-BEGIN
+begin
   ErmErrReported  := TRUE;
   PositionLocated := ScriptMan.AddrToScriptNameAndLine(ErrCmd, ScriptName, Line);
   
-  IF Error = '' THEN BEGIN
+  if Error = '' then begin
     Error := 'Unknown error';
-  END; // .IF
+  end; // .if
   
   Question := '{~r}' + Error + '{~}';
   
-  IF PositionLocated THEN BEGIN
+  if PositionLocated then begin
     Question := Question + #10'File: ' + ScriptName + '. Line: ' + IntToStr(Line);
-  END; // .IF
+  end; // .if
   
   Question := Question + #10#10'{~g}' + GrabErmCmd(ErrCmd) + '{~}'
               + #10#10'Continue without saving ERM memory dump?';
   
-  IF NOT Ask(Question) THEN BEGIN
-    ZvsDumpErmVars(PCHAR(Error), ErrCmd);
-  END; // .IF
-END; // .PROCEDURE ReportErmError
+  if not Ask(Question) then begin
+    ZvsDumpErmVars(pchar(Error), ErrCmd);
+  end; // .if
+end; // .procedure ReportErmError
 
-FUNCTION Hook_MError (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
+function Hook_MError (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
   ReportErmError(PPCHAR(Context.EBP + 16)^, ErmErrCmdPtr^);
   Context.RetAddr := Ptr($712483);
-  RESULT          := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_MError
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_MError
 
-FUNCTION Hook_ProcessErm_Start (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-VAR
-  DisableExecution: BOOLEAN;
+function Hook_ProcessErm_Start (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
+  DisableExecution: boolean;
 
-BEGIN
+begin
   PINTEGER(Context.EBP - $300)^ := 0; // M.i = 0, default code
   DisableExecution := FALSE;
   ErmErrReported   := FALSE;
   
-  IF DisableExecution THEN BEGIN
+  if DisableExecution then begin
     Context.RetAddr := Ptr($749702);
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     Context.RetAddr := Ptr($741E58);
-  END; // .ELSE
+  end; // .else
   
-  RESULT := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ProcessErm_Start
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_ProcessErm_Start
 
-FUNCTION Hook_ErmMess (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
-  IF NOT ErmErrReported THEN BEGIN
+function Hook_ErmMess (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
+  if not ErmErrReported then begin
     // ERM cmd pos is m->m.s
     ReportErmError('', PPCHAR(PINTEGER(Context.EBP + 8)^ + 4)^);
-  END; // .IF
+  end; // .if
   
   (* The command below was deactivated, because it leaded to multiple ERM messages *)
   // ++m->i;
-  //INC(PINTEGER(PINTEGER(Context.EBP + 8)^)^);
+  //Inc(PINTEGER(PINTEGER(Context.EBP + 8)^)^);
   ErmErrReported  := FALSE;
   Context.RetAddr := Ptr($73DF03);
-  RESULT          := NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ErmMess
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_ErmMess
 
-FUNCTION Hook_MR_N (c: Core.PContext): longbool; stdcall;
+function Hook_MR_N (c: Core.PContext): longbool; stdcall;
 begin
   c.eax     := Heroes.GetStackIdByPos(Heroes.GetVal(MrMonPtr^, STACK_POS).v);
   c.RetAddr := Ptr($75DC76);
   result    := not Core.EXEC_DEF_CODE;
 end; // .function Hook_MR_N
 
-PROCEDURE OnBeforeWoG (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
+begin
   (* Remove WoG CM3 trigger *)
   Core.p.WriteDword($78C210, $887668);
-END; // .PROCEDURE OnBeforeWoG
+end; // .procedure OnBeforeWoG
 
-PROCEDURE OnAfterWoG (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+begin
   (* Disable internal map scripts interpretation *)
   Core.ApiHook(@Hook_FindErm_BeforeMainLoop, Core.HOOKTYPE_BRIDGE, Ptr($749BBA));
   
@@ -1815,15 +1815,15 @@ BEGIN
   Core.p.WriteDataPatch($72CA8A, ['E90102000090909090']);
   
   (* Replace all points of wog option 5 (Wogify) access with FreezedWogOptionWogify *)
-  Core.p.WriteDword($705601 + 2, INTEGER(@FreezedWogOptionWogify));
-  Core.p.WriteDword($72CA2F + 2, INTEGER(@FreezedWogOptionWogify));
-  Core.p.WriteDword($749BFE + 2, INTEGER(@FreezedWogOptionWogify));
-  Core.p.WriteDword($749CAF + 2, INTEGER(@FreezedWogOptionWogify));
-  Core.p.WriteDword($749D91 + 2, INTEGER(@FreezedWogOptionWogify));
-  Core.p.WriteDword($749E2D + 2, INTEGER(@FreezedWogOptionWogify));
-  Core.p.WriteDword($749E9D + 2, INTEGER(@FreezedWogOptionWogify));
-  Core.p.WriteDword($74C6F5 + 2, INTEGER(@FreezedWogOptionWogify));
-  Core.p.WriteDword($753F07 + 2, INTEGER(@FreezedWogOptionWogify));
+  Core.p.WriteDword($705601 + 2, integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword($72CA2F + 2, integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword($749BFE + 2, integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword($749CAF + 2, integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword($749D91 + 2, integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword($749E2D + 2, integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword($749E9D + 2, integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword($74C6F5 + 2, integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword($753F07 + 2, integer(@FreezedWogOptionWogify));
 
   (* Never load [mapname].cmd file *)
   Core.p.WriteDataPatch($771CA8, ['E9C2070000']);
@@ -1908,12 +1908,12 @@ BEGIN
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
   Core.p.WriteDataPatch($439840, ['8B4D08909090']);
   Core.p.WriteDataPatch($439857, ['8B4D08909090']);
-END; // .PROCEDURE OnAfterWoG
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   ScriptMan   := TScriptMan.Create;
   ErmScanner  := TextScan.TTextScanner.Create;
-  ErmCmdCache := DataLib.NewDict(NOT Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  ErmCmdCache := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   IsWoG^      := TRUE;
   ErmEnabled^ := TRUE;
   SavedYVars  := Lists.NewStrictList(TYVars);
@@ -1922,4 +1922,4 @@ BEGIN
   GameExt.RegisterHandler(OnAfterWoG,       'OnAfterWoG');
   GameExt.RegisterHandler(OnEraSaveScripts, '$OnEraSaveScripts');
   GameExt.RegisterHandler(OnEraLoadScripts, '$OnEraLoadScripts');
-END.
+end.

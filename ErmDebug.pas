@@ -1,102 +1,102 @@
-UNIT ErmDebug;
+unit ErmDebug;
 {
 DESCRIPTION:  Erm debugging and tracking
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES Utils, Erm;
+(***)  interface  (***)
+uses Utils, Erm;
 
-TYPE
+type
   TCmdId = Erm.TErmCmdId;
   TEventContext = TObject;
 
   PEventRec = ^TEventRec;
-  TEventRec = RECORD
-        EventId:  INTEGER;
-        EventN:   INTEGER;
+  TEventRec = record
+        EventId:  integer;
+        EventN:   integer;
     {O} Context:  TEventContext
-  END; // .RECORD TEventRec
+  end; // .record TEventRec
 
   PCmdRec = ^TCmdRec;
-  TCmdRec = RECORD
+  TCmdRec = record
     CmdId:  TCmdId;
-    CmdPtr: PCHAR;  // Set for commands from scripts, CmdStr = ''
-    CmdStr: STRING; // Set for deleted or temp commands, CmdPtr = NIL
-    EventN: INTEGER;
-  END; // .RECORD TCmdRec
+    CmdPtr: pchar;  // set for commands from scripts, CmdStr = ''
+    CmdStr: string; // set for deleted or temp commands, CmdPtr = nil
+    EventN: integer;
+  end; // .record TCmdRec
   
-  TTracker = CLASS
-   PRIVATE
-    fEventRecs:           ARRAY OF TEventRec;
-    fCmdRecs:             ARRAY OF TCmdRec;
-    fLastEventN:          INTEGER;
-    fEventRecsPos:        INTEGER;
-    fCmdRecsPos:          INTEGER;
-    fEventRecsIsCircBuf:  BOOLEAN; // Becomes true when new records start overwriting the old ones
-    fCmdRecsIsCircBuf:    BOOLEAN; // Becomes true when new records start overwriting the old ones
+  TTracker = class
+   private
+    fEventRecs:           array of TEventRec;
+    fCmdRecs:             array of TCmdRec;
+    fLastEventN:          integer;
+    fEventRecsPos:        integer;
+    fCmdRecsPos:          integer;
+    fEventRecsIsCircBuf:  boolean; // Becomes true when New records start overwriting the old ones
+    fCmdRecsIsCircBuf:    boolean; // Becomes true when New records start overwriting the old ones
     
-   PUBLIC
-    CONSTRUCTOR Create (aNumEventRecs, aNumCmdRecs: INTEGER);
-    PROCEDURE Reset;
-    PROCEDURE TrackEvent (EventId: INTEGER);
-    PROCEDURE TrackCmd (CmdId: TCmdId; CmdPtr: PCHAR; IsTempCmd: BOOLEAN);
-    FUNCTION  GenerateReport: STRING;
-  END; // .CLASS TTracker
+   public
+    constructor Create (aNumEventRecs, aNumCmdRecs: integer);
+    procedure Reset;
+    procedure TrackEvent (EventId: integer);
+    procedure TrackCmd (CmdId: TCmdId; CmdPtr: pchar; IsTempCmd: boolean);
+    function  GenerateReport: string;
+  end; // .class TTracker
   
-  TAddrRange = RECORD
+  TAddrRange = record
     StartAddr: POINTER;
     EndAddr:   POINTER;
-  END; // .RECORD TAddrRange
+  end; // .record TAddrRange
   
-  TScriptsLineKeeper = CLASS
-   PRIVATE
-    ScriptsBounds: ARRAY OF TAddrRange;
-  END; // .CLASS TScriptsLineKeeper
+  TScriptsLineKeeper = class
+   private
+    ScriptsBounds: array of TAddrRange;
+  end; // .class TScriptsLineKeeper
   
 
-VAR
+var
 {O} Tracker: TTracker;
     
     (* Options *)
-    EnableDebuggerOpt:  BOOLEAN = FALSE;
-    EnableTracingOpt:   BOOLEAN = FALSE;
-    NumTracedEventsOpt: INTEGER = 0;
-    NumTracedCmdsOpt:   INTEGER = 0;
+    EnableDebuggerOpt:  boolean = FALSE;
+    EnableTracingOpt:   boolean = FALSE;
+    NumTracedEventsOpt: integer = 0;
+    NumTracedCmdsOpt:   integer = 0;
   
   
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
-CONSTRUCTOR TTracker.Create (aNumEventRecs, aNumCmdRecs: INTEGER);
-BEGIN
-  {!} ASSERT(aNumEventRecs >= 0);
-  {!} ASSERT(aNumCmdRecs >= 0);
+constructor TTracker.Create (aNumEventRecs, aNumCmdRecs: integer);
+begin
+  {!} Assert(aNumEventRecs >= 0);
+  {!} Assert(aNumCmdRecs >= 0);
   SetLength(fEventRecs, aNumEventRecs);
   SetLength(fCmdRecs, aNumCmdRecs);
   Reset;
-END; // .CONSTRUCTOR TTracker.Create
+end; // .constructor TTracker.Create
 
-PROCEDURE TTracker.Reset;
-BEGIN
+procedure TTracker.Reset;
+begin
   fLastEventN         := 0;
   fEventRecsPos       := 0;
   fCmdRecsPos         := 0;
   fEventRecsIsCircBuf := FALSE;
   fCmdRecsIsCircBuf   := FALSE;
-END; // .PROCEDURE TTracker.Reset
+end; // .procedure TTracker.Reset
 
-PROCEDURE TrackEvent (EventId: INTEGER);
-VAR
+procedure TrackEvent (EventId: integer);
+var
    
-BEGIN
+begin
   
-END; // .PROCEDURE TrackEvent
+end; // .procedure TrackEvent
 
-PROCEDURE OnBeforeWoG (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
+begin
   Tracker := TTracker.Create(NumTracedEventsOpt, NumTracedCmdsOpt);
-END; // .PROCEDURE OnBeforeWoG
+end; // .procedure OnBeforeWoG
 
-BEGIN
+begin
   GameExt.RegisterHandler('OnBeforeWoG', OnBeforeWoG);
-END.
+end.

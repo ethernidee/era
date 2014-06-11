@@ -1,410 +1,410 @@
-UNIT SndVid;
+unit SndVid;
 {
 DESCRIPTION:  Adds snd/vid archives autoloading support
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   Windows, SysUtils, Utils, WinWrappers, Files, StrLib, Crypto, AssocArrays,
   Core, GameExt, Heroes;
 
-CONST  
+const  
   CD_GAME_FOLDER  = 'Heroes3';
   CD_VIDEO_PATH   = CD_GAME_FOLDER + '\Data\Heroes3.vid';
   CD_AUDIO_PATH   = CD_GAME_FOLDER + '\Data\Heroes3.snd';
   
   
-TYPE
+type
   TArcType  = (ARC_SND, ARC_VID);
 
   PArcItem  = ^TArcItem;
-  TArcItem  = PACKED RECORD
-    Name:   ARRAY[0..39] OF CHAR; // For ARC_SND name is separated from extension with #0
-    Offset: INTEGER;
-  END; // .RECORD TArcItem
+  TArcItem  = packed record
+    Name:   array[0..39] of char; // for ARC_SND name is separated from extension with #0
+    Offset: integer;
+  end; // .record TArcItem
   
   PVidArcItem = PArcItem;
   TVidArcItem = TArcItem;
   
   PSndArcItem = ^TSndArcItem;
-  TSndArcItem = PACKED RECORD
+  TSndArcItem = packed record
     Item: TArcItem;
-    Size: INTEGER;
-  END; // .RECORD TSndArcItem
+    Size: integer;
+  end; // .record TSndArcItem
   
   PItemInfo = ^TItemInfo;
-  TItemInfo = RECORD
-    hFile:  INTEGER;
-    Offset: INTEGER;
-    Size:   INTEGER;
-  END; // .RECORD TItemInfo
+  TItemInfo = record
+    hFile:  integer;
+    Offset: integer;
+    Size:   integer;
+  end; // .record TItemInfo
   
   PResourceBuf  = ^TResourceBuf;
-  TResourceBuf  = PACKED RECORD
-    IsLoaded: BOOLEAN;
-    _0:       ARRAY [0..2] OF BYTE;
+  TResourceBuf  = packed record
+    IsLoaded: boolean;
+    _0:       array [0..2] of byte;
     Addr:     POINTER;
-  END; // .RECORD TResourceBuf
+  end; // .record TResourceBuf
 
 
-VAR
-  LoadCDOpt: BOOLEAN;
+var
+  LoadCDOpt: boolean;
   
-  GameCDFound:  BOOLEAN;
-  GameCDPath:   STRING;
+  GameCDFound:  boolean;
+  GameCDPath:   string;
   
   
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-VAR
+var
 {O} SndFiles: {O} AssocArrays.TAssocArray {OF PItemInfo};
 {O} VidFiles: {O} AssocArrays.TAssocArray {OF PItemInfo};
 
 
-PROCEDURE FindGameCD;
-CONST
+procedure FindGameCD;
+const
   MAX_NUM_DRIVES  = 26;
 
-VAR
-  Drives:     INTEGER;
-  OldErrMode: INTEGER;
-  i:          INTEGER;
+var
+  Drives:     integer;
+  OldErrMode: integer;
+  i:          integer;
 
-BEGIN
+begin
   OldErrMode  :=  Windows.SetErrorMode(Windows.SEM_FAILCRITICALERRORS);
   Drives      :=  Windows.GetLogicalDrives;
   GameCDPath  :=  'A:\';
   GameCDFound :=  FALSE;
-  {!} ASSERT(Drives <> 0);
+  {!} Assert(Drives <> 0);
   
   i :=  0;
 
-  WHILE (i < MAX_NUM_DRIVES) AND NOT GameCDFound DO BEGIN
-    IF (Drives AND (1 SHL i)) <> 0 THEN BEGIN
-      IF Windows.GetDriveType(PCHAR(GameCDPath)) = Windows.DRIVE_CDROM THEN BEGIN
+  while (i < MAX_NUM_DRIVES) and not GameCDFound do begin
+    if (Drives and (1 shl i)) <> 0 then begin
+      if Windows.GetDriveType(pchar(GameCDPath)) = Windows.DRIVE_CDROM then begin
         GameCDFound :=  SysUtils.DirectoryExists(GameCDPath + CD_GAME_FOLDER);
-      END; // .IF
-    END; // .IF
+      end; // .if
+    end; // .if
     
-    IF NOT GameCDFound THEN BEGIN
+    if not GameCDFound then begin
       GameCDPath[1] :=  CHR(ORD(GameCDPath[1]) + 1);
-    END; // .IF
-    INC(i);
-  END; // .WHILE
+    end; // .if
+    Inc(i);
+  end; // .while
   
   Windows.SetErrorMode(OldErrMode);
-END; // .PROCEDURE FindGameCD
+end; // .procedure FindGameCD
 
-PROCEDURE LoadArc (CONST ArcPath: STRING; ArcType: TArcType);
-VAR
+procedure LoadArc (const ArcPath: string; ArcType: TArcType);
+var
 {U} ItemInfo: PItemInfo;
 {U} ArcFiles: AssocArrays.TAssocArray {OF PItemInfo};
 {U} CurrItem: PArcItem;
-    hFile:    INTEGER;
+    hFile:    integer;
     
-    NumItems: INTEGER;
-    ItemSize: INTEGER;
-    ItemName: STRING;
+    NumItems: integer;
+    ItemSize: integer;
+    ItemName: string;
     
-    BufSize:  INTEGER;
-    BufStr:   STRING;
+    BufSize:  integer;
+    BufStr:   string;
     
-    i:        INTEGER;
+    i:        integer;
 
-BEGIN
-  ItemInfo  :=  NIL;
-  ArcFiles  :=  NIL;
-  CurrItem  :=  NIL;
+begin
+  ItemInfo  :=  nil;
+  ArcFiles  :=  nil;
+  CurrItem  :=  nil;
   // * * * * * // 
-  IF
-    WinWrappers.FileOpen(ArcPath, SysUtils.fmOpenRead OR SysUtils.fmShareDenyWrite, hFile)
-  THEN BEGIN
-    CASE ArcType OF
-      ARC_VID: BEGIN
-        ItemSize  :=  SIZEOF(TVidArcItem);
+  if
+    WinWrappers.FileOpen(ArcPath, SysUtils.fmOpenRead or SysUtils.fmShareDenyWrite, hFile)
+  then begin
+    case ArcType of
+      ARC_VID: begin
+        ItemSize  :=  sizeof(TVidArcItem);
         ArcFiles  :=  VidFiles;
-      END; // .CASE ARC_VID
-      ARC_SND: BEGIN
-        ItemSize  :=  SIZEOF(TSndArcItem);
+      end; // .case ARC_VID
+      ARC_SND: begin
+        ItemSize  :=  sizeof(TSndArcItem);
         ArcFiles  :=  SndFiles;
-      END; // .CASE ARC_SND
-    ELSE
+      end; // .case ARC_SND
+    else
       ItemSize  :=  0;
-      {!} ASSERT(FALSE);
-    END; // .CASE ArcType
+      {!} Assert(FALSE);
+    end; // .case ArcType
     
-    IF (WinWrappers.FileRead(hFile, NumItems, SIZEOF(NumItems))) AND (NumItems > 0) THEN BEGIN
+    if (WinWrappers.FileRead(hFile, NumItems, sizeof(NumItems))) and (NumItems > 0) then begin
       BufSize :=  NumItems * ItemSize;
       SetLength(BufStr, BufSize);
-      {!} ASSERT(WinWrappers.FileRead(hFile, BufStr[1], BufSize));
+      {!} Assert(WinWrappers.FileRead(hFile, BufStr[1], BufSize));
       CurrItem  :=  POINTER(BufStr);
       
-      FOR i:=0 TO NumItems - 1 DO BEGIN
-        ItemName  :=  PCHAR(@CurrItem.Name);
+      for i:=0 to NumItems - 1 do begin
+        ItemName  :=  pchar(@CurrItem.Name);
 
-        IF ArcFiles[ItemName] = NIL THEN BEGIN
-          NEW(ItemInfo);
+        if ArcFiles[ItemName] = nil then begin
+          New(ItemInfo);
           ItemInfo.hFile   :=  hFile;
           ItemInfo.Offset  :=  CurrItem.Offset;
           
-          IF ArcType = ARC_SND THEN BEGIN
+          if ArcType = ARC_SND then begin
             ItemInfo.Size :=  PSndArcItem(CurrItem).Size;
-          END; // .IF
+          end; // .if
           
-          ArcFiles[ItemName]  :=  ItemInfo; ItemInfo :=  NIL;
-        END; // .IF
+          ArcFiles[ItemName]  :=  ItemInfo; ItemInfo :=  nil;
+        end; // .if
         
         CurrItem  :=  Utils.PtrOfs(CurrItem, ItemSize);
-      END; // .FOR
-    END; // .IF
-  END; // .IF
-END; // .PROCEDURE LoadArc
+      end; // .for
+    end; // .if
+  end; // .if
+end; // .procedure LoadArc
 
-FUNCTION IsOrigArc (CONST FileName: STRING; ArcType: TArcType): BOOLEAN;
-BEGIN
-  IF ArcType = ARC_SND THEN BEGIN
-    RESULT  :=  (FileName = 'h3ab_ahd.snd') OR (FileName = 'heroes3.snd');
-  END // .IF
-  ELSE BEGIN
-    RESULT  :=
-      (FileName = 'h3ab_ahd.vid') OR
-      (FileName = 'video.vid')    OR
+function IsOrigArc (const FileName: string; ArcType: TArcType): boolean;
+begin
+  if ArcType = ARC_SND then begin
+    result  :=  (FileName = 'h3ab_ahd.snd') or (FileName = 'heroes3.snd');
+  end // .if
+  else begin
+    result  :=
+      (FileName = 'h3ab_ahd.vid') or
+      (FileName = 'video.vid')    or
       (FileName = 'heroes3.vid');
-  END; // .ELSE
-END; // .FUNCTION IsOrigArc
+  end; // .else
+end; // .function IsOrigArc
 
-PROCEDURE LoadArcs (ArcType: TArcType);
-VAR
+procedure LoadArcs (ArcType: TArcType);
+var
 {O} Locator:  Files.TFileLocator;
 {O} FileInfo: Files.TFileItemInfo;
-    ArcExt:   STRING;
-    FileName: STRING;
+    ArcExt:   string;
+    FileName: string;
   
-BEGIN
+begin
   Locator   :=  Files.TFileLocator.Create;
-  FileInfo  :=  NIL;
+  FileInfo  :=  nil;
   // * * * * * //
-  IF ArcType = ARC_VID THEN BEGIN
+  if ArcType = ARC_VID then begin
     ArcExt  :=  '.vid';
-  END // .IF
-  ELSE IF ArcType = ARC_SND THEN BEGIN
+  end // .if
+  else if ArcType = ARC_SND then begin
     ArcExt  :=  '.snd';
-  END // .ELSEIF
-  ELSE BEGIN
+  end // .ELSEIF
+  else begin
     ArcExt  :=  '';
-    {!} ASSERT(FALSE);
-  END; // .ELSE
+    {!} Assert(FALSE);
+  end; // .else
   
   Locator.DirPath :=  'Data';
   Locator.InitSearch('*' + ArcExt);
   
-  WHILE Locator.NotEnd DO BEGIN
+  while Locator.NotEnd do begin
     FileName  :=  SysUtils.AnsiLowerCase(Locator.GetNextItem(Files.TItemInfo(FileInfo)));
     
-    IF
-      (SysUtils.ExtractFileExt(FileName) = ArcExt)  AND
-      NOT FileInfo.IsDir                            AND
-      FileInfo.HasKnownSize                         AND
-      (FileInfo.FileSize > SIZEOF(INTEGER))
-    THEN BEGIN
-      IF NOT IsOrigArc(FileName, ArcType) THEN BEGIN
+    if
+      (SysUtils.ExtractFileExt(FileName) = ArcExt)  and
+      not FileInfo.IsDir                            and
+      FileInfo.HasKnownSize                         and
+      (FileInfo.FileSize > sizeof(integer))
+    then begin
+      if not IsOrigArc(FileName, ArcType) then begin
         LoadArc('Data\' + FileName, ArcType);
-      END; // .IF
-    END; // .IF
+      end; // .if
+    end; // .if
     
     SysUtils.FreeAndNil(FileInfo);
-  END; // .WHILE
+  end; // .while
   
   Locator.FinitSearch;
   // * * * * * //
   SysUtils.FreeAndNil(Locator);
-END; // .FUNCTION Hook_LoadArcs
+end; // .function Hook_LoadArcs
 
-FUNCTION Hook_LoadVideoHeaders (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_LoadVideoHeaders (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   NUM_ARGS  = 0;
 
-BEGIN
-  (* Load new resources *)
+begin
+  (* Load New resources *)
   LoadArcs(ARC_VID);
   
   (* Load CD resources *)
-  IF SysUtils.FileExists(CD_VIDEO_PATH) THEN BEGIN
+  if SysUtils.FileExists(CD_VIDEO_PATH) then begin
     LoadArc(CD_VIDEO_PATH, ARC_VID);
-  END // .IF
-  ELSE IF LoadCDOpt AND GameCDFound THEN BEGIN
+  end // .if
+  else if LoadCDOpt and GameCDFound then begin
     LoadArc(GameCDPath + CD_VIDEO_PATH, ARC_VID);
-  END; // .ELSEIF
+  end; // .ELSEIF
   
   (* Load original rsources *)
   LoadArc('Data\video.vid', ARC_VID);
   LoadArc('Data\h3ab_ahd.vid', ARC_VID);
   
-  Context.EAX     :=  BYTE(TRUE);
+  Context.EAX     :=  byte(TRUE);
   Context.RetAddr :=  Core.Ret(NUM_ARGS);
-  RESULT          :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_LoadVideoHeaders
+  result          :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_LoadVideoHeaders
 
-FUNCTION Hook_OpenSmack (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_OpenSmack (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   NUM_ARGS          = 1;
   ARG_BUFSIZE_MASK  = 1;
   
   SET_POSITION  = 0;
 
-VAR
+var
 {U} ItemInfo: PItemInfo;
     
-    FileName:     STRING;
-    BufSize:      INTEGER;
-    BufSizeMask:  INTEGER;
+    FileName:     string;
+    BufSize:      integer;
+    BufSizeMask:  integer;
     
-    hFile:  INTEGER;
-    Res:    INTEGER;
+    hFile:  integer;
+    Res:    integer;
 
-BEGIN
-  ItemInfo  :=  NIL;
+begin
+  ItemInfo  :=  nil;
   // * * * * * //
-  FileName    :=  PCHAR(Context.ECX);
+  FileName    :=  pchar(Context.ECX);
   FileName    :=  FileName + '.smk';
   BufSize     :=  Context.EDX;
   BufSizeMask :=  Core.APIArg(Context, ARG_BUFSIZE_MASK).v;
-  BufSize     :=  BufSize OR BufSizeMask OR $1140;
+  BufSize     :=  BufSize or BufSizeMask or $1140;
 
   ItemInfo  :=  VidFiles[FileName];
   
-  IF ItemInfo <> NIL THEN BEGIN
+  if ItemInfo <> nil then begin
     hFile :=  ItemInfo.hFile;
     SysUtils.FileSeek(hFile, ItemInfo.Offset, SET_POSITION);
     
-    ASM
+    asm
       PUSH -1
       PUSH BufSize
       PUSH hFile
       MOV EAX, [Heroes.SMACK_OPEN]
       CALL EAX
       MOV Res, EAX
-    END; // .ASM
+    end; // .asm
     Context.EAX :=  Res;
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     Context.EAX :=  0;
-  END; // .ELSE
+  end; // .else
   
   Context.RetAddr :=  Core.Ret(NUM_ARGS);
-  RESULT          :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_OpenSmack
+  result          :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_OpenSmack
 
-FUNCTION Hook_OpenBik (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_OpenBik (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   NUM_ARGS  = 0;
 
   SET_POSITION  = 0;
 
-VAR
+var
 {U} ItemInfo: PItemInfo;
     
-    FileName:     STRING;
-    BufSizeMask:  INTEGER;
+    FileName:     string;
+    BufSizeMask:  integer;
     
-    hFile:  INTEGER;
-    Res:    INTEGER;
+    hFile:  integer;
+    Res:    integer;
 
-BEGIN
-  ItemInfo  :=  NIL;
+begin
+  ItemInfo  :=  nil;
   // * * * * * //
-  FileName    :=  PCHAR(Context.ECX);
+  FileName    :=  pchar(Context.ECX);
   FileName    :=  FileName + '.bik';
-  BufSizeMask :=  Context.EDX OR $8000000;
+  BufSizeMask :=  Context.EDX or $8000000;
 
   ItemInfo  :=  VidFiles[FileName];
   
-  IF ItemInfo <> NIL THEN BEGIN
+  if ItemInfo <> nil then begin
     hFile :=  ItemInfo.hFile;
     SysUtils.FileSeek(hFile, ItemInfo.Offset, SET_POSITION);
     
-    ASM
+    asm
       PUSH BufSizeMask
       PUSH hFile
       MOV EAX, [Heroes.BINK_OPEN]
       CALL EAX
       MOV Res, EAX
-    END; // .ASM
+    end; // .asm
     Context.EAX :=  Res;
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     Context.EAX :=  0;
-  END; // .ELSE
+  end; // .else
   
   Context.RetAddr :=  Core.Ret(NUM_ARGS);
-  RESULT          :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_OpenBik
+  result          :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_OpenBik
 
-FUNCTION Hook_LoadSndHeaders (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_LoadSndHeaders (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   NUM_ARGS  = 0;
 
-BEGIN
-  (* Load new resources *)
+begin
+  (* Load New resources *)
   LoadArcs(ARC_SND);
 
   (* Load CD resources *)
-  IF SysUtils.FileExists(CD_AUDIO_PATH) THEN BEGIN
+  if SysUtils.FileExists(CD_AUDIO_PATH) then begin
     LoadArc(CD_AUDIO_PATH, ARC_SND);
-  END // .IF
-  ELSE IF LoadCDOpt AND GameCDFound THEN BEGIN
+  end // .if
+  else if LoadCDOpt and GameCDFound then begin
     LoadArc(GameCDPath + CD_AUDIO_PATH, ARC_SND);
-  END; // .ELSEIF
+  end; // .ELSEIF
   
   (* Load original rsources *)
   LoadArc('Data\heroes3.snd', ARC_SND);
   LoadArc('Data\h3ab_ahd.snd', ARC_SND);
   
-  Context.EAX     :=  BYTE(TRUE);
+  Context.EAX     :=  byte(TRUE);
   Context.RetAddr :=  Core.Ret(NUM_ARGS);
-  RESULT          :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_LoadSndHeaders
+  result          :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_LoadSndHeaders
 
-FUNCTION Hook_LoadSnd (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_LoadSnd (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   NUM_ARGS          = 1;
   ARG_FILESIZE_PTR  = 1;
 
   SET_POSITION  = 0;
 
-VAR
+var
 {U} ItemInfo: PItemInfo;
 
-    BaseFileName: STRING;
+    BaseFileName: string;
     ResourceBuf:  PResourceBuf;
     FileSizePtr:  PINTEGER;
     
-    RightMostDotPos:  INTEGER;
+    RightMostDotPos:  integer;
 
-BEGIN
-  ItemInfo  :=  NIL;
+begin
+  ItemInfo  :=  nil;
   // * * * * * //
-  BaseFileName  :=  SysUtils.ExtractFileName(PCHAR(Context.ECX));
+  BaseFileName  :=  SysUtils.ExtractFileName(pchar(Context.ECX));
   
-  IF StrLib.ReverseFindChar('.', BaseFileName, RightMostDotPos) THEN BEGIN
+  if StrLib.ReverseFindChar('.', BaseFileName, RightMostDotPos) then begin
     BaseFileName  :=  System.Copy(BaseFileName, 1, RightMostDotPos - 1);
-  END; // .IF
+  end; // .if
   
   ItemInfo  :=  SndFiles[BaseFileName];
   
-  IF ItemInfo = NIL THEN BEGIN
+  if ItemInfo = nil then begin
     ItemInfo  :=  SndFiles[BaseFileName];
-  END; // .IF
+  end; // .if
   
-  IF (ItemInfo <> NIL) AND (ItemInfo.Size > 0) THEN BEGIN
+  if (ItemInfo <> nil) and (ItemInfo.Size > 0) then begin
     ResourceBuf :=  POINTER(Context.EDX);
     FileSizePtr :=  POINTER(Core.APIArg(Context, ARG_FILESIZE_PTR).v);
   
-    IF ResourceBuf.IsLoaded THEN BEGIN
+    if ResourceBuf.IsLoaded then begin
       Heroes.MFree(ResourceBuf.Addr);
-    END; // .IF
+    end; // .if
     
     ResourceBuf.Addr  :=  Heroes.MAlloc(ItemInfo.Size);
     FileSizePtr^      :=  ItemInfo.Size;
@@ -412,18 +412,18 @@ BEGIN
     SysUtils.FileSeek(ItemInfo.hFile, ItemInfo.Offset, SET_POSITION);
     SysUtils.FileRead(ItemInfo.hFile, ResourceBuf.Addr^, ItemInfo.Size);
 
-    Context.EAX :=  BYTE(TRUE);
-  END // .IF
-  ELSE BEGIN
-    Context.EAX :=  BYTE(FALSE);
-  END; // .ELSE
+    Context.EAX :=  byte(TRUE);
+  end // .if
+  else begin
+    Context.EAX :=  byte(FALSE);
+  end; // .else
   
   Context.RetAddr :=  Core.Ret(NUM_ARGS);
-  RESULT          :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_LoadSnd
+  result          :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_LoadSnd
 
-PROCEDURE OnAfterWoG (Event: PEvent); STDCALL;
-BEGIN
+procedure OnAfterWoG (Event: PEvent); stdcall;
+begin
   (* Setup snd/vid hooks *)
   Core.Hook(@Hook_LoadVideoHeaders, Core.HOOKTYPE_BRIDGE, 6, Ptr($598510));
   Core.Hook(@Hook_OpenSmack, Core.HOOKTYPE_BRIDGE, 6, Ptr($598A90));
@@ -433,28 +433,28 @@ BEGIN
   
   (* Disable CloseSndHandles function *)
   PBYTE($4F3DFD)^     :=  $90;
-  PINTEGER($4F3DFE)^  :=  INTEGER($90909090);
+  PINTEGER($4F3DFE)^  :=  integer($90909090);
   
   (* Disable SavePointersToSndHandles function *)
   Core.Hook(Core.Ret(0), Core.HOOKTYPE_JUMP, 5, Ptr($5594F0));
   
   (* Find game CD *)
-  IF LoadCDOpt THEN BEGIN
+  if LoadCDOpt then begin
     FindGameCD;
-  END; // .IF
+  end; // .if
   
   (* Disable default CD scanning *)
   PINTEGER($50C409)^  :=  $0000B4E9;
   PWORD($50C40D)^     :=  $9000;
-END; // .PROCEDURE OnAfterWoG
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   SndFiles :=  AssocArrays.NewAssocArr
   (
     Crypto.AnsiCRC32,
     SysUtils.AnsiLowerCase,
     Utils.OWNS_ITEMS,
-    NOT Utils.ITEMS_ARE_OBJECTS,
+    not Utils.ITEMS_ARE_OBJECTS,
     Utils.NO_TYPEGUARD,
     Utils.ALLOW_NIL
   );
@@ -464,10 +464,10 @@ BEGIN
     Crypto.AnsiCRC32,
     SysUtils.AnsiLowerCase,
     Utils.OWNS_ITEMS,
-    NOT Utils.ITEMS_ARE_OBJECTS,
+    not Utils.ITEMS_ARE_OBJECTS,
     Utils.NO_TYPEGUARD,
     Utils.ALLOW_NIL
   );
 
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
-END.
+end.

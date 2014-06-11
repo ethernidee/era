@@ -1,82 +1,82 @@
-UNIT TextsExt;
+unit TextsExt;
 {
 DESCRIPTION:  Allows to extend heroes 3 *.txt files on the fly
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   Utils, AssocArrays, TypeWrappers,
   Core, Heroes, GameExt;
 
-TYPE
+type
   (* IMPORT *)
   TString = TypeWrappers.TString;
 
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-VAR
+var
 {O} AddTexts: {O} AssocArrays.TAssocArray {OF TString};
-    TxtSize:  INTEGER; {UNSAFE, used in gapped function}
+    TxtSize:  integer; {UNSAFE, used in gapped function}
 
 
-PROCEDURE AddLinesToText (CONST FileName, Lines: STRING);
-VAR
+procedure AddLinesToText (const FileName, Lines: string);
+var
 {U} AddText:  TString;
    
-BEGIN
+begin
   AddText :=  AddTexts[FileName];
   // * * * * * //
-  IF AddText = NIL THEN BEGIN
+  if AddText = nil then begin
     AddText[FileName] :=  TString.Create(Lines);
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     AddText.Value :=  AddText.Value + Lines;
-  END; // .ELSE
-END; // .PROCEDURE AddLinesToText
+  end; // .else
+end; // .procedure AddLinesToText
 
-FUNCTION ExtendText (CONST TextName: STRING; VAR TxtSize: INTEGER): POINTER;
-VAR
+function ExtendText (const TextName: string; var TxtSize: integer): POINTER;
+var
 {U} AddText:  TString;
 
-BEGIN
+begin
   AddText :=  AddTexts[FileName];
-  RESULT  :=  NIL;
+  result  :=  nil;
   // * * * * * //
-  IF AddText <> NIL THEN BEGIN
-    TxtSize :=  TxtSize + LENGTH(AddText.Value);
-    RESULT  :=  Heroes.MAlloc(TxtSize);
-    Utils.CopyMem(LENGTH(AddText.Value), POINTER(AddText.Value), Utils.PtrOfs(RESULT, TxtSize));
-  END // .IF
-  ELSE BEGIN
-    RESULT  :=  Heroes.MAlloc(TxtSize);
-  END; // .ELSE
-END; // .FUNCTION ExtendText
+  if AddText <> nil then begin
+    TxtSize :=  TxtSize + Length(AddText.Value);
+    result  :=  Heroes.MAlloc(TxtSize);
+    Utils.CopyMem(Length(AddText.Value), POINTER(AddText.Value), Utils.PtrOfs(result, TxtSize));
+  end // .if
+  else begin
+    result  :=  Heroes.MAlloc(TxtSize);
+  end; // .else
+end; // .function ExtendText
 
-FUNCTION Hook_LoadTextFromFile_BeforeLoad (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
+function Hook_LoadTextFromFile_BeforeLoad (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
   TxtSize         :=  Context.EDI;
   Context.EAX     :=  ExtendText(Ptr(Context.EBX), TxtSize);
   Context.RetAddr :=  Ptr($55C110);
-  RESULT          :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_LoadTextFromFile_BeforeLoad
+  result          :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_LoadTextFromFile_BeforeLoad
 
-FUNCTION Hook_LoadTextFromFile_AfterLoad (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-BEGIN
+function Hook_LoadTextFromFile_AfterLoad (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
   TxtSize         :=  Context.EDI;
   Context.EAX     :=  ExtendText(Ptr(Context.EBX), TxtSize);
   Context.RetAddr :=  Ptr($55C110);
-  RESULT          :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_LoadTextFromFile_AfterLoad
+  result          :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_LoadTextFromFile_AfterLoad
 
-PROCEDURE OnAfterWoG (Event: GameExt.PEvent);
-BEGIN
+procedure OnAfterWoG (Event: GameExt.PEvent);
+begin
   Core.ApiHook(@Hook_LoadTextFromFile, Core.HOOKTYPE_BRIDGE, Ptr($55C106));
-END; // .PROCEDURE OnAfterWoG
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   AddTexts  :=  AssocArrays.NewStrictAssocArr(TString);
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
-END.
+end.

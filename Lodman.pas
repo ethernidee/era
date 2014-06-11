@@ -1,23 +1,23 @@
-UNIT Lodman;
+unit Lodman;
 {
 DESCRIPTION:  LOD archives manager. Includes resource redirection support
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 BASED ON:     "Lods" plugin by Sav, WoG Sources by ZVS
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib,
   GameExt, Heroes, Stores;
 
-CONST
+const
   MAX_NUM_LODS  = 100;
   DEF_NUM_LODS  = 8;
   
   LODREDIR_SAVE_SECTION = 'Era.ResourceRedirections';
 
 
-TYPE
+type
   (* IMPORT *)
   TString = TypeWrappers.TString;
 
@@ -25,67 +25,67 @@ TYPE
   TLodType      = (LOD_SPRITE = 1, LOD_BITMAP = 2, LOD_WAV = 3);
   
   PLodTable = ^TLodTable;
-  TLodTable = ARRAY [0..MAX_NUM_LODS - 1] OF Heroes.TLod;
+  TLodTable = array [0..MAX_NUM_LODS - 1] of Heroes.TLod;
 
-  TZvsAddLodToList  = FUNCTION (LodInd: INTEGER): INTEGER; CDECL;
+  TZvsAddLodToList  = function (LodInd: integer): integer; cdecl;
   
   PIndexes  = ^TIndexes;
-  TIndexes  = ARRAY [0..MAX_NUM_LODS - 1] OF INTEGER;
+  TIndexes  = array [0..MAX_NUM_LODS - 1] of integer;
   
   PLodIndexes = ^TLodIndexes;
-  TLodIndexes = PACKED RECORD
-    NumLods:  INTEGER;
+  TLodIndexes = packed record
+    NumLods:  integer;
     Indexes:  PIndexes;
-  END; // .RECORD TLodIndexes
+  end; // .record TLodIndexes
   
   PLodTypes = ^TLodTypes;
-  TLodTypes = PACKED RECORD
-    Table:    ARRAY [TLodType, TGameVersion] OF TLodIndexes;
-    Indexes:  ARRAY [TLodType, TGameVersion] OF TIndexes;
-  END; // .RECORD TLodTypes
+  TLodTypes = packed record
+    Table:    array [TLodType, TGameVersion] of TLodIndexes;
+    Indexes:  array [TLodType, TGameVersion] of TIndexes;
+  end; // .record TLodTypes
 
 
-CONST
+const
   ZvsAddLodToList:  TZvsAddLodToList  = Ptr($75605B);
   ZvsLodTable:      PLodTable         = Ptr($28077D0);
   ZvsLodTypes:      PLodTypes         = Ptr($79EFE0);
 
 
-PROCEDURE RedirectFile (CONST OldFileName, NewFileName: STRING);
-PROCEDURE GlobalRedirectFile (CONST OldFileName, NewFileName: STRING);
-FUNCTION  FindFileLod (CONST FileName: STRING; OUT LodPath: STRING): BOOLEAN;
-FUNCTION  FileIsInLod (CONST FileName: STRING; Lod: Heroes.PLod): BOOLEAN; 
+procedure RedirectFile (const OldFileName, NewFileName: string);
+procedure GlobalRedirectFile (const OldFileName, NewFileName: string);
+function  FindFileLod (const FileName: string; out LodPath: string): boolean;
+function  FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean; 
   
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-VAR
+var
 {O} GlobalLodRedirs:  {O} AssocArrays.TAssocArray {OF TString};
 {O} LodRedirs:        {O} AssocArrays.TAssocArray {OF TString};
 {O} LodList:          Lists.TStringList;
-    NumLods:          INTEGER = DEF_NUM_LODS;
+    NumLods:          integer = DEF_NUM_LODS;
     RedirCritSection: Windows.TRTLCriticalSection;
 
 
-PROCEDURE UnregisterLod (LodInd: INTEGER);
-VAR
+procedure UnregisterLod (LodInd: integer);
+var
 {U} Table:        PLodIndexes;
 {U} Indexes:      PIndexes;
     LodType:      TLodType;
     GameVersion:  TGameVersion;
-    LocalNumLods: INTEGER;
+    LocalNumLods: integer;
     
-    LeftInd:      INTEGER;
-    i:            INTEGER;
+    LeftInd:      integer;
+    i:            integer;
    
-BEGIN
-  {!} ASSERT(Math.InRange(LodInd, 0, NumLods - 1));
-  Table   :=  NIL;
-  Indexes :=  NIL;
+begin
+  {!} Assert(Math.InRange(LodInd, 0, NumLods - 1));
+  Table   :=  nil;
+  Indexes :=  nil;
   // * * * * * //
-  FOR LodType := LOW(TLodType) TO HIGH(TLodType) DO BEGIN
-    FOR GameVersion := LOW(TGameVersion) TO HIGH(TGameVersion) DO BEGIN
+  for LodType := Low(TLodType) to High(TLodType) do begin
+    for GameVersion := Low(TGameVersion) to High(TGameVersion) do begin
       Table         :=  @ZvsLodTypes.Table[LodType, GameVersion];
       Indexes       :=  Table.Indexes;
       LocalNumLods  :=  Table.NumLods;
@@ -93,108 +93,108 @@ BEGIN
       LeftInd :=  0;
       i       :=  0;
       
-      WHILE i < LocalNumLods DO BEGIN
-        IF Indexes[i] <> LodInd THEN BEGIN
+      while i < LocalNumLods do begin
+        if Indexes[i] <> LodInd then begin
           Indexes[LeftInd]  :=  Indexes[i];
-          INC(LeftInd);
-        END; // .IF
+          Inc(LeftInd);
+        end; // .if
         
-        INC(i);
-      END; // .WHILE
+        Inc(i);
+      end; // .while
       
       Table.NumLods :=  LeftInd;
-    END; // .FOR
-  END; // .FOR
+    end; // .for
+  end; // .for
   
-  DEC(NumLods);
-END; // .PROCEDURE UnregisterLod
+  Dec(NumLods);
+end; // .procedure UnregisterLod
 
-PROCEDURE UnregisterDeadLods;
-BEGIN
-  IF NOT SysUtils.FileExists('Data\h3abp_sp.lod') THEN BEGIN
+procedure UnregisterDeadLods;
+begin
+  if not SysUtils.FileExists('Data\h3abp_sp.lod') then begin
     UnregisterLod(7);
-  END; // .IF
+  end; // .if
   
-  IF NOT SysUtils.FileExists('Data\h3abp_bm.lod') THEN BEGIN
+  if not SysUtils.FileExists('Data\h3abp_bm.lod') then begin
     UnregisterLod(6);
-  END; // .IF
+  end; // .if
   
-  IF NOT SysUtils.FileExists('Data\h3psprit.lod') THEN BEGIN
+  if not SysUtils.FileExists('Data\h3psprit.lod') then begin
     UnregisterLod(5);
-  END; // .IF
+  end; // .if
   
-  IF NOT SysUtils.FileExists('Data\h3pbitma.lod') THEN BEGIN
+  if not SysUtils.FileExists('Data\h3pbitma.lod') then begin
     UnregisterLod(4);
-  END; // .IF
+  end; // .if
   
-  IF NOT SysUtils.FileExists('Data\h3ab_spr.lod') THEN BEGIN
+  if not SysUtils.FileExists('Data\h3ab_spr.lod') then begin
     UnregisterLod(3);
-  END; // .IF
+  end; // .if
   
-  IF NOT SysUtils.FileExists('Data\h3ab_bmp.lod') THEN BEGIN
+  if not SysUtils.FileExists('Data\h3ab_bmp.lod') then begin
     UnregisterLod(2);
-  END; // .IF
+  end; // .if
   
-  IF NOT SysUtils.FileExists('Data\h3sprite.lod') THEN BEGIN
+  if not SysUtils.FileExists('Data\h3sprite.lod') then begin
     UnregisterLod(1);
-  END; // .IF
+  end; // .if
   
-  IF NOT SysUtils.FileExists('Data\h3bitmap.lod') THEN BEGIN
+  if not SysUtils.FileExists('Data\h3bitmap.lod') then begin
     UnregisterLod(0);
-  END; // .IF
-END; // .PROCEDURE UnregisterDeadLods
+  end; // .if
+end; // .procedure UnregisterDeadLods
 
-FUNCTION FileIsInLod (CONST FileName: STRING; Lod: Heroes.PLod): BOOLEAN; 
-BEGIN
-  {!} ASSERT(Lod <> NIL);
-  RESULT  :=  FALSE;
+function FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean; 
+begin
+  {!} Assert(Lod <> nil);
+  result  :=  FALSE;
   
-  IF FileName <> '' THEN BEGIN
-    ASM
+  if FileName <> '' then begin
+    asm
       MOV ECX, Lod
       ADD ECX, 4
       PUSH FileName
       MOV EAX, $4FB100
       CALL EAX
-      MOV RESULT, AL
-    END; // .ASM
-  END; // .IF
-END; // .FUNCTION FileIsInLod 
+      MOV result, AL
+    end; // .asm
+  end; // .if
+end; // .function FileIsInLod 
 
-FUNCTION FindFileLod (CONST FileName: STRING; OUT LodPath: STRING): BOOLEAN;
-VAR
+function FindFileLod (const FileName: string; out LodPath: string): boolean;
+var
   Lod:  Heroes.PLod;
-  i:    INTEGER;
+  i:    integer;
   
-BEGIN
-  Lod :=  Utils.PtrOfs(ZvsLodTable, SIZEOF(Heroes.TLod) * (NumLods - 1));
+begin
+  Lod :=  Utils.PtrOfs(ZvsLodTable, sizeof(Heroes.TLod) * (NumLods - 1));
   // * * * * * //
-  RESULT  :=  FALSE;
+  result  :=  FALSE;
   i       :=  NumLods - 1;
    
-  WHILE NOT RESULT AND (i >= 0) DO BEGIN
-    RESULT  :=  FileIsInLod(FileName, Lod);
+  while not result and (i >= 0) do begin
+    result  :=  FileIsInLod(FileName, Lod);
     
-    IF NOT RESULT THEN BEGIN
-      Lod :=  Utils.PtrOfs(Lod, -SIZEOF(Heroes.TLod));
-      DEC(i);
-    END; // .IF
-  END; // .WHILE
+    if not result then begin
+      Lod :=  Utils.PtrOfs(Lod, -sizeof(Heroes.TLod));
+      Dec(i);
+    end; // .if
+  end; // .while
 
-  IF RESULT THEN BEGIN
-    LodPath :=  PCHAR(INTEGER(Lod) + 8);
-  END; // .IF
-END; // .FUNCTION FindFileLod
+  if result then begin
+    LodPath :=  pchar(integer(Lod) + 8);
+  end; // .if
+end; // .function FindFileLod
 
-FUNCTION Hook_LoadLods (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-VAR
+function Hook_LoadLods (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
 {O} Locator:  Files.TFileLocator;
 {O} FileInfo: Files.TFileItemInfo;
-    i:        INTEGER;
+    i:        integer;
   
-BEGIN
+begin
   Locator   :=  Files.TFileLocator.Create;
-  FileInfo  :=  NIL;
+  FileInfo  :=  nil;
   // * * * * * //
   UnregisterDeadLods;
   
@@ -204,135 +204,135 @@ BEGIN
     end; // .while
   end; // .with
   
-  FOR i := LodList.Count - 1 DOWNTO 0 DO BEGIN
+  for i := LodList.Count - 1 downto 0 do begin
     Heroes.LoadLod(LodList[i], @ZvsLodTable[NumLods]);
     ZvsAddLodToList(NumLods);
-    INC(NumLods);
-  END; // .FOR
+    Inc(NumLods);
+  end; // .for
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
+  result  :=  Core.EXEC_DEF_CODE;
   // * * * * * //
   SysUtils.FreeAndNil(Locator);
-END; // .FUNCTION Hook_LoadLods
+end; // .function Hook_LoadLods
 
-FUNCTION FindRedirection (CONST FileName: STRING; OUT Redirected: STRING): BOOLEAN;
-VAR
+function FindRedirection (const FileName: string; out Redirected: string): boolean;
+var
 {U} Redirection: TString;
 
-BEGIN
+begin
   Redirection := LodRedirs[FileName];
   // * * * * * //
-  RESULT := FALSE;
+  result := FALSE;
 
-  IF Redirection = NIL THEN BEGIN
+  if Redirection = nil then begin
     Redirection :=  GlobalLodRedirs[FileName];
-  END; // .IF
+  end; // .if
 
-  IF Redirection <> NIL THEN BEGIN
+  if Redirection <> nil then begin
     Redirected := Redirection.Value;
-    RESULT     := TRUE;
-  END; // .IF
-END; // .FUNCTION FindRedirection
+    result     := TRUE;
+  end; // .if
+end; // .function FindRedirection
 
-FUNCTION Hook_FindFileInLod (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-VAR
-  Redirected: STRING;
+function Hook_FindFileInLod (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
+  Redirected: string;
 
-BEGIN 
-  IF FindRedirection(PPCHAR(Context.EBP + $8)^, Redirected) THEN BEGIN
-    PPCHAR(Context.EBP + $8)^ :=  PCHAR(Redirected);
-  END; // .IF
+begin 
+  if FindRedirection(PPCHAR(Context.EBP + $8)^, Redirected) then begin
+    PPCHAR(Context.EBP + $8)^ :=  pchar(Redirected);
+  end; // .if
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_FindFileInLod
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_FindFileInLod
 
-FUNCTION Hook_OnMp3Start (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
-CONST
+function Hook_OnMp3Start (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+const
   DEFAULT_BUFFER_SIZE = 128;
 
-VAR
-  FileName:   STRING;
-  Redirected: STRING;
+var
+  FileName:   string;
+  Redirected: string;
 
-BEGIN
+begin
   (* Carefully copy redirected value to persistent storage and don't change anything in LodRedirs *)
   {!} Windows.EnterCriticalSection(RedirCritSection);
   FileName := Heroes.Mp3Name + '.mp3';
   
-  IF FindRedirection('*.mp3', Redirected) OR FindRedirection(FileName, Redirected) THEN BEGIN
+  if FindRedirection('*.mp3', Redirected) or FindRedirection(FileName, Redirected) then begin
     Utils.SetPcharValue(Heroes.Mp3Name, SysUtils.ChangeFileExt(Redirected, ''),
                         DEFAULT_BUFFER_SIZE);
-  END; // .IF
+  end; // .if
 
-  RESULT := Core.EXEC_DEF_CODE;
+  result := Core.EXEC_DEF_CODE;
   {!} Windows.LeaveCriticalSection(RedirCritSection);
-END; // .FUNCTION Hook_OnMp3Start
+end; // .function Hook_OnMp3Start
 
-PROCEDURE RedirectFile (CONST OldFileName, NewFileName: STRING);
-VAR
+procedure RedirectFile (const OldFileName, NewFileName: string);
+var
   Redirection:  TString;
    
-BEGIN
+begin
   {!} Windows.EnterCriticalSection(RedirCritSection);
 
-  IF NewFileName = '' THEN BEGIN
-    IF OldFileName = '' THEN BEGIN
+  if NewFileName = '' then begin
+    if OldFileName = '' then begin
       LodRedirs.Clear;
-    END // .IF
-    ELSE BEGIN
+    end // .if
+    else begin
       LodRedirs.DeleteItem(OldFileName);
-    END; // .ELSE
-  END // .IF
-  ELSE BEGIN
+    end; // .else
+  end // .if
+  else begin
     Redirection :=  LodRedirs[OldFileName];
   
-    IF Redirection = NIL THEN BEGIN
+    if Redirection = nil then begin
       LodRedirs[OldFileName] :=  TString.Create(NewFileName);
-    END // .IF
-    ELSE BEGIN
+    end // .if
+    else begin
       Redirection.Value :=  NewFileName;
-    END; // .ELSE
-  END; // .ELSE
+    end; // .else
+  end; // .else
   
   {!} Windows.LeaveCriticalSection(RedirCritSection);
-END; // .PROCEDURE RedirectFile
+end; // .procedure RedirectFile
 
-PROCEDURE GlobalRedirectFile (CONST OldFileName, NewFileName: STRING);
-VAR
+procedure GlobalRedirectFile (const OldFileName, NewFileName: string);
+var
   Redirection:  TString;
    
-BEGIN
+begin
   {!} Windows.EnterCriticalSection(RedirCritSection);
 
-  IF NewFileName = '' THEN BEGIN
-    IF OldFileName = '' THEN BEGIN
+  if NewFileName = '' then begin
+    if OldFileName = '' then begin
       GlobalLodRedirs.Clear;
-    END // .IF
-    ELSE BEGIN
+    end // .if
+    else begin
       GlobalLodRedirs.DeleteItem(OldFileName);
-    END; // .ELSE
-  END // .IF
-  ELSE BEGIN
+    end; // .else
+  end // .if
+  else begin
     Redirection :=  GlobalLodRedirs[OldFileName];
   
-    IF Redirection = NIL THEN BEGIN
+    if Redirection = nil then begin
       GlobalLodRedirs[OldFileName]  :=  TString.Create(NewFileName);
-    END // .IF
-    ELSE BEGIN
+    end // .if
+    else begin
       Redirection.Value :=  NewFileName;
-    END; // .ELSE
-  END; // .ELSE
+    end; // .else
+  end; // .else
   
   {!} Windows.LeaveCriticalSection(RedirCritSection);
-END; // .PROCEDURE GlobalRedirectFile
+end; // .procedure GlobalRedirectFile
 
-PROCEDURE OnBeforeErmInstructions (Event: PEvent); STDCALL;
-BEGIN
+procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
+begin
   LodRedirs.Clear;
-END; // .PROCEDURE OnBeforeErmInstructions
+end; // .procedure OnBeforeErmInstructions
 
-PROCEDURE OnSavegameWrite (Event: PEvent); STDCALL;
-BEGIN
+procedure OnSavegameWrite (Event: PEvent); stdcall;
+begin
   with Stores.NewRider(LODREDIR_SAVE_SECTION) do begin
     WriteInt(LodRedirs.ItemCount);
 
@@ -343,16 +343,16 @@ BEGIN
       end; // .while
     end; // .with
   end; // .with
-END; // .PROCEDURE OnSavegameWrite
+end; // .procedure OnSavegameWrite
 
-PROCEDURE OnSavegameRead (Event: PEvent); STDCALL;
-VAR
-  NumRedirs:    INTEGER;
-  OldFileName:  STRING;
-  NewFileName:  STRING;
-  i:            INTEGER;
+procedure OnSavegameRead (Event: PEvent); stdcall;
+var
+  NumRedirs:    integer;
+  OldFileName:  string;
+  NewFileName:  string;
+  i:            integer;
 
-BEGIN
+begin
   {!} Windows.EnterCriticalSection(RedirCritSection);
   LodRedirs.Clear;
 
@@ -367,10 +367,10 @@ BEGIN
   end; // .with 
 
   {!} Windows.LeaveCriticalSection(RedirCritSection);
-END; // .PROCEDURE OnSavegameRead
+end; // .procedure OnSavegameRead
 
-PROCEDURE OnBeforeWoG (Event: PEvent); STDCALL;
-BEGIN
+procedure OnBeforeWoG (Event: PEvent); stdcall;
+begin
   (* Remove WoG h3custom and h3wog lods registration *)
   PWORD($7015E5)^ :=  $38EB;
   Core.Hook(@Hook_LoadLods, Core.HOOKTYPE_BRIDGE, 5, Ptr($559408));
@@ -378,15 +378,15 @@ BEGIN
   (* Lods files redirection mechanism *)
   Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FB106));
   Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FACA6));
-END; // .PROCEDURE OnBeforeWoG
+end; // .procedure OnBeforeWoG
 
-PROCEDURE OnAfterWoG (Event: PEvent); STDCALL;
-BEGIN
+procedure OnAfterWoG (Event: PEvent); stdcall;
+begin
   (* Mp3 redirection mechanism *)
   Core.ApiHook(@Hook_OnMp3Start, Core.HOOKTYPE_BRIDGE, Ptr($59AC51));
-END; // .PROCEDURE OnAfterWoG
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   Windows.InitializeCriticalSection(RedirCritSection);
   GlobalLodRedirs := AssocArrays.NewStrictAssocArr(TString);
   LodRedirs       := AssocArrays.NewStrictAssocArr(TString);
@@ -397,4 +397,4 @@ BEGIN
   GameExt.RegisterHandler(OnBeforeErmInstructions,  'OnBeforeErmInstructions');
   GameExt.RegisterHandler(OnSavegameWrite,          'OnSavegameWrite');
   GameExt.RegisterHandler(OnSavegameRead,           'OnSavegameRead');
-END.
+end.

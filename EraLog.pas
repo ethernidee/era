@@ -1,54 +1,54 @@
-UNIT EraLog;
+unit EraLog;
 {
 DESCRIPTION:  Logging support
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES SysUtils, Utils, Files, ConsoleAPI, Log, StrLib;
+(***)  interface  (***)
+uses SysUtils, Utils, Files, ConsoleAPI, Log, StrLib;
 
-TYPE
-  TLogger = CLASS (Log.TLogger)
-    FUNCTION  Read (OUT LogRec: TLogRec): BOOLEAN; OVERRIDE;
-    FUNCTION  IsLocked: BOOLEAN; OVERRIDE;
-    PROCEDURE Lock; OVERRIDE;
-    PROCEDURE Unlock; OVERRIDE;
-    FUNCTION  GetPos (OUT Pos: INTEGER): BOOLEAN; OVERRIDE;
-    FUNCTION  Seek (NewPos: INTEGER): BOOLEAN; OVERRIDE;
-    FUNCTION  GetCount (OUT Count: INTEGER): BOOLEAN; OVERRIDE;
-  END; // .CLASS TLogger
+type
+  TLogger = class (Log.TLogger)
+    function  Read (out LogRec: TLogRec): boolean; override;
+    function  IsLocked: boolean; override;
+    procedure Lock; override;
+    procedure Unlock; override;
+    function  GetPos (out Pos: integer): boolean; override;
+    function  Seek (NewPos: integer): boolean; override;
+    function  GetCount (out Count: integer): boolean; override;
+  end; // .class TLogger
 
-  TMemoryLogger  = CLASS (TLogger)
-    FUNCTION  Write (CONST EventSource, Operation, Description: STRING): BOOLEAN; OVERRIDE;
-  END; // .CLASS TMemoryLogger
+  TMemoryLogger  = class (TLogger)
+    function  Write (const EventSource, Operation, Description: string): boolean; override;
+  end; // .class TMemoryLogger
   
-  TConsoleLogger  = CLASS (TLogger)
-    (***) PROTECTED (***)
+  TConsoleLogger  = class (TLogger)
+    (***) protected (***)
       {O} fCon: ConsoleAPI.TConsole;
     
-    (***) PUBLIC (***)
-      CONSTRUCTOR Create (CONST Title: STRING);
-      DESTRUCTOR  Destroy; OVERRIDE;
+    (***) public (***)
+      constructor Create (const Title: string);
+      destructor  Destroy; override;
       
-      FUNCTION  Write (CONST EventSource, Operation, Description: STRING): BOOLEAN; OVERRIDE;
-  END; // .CLASS TConsoleLogger
+      function  Write (const EventSource, Operation, Description: string): boolean; override;
+  end; // .class TConsoleLogger
   
-  TFileLogger = CLASS (TLogger)
-    (***) PROTECTED (***)
+  TFileLogger = class (TLogger)
+    (***) protected (***)
       {O} fFile:  Files.TFile;
       
-    (***) PUBLIC (***)
-      CONSTRUCTOR Create (CONST FilePath: STRING);
-      DESTRUCTOR  Destroy; OVERRIDE;
+    (***) public (***)
+      constructor Create (const FilePath: string);
+      destructor  Destroy; override;
       
-      FUNCTION  Write (CONST EventSource, Operation, Description: STRING): BOOLEAN; OVERRIDE;
-  END; // .CLASS TFileLogger
+      function  Write (const EventSource, Operation, Description: string): boolean; override;
+  end; // .class TFileLogger
 
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-CONST
+const
   BR                      = #13#10;
   RECORD_BEGIN_SEPARATOR  = '>> ';
   RECORD_END_SEPARATOR    = BR + BR;
@@ -58,58 +58,58 @@ CONST
   DESCR_LINES_GLUE        = BR + DESCR_LINES_PREFIX;
 
 
-FUNCTION TLogger.Read (OUT LogRec: TLogRec): BOOLEAN;
-BEGIN
-  RESULT  :=  FALSE;
-END; // .FUNCTION TLogger.Read
+function TLogger.Read (out LogRec: TLogRec): boolean;
+begin
+  result  :=  FALSE;
+end; // .function TLogger.Read
 
-FUNCTION TLogger.IsLocked: BOOLEAN;
-BEGIN
-  RESULT  :=  FALSE;
-END; // .FUNCTION TLogger.IsLocked
+function TLogger.IsLocked: boolean;
+begin
+  result  :=  FALSE;
+end; // .function TLogger.IsLocked
 
-PROCEDURE TLogger.Lock;
-BEGIN
-END; // .PROCEDURE TLogger.Lock
+procedure TLogger.Lock;
+begin
+end; // .procedure TLogger.Lock
 
-PROCEDURE TLogger.Unlock;
-BEGIN
-END; // .PROCEDURE TLogger.Unlock
+procedure TLogger.Unlock;
+begin
+end; // .procedure TLogger.Unlock
 
-FUNCTION TLogger.GetPos (OUT Pos: INTEGER): BOOLEAN;
-BEGIN
+function TLogger.GetPos (out Pos: integer): boolean;
+begin
   Pos     :=  -1;
-  RESULT  :=  FALSE;
-END; // .FUNCTION TLogger.GetPos
+  result  :=  FALSE;
+end; // .function TLogger.GetPos
 
-FUNCTION TLogger.Seek (NewPos: INTEGER): BOOLEAN;
-BEGIN
-  RESULT  :=  FALSE;
-END; // .FUNCTION TLogger.Seek
+function TLogger.Seek (NewPos: integer): boolean;
+begin
+  result  :=  FALSE;
+end; // .function TLogger.Seek
 
-FUNCTION TLogger.GetCount (OUT Count: INTEGER): BOOLEAN;
-BEGIN
+function TLogger.GetCount (out Count: integer): boolean;
+begin
   Count   :=  -1;
-  RESULT  :=  FALSE;
-END; // .FUNCTION TLogger.GetCount
+  result  :=  FALSE;
+end; // .function TLogger.GetCount
 
-FUNCTION TMemoryLogger.Write (CONST EventSource, Operation, Description: STRING): BOOLEAN;
-BEGIN
-  RESULT  :=  TRUE;
-END; // .FUNCTION TMemoryLogger.Write
+function TMemoryLogger.Write (const EventSource, Operation, Description: string): boolean;
+begin
+  result  :=  TRUE;
+end; // .function TMemoryLogger.Write
 
-CONSTRUCTOR TConsoleLogger.Create (CONST Title: STRING);
-BEGIN
+constructor TConsoleLogger.Create (const Title: string);
+begin
   Self.fCon :=  ConsoleAPI.TConsole.Create(Title, 80, 50, 80, 1000);
-END; // .CONSTRUCTOR TConsoleLogger.Create
+end; // .constructor TConsoleLogger.Create
 
-DESTRUCTOR TConsoleLogger.Destroy;
-BEGIN
+destructor TConsoleLogger.Destroy;
+begin
   SysUtils.FreeAndNil(Self.fCon);
-END; // .DESTRUCTOR TConsoleLogger.Destroy
+end; // .destructor TConsoleLogger.Destroy
 
-FUNCTION TConsoleLogger.Write (CONST EventSource, Operation, Description: STRING): BOOLEAN;
-BEGIN
+function TConsoleLogger.Write (const EventSource, Operation, Description: string): boolean;
+begin
   Writeln
   (
     RECORD_BEGIN_SEPARATOR,
@@ -122,23 +122,23 @@ BEGIN
     RECORD_END_SEPARATOR
   );
   
-  RESULT  :=  TRUE;
-END; // .FUNCTION TConsoleLogger.Write
+  result  :=  TRUE;
+end; // .function TConsoleLogger.Write
 
-CONSTRUCTOR TFileLogger.Create (CONST FilePath: STRING);
-BEGIN
+constructor TFileLogger.Create (const FilePath: string);
+begin
   Self.fFile  :=  Files.TFile.Create;
-  {!} ASSERT(Self.fFile.CreateNew(FilePath));
-END; // .CONSTRUCTOR TFileLogger.Create
+  {!} Assert(Self.fFile.CreateNew(FilePath));
+end; // .constructor TFileLogger.Create
 
-DESTRUCTOR TFileLogger.Destroy;
-BEGIN
+destructor TFileLogger.Destroy;
+begin
   SysUtils.FreeAndNil(Self.fFile);
-END; // .DESTRUCTOR TFileLogger.Destroy
+end; // .destructor TFileLogger.Destroy
 
-FUNCTION TFileLogger.Write (CONST EventSource, Operation, Description: STRING): BOOLEAN;
-BEGIN
-  RESULT  :=  Self.fFile.WriteStr(StrLib.Concat([
+function TFileLogger.Write (const EventSource, Operation, Description: string): boolean;
+begin
+  result  :=  Self.fFile.WriteStr(StrLib.Concat([
     RECORD_BEGIN_SEPARATOR,
     EventSource,
     OPERATION_SEPARATOR,
@@ -148,6 +148,6 @@ BEGIN
     StrLib.Join(StrLib.Explode(Description, BR), DESCR_LINES_GLUE),
     RECORD_END_SEPARATOR
   ]));
-END; // .FUNCTION TFileLogger.Write
+end; // .function TFileLogger.Write
 
-END.
+end.

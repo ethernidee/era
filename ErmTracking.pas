@@ -1,226 +1,226 @@
-UNIT ErmTracking;
+unit ErmTracking;
 {
 DESCRIPTION:  Provides ERM receivers and teiggers tracking support
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES Utils;
+(***)  interface  (***)
+uses Utils;
 
-TYPE
-  TCmdId = RECORD
-    Is:   WORD;
-    Name: ARRAY [0..1] OF CHAR;
-  END; // .RECORD TCmdId
+type
+  TCmdId = record
+    Is:   word;
+    Name: array [0..1] of char;
+  end; // .record TCmdId
   
   PTrigTrackerRec = ^TTrigTrackerRec;
-  TTrigTrackerRec = RECORD
-    TrigId: INTEGER;
-    v:      ARRAY [997..1000] OF INTEGER;
-    f:      ARRAY [999..1000] OF BOOLEAN;
+  TTrigTrackerRec = record
+    TrigId: integer;
+    v:      array [997..1000] of integer;
+    f:      array [999..1000] of boolean;
     SnX:    GameExt.TEraEventParams;
-  END; // .RECORD TTrigTrackerRec
+  end; // .record TTrigTrackerRec
   
-  TTrigTracker = CLASS
-   PRIVATE
-    fRecs:        ARRAY OF TTrigTrackerRec;
-    fMaxNumRecs:  INTEGER;
-    fPos:         INTEGER;
+  TTrigTracker = class
+   private
+    fRecs:        array of TTrigTrackerRec;
+    fMaxNumRecs:  integer;
+    fPos:         integer;
    
-   PUBLIC
-    CONSTRUCTOR Create (aMaxNumRecs: INTEGER);
-    PROCEDURE Reset ();
-    PROCEDURE Track (TrigId: INTEGER);
-    FUNCTION  GenerateReport (): STRING;
+   public
+    constructor Create (aMaxNumRecs: integer);
+    procedure Reset ();
+    procedure Track (TrigId: integer);
+    function  GenerateReport (): string;
 
-    PROPERTY MaxNumRecs: INTEGER READ fMaxNumRecs;
-  END; // .CLASS TTrigTracker
+    property MaxNumRecs: integer read fMaxNumRecs;
+  end; // .class TTrigTracker
 
 
   {O} TrigTracker:            TTrigTracker;
   
-  CONSTRUCTOR TTrigTracker.Create (aMaxNumRecs: INTEGER);
-BEGIN
-  {!} ASSERT(aMaxNumRecs >= 0);
+  constructor TTrigTracker.Create (aMaxNumRecs: integer);
+begin
+  {!} Assert(aMaxNumRecs >= 0);
   SetLength(fRecs, aMaxNumRecs);
   fMaxNumRecs := aMaxNumRecs;
   fPos        := 9;
-END; // .CONSTRUCTOR TTrigTracker.Create
+end; // .constructor TTrigTracker.Create
 
-PROCEDURE TTrigTracker.Reset ();
-VAR
-  i: INTEGER;
+procedure TTrigTracker.Reset ();
+var
+  i: integer;
    
-BEGIN
-  FOR i := Low(fRecs) TO High(fRecs) DO BEGIN
+begin
+  for i := Low(fRecs) to High(fRecs) do begin
     fRecs[i].TrigId := TRIGGER_INVALID;
-  END; // .FOR
+  end; // .for
   
   fPos := 0;
-END; // .PROCEDURE TTrigTracker.Reset
+end; // .procedure TTrigTracker.Reset
 
-PROCEDURE TTrigTracker.Track (TrigId: INTEGER);
-VAR
+procedure TTrigTracker.Track (TrigId: integer);
+var
 {U} Rec: PTrigTrackerRec;
    
-BEGIN
-  Rec := NIL;
+begin
+  Rec := nil;
   // * * * * * //
-  IF fMaxNumRecs > 0 THEN BEGIN
+  if fMaxNumRecs > 0 then begin
     Rec        := @fRecs[fPos];
     Rec.TrigId := TrigId;
-    Utils.CopyMem(SIZEOF(Rec.v), @v[997], @Rec.v);
-    Utils.CopyMem(SIZEOF(Rec.f), @f[999], @Rec.f);
-    Utils.CopyMem(SIZEOF(Rec.SnX), GameExt.EraEventParams, @Rec.SnX);
+    Utils.CopyMem(sizeof(Rec.v), @v[997], @Rec.v);
+    Utils.CopyMem(sizeof(Rec.f), @f[999], @Rec.f);
+    Utils.CopyMem(sizeof(Rec.SnX), GameExt.EraEventParams, @Rec.SnX);
     
-    INC(fPos);
+    Inc(fPos);
     
-    IF fPos = fMaxNumRecs THEN BEGIN
+    if fPos = fMaxNumRecs then begin
       fPos := 0;
-    END; // .IF
-  END; // .IF
-END; // .PROCEDURE TTrigTracker.Track
+    end; // .if
+  end; // .if
+end; // .procedure TTrigTracker.Track
 
-FUNCTION TTrigTracker.GenerateReport (): STRING;
-BEGIN
-  RESULT := '';
-END; // .FUNCTION TTrigTracker.GenerateReport
+function TTrigTracker.GenerateReport (): string;
+begin
+  result := '';
+end; // .function TTrigTracker.GenerateReport
 
-FUNCTION GetTriggerReadableName (EventID: INTEGER): STRING;
-VAR
-  BaseEventName:  STRING;
-  EventID:        INTEGER;
+function GetTriggerReadableName (EventID: integer): string;
+var
+  BaseEventName:  string;
+  EventID:        integer;
   
-  x:              INTEGER;
-  y:              INTEGER;
-  z:              INTEGER;
+  x:              integer;
+  y:              integer;
+  z:              integer;
   
-  ObjType:        INTEGER;
-  ObjSubtype:     INTEGER;
+  ObjType:        integer;
+  ObjSubtype:     integer;
 
-BEGIN
-  CASE EventID OF
+begin
+  case EventID of
     {*} Erm.TRIGGER_TM1..Erm.TRIGGER_TM100:
-      RESULT :=  'OnErmTimer ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_TM1 + 1); 
+      result :=  'OnErmTimer ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_TM1 + 1); 
     {*} Erm.TRIGGER_HE0..Erm.TRIGGER_HE198:
-      RESULT :=  'OnHeroInteraction ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HE0);
-    {*} Erm.TRIGGER_BA0:      RESULT :=  'OnBeforeBattle';
-    {*} Erm.TRIGGER_BA1:      RESULT :=  'OnAfterBattle';
-    {*} Erm.TRIGGER_BR:       RESULT :=  'OnBattleRound';
-    {*} Erm.TRIGGER_BG0:      RESULT :=  'OnBeforeBattleAction';
-    {*} Erm.TRIGGER_BG1:      RESULT :=  'OnAfterBattleAction';
-    {*} Erm.TRIGGER_MW0:      RESULT :=  'OnWanderingMonsterReach';
-    {*} Erm.TRIGGER_MW1:      RESULT :=  'OnWanderingMonsterDeath';
-    {*} Erm.TRIGGER_MR0:      RESULT :=  'OnMagicBasicResistance';
-    {*} Erm.TRIGGER_MR1:      RESULT :=  'OnMagicCorrectedResistance';
-    {*} Erm.TRIGGER_MR2:      RESULT :=  'OnDwarfMagicResistance';
-    {*} Erm.TRIGGER_CM0:      RESULT :=  'OnAdventureMapRightMouseClick';
-    {*} Erm.TRIGGER_CM1:      RESULT :=  'OnTownMouseClick';
-    {*} Erm.TRIGGER_CM2:      RESULT :=  'OnHeroScreenMouseClick';
-    {*} Erm.TRIGGER_CM3:      RESULT :=  'OnHeroesMeetScreenMouseClick';
-    {*} Erm.TRIGGER_CM4:      RESULT :=  'OnBattleScreenMouseClick';
-    {*} Erm.TRIGGER_CM5:      RESULT :=  'OnAdventureMapLeftMouseClick';
-    {*} Erm.TRIGGER_AE0:      RESULT :=  'OnEquipArt';
-    {*} Erm.TRIGGER_AE1:      RESULT :=  'OnUnequipArt';
-    {*} Erm.TRIGGER_MM0:      RESULT :=  'OnBattleMouseHint';
-    {*} Erm.TRIGGER_MM1:      RESULT :=  'OnTownMouseHint';
-    {*} Erm.TRIGGER_MP:       RESULT :=  'OnMp3MusicChange';
-    {*} Erm.TRIGGER_SN:       RESULT :=  'OnSoundPlay';
-    {*} Erm.TRIGGER_MG0:      RESULT :=  'OnBeforeAdventureMagic';
-    {*} Erm.TRIGGER_MG1:      RESULT :=  'OnAfterAdventureMagic';
-    {*} Erm.TRIGGER_TH0:      RESULT :=  'OnEnterTown';
-    {*} Erm.TRIGGER_TH1:      RESULT :=  'OnLeaveTown';
-    {*} Erm.TRIGGER_IP0:      RESULT :=  'OnBeforeBattleBeforeDataSend';
-    {*} Erm.TRIGGER_IP1:      RESULT :=  'OnBeforeBattleAfterDataReceived';
-    {*} Erm.TRIGGER_IP2:      RESULT :=  'OnAfterBattleBeforeDataSend';
-    {*} Erm.TRIGGER_IP3:      RESULT :=  'OnAfterBattleAfterDataReceived';
-    {*} Erm.TRIGGER_CO0:      RESULT :=  'OnOpenCommanderWindow';
-    {*} Erm.TRIGGER_CO1:      RESULT :=  'OnCloseCommanderWindow';
-    {*} Erm.TRIGGER_CO2:      RESULT :=  'OnAfterCommanderBuy';
-    {*} Erm.TRIGGER_CO3:      RESULT :=  'OnAfterCommanderResurrect';
-    {*} Erm.TRIGGER_BA50:     RESULT :=  'OnBeforeBattleForThisPcDefender';
-    {*} Erm.TRIGGER_BA51:     RESULT :=  'OnAfterBattleForThisPcDefender';
-    {*} Erm.TRIGGER_BA52:     RESULT :=  'OnBeforeBattleUniversal';
-    {*} Erm.TRIGGER_BA53:     RESULT :=  'OnAfterBattleUniversal';
-    {*} Erm.TRIGGER_GM0:      RESULT :=  'OnAfterLoadGame';
-    {*} Erm.TRIGGER_GM1:      RESULT :=  'OnBeforeSaveGame';
-    {*} Erm.TRIGGER_PI:       RESULT :=  'OnAfterErmInstructions';
-    {*} Erm.TRIGGER_DL:       RESULT :=  'OnCustomDialogEvent';
-    {*} Erm.TRIGGER_HM:       RESULT :=  'OnHeroMove';
+      result :=  'OnHeroInteraction ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HE0);
+    {*} Erm.TRIGGER_BA0:      result :=  'OnBeforeBattle';
+    {*} Erm.TRIGGER_BA1:      result :=  'OnAfterBattle';
+    {*} Erm.TRIGGER_BR:       result :=  'OnBattleRound';
+    {*} Erm.TRIGGER_BG0:      result :=  'OnBeforeBattleAction';
+    {*} Erm.TRIGGER_BG1:      result :=  'OnAfterBattleAction';
+    {*} Erm.TRIGGER_MW0:      result :=  'OnWanderingMonsterReach';
+    {*} Erm.TRIGGER_MW1:      result :=  'OnWanderingMonsterDeath';
+    {*} Erm.TRIGGER_MR0:      result :=  'OnMagicBasicResistance';
+    {*} Erm.TRIGGER_MR1:      result :=  'OnMagicCorrectedResistance';
+    {*} Erm.TRIGGER_MR2:      result :=  'OnDwarfMagicResistance';
+    {*} Erm.TRIGGER_CM0:      result :=  'OnAdventureMapRightMouseClick';
+    {*} Erm.TRIGGER_CM1:      result :=  'OnTownMouseClick';
+    {*} Erm.TRIGGER_CM2:      result :=  'OnHeroScreenMouseClick';
+    {*} Erm.TRIGGER_CM3:      result :=  'OnHeroesMeetScreenMouseClick';
+    {*} Erm.TRIGGER_CM4:      result :=  'OnBattleScreenMouseClick';
+    {*} Erm.TRIGGER_CM5:      result :=  'OnAdventureMapLeftMouseClick';
+    {*} Erm.TRIGGER_AE0:      result :=  'OnEquipArt';
+    {*} Erm.TRIGGER_AE1:      result :=  'OnUnequipArt';
+    {*} Erm.TRIGGER_MM0:      result :=  'OnBattleMouseHint';
+    {*} Erm.TRIGGER_MM1:      result :=  'OnTownMouseHint';
+    {*} Erm.TRIGGER_MP:       result :=  'OnMp3MusicChange';
+    {*} Erm.TRIGGER_SN:       result :=  'OnSoundPlay';
+    {*} Erm.TRIGGER_MG0:      result :=  'OnBeforeAdventureMagic';
+    {*} Erm.TRIGGER_MG1:      result :=  'OnAfterAdventureMagic';
+    {*} Erm.TRIGGER_TH0:      result :=  'OnEnterTown';
+    {*} Erm.TRIGGER_TH1:      result :=  'OnLeaveTown';
+    {*} Erm.TRIGGER_IP0:      result :=  'OnBeforeBattleBeforeDataSend';
+    {*} Erm.TRIGGER_IP1:      result :=  'OnBeforeBattleAfterDataReceived';
+    {*} Erm.TRIGGER_IP2:      result :=  'OnAfterBattleBeforeDataSend';
+    {*} Erm.TRIGGER_IP3:      result :=  'OnAfterBattleAfterDataReceived';
+    {*} Erm.TRIGGER_CO0:      result :=  'OnOpenCommanderWindow';
+    {*} Erm.TRIGGER_CO1:      result :=  'OnCloseCommanderWindow';
+    {*} Erm.TRIGGER_CO2:      result :=  'OnAfterCommanderBuy';
+    {*} Erm.TRIGGER_CO3:      result :=  'OnAfterCommanderResurrect';
+    {*} Erm.TRIGGER_BA50:     result :=  'OnBeforeBattleForThisPcDefender';
+    {*} Erm.TRIGGER_BA51:     result :=  'OnAfterBattleForThisPcDefender';
+    {*} Erm.TRIGGER_BA52:     result :=  'OnBeforeBattleUniversal';
+    {*} Erm.TRIGGER_BA53:     result :=  'OnAfterBattleUniversal';
+    {*} Erm.TRIGGER_GM0:      result :=  'OnAfterLoadGame';
+    {*} Erm.TRIGGER_GM1:      result :=  'OnBeforeSaveGame';
+    {*} Erm.TRIGGER_PI:       result :=  'OnAfterErmInstructions';
+    {*} Erm.TRIGGER_DL:       result :=  'OnCustomDialogEvent';
+    {*} Erm.TRIGGER_HM:       result :=  'OnHeroMove';
     {*} Erm.TRIGGER_HM0..Erm.TRIGGER_HM198:
-      RESULT :=  'OnHeroMove ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HM0);
-    {*} Erm.TRIGGER_HL:   RESULT :=  'OnHeroGainLevel';
+      result :=  'OnHeroMove ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HM0);
+    {*} Erm.TRIGGER_HL:   result :=  'OnHeroGainLevel';
     {*} Erm.TRIGGER_HL0..Erm.TRIGGER_HL198:
-      RESULT :=  'OnHeroGainLevel ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HL0);
-    {*} Erm.TRIGGER_BF:       RESULT :=  'OnSetupBattlefield';
-    {*} Erm.TRIGGER_MF1:      RESULT :=  'OnMonsterPhysicalDamage';
-    {*} Erm.TRIGGER_TL0:      RESULT :=  'OnEverySecond';
-    {*} Erm.TRIGGER_TL1:      RESULT :=  'OnEvery2Seconds';
-    {*} Erm.TRIGGER_TL2:      RESULT :=  'OnEvery5Seconds';
-    {*} Erm.TRIGGER_TL3:      RESULT :=  'OnEvery10Seconds';
-    {*} Erm.TRIGGER_TL4:      RESULT :=  'OnEveryMinute';
+      result :=  'OnHeroGainLevel ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HL0);
+    {*} Erm.TRIGGER_BF:       result :=  'OnSetupBattlefield';
+    {*} Erm.TRIGGER_MF1:      result :=  'OnMonsterPhysicalDamage';
+    {*} Erm.TRIGGER_TL0:      result :=  'OnEverySecond';
+    {*} Erm.TRIGGER_TL1:      result :=  'OnEvery2Seconds';
+    {*} Erm.TRIGGER_TL2:      result :=  'OnEvery5Seconds';
+    {*} Erm.TRIGGER_TL3:      result :=  'OnEvery10Seconds';
+    {*} Erm.TRIGGER_TL4:      result :=  'OnEveryMinute';
     (* Era Triggers *)
     {*  Erm.TRIGGER_BEFORE_SAVE_GAME:           RESULT :=  'OnBeforeSaveGameEx';}
-    {*} Erm.TRIGGER_SAVEGAME_WRITE:             RESULT :=  'OnSavegameWrite';
-    {*} Erm.TRIGGER_SAVEGAME_READ:              RESULT :=  'OnSavegameRead';
-    {*} Erm.TRIGGER_KEYPRESS:                   RESULT :=  'OnKeyPressed';
-    {*} Erm.TRIGGER_OPEN_HEROSCREEN:            RESULT :=  'OnOpenHeroScreen';
-    {*} Erm.TRIGGER_CLOSE_HEROSCREEN:           RESULT :=  'OnCloseHeroScreen';
-    {*} Erm.TRIGGER_STACK_OBTAINS_TURN:         RESULT :=  'OnBattleStackObtainsTurn';
-    {*} Erm.TRIGGER_REGENERATE_PHASE:           RESULT :=  'OnBattleRegeneratePhase';
-    {*} Erm.TRIGGER_AFTER_SAVE_GAME:            RESULT :=  'OnAfterSaveGame';
+    {*} Erm.TRIGGER_SAVEGAME_WRITE:             result :=  'OnSavegameWrite';
+    {*} Erm.TRIGGER_SAVEGAME_READ:              result :=  'OnSavegameRead';
+    {*} Erm.TRIGGER_KEYPRESS:                   result :=  'OnKeyPressed';
+    {*} Erm.TRIGGER_OPEN_HEROSCREEN:            result :=  'OnOpenHeroScreen';
+    {*} Erm.TRIGGER_CLOSE_HEROSCREEN:           result :=  'OnCloseHeroScreen';
+    {*} Erm.TRIGGER_STACK_OBTAINS_TURN:         result :=  'OnBattleStackObtainsTurn';
+    {*} Erm.TRIGGER_REGENERATE_PHASE:           result :=  'OnBattleRegeneratePhase';
+    {*} Erm.TRIGGER_AFTER_SAVE_GAME:            result :=  'OnAfterSaveGame';
     {*  Erm.TRIGGER_SKEY_SAVEDIALOG:            RESULT :=  'OnSKeySaveDialog';}
-    {*} Erm.TRIGGER_BEFOREHEROINTERACT:         RESULT :=  'OnBeforeHeroInteraction';
-    {*} Erm.TRIGGER_AFTERHEROINTERACT:          RESULT :=  'OnAfterHeroInteraction';
-    {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:       RESULT :=  'OnStackToStackDamage';
-    {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT:  RESULT :=  'OnAICalcStackAttackEffect';
-    {*} Erm.TRIGGER_ONCHAT:                     RESULT :=  'OnChat';
-    {*} Erm.TRIGGER_ONGAMEENTER:                RESULT :=  'OnGameEnter';
-    {*} Erm.TRIGGER_ONGAMELEAVE:                RESULT :=  'OnGameLeave';
-    (* End Era Triggers *)
-  ELSE
-    IF EventID >= Erm.TRIGGER_OB_POS THEN BEGIN
-      IF ((EventID AND Erm.TRIGGER_OB_POS) OR (EventID AND Erm.TRIGGER_LE_POS)) <> 0 THEN BEGIN
-        x :=  EventID AND 1023;
-        y :=  (EventID SHR 16) AND 1023;
-        z :=  (EventID SHR 26) AND 1;
+    {*} Erm.TRIGGER_BEFOREHEROINTERACT:         result :=  'OnBeforeHeroInteraction';
+    {*} Erm.TRIGGER_AFTERHEROINTERACT:          result :=  'OnAfterHeroInteraction';
+    {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:       result :=  'OnStackToStackDamage';
+    {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT:  result :=  'OnAICalcStackAttackEffect';
+    {*} Erm.TRIGGER_ONCHAT:                     result :=  'OnChat';
+    {*} Erm.TRIGGER_ONGAMEENTER:                result :=  'OnGameEnter';
+    {*} Erm.TRIGGER_ONGAMELEAVE:                result :=  'OnGameLeave';
+    (* end Era Triggers *)
+  else
+    if EventID >= Erm.TRIGGER_OB_POS then begin
+      if ((EventID and Erm.TRIGGER_OB_POS) or (EventID and Erm.TRIGGER_LE_POS)) <> 0 then begin
+        x :=  EventID and 1023;
+        y :=  (EventID shr 16) and 1023;
+        z :=  (EventID shr 26) and 1;
         
-        IF (EventID AND Erm.TRIGGER_LE_POS) <> 0 THEN BEGIN
+        if (EventID and Erm.TRIGGER_LE_POS) <> 0 then begin
           BaseEventName :=  'OnLocalEvent ';
-        END // .IF
-        ELSE BEGIN
-          IF (EventID AND Erm.TRIGGER_OB_LEAVE) <> 0 THEN BEGIN
+        end // .if
+        else begin
+          if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
             BaseEventName :=  'OnAfterVisitObject ';
-          END // .IF
-          ELSE BEGIN
+          end // .if
+          else begin
             BaseEventName :=  'OnBeforeVisitObject ';
-          END; // .ELSE
-        END; // .ELSE
+          end; // .else
+        end; // .else
         
-        RESULT :=
+        result :=
           BaseEventName + SysUtils.IntToStr(x) + '/' +
           SysUtils.IntToStr(y) + '/' + SysUtils.IntToStr(z);
-      END // .IF
-      ELSE BEGIN
-        ObjType     :=  (EventID SHR 12) AND 255;
-        ObjSubtype  :=  (EventID AND 255) - 1;
+      end // .if
+      else begin
+        ObjType     :=  (EventID shr 12) and 255;
+        ObjSubtype  :=  (EventID and 255) - 1;
         
-        IF (EventID AND Erm.TRIGGER_OB_LEAVE) <> 0 THEN BEGIN
+        if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
           BaseEventName :=  'OnAfterVisitObject ';
-        END // .IF
-        ELSE BEGIN
+        end // .if
+        else begin
           BaseEventName :=  'OnBeforeVisitObject ';
-        END; // .ELSE
+        end; // .else
         
-        RESULT :=
+        result :=
           BaseEventName + SysUtils.IntToStr(ObjType) + '/' + SysUtils.IntToStr(ObjSubtype);
-      END; // .ELSE
-    END; // .IF
-  END; // .SWITCH
-END; // .FUNCTION GetTriggerReadableName
+      end; // .else
+    end; // .if
+  end; // .SWITCH
+end; // .function GetTriggerReadableName
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 TrigTracker := TTrigTracker.Create(TrigTrackerMaxRecsOpt);
 
-END.
+end.
