@@ -30,7 +30,7 @@ const
   MODIFIER_DIV    = 4;
   MODIFIER_CONCAT = 5;
   
-  ERM_MEMORY_DUMP_FILE = 'erm memory dump.txt';
+  ERM_MEMORY_DUMP_FILE = GameExt.DEBUG_DIR + '\erm memory dump.txt';
 
 
 type
