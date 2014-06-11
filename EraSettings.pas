@@ -20,10 +20,13 @@ var
 
 function GetOptValue (const OptionName: string): string;
 const
-  ERA_SECTION = 'Era';
+  ERA_SECTION               = 'Era';
+  DEFAULT_ERA_SETTINGS_FILE = 'default era settings.ini';
 
 begin
-  if Ini.ReadStrFromIni(OptionName, ERA_SECTION, Heroes.GAME_SETTINGS_FILE, result) then begin
+  if Ini.ReadStrFromIni(OptionName, ERA_SECTION, Heroes.GAME_SETTINGS_FILE, result) or
+     Ini.ReadStrFromIni(OptionName, ERA_SECTION, DEFAULT_ERA_SETTINGS_FILE, result)
+  then begin
     result := SysUtils.Trim(result);
   end else begin
     result := '';
@@ -41,8 +44,17 @@ begin
 end; // .function GetDebugOpt
 
 function GetOptIntValue (const OptionName: string): integer;
+var
+  OptVal: string;
+
 begin
-  result := StrToInt(GetOptValue(OptionName));
+  OptVal := GetOptValue(OptionName);
+
+  if not TryStrToInt(OptVal, result) then begin
+    Log.Write('Settings', 'GetOptIntValue', 'Error. Invalid option "' + OptionName
+                                            + '" value: "' + OptVal + '". Assumed 0');
+    result := 0;
+  end; // .if
 end; // .function GetOptIntValue
 
 procedure InstallLogger (Logger: Log.TLogger);
