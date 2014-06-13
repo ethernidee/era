@@ -65,7 +65,8 @@ exports
   RedirectFile,
   GlobalRedirectFile,
   GameExt.RedirectMemoryBlock,
-  GameExt.GetRealAddr;
+  GameExt.GetRealAddr,
+  GameExt.GenerateDebugInfo;
 
 
 (***) implementation (***)

@@ -92,6 +92,7 @@ function  GetRealAddr (Addr: pointer): pointer; stdcall;
 function  GetMapFolder: string; stdcall;
 procedure SetMapFolder (const NewMapFolder: string);
 function  GetMapResourcePath (const OrigResourcePath: string): string; stdcall;
+procedure GenerateDebugInfo;
 
 
 procedure Init (hDll: integer);
@@ -466,6 +467,11 @@ begin
     result := OrigResourcePath;
   end; // .if
 end; // .function GetMapResourcePath
+
+procedure GenerateDebugInfo;
+begin
+  FireEvent('OnGenerateDebugInfo', nil, 0);
+end; // .procedure GenerateDebugInfo
 
 procedure Init (hDll: integer);
 begin

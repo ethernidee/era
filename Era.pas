@@ -228,6 +228,7 @@ procedure SaveEventParams;
 procedure RestoreEventParams;
 procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall;
 function  GetRealAddr (Addr: pointer): pointer; stdcall;
+procedure GenerateDebugInfo;
 
 
 var
@@ -267,6 +268,7 @@ procedure RedirectFile;         external 'Era.dll' NAME 'RedirectFile';
 procedure GlobalRedirectFile;   external 'Era.dll' NAME 'GlobalRedirectFile';
 procedure RedirectMemoryBlock;  external 'Era.dll' NAME 'RedirectMemoryBlock';
 function  GetRealAddr;          external 'Era.dll' NAME 'GetRealAddr';
+procedure GenerateDebugInfo;    external 'Era.dll' NAME 'GenerateDebugInfo';
 procedure SaveEventParams;      external 'Angel.dll' NAME 'SaveEventParams';
 procedure RestoreEventParams;   external 'Angel.dll' NAME 'RestoreEventParams';
 
