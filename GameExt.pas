@@ -6,8 +6,14 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Utils, Lists, CFiles, Files, Crypto, AssocArrays,
-  Math, Core, VFS;
+  Windows, Math, SysUtils,
+  Utils, DataLib, CFiles, Files, Crypto, Core,
+  VFS;
+
+type
+  (* Import *)
+  TList       = DataLib.TList;
+  TStringList = DataLib.TStrList;
 
 const
   (* Pathes *)
@@ -52,6 +58,19 @@ type
   end; // .record TEvent
 
   TEventHandler = procedure (Event: PEvent); stdcall;
+
+  TEventInfo = class
+   protected
+    {On} fHandlers:      TList {of TEventHandler};
+         fNumTimesFired: integer;
+   public
+    destructor Destroy; override;
+
+    procedure AddHandler (Handler: pointer);
+
+    property Handlers:      {n} TList {of TEventHandler} read fHandlers;
+    property NumTimesFired: integer                      read fNumTimesFired write fNumTimesFired;
+  end; // .class TEventInfo
   
   PEraEventParams = ^TEraEventParams;
   TEraEventParams = array [0..15] of integer;
@@ -79,8 +98,8 @@ procedure Init (hDll: integer);
 
 
 var
-{O} PluginsList:            Lists.TStringList {OF TDllHandle};
-{O} Events:                 {O} AssocArrays.TAssocArray {OF Lists.TList};
+{O} PluginsList:            DataLib.TStrList {OF TDllHandle};
+{O} Events:                 {O} DataLib.TDict {OF TEventInfo};
     hAngel:                 integer;  // Era 1.8x DLL
     hEra:                   integer;  // Era 1.9+ DLL
     (* Compability with Era 1.8x *)
@@ -89,7 +108,7 @@ var
     EraRestoreEventParams:  Utils.TProcedure;
 {U} EraEventParams:         PEraEventParams;
 
-{O} MemRedirections:        {O} Lists.TList {OF PMemRedirection};
+{O} MemRedirections:        {O} DataLib.TList {OF PMemRedirection};
 
   MapFolder: string = '';
 
@@ -97,6 +116,20 @@ var
 (***) implementation (***)
 uses Heroes;
 
+destructor TEventInfo.Destroy;
+begin
+  FreeAndNil(fHandlers);
+end; // .destructor TEventInfo.Destroy
+
+procedure TEventInfo.AddHandler (Handler: pointer);
+begin
+  {!} Assert(Handler <> nil);
+  if fHandlers = nil then begin
+    fHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
+  end; // .if
+
+  fHandlers.Add(Handler);
+end; // .procedure TEventInfo.AddHandler
 
 procedure LoadPlugins;
 const
@@ -214,43 +247,46 @@ end; // .procedure InitWoG
 
 procedure RegisterHandler (Handler: TEventHandler; const EventName: string);
 var
-{U} Handlers: {U} Lists.TList {OF TEventHandler};
+{U} EventInfo: TEventInfo;
   
 begin
   {!} Assert(@Handler <> nil);
-  Handlers  :=  Events[EventName];
+  EventInfo := Events[EventName];
   // * * * * * //
-  if Handlers = nil then begin
-    Handlers          :=  Lists.NewSimpleList;
-    Events[EventName] :=  Handlers;
+  if EventInfo = nil then begin
+    EventInfo         := TEventInfo.Create;
+    Events[EventName] := EventInfo;
   end; // .if
-  
-  Handlers.Add(@Handler);
+
+  EventInfo.AddHandler(@Handler);
 end; // .procedure RegisterHandler
 
 procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer);
 var
-{O} Event:    PEvent;
-{U} Handlers: {U} Lists.TList {OF TEventHandler};
-    i:        integer;
+    Event:     TEvent;
+{U} EventInfo: TEventInfo;
+    i:         integer;
 
 begin
-  {!} Assert(DataSize >= 0);
-  {!} Assert((EventData <> nil) or (DataSize = 0));
-  New(Event);
-  Handlers  :=  Events[EventName];
+  {!} Assert(Utils.IsValidBuf(EventData, DataSize));
+  EventInfo := Events[EventName];
   // * * * * * //
-  Event.Name      :=  EventName;
-  Event.Data      :=  EventData;
-  Event.DataSize  :=  DataSize;
+  Event.Name     := EventName;
+  Event.Data     := EventData;
+  Event.DataSize := DataSize;
+
+  if EventInfo = nil then begin
+    EventInfo         := TEventInfo.Create;
+    Events[EventName] := EventInfo;
+  end; // .if
   
-  if Handlers <> nil then begin
-    for i:=0 to Handlers.Count - 1 do begin
-      TEventHandler(Handlers[i])(Event);
+  EventInfo.NumTimesFired := EventInfo.NumTimesFired + 1;
+
+  if EventInfo.Handlers <> nil then begin
+    for i := 0 to EventInfo.Handlers.Count - 1 do begin
+      TEventHandler(EventInfo.Handlers[i])(@Event);
     end; // .for
   end; // .if
-  // * * * * * //
-  Dispose(Event);
 end; // .procedure FireEvent
 
 function PatchExists (const PatchName: string): boolean;
@@ -463,13 +499,7 @@ begin
 end; // .procedure Init
 
 begin
-  PluginsList     :=  Lists.NewSimpleStrList;
-  Events          :=  AssocArrays.NewStrictAssocArr(Lists.TList);
-  MemRedirections :=  Lists.NewList
-  (
-    Utils.OWNS_ITEMS,
-    not Utils.ITEMS_ARE_OBJECTS,
-    Utils.NO_TYPEGUARD,
-    Utils.ALLOW_NIL
-  );
+  PluginsList     :=  DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  Events          :=  DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  MemRedirections :=  DataLib.NewList(not Utils.OWNS_ITEMS);
 end.
