@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, Math, SysUtils,
-  Utils, DataLib, CFiles, Files, Crypto, Core,
+  Utils, DataLib, CFiles, Files, FilesEx, Crypto, Core,
   VFS;
 
 type
@@ -17,10 +17,11 @@ type
 
 const
   (* Pathes *)
-  ERA_DLL_NAME  = 'era.dll';
-  PLUGINS_PATH  = 'EraPlugins';
-  PATCHES_PATH  = 'EraPlugins';
-  DEBUG_DIR     = 'Debug\Era';
+  ERA_DLL_NAME          = 'era.dll';
+  PLUGINS_PATH          = 'EraPlugins';
+  PATCHES_PATH          = 'EraPlugins';
+  DEBUG_DIR             = 'Debug\Era';
+  DEBUG_EVENT_LIST_PATH = DEBUG_DIR + '\event list.txt';
   
   CONST_STR = -1;
   
@@ -63,12 +64,15 @@ type
    protected
     {On} fHandlers:      TList {of TEventHandler};
          fNumTimesFired: integer;
+
+    function GetNumHandlers: integer;
    public
     destructor Destroy; override;
 
     procedure AddHandler (Handler: pointer);
 
     property Handlers:      {n} TList {of TEventHandler} read fHandlers;
+    property NumHandlers:   integer                      read GetNumHandlers;
     property NumTimesFired: integer                      read fNumTimesFired write fNumTimesFired;
   end; // .class TEventInfo
   
@@ -131,6 +135,15 @@ begin
 
   fHandlers.Add(Handler);
 end; // .procedure TEventInfo.AddHandler
+
+function TEventInfo.GetNumHandlers: integer;
+begin
+  if fHandlers = nil then begin
+    result := 0;
+  end else begin
+    result := fHandlers.Count;
+  end; // .else
+end; // .function TEventInfo.GetNumHandlers
 
 procedure LoadPlugins;
 const
@@ -473,6 +486,53 @@ begin
   FireEvent('OnGenerateDebugInfo', nil, 0);
 end; // .procedure GenerateDebugInfo
 
+procedure DumpEventList;
+var
+{O} EventList: TStrList {of TEventInfo};
+{U} EventInfo: TEventInfo;
+    i, j:      integer;
+
+begin
+  EventList := nil;
+  EventInfo := nil;
+  // * * * * * //
+  with FilesEx.WriteFormattedOutput(DEBUG_EVENT_LIST_PATH) do begin
+    Line('> Format: [Event name] ([Number of handlers], [Fired N times])');
+    EmptyLine;
+
+    EventList := DataLib.DictToStrList(Events, DataLib.CASE_INSENSITIVE);
+    EventList.Sort;
+
+    for i := 0 to EventList.Count - 1 do begin
+      EventInfo := TEventInfo(EventList.Values[i]);
+      Line(Format('%s (%d, %d)', [EventList[i], EventInfo.NumHandlers, EventInfo.NumTimesFired]));
+    end; // .for
+
+    EmptyLine; EmptyLine;
+    Line('> Event handlers');
+    EmptyLine;
+    
+    for i := 0 to EventList.Count - 1 do begin
+      EventInfo := TEventInfo(EventList.Values[i]);
+      Line(EventList[i] + ':');
+      Indent;
+
+      for j := 0 to EventInfo.NumHandlers - 1 do begin
+        Line(Format('%p', [EventInfo.Handlers[j]]));
+      end; // .for
+
+      Unindent;
+    end; // .for
+  end; // .with
+  // * * * * * //
+  FreeAndNil(EventList);
+end;
+
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+begin
+  DumpEventList;
+end; // .procedure OnGenerateDebugInfo
+
 procedure Init (hDll: integer);
 begin
   hEra  :=  hDll;
@@ -502,6 +562,8 @@ begin
   
   FireEvent('OnAfterWoG', NO_EVENT_DATA, 0);
   ApplyPatches('AfterWoG');
+
+  RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end; // .procedure Init
 
 begin
