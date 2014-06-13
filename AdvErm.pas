@@ -802,7 +802,7 @@ begin
   result  :=  EXEC_DEFAULT;
 end; // .function HookFindErm_NewReceivers*)
 
-function Hook_DumpErmVars (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+procedure DumpErmMemory (const DumpFilePath: string);
 const
   ERM_CONTEXT_LEN = 300;
   
@@ -1133,12 +1133,16 @@ begin
   end; // .for
   
   DumpVars('Vars z1..z1000', 'z', STR_VAR, @Erm.z[1], 1000, 1);  
-  Files.WriteFileContents(Buf.BuildStr, ERM_MEMORY_DUMP_FILE);
-  
-  Context.RetAddr := Core.Ret(0);
-  result          := not Core.EXEC_DEF_CODE;
+  Files.WriteFileContents(Buf.BuildStr, DumpFilePath);
   // * * * * * //
   SysUtils.FreeAndNil(Buf);
+end; // .procedure DumpErmMemory
+
+function Hook_DumpErmVars (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
+  DumpErmMemory(ERM_MEMORY_DUMP_FILE);
+  Context.RetAddr := Core.Ret(0);
+  result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_DumpErmVars
 
 procedure OnBeforeWoG (Event: PEvent); stdcall;
