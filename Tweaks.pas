@@ -7,8 +7,12 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, Ini,
+  CFiles, Files, FilesEx, Ini, DataLib,
   PatchApi, Core, GameExt, Heroes, Lodman;
+
+type
+  (* Import *)
+  TStrList = DataLib.TStrList;
 
 const
   // f (Value: pchar; MaxResLen: integer; DefValue, Key, SectionName, FileName: pchar): integer; cdecl;
@@ -573,6 +577,41 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsLib_ExtractDef_GetGamePath
 
+procedure DumpWinPeModuleList;
+const
+  DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
+
+var
+{O} ModuleList: TStrList;
+{U} ModuleInfo: Core.TModuleInfo;
+    i:          integer;
+
+begin
+  ModuleList := Core.GetModuleList;
+  ModuleInfo := nil;
+  // * * * * * //
+  ModuleList.Sort;
+
+  with FilesEx.WriteFormattedOutput(DEBUG_WINPE_MODULE_LIST_PATH) do begin
+    Line('> Win32 executable modules');
+    EmptyLine;
+
+    for i := 0 to ModuleList.Count - 1 do begin
+      ModuleInfo := TObject(ModuleList.Values[i]) as Core.TModuleInfo;
+      Line(Format('%s ("%s", size: %d, addr: %p, entry: %x)',
+           [ModuleInfo.Name, ModuleInfo.Path, ModuleInfo.Size, ModuleInfo.BaseAddr,
+            integer(ModuleInfo.EntryPoint) - integer(ModuleInfo.BaseAddr)]));
+    end; // .for
+  end; // .with
+  // * * * * * //
+  FreeAndNil(ModuleList);
+end; // .procedure DumpWinPeModuleList
+
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+begin
+  DumpWinPeModuleList;
+end; // .procedure OnGenerateDebugInfo
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 const
   ZVSLIB_EXTRACTDEF_OFS             = 100668;
@@ -701,5 +740,6 @@ end; // .procedure OnAfterWoG
 
 begin
   Windows.InitializeCriticalSection(InetCriticalSection);
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  GameExt.RegisterHandler(OnAfterWoG,  'OnAfterWoG');
+  RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end.
