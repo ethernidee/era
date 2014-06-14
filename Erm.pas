@@ -1175,15 +1175,14 @@ end; // .function PreprocessErm*)
 
 procedure TScriptMan.ReloadScriptsFromDisk;
 const
-  SUCCESS_MES: string = '{~white}ERM is updated{~}';
+  SUCCESS_MES: string = '';
 
 begin
   if ErmTriggerDepth = 0 then begin
     ScriptMan.LoadScriptsFromDisk;
     ZvsIsGameLoading^ := TRUE;
     ZvsFindErm;
-    Utils.CopyMem(Length(SUCCESS_MES) + 1, pointer(SUCCESS_MES), @z[1]);
-    ExecErmCmd('if:Lz1;');
+    PrintChatMsg('{~white}ERM is updated{~}');
   end; // .if
 end; // .procedure TScriptMan.ReloadScriptsFromDisk
 
