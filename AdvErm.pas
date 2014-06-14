@@ -815,6 +815,7 @@ var
 {O} Buf:              StrLib.TStrBuilder;
     PositionLocated:  boolean;
     ErmContextHeader: string;
+    ErmContext:       string;
     ScriptName:       string;
     LineN:            integer;
     ErmContextStart:  pchar;
@@ -1105,8 +1106,19 @@ begin
     end; // .if
     
     WriteSectionHeader(ErmContextHeader); LineEnd;
-    ErmContextStart := Erm.FindErmCmdBeginning(Erm.ErmErrCmdPtr^);
-    Line(StrLib.ExtractFromPchar(ErmContextStart, ERM_CONTEXT_LEN) + '...');
+
+    try
+      ErmContextStart := Erm.FindErmCmdBeginning(Erm.ErmErrCmdPtr^);
+      ErmContext      := StrLib.ExtractFromPchar(ErmContextStart, ERM_CONTEXT_LEN) + '...';
+
+      if StrLib.IsBinaryStr(ErmContext) then begin
+        ErmContext := '';
+      end; // .if
+    except
+      ErmContext := '';
+    end; // .try
+
+    Line(ErmContext);
   end; // .if
   
   WriteSectionHeader('Quick vars (f..t)'); LineEnd;
