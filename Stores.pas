@@ -10,7 +10,7 @@ uses
   Core, GameExt, Heroes, Erm;
 
 const
-  DUMP_SAVEGAME_SECTIONS_DIR = GameExt.DEBUG_DIR + '\Savegame_Sections';
+  DUMP_SAVEGAME_SECTIONS_DIR = GameExt.DEBUG_DIR + '\Savegame Sections';
 
 type
   (* IMPORT *)

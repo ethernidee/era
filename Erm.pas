@@ -14,7 +14,7 @@ uses
 const
   ERM_SCRIPTS_SECTION     = 'Era.ErmScripts';
   ERM_SCRIPTS_PATH        = 'Data\s';
-  EXTRACTED_SCRIPTS_PATH  = 'Data\ExtractedScripts';
+  EXTRACTED_SCRIPTS_PATH  = GameExt.DEBUG_DIR + '\Scripts';
 
   (* Erm command conditions *)
   LEFT_COND   = 0;
@@ -1202,6 +1202,7 @@ var
 begin
   Files.DeleteDir(EXTRACTED_SCRIPTS_PATH);
   Res := SysUtils.CreateDir(EXTRACTED_SCRIPTS_PATH);
+  Mes := '';
   
   if not Res then begin
     Mes :=  '{~red}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
@@ -1221,12 +1222,9 @@ begin
     end; // .while
   end; // .else
   
-  if Res then begin
-    Mes := '{~white}Scripts were successfully extracted{~}';
+  if not Res then begin
+    PrintChatMsg(Mes);
   end; // .if
-  
-  Utils.SetPcharValue(@z[1], Mes, sizeof(z[1]));
-  ExecErmCmd('if:Lz1;');
 end; // .procedure TScriptMan.ExtractScripts
 
 procedure ExtractErm;
@@ -1800,6 +1798,11 @@ begin
   result    := not Core.EXEC_DEF_CODE;
 end; // .function Hook_MR_N
 
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+begin
+  ExtractErm;
+end; // .procedure OnGenerateDebugInfo
+
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* Remove WoG CM3 trigger *)
@@ -1918,8 +1921,9 @@ begin
   ErmEnabled^ := TRUE;
   SavedYVars  := Lists.NewStrictList(TYVars);
 
-  GameExt.RegisterHandler(OnBeforeWoG,      'OnBeforeWoG');
-  GameExt.RegisterHandler(OnAfterWoG,       'OnAfterWoG');
-  GameExt.RegisterHandler(OnEraSaveScripts, '$OnEraSaveScripts');
-  GameExt.RegisterHandler(OnEraLoadScripts, '$OnEraLoadScripts');
+  GameExt.RegisterHandler(OnBeforeWoG,         'OnBeforeWoG');
+  GameExt.RegisterHandler(OnAfterWoG,          'OnAfterWoG');
+  GameExt.RegisterHandler(OnEraSaveScripts,    '$OnEraSaveScripts');
+  GameExt.RegisterHandler(OnEraLoadScripts,    '$OnEraLoadScripts');
+  GameExt.RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end.

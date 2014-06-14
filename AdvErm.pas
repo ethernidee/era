@@ -1145,6 +1145,11 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_DumpErmVars
 
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+begin
+  DumpErmMemory(ERM_MEMORY_DUMP_FILE);
+end; // .procedure OnGenerateDebugInfo
+
 procedure OnBeforeWoG (Event: PEvent); stdcall;
 begin
   (*Core.p.WriteLoHook($74B6B2, @HookFindErm_NewReceivers);*)
@@ -1159,8 +1164,9 @@ begin
   Slots     :=  AssocArrays.NewStrictObjArr(TSlot);
   AssocMem  :=  AssocArrays.NewStrictAssocArr(TAssocVar);
   
-  GameExt.RegisterHandler(OnBeforeWoG, 'OnBeforeWoG');
+  GameExt.RegisterHandler(OnBeforeWoG,             'OnBeforeWoG');
   GameExt.RegisterHandler(OnBeforeErmInstructions, 'OnBeforeErmInstructions');
-  GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
-  GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
+  GameExt.RegisterHandler(OnSavegameWrite,         'OnSavegameWrite');
+  GameExt.RegisterHandler(OnSavegameRead,          'OnSavegameRead');
+  GameExt.RegisterHandler(OnGenerateDebugInfo,     'OnGenerateDebugInfo');
 end.

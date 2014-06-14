@@ -514,7 +514,11 @@ begin
     
     for i := 0 to EventList.Count - 1 do begin
       EventInfo := TEventInfo(EventList.Values[i]);
-      Line(EventList[i] + ':');
+      
+      if EventInfo.NumHandlers > 0 then begin
+        Line(EventList[i] + ':');
+      end; // .if
+      
       Indent;
 
       for j := 0 to EventInfo.NumHandlers - 1 do begin

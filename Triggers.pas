@@ -245,8 +245,11 @@ begin
       (wParam in [KEY_F11, KEY_F12])
     then begin
       case wParam of
-        KEY_F12:  Erm.ReloadErm;
-        KEY_F11:  Erm.ExtractErm;
+        KEY_F12: Erm.ReloadErm;
+        KEY_F11: begin
+          GameExt.GenerateDebugInfo;
+          Erm.PrintChatMsg('{~white}Debug information was dumped to ' + GameExt.DEBUG_DIR +'{~}');
+        end; // .case KEY_F11
       end; // .SWITCH
     end // .if
     else begin
