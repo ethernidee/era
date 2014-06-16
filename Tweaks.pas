@@ -582,29 +582,22 @@ const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
 
 var
-{O} ModuleList: TStrList;
-{U} ModuleInfo: Core.TModuleInfo;
-    i:          integer;
+  i: integer;
 
 begin
-  ModuleList := Core.GetModuleList;
-  ModuleInfo := nil;
-  // * * * * * //
-  ModuleList.Sort;
+  {!} Core.ModuleContext.Lock;
+  Core.ModuleContext.UpdateModuleList;
 
   with FilesEx.WriteFormattedOutput(DEBUG_WINPE_MODULE_LIST_PATH) do begin
     Line('> Win32 executable modules');
     EmptyLine;
 
-    for i := 0 to ModuleList.Count - 1 do begin
-      ModuleInfo := TObject(ModuleList.Values[i]) as Core.TModuleInfo;
-      Line(Format('%s ("%s", size: %d, addr: %p, entry: %x)',
-           [ModuleInfo.Name, ModuleInfo.Path, ModuleInfo.Size, ModuleInfo.BaseAddr,
-            integer(ModuleInfo.EntryPoint) - integer(ModuleInfo.BaseAddr)]));
+    for i := 0 to Core.ModuleContext.ModuleList.Count - 1 do begin
+      Line(Core.ModuleContext.ModuleInfo[i].ToStr);
     end; // .for
   end; // .with
-  // * * * * * //
-  FreeAndNil(ModuleList);
+
+  {!} Core.ModuleContext.Unlock;
 end; // .procedure DumpWinPeModuleList
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;

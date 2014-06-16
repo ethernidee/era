@@ -488,19 +488,16 @@ end; // .procedure GenerateDebugInfo
 
 procedure DumpEventList;
 var
-{O} EventList:  TStrList {of TEventInfo};
-{O} ModuleList: TStrList {of Core.TModuleInfo};
-{U} ModuleInfo: Core.TModuleInfo;
-{U} EventInfo:  TEventInfo;
-    ModuleInd:  integer;
-    i, j:       integer;
+{O} EventList: TStrList {of TEventInfo};
+{U} EventInfo: TEventInfo;
+    i, j:      integer;
 
 begin
-  EventList  := nil;
-  ModuleList := Core.GetModuleList;
-  ModuleInfo := nil;
-  EventInfo  := nil;
+  EventList := nil;
+  EventInfo := nil;
   // * * * * * //
+  {!} Core.ModuleContext.Lock;
+
   with FilesEx.WriteFormattedOutput(DEBUG_EVENT_LIST_PATH) do begin
     Line('> Format: [Event name] ([Number of handlers], [Fired N times])');
     EmptyLine;
@@ -527,27 +524,16 @@ begin
       Indent;
 
       for j := 0 to EventInfo.NumHandlers - 1 do begin
-        if Core.FindModuleByAddr(EventInfo.Handlers[j], ModuleList, ModuleInd) then begin
-          ModuleInfo := TObject(ModuleList.Values[ModuleInd]) as TModuleInfo;
-          
-          if ModuleInfo.IsExe then begin
-            Line(Format('%s.%p', [ChangeFileExt(StrLib.Capitalize(ModuleInfo.Name), ''),
-                                  EventInfo.Handlers[j]]));
-          end else begin
-            Line(Format('%s.%x', [ChangeFileExt(StrLib.Capitalize(ModuleInfo.Name), ''),
-                                  integer(EventInfo.Handlers[j]) - integer(ModuleInfo.BaseAddr)]));
-          end; // .else
-        end else begin
-          Line(Format('%p', [EventInfo.Handlers[j]]));
-        end; // .else
+        Line(Core.ModuleContext.AddrToStr(EventInfo.Handlers[j]));
       end; // .for
 
       Unindent;
     end; // .for
   end; // .with
+
+  {!} Core.ModuleContext.Unlock;
   // * * * * * //
   FreeAndNil(EventList);
-  FreeAndNil(ModuleList);
 end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
