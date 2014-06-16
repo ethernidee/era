@@ -27,8 +27,8 @@ const
   
   NO_EVENT_DATA = nil;
 
-  ERA_VERSION_STR = '2.55.1';
-  ERA_VERSION_INT = 2551;
+  ERA_VERSION_STR = '2.55.2';
+  ERA_VERSION_INT = 2552;
 
 
 type
