@@ -287,9 +287,6 @@ begin
     Inc(NumLods);
   end; // .for
 
-  LoadGlobalRedirectionConfig(GLOBAL_REDIRECTIONS_CONFIG_DIR, REDIRECT_MISSING_AND_EXISTING);
-  LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
-  
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadLods
 
@@ -326,6 +323,13 @@ begin
   result := Core.EXEC_DEF_CODE;
   {!} Windows.LeaveCriticalSection(RedirCritSection);
 end; // .function Hook_OnMp3Start
+
+function Hook_AfterLoadLods (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+begin
+  LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
+  GameExt.FireEvent('OnAfterLoadLods', nil, 0);
+  result := Core.EXEC_DEF_CODE;
+end; // .function Hook_AfterLoadLods
 
 procedure RedirectFile (const OldFileName, NewFileName: string);
 var
@@ -437,12 +441,15 @@ begin
   (* Lods files redirection mechanism *)
   Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FB106));
   Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FACA6));
+  Core.ApiHook(@Hook_AfterLoadLods, Core.HOOKTYPE_BRIDGE, Ptr($4EDD65));
 end; // .procedure OnBeforeWoG
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* Mp3 redirection mechanism *)
   Core.ApiHook(@Hook_OnMp3Start, Core.HOOKTYPE_BRIDGE, Ptr($59AC51));
+
+  LoadGlobalRedirectionConfig(GLOBAL_REDIRECTIONS_CONFIG_DIR, REDIRECT_MISSING_AND_EXISTING);
 end; // .procedure OnAfterWoG
 
 begin
