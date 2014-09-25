@@ -7,7 +7,7 @@ BASED ON:     "Lods" plugin by Sav, WoG Sources by ZVS
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib,
+  Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib, Log, Json,
   GameExt, Heroes, Stores;
 
 const
@@ -15,7 +15,6 @@ const
   DEF_NUM_LODS  = 8;
   
   LODREDIR_SAVE_SECTION = 'Era.ResourceRedirections';
-
 
 type
   (* IMPORT *)
@@ -59,6 +58,14 @@ function  FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean;
 
 (***) implementation (***)
 
+
+const
+  GLOBAL_REDIRECTIONS_CONFIG_DIR         = 'Data\Redirections';
+  GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR = GLOBAL_REDIRECTIONS_CONFIG_DIR + '\Missing';
+  MUSIC_DIR                              = 'Mp3';
+
+  REDIRECT_ONLY_MISSING         = TRUE;
+  REDIRECT_MISSING_AND_EXISTING = NOT REDIRECT_ONLY_MISSING;
 
 var
 {O} GlobalLodRedirs:  {O} AssocArrays.TAssocArray {OF TString};
@@ -186,34 +193,13 @@ begin
   end; // .if
 end; // .function FindFileLod
 
-function Hook_LoadLods (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function FileIsInLods (const FileName: string): boolean;
 var
-{O} Locator:  Files.TFileLocator;
-{O} FileInfo: Files.TFileItemInfo;
-    i:        integer;
-  
+  FoundLod: string;
+
 begin
-  Locator   :=  Files.TFileLocator.Create;
-  FileInfo  :=  nil;
-  // * * * * * //
-  UnregisterDeadLods;
-  
-  with Files.Locate('Data\*.pac', Files.ONLY_FILES) do begin
-    while FindNext do begin
-      LodList.Add(FoundName);
-    end; // .while
-  end; // .with
-  
-  for i := LodList.Count - 1 downto 0 do begin
-    Heroes.LoadLod(LodList[i], @ZvsLodTable[NumLods]);
-    ZvsAddLodToList(NumLods);
-    Inc(NumLods);
-  end; // .for
-  
-  result  :=  Core.EXEC_DEF_CODE;
-  // * * * * * //
-  SysUtils.FreeAndNil(Locator);
-end; // .function Hook_LoadLods
+  result := FindFileLod(FileName, FoundLod);
+end; // .function FileIsInLods 
 
 function FindRedirection (const FileName: string; out Redirected: string): boolean;
 var
@@ -233,6 +219,79 @@ begin
     result     := TRUE;
   end; // .if
 end; // .function FindRedirection
+
+(* Loads global redirection rules from json configs *)
+procedure LoadGlobalRedirectionConfig (const ConfigDir: string; RedirectOnlyMissing: boolean);
+var
+{U} Config:             TlkJsonObject;
+    ResourceName:       string;
+    WillBeRedirected:   boolean;
+    ConfigFileContents: string;
+    i:                  integer;
+
+begin
+  Config := nil;
+  // * * * * * //
+  with Files.Locate(ConfigDir + '\*.json', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      if Files.ReadFileContents(ConfigDir + '\' + FoundName, ConfigFileContents) then begin
+        Utils.CastOrFree(TlkJson.ParseText(ConfigFileContents), TlkJsonObject, Config);
+        
+        if Config <> nil then begin
+          for i := 0 to Config.Count - 1 do begin
+            ResourceName := Config.NameOf[i];
+
+            if GlobalLodRedirs[ResourceName] = nil then begin
+              WillBeRedirected := not RedirectOnlyMissing;
+
+              if RedirectOnlyMissing then begin
+                if AnsiLowerCase(ExtractFileExt(ResourceName)) = '.mp3' then begin
+                  WillBeRedirected := not FileExists(MUSIC_DIR + '\' + ResourceName);
+                end else begin
+                  WillBeRedirected := not FileIsInLods(ResourceName);
+                end; // .else
+              end; // .if
+              
+              if WillBeRedirected then begin
+                GlobalLodRedirs[ResourceName] := TString.Create(Config.getString(i));
+              end; // .if
+            end; // .if
+          end; // .for
+        end else begin
+          Log.Write('Lodman', 'LoadGlobalRedirectionConfig',
+                    'Invalid json config: "' + ConfigDir + '\' + FoundName + '"');
+        end; // .else
+      end; // .if
+    end; // .while
+  end; // .with
+  // * * * * * //
+  FreeAndNil(Config);
+end; // .procedure LoadGlobalRedirectionConfig
+
+function Hook_LoadLods (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+var
+  i: integer;
+  
+begin
+  UnregisterDeadLods;
+  
+  with Files.Locate('Data\*.pac', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      LodList.Add(FoundName);
+    end; // .while
+  end; // .with
+  
+  for i := LodList.Count - 1 downto 0 do begin
+    Heroes.LoadLod(LodList[i], @ZvsLodTable[NumLods]);
+    ZvsAddLodToList(NumLods);
+    Inc(NumLods);
+  end; // .for
+
+  LoadGlobalRedirectionConfig(GLOBAL_REDIRECTIONS_CONFIG_DIR, REDIRECT_MISSING_AND_EXISTING);
+  LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
+  
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_LoadLods
 
 function Hook_FindFileInLod (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
 var

@@ -88,7 +88,7 @@ begin
     InstallLogger(EraLog.TMemoryLogger.Create);
   end; // .else
   
-  Log.Write('Core', 'CheckVersion', 'result: ' + GameExt.ERA_VERSION_STR);
+  Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
 
   SndVid.LoadCDOpt               := GetOptBoolValue('LoadCD');
   Tweaks.CPUPatchOpt             := GetOptBoolValue('CPUPatch');
