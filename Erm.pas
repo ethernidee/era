@@ -225,7 +225,7 @@ type
   end; // .record TOnBeforeTriggerArgs
   
   TYVars = class
-    Value: Utils.TArrayOfInteger;
+    Value: Utils.TArrayOfInt;
   end; // .class TYVars
   
   TWoGOptions = array [CURRENT_WOG_OPTIONS..GLOBAL_WOG_OPTIONS, 0..NUM_WOG_OPTIONS - 1] of integer;
@@ -685,7 +685,7 @@ end; // .procedure ExecSingleErmCmd
 
 procedure ExecErmCmd (const CmdStr: string);
 var
-  Commands: Utils.TArrayOfString;
+  Commands: Utils.TArrayOfStr;
   i:        integer;
    
 begin
@@ -1043,7 +1043,7 @@ var
     FILENAME_TOKEN      = 1;
   
   var
-    FileNameTokens: Utils.TArrayOfString;
+    FileNameTokens: Utils.TArrayOfStr;
     Priority:       integer;
     TestPriority:   integer;
     i:              integer;
@@ -1389,7 +1389,7 @@ begin
   end; // .else
 end; // .function 
 
-function Hook_ProcessErm (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ProcessErm (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
 {O} YVars:     TYVars;
     EventArgs: TOnBeforeTriggerArgs;
@@ -1452,7 +1452,7 @@ begin
   SysUtils.FreeAndNil(YVars);
 end; // .function Hook_ProcessErm
 
-function Hook_FindErm_BeforeMainLoop (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_FindErm_BeforeMainLoop (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   GLOBAL_EVENT_SIZE = 52;
   
@@ -1494,7 +1494,7 @@ asm
 @Done:
 end; // .function LoadWoGOptions
 
-function Hook_UN_J3_End (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_UN_J3_End (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   RESET_OPTIONS_COMMAND = ':clear:';
   WOG_OPTION_MAP_RULES  = 101;
@@ -1521,7 +1521,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_UN_J3_End
 
-function Hook_FindErm_AfterMapScripts (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_FindErm_AfterMapScripts (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   GLOBAL_EVENT_SIZE = 52;
 
@@ -1557,7 +1557,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_FindErm_AfterMapScripts
 
-function Hook_ProcessErm_End (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ProcessErm_End (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
 {O} YVars: TYVars;
 
@@ -1587,7 +1587,7 @@ asm
 end; // .procedure Hook_ErmCastleBuilding
 {$W+}
 
-function Hook_ErmHeroArt (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ErmHeroArt (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   result := ((PINTEGER(Context.EBP - $E8)^ shr 8) and 7) = 0;
   
@@ -1596,19 +1596,19 @@ begin
   end; // .if
 end; // .function Hook_ErmHeroArt
 
-function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   f[1]   := FALSE;
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_FindFreeSlot
 
-function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   f[1]   := TRUE;
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_FoundFreeSlot
 
-function Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NUM_BAG_ARTS_OFFSET = +$3D4;
   HERO_PTR_OFFSET     = -$380;
@@ -1622,7 +1622,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_DeleteFromBag
 
-function Hook_DlgCallback (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_DlgCallback (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NO_CMD = 0;
 
@@ -1631,7 +1631,7 @@ begin
   result     := Core.EXEC_DEF_CODE;
 end; // .function Hook_DlgCallback
 
-function Hook_CM3 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_CM3 (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   MOUSE_STRUCT_ITEM_OFS = +$8;
   CM3_RES_ADDR          = $A6929C;
@@ -1659,7 +1659,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_CM3
 
-function Hook_InvalidReceiver (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_InvalidReceiver (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   MAX_CONTEXT_SIZE = 512;
   CMD_SIZE         = 4;
@@ -1701,7 +1701,7 @@ begin
   ScriptMan.LoadScriptsFromSavedGame;
 end; // .procedure OnEraLoadScripts
 
-function Hook_LoadErtFile (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_LoadErtFile (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   ARG_FILENAME = 2;
 
@@ -1749,14 +1749,14 @@ begin
   end; // .if
 end; // .procedure ReportErmError
 
-function Hook_MError (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_MError (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   ReportErmError(PPCHAR(Context.EBP + 16)^, ErmErrCmdPtr^);
   Context.RetAddr := Ptr($712483);
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_MError
 
-function Hook_ProcessErm_Start (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ProcessErm_Start (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
   DisableExecution: boolean;
 
@@ -1775,7 +1775,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ProcessErm_Start
 
-function Hook_ErmMess (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ErmMess (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   if not ErmErrReported then begin
     // ERM cmd pos is m->m.s
@@ -1790,7 +1790,7 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmMess
 
-function Hook_MR_N (c: Core.PContext): longbool; stdcall;
+function Hook_MR_N (c: Core.PHookContext): longbool; stdcall;
 begin
   c.eax     := Heroes.GetStackIdByPos(Heroes.GetVal(MrMonPtr^, STACK_POS).v);
   c.RetAddr := Ptr($75DC76);

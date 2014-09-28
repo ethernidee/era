@@ -46,7 +46,7 @@ var
   MainGameLoopDepth: integer = 0;
   
   
-function Hook_BattleHint_GetAttacker (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_BattleHint_GetAttacker (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraSaveEventParams;
   GameExt.EraEventParams[ATTACKER_STACK_N_PARAM]  :=  Context.EAX;
@@ -57,13 +57,13 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_BattleHint_GetAttacker
 
-function Hook_BattleHint_GetDefender (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_BattleHint_GetDefender (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraEventParams[DEFENDER_STACK_N_PARAM]  :=  Context.EAX;
   result                                          :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_BattleHint_GetDefender
 
-function Hook_BattleHint_CalcMinMaxDamage (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_BattleHint_CalcMinMaxDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraEventParams[MIN_DAMAGE_PARAM]  :=  Context.EDI;
   GameExt.EraEventParams[MAX_DAMAGE_PARAM]  :=  Context.EAX;
@@ -71,7 +71,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_BattleHint_CalcMinMaxDamage
 
-function Hook_MMTrigger (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_MMTrigger (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraRestoreEventParams;
   result  :=  Core.EXEC_DEF_CODE;
@@ -276,7 +276,7 @@ begin
   end; // .else
 end; // .function MainWndProc
 
-function Hook_CreateWindow (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_CreateWindow (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PrevWndProc :=  Ptr
   (
@@ -286,7 +286,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_CreateWindow
 
-function Hook_StartCalcDamage (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_StartCalcDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   AttackerId  :=  Heroes.GetStackIdByPos(PINTEGER(Context.EBX + STACK_POS_OFS)^);
   DefenderId  :=  Heroes.GetStackIdByPos(PINTEGER(Context.ESI + STACK_POS_OFS)^);
@@ -299,13 +299,13 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_StartCalcDamage
 
-function Hook_CalcDamage_GetDamageBonus (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_CalcDamage_GetDamageBonus (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   DamageBonus :=  Context.EAX;
   result      :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_CalcDamage_GetDamageBonus
 
-function Hook_EndCalcDamage (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_EndCalcDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   ATTACKER            = 0;
   DEFENDER            = 1;
@@ -338,7 +338,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_EndCalcDamage
 
-function Hook_AI_CalcStackAttackEffect_Start (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_AI_CalcStackAttackEffect_Start (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   AIAttackerId  :=  Heroes.GetBattleCellStackId
     (Heroes.GetBattleCellByPos(PINTEGER(PINTEGER(Context.ESP + 8)^ + STACK_POS_OFS)^));
@@ -348,7 +348,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_AI_CalcStackAttackEffect_Start
 
-function Hook_AI_CalcStackAttackEffect_End (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_AI_CalcStackAttackEffect_End (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   ATTACKER            = 0;
   DEFENDER            = 1;
@@ -371,7 +371,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_AI_CalcStackAttackEffect_End
 
-function Hook_EnterChat (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_EnterChat (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NUM_ARGS  = 0;
   
@@ -406,7 +406,7 @@ asm
   // RET
 end; // .procedure ClearChatBox
 
-function Hook_ChatInput (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ChatInput (Context: Core.PHookContext): LONGBOOL; stdcall;
 const 
   (* Event parameters *)
   ARG_EVENT_SUBTYPE = 0;
@@ -457,7 +457,7 @@ begin
   end; // .SWITCH Action
 end; // .function Hook_ChatInput
 
-function Hook_LeaveChat (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_LeaveChat (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   (* Event parameters *)
   EVENT_SUBTYPE = 0;

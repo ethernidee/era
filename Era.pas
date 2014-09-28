@@ -18,7 +18,7 @@ const
   {
   Opcode: call, 5 bytes.
   Automatically creates safe bridge to high-level function "F".
-  FUNCTION  F (Context: PHookHandlerArgs): TExecuteDefaultCodeFlag; STDCALL;
+  FUNCTION  F (Context: PHookContext): TExecuteDefaultCodeFlag; STDCALL;
   If default code should be executed, it can contain any commands except jumps.
   }
   HOOKTYPE_BRIDGE = 2;
@@ -122,7 +122,7 @@ type
     (* Dummy *)
   end; // .record TTxtFile
 
-  PHookHandlerArgs  = ^THookHandlerArgs;
+  PHookContext  = ^THookHandlerArgs;
   THookHandlerArgs  = packed record
     EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX: integer;
     RetAddr:                                pointer;
@@ -194,7 +194,7 @@ procedure Hook
 procedure ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer); stdcall;
 procedure KillThisProcess;
 procedure FatalError (Err: pchar); stdcall;
-function  RecallAPI (Context: PHookHandlerArgs; NumArgs: integer): integer; stdcall;
+function  RecallAPI (Context: PHookContext; NumArgs: integer): integer; stdcall;
 procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
 procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer); stdcall;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;

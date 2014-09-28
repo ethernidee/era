@@ -53,7 +53,7 @@ const
 
 
 type
-  TButtonsTable = array of StrLib.TArrayOfString;
+  TButtonsTable = array of StrLib.TArrayOfStr;
   
   
 var
@@ -75,8 +75,8 @@ var
 {O} ItemInfo:     Files.TFileItemInfo;
     FileName:     string;
     FileContents: string;
-    Lines:        StrLib.TArrayOfString;
-    Line:         StrLib.TArrayOfString;
+    Lines:        StrLib.TArrayOfStr;
+    Line:         StrLib.TArrayOfStr;
     NumLines:     integer;
     ButtonName:   string;
     i:            integer;

@@ -55,7 +55,7 @@ begin
   end; // .else
 end; // .function ExtendText
 
-function Hook_LoadTextFromFile_BeforeLoad (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_LoadTextFromFile_BeforeLoad (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   TxtSize         :=  Context.EDI;
   Context.EAX     :=  ExtendText(Ptr(Context.EBX), TxtSize);
@@ -63,7 +63,7 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadTextFromFile_BeforeLoad
 
-function Hook_LoadTextFromFile_AfterLoad (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_LoadTextFromFile_AfterLoad (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   TxtSize         :=  Context.EDI;
   Context.EAX     :=  ExtendText(Ptr(Context.EBX), TxtSize);

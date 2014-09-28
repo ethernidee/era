@@ -222,7 +222,7 @@ begin
   SysUtils.FreeAndNil(Locator);
 end; // .function Hook_LoadArcs
 
-function Hook_LoadVideoHeaders (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_LoadVideoHeaders (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NUM_ARGS  = 0;
 
@@ -247,7 +247,7 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadVideoHeaders
 
-function Hook_OpenSmack (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_OpenSmack (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NUM_ARGS          = 1;
   ARG_BUFSIZE_MASK  = 1;
@@ -270,7 +270,7 @@ begin
   FileName    :=  pchar(Context.ECX);
   FileName    :=  FileName + '.smk';
   BufSize     :=  Context.EDX;
-  BufSizeMask :=  Core.APIArg(Context, ARG_BUFSIZE_MASK).v;
+  BufSizeMask :=  Core.GetStdcallArg(Context, ARG_BUFSIZE_MASK)^;
   BufSize     :=  BufSize or BufSizeMask or $1140;
 
   ItemInfo  :=  VidFiles[FileName];
@@ -297,7 +297,7 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_OpenSmack
 
-function Hook_OpenBik (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_OpenBik (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NUM_ARGS  = 0;
 
@@ -342,7 +342,7 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_OpenBik
 
-function Hook_LoadSndHeaders (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_LoadSndHeaders (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NUM_ARGS  = 0;
 
@@ -367,7 +367,7 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadSndHeaders
 
-function Hook_LoadSnd (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_LoadSnd (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NUM_ARGS          = 1;
   ARG_FILESIZE_PTR  = 1;
@@ -400,7 +400,7 @@ begin
   
   if (ItemInfo <> nil) and (ItemInfo.Size > 0) then begin
     ResourceBuf :=  pointer(Context.EDX);
-    FileSizePtr :=  pointer(Core.APIArg(Context, ARG_FILESIZE_PTR).v);
+    FileSizePtr :=  pointer(Core.GetStdcallArg(Context, ARG_FILESIZE_PTR)^);
   
     if ResourceBuf.IsLoaded then begin
       Heroes.MFree(ResourceBuf.Addr);

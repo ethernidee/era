@@ -9,6 +9,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman;
 
 
+procedure NotifyError (Err: pchar); stdcall;
 procedure FatalError (Err: pchar); stdcall;
 procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
 procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer); stdcall;
@@ -39,8 +40,7 @@ exports
   Core.WriteAtCode,
   Core.Hook,
   Core.ApiHook,
-  Core.KillThisProcess,
-  Core.RecallAPI,
+  NotifyError,
   FatalError,
   RegisterHandler,
   FireEvent,
@@ -130,6 +130,11 @@ procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer
 begin
   GameExt.FireEvent(EventName, EventData, DataSize);
 end; // .procedure FireEvent
+
+procedure NotifyError (Err: pchar);
+begin
+  Core.NotifyError(Err);
+end; // .procedure NotifyError
 
 procedure FatalError (Err: pchar);
 begin

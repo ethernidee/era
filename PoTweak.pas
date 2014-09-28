@@ -94,7 +94,7 @@ begin
   PINTEGER($752B33)^  :=  MapSize;
 end; // .procedure PatchSquaresRefs
 
-function Hook_BeforeResetErmFunc (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_BeforeResetErmFunc (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.FireEvent('$OnBeforeResetErmFunc', nil, 0);
   result := Core.EXEC_DEF_CODE;

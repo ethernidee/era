@@ -115,13 +115,13 @@ begin
   end; // .if
 end; // .function Hook_ReadIntIni
 
-function Hook_ZvsGetWindowWidth (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ZvsGetWindowWidth (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ECX :=  WndManagerPtr^.ScreenPcx16.Width;
   result      :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsGetWindowWidth
 
-function Hook_ZvsGetWindowHeight (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ZvsGetWindowHeight (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EDX :=  WndManagerPtr^.ScreenPcx16.Height;
   result      :=  not Core.EXEC_DEF_CODE;
@@ -165,7 +165,7 @@ begin
   SysUtils.FreeAndNil(Locator);
 end; // .procedure MarkFreshestSavegame
 
-function Hook_SetHotseatHeroName (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_SetHotseatHeroName (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
   PlayerName:     string;
   NewPlayerName:  string;
@@ -459,69 +459,69 @@ begin
   {!} Windows.LeaveCriticalSection(InetCriticalSection);
 end; // .function Hook_GetHostByName
 
-function Hook_UN_C (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_UN_C (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PPOINTER(Context.EBP - $0C)^  :=  GameExt.GetRealAddr(PPOINTER(Context.EBP - $0C)^);
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_UN_C
 
-function Hook_ApplyDamage_Ebx (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX :=  ZvsAppliedDamage^;
   result      :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_Ebx
 
-function Hook_ApplyDamage_Esi (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Esi (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ESI :=  ZvsAppliedDamage^;
   result      :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_Esi
 
-function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ESI                 :=  ZvsAppliedDamage^;
   PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_Esi
 
-function Hook_ApplyDamage_Arg1 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_Arg1
 
-function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX                    := ZvsAppliedDamage^;
   PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_Ebx_Local7
 
-function Hook_ApplyDamage_Local7 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_ocal7
 
-function Hook_ApplyDamage_Local4 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Local4 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_Local4
 
-function Hook_ApplyDamage_Local8 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Local8 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_Local8
 
-function Hook_ApplyDamage_Local13 (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Local13 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
   result                          := Core.EXEC_DEF_CODE;
 end; // .function Hook_ApplyDamage_Local13
 
-function Hook_GetWoGAndErmVersions (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_GetWoGAndErmVersions (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NEW_WOG_VERSION = 400;
   
@@ -531,7 +531,7 @@ begin
   result                        :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_GetWoGAndErmVersions
 
-function Hook_ZvsLib_ExtractDef (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   MIN_NUM_TOKENS  = 2;
   TOKEN_LODNAME   = 0;
@@ -541,7 +541,7 @@ const
 
 var
   ImageSettings:  string;
-  Tokens:         StrLib.TArrayOfString;
+  Tokens:         StrLib.TArrayOfStr;
   LodName:        string;
   
 begin
@@ -562,7 +562,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsLib_ExtractDef
 
-function Hook_ZvsLib_ExtractDef_GetGamePath (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_ZvsLib_ExtractDef_GetGamePath (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   EBP_LOCAL_GAME_PATH = 16;
 

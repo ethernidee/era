@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, Utils, Log, Ini,
+  SysUtils, Utils, Log, Ini, Core,
   VFS, Heroes, GameExt, EraLog, SndVid, Tweaks, Stores, Erm;
 
 const
@@ -87,9 +87,10 @@ begin
   else begin
     InstallLogger(EraLog.TMemoryLogger.Create);
   end; // .else
-  
+
   Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
 
+  Core.AbortOnError              := GetDebugOpt('Debug.AbortOnError');
   SndVid.LoadCDOpt               := GetOptBoolValue('LoadCD');
   Tweaks.CPUPatchOpt             := GetOptBoolValue('CPUPatch');
   Tweaks.FixGetHostByNameOpt     := GetOptBoolValue('FixGetHostByName');

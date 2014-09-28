@@ -21,7 +21,7 @@ end; // .record TMapSettings
 
 //ZvsGameBeforeSave 750093 at 4beb3b
 
-function Hook_AfterApplyDamage (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_AfterApplyDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   WOG_MF_DAMAGE:  PINTEGER  = Ptr($2811888);
 
@@ -83,8 +83,8 @@ var
 {O} FileInfo:   Files.TFileItemInfo;
 
     ScriptName:         string;
-    ScriptContents:     Utils.TArrayOfString;
-    ScriptNameTokens:   Utils.TArrayOfString;
+    ScriptContents:     Utils.TArrayOfStr;
+    ScriptNameTokens:   Utils.TArrayOfStr;
     ScriptPriority:     integer;
     TestPriority:       integer;
     ScriptInd:          integer;

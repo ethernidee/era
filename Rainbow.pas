@@ -249,7 +249,7 @@ begin
   end; // .if
 end; // .function IsChineseLoaderPresent
 
-function Hook_BeginParseText (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_BeginParseText (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   ERR_COLOR       = $000000;
   LINE_END_MARKER = #10;
@@ -427,7 +427,7 @@ BEGIN
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_BeginParseText
 
-function Hook_GetCharColor (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_GetCharColor (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   result  :=  TextBlocks[TextBlockInd].Color16 = DEF_COLOR;
   
@@ -436,7 +436,7 @@ begin
   end; // .if
 end; // .function Hook_GetCharColor
 
-function Hook_HandleTags (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_HandleTags (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
   c:  char;
 
@@ -477,7 +477,7 @@ BEGIN
   END; // .WHILE
 END; // .PROCEDURE ChineseGotoNextChar
 
-FUNCTION Hook_SetupColorMode (Context: Core.PHookHandlerArgs): LONGBOOL; STDCALL;
+FUNCTION Hook_SetupColorMode (Context: Core.PHookContext): LONGBOOL; STDCALL;
 BEGIN
   IF TextColorMode^ = TEXTMODE_15BITS THEN BEGIN
     Color32To16 := Color32To15Func;
@@ -496,7 +496,7 @@ BEGIN
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_SetupColorMode
 
-function Hook_DrawPic (Context: PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_DrawPic (Context: PHookContext): LONGBOOL; stdcall;
 const
   Name: string = 'smalres.def';
   
@@ -556,7 +556,7 @@ begin
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_DrawPic
 
-function Hook_RegisterDefFrame (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_RegisterDefFrame (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
     Color32To16 := Color32To15Func;

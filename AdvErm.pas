@@ -1150,7 +1150,7 @@ begin
   SysUtils.FreeAndNil(Buf);
 end; // .procedure DumpErmMemory
 
-function Hook_DumpErmVars (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_DumpErmVars (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   DumpErmMemory(ERM_MEMORY_DUMP_FILE);
   Context.RetAddr := Core.Ret(0);

@@ -8,7 +8,7 @@ BASED ON:     "Lods" plugin by Sav, WoG Sources by ZVS
 (***)  interface  (***)
 uses
   Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib, Log, Json,
-  GameExt, Heroes, Stores;
+  StrUtils, GameExt, Heroes, Stores;
 
 const
   MAX_NUM_LODS  = 100;
@@ -245,7 +245,7 @@ begin
               WillBeRedirected := not RedirectOnlyMissing;
 
               if RedirectOnlyMissing then begin
-                if AnsiLowerCase(ExtractFileExt(ResourceName)) = '.mp3' then begin
+                if AnsiEndsText(ResourceName, '.mp3') then begin
                   WillBeRedirected := not FileExists(MUSIC_DIR + '\' + ResourceName);
                 end else begin
                   WillBeRedirected := not FileIsInLods(ResourceName);
@@ -258,8 +258,7 @@ begin
             end; // .if
           end; // .for
         end else begin
-          Log.Write('Lodman', 'LoadGlobalRedirectionConfig',
-                    'Invalid json config: "' + ConfigDir + '\' + FoundName + '"');
+          Core.NotifyError('Invalid json config: "' + ConfigDir + '\' + FoundName + '"');
         end; // .else
       end; // .if
     end; // .while
@@ -268,7 +267,7 @@ begin
   FreeAndNil(Config);
 end; // .procedure LoadGlobalRedirectionConfig
 
-function Hook_LoadLods (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_LoadLods (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
   i: integer;
   
@@ -290,7 +289,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadLods
 
-function Hook_FindFileInLod (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_FindFileInLod (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
   Redirected: string;
 
@@ -302,7 +301,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_FindFileInLod
 
-function Hook_OnMp3Start (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_OnMp3Start (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   DEFAULT_BUFFER_SIZE = 128;
 
@@ -324,7 +323,7 @@ begin
   {!} Windows.LeaveCriticalSection(RedirCritSection);
 end; // .function Hook_OnMp3Start
 
-function Hook_AfterLoadLods (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_AfterLoadLods (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
   GameExt.FireEvent('OnAfterLoadLods', nil, 0);

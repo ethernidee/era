@@ -261,7 +261,7 @@ begin
   result := TRider.Create(SectionName);
 end; // .function NewRider
 
-function Hook_SaveGame (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_SaveGame (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   PARAM_SAVEGAME_NAME = 0;
 
@@ -291,7 +291,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_SaveGame
 
-function Hook_SaveGameWrite (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_SaveGameWrite (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
 {U} StrBuilder:     StrLib.TStrBuilder;
     NumSections:    integer;
@@ -372,7 +372,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SaveGameWrite
 
-function Hook_SaveGameRead (Context: Core.PHookHandlerArgs): LONGBOOL; stdcall;
+function Hook_SaveGameRead (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
 {U} StoredData:     TStoredData;
     BytesRead:      integer;
