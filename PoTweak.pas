@@ -8,8 +8,8 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses Core, GameExt, Heroes, Stores;
 
 const
-  FILE_SECTION_NAME = 'EraPO';
-
+  FILE_SECTION_NAME = 'Era.PO';
+  MAX_MAP_SIZE      = 256;
 
 type
   PSquare = ^TSquare;
@@ -18,41 +18,32 @@ type
   PSquare2  = ^TSquare2;
   TSquare2  = packed array [0..15] of byte;
 
-
 const
   ErmSquare:  ^PSquare  = Ptr($27C9678);
   ErmSquare2: ^PSquare2 = Ptr($9A48A0);
 
+var
+  Squares:  array [0..MAX_MAP_SIZE * MAX_MAP_SIZE * 2 - 1] of TSquare;
+  Squares2: array [0..MAX_MAP_SIZE * MAX_MAP_SIZE * 2 - 1] of TSquare2;
+
+implementation
 
 var
-  Squares:  array of byte;
-  Squares2: array of byte;
-  
+  SquaresSize:  integer;
+  Squares2Size: integer;
+
+procedure PatchSquaresRefs;
+var
   MapSize:        integer;
   BasicPoSize:    integer;
-  SquaresSize:    integer;
-  Squares2Size:   integer;
   SecondDimSize:  integer;
   SecondDimSize2: integer;
 
-
-(***) implementation (***)
-
-
-procedure PatchSquaresRefs;
 begin
-  MapSize       :=  Heroes.GetMapSize;
-  BasicPoSize   :=  MapSize * MapSize * 2;
-  SquaresSize   :=  BasicPoSize * sizeof(TSquare);
-  Squares2Size  :=  BasicPoSize * sizeof(TSquare2);
-  
-  if SquaresSize > Length(Squares) then begin
-    SetLength(Squares, SquaresSize);
-  end; // .if
-  if Squares2Size > Length(Squares2) then begin
-    SetLength(Squares2, Squares2Size);
-  end; // .if
-  
+  MapSize         :=  Heroes.GetMapSize;
+  BasicPoSize     :=  MapSize * MapSize * 2;
+  SquaresSize     :=  BasicPoSize * sizeof(TSquare);
+  Squares2Size    :=  BasicPoSize * sizeof(TSquare2);
   SecondDimSize   :=  MapSize * 2 * sizeof(TSquare);
   SecondDimSize2  :=  MapSize * 2 * sizeof(TSquare2);
   
@@ -103,6 +94,12 @@ begin
   PINTEGER($752B33)^  :=  MapSize;
 end; // .procedure PatchSquaresRefs
 
+function Hook_BeforeResetErmFunc (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  GameExt.FireEvent('$OnBeforeResetErmFunc', nil, 0);
+  result := Core.EXEC_DEF_CODE;
+end; // .function Hook_BeforeResetErmFunc
+
 procedure OnSavegameWrite (Event: GameExt.PEvent); stdcall;
 begin
   Stores.WriteSavegameSection(SquaresSize, @Squares[0], FILE_SECTION_NAME);
@@ -111,15 +108,15 @@ end; // .procedure OnSavegameWrite
 
 procedure OnSavegameRead (Event: GameExt.PEvent); stdcall;
 begin
+  PatchSquaresRefs;
   Stores.ReadSavegameSection(SquaresSize, @Squares[0], FILE_SECTION_NAME);
   Stores.ReadSavegameSection(Squares2Size, @Squares2[0], FILE_SECTION_NAME);
 end; // .procedure OnSavegameRead
 
-function Hook_ResetErm (Context: Core.PHookContext): LONGBOOL; stdcall;
+procedure OnBeforeResetErmFunc (Event: GameExt.PEvent); stdcall;
 begin
   PatchSquaresRefs;
-  result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_ResetErm
+end; // .procedure OnBeforeResetErmFunc
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
@@ -134,11 +131,14 @@ begin
   PBYTE($751580)^     :=  byte($90);
   PINTEGER($75246C)^  :=  integer($909023EB);
   PBYTE($752470)^     :=  byte($90);
+
+  // $OnBeforeResetErmFunc event for patching PO code before being inited by ERM
+  Core.ApiHook(@Hook_BeforeResetErmFunc, Core.HOOKTYPE_BRIDGE, Ptr($75259E));
 end; // .procedure OnAfterWoG
 
 begin
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
   GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
   GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
-  Core.Hook(@Hook_ResetErm, Core.HOOKTYPE_BRIDGE, 5, Ptr($7525A4));
+  GameExt.RegisterHandler(OnBeforeResetErmFunc, '$OnBeforeResetErmFunc');
 end.

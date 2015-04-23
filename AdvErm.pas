@@ -19,8 +19,8 @@ const
   IS_STR    = TRUE;
   OPER_GET  = TRUE;
   
-  SLOTS_SAVE_SECTION  = 'EraSlots';
-  ASSOC_SAVE_SECTION  = 'EraAssoc';
+  SLOTS_SAVE_SECTION  = 'Era.DynArrays_SN_M';
+  ASSOC_SAVE_SECTION  = 'Era.AssocArray_SN_W';
   
   (* TParamModifier *)
   NO_MODIFIER     = 0;
@@ -90,6 +90,7 @@ var
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
 {O} AssocMem:   {O} AssocArrays.TAssocArray {OF TAssocVar};
     FreeSlotN:  integer = SPEC_SLOT - 1;
+    ErrBuf:     array [0..255] of char;
 
 
 procedure RegisterReceiver (ReceiverName: integer; ReceiverHandler: TReceiverHandler);
@@ -222,7 +223,7 @@ begin
   AssocVarValue :=  nil;
   // * * * * * //
   result  :=  TRUE;
-  Error   :=  'Invalid command parameters.';
+  Error   :=  'Invalid command parameters';
   
   case Cmd of 
     'M':
@@ -406,7 +407,7 @@ begin
             end; // .case 4
         else
           result  :=  FALSE;
-          Error   :=  'Invalid number of parameters.';
+          Error   :=  'Invalid number of command parameters';
         end; // .switch NumParams
       end; // .case "M"
     'K':
@@ -454,7 +455,7 @@ begin
             end; // .case 4
         else
           result  :=  FALSE;
-          Error   :=  'Invalid number of parameters.';
+          Error   :=  'Invalid number of command parameters';
         end; // .switch NumParams
       end; // .case "K"
     'W':
@@ -541,7 +542,7 @@ begin
             end; // .case 2
         else
           result  :=  FALSE;
-          Error   :=  'Invalid number of parameters.';
+          Error   :=  'Invalid number of command parameters';
         end; // .switch
       end; // .case "W"
     'D':
@@ -568,8 +569,8 @@ begin
   
   if not result then begin
     Error :=  'Error executing Era command SN:' + Cmd + ':'#13#10 + Error;
-    Utils.CopyMem(Length(Error) + 1, pointer(Error), @Erm.z[1]);
-    Err   :=  @Erm.z[1];
+    Utils.CopyMem(Length(Error) + 1, pointer(Error), @ErrBuf);
+    Err := @ErrBuf;
   end; // .if
 end; // .function ExtendedEraService
 
@@ -813,6 +814,6 @@ begin
   
   (*GameExt.RegisterHandler(OnBeforeWoG, 'OnBeforeWoG');*)
   GameExt.RegisterHandler(OnBeforeErmInstructions, 'OnBeforeErmInstructions');
-  GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
-  GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
+  GameExt.RegisterHandler(OnSavegameWrite,         'OnSavegameWrite');
+  GameExt.RegisterHandler(OnSavegameRead,          'OnSavegameRead');
 end.

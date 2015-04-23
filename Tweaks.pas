@@ -7,8 +7,12 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, Ini,
+  CFiles, Files, FilesEx, Ini, DataLib,
   PatchApi, Core, GameExt, Heroes, Lodman;
+
+type
+  (* Import *)
+  TStrList = DataLib.TStrList;
 
 const
   // f (Value: pchar; MaxResLen: integer; DefValue, Key, SectionName, FileName: pchar): integer; cdecl;
@@ -323,7 +327,7 @@ begin
     Ini.SaveIni(Heroes.GAME_SETTINGS_FILE);
   end; // .if
   
-  ReadStr('Network Default Name',   Heroes.NETWORK_DEF_NAME_OPT);
+  ReadStr('Network default Name',   Heroes.NETWORK_DEF_NAME_OPT);
   ReadInt('Autosave',               Heroes.AUTOSAVE_OPT);
   ReadInt('Show Combat Grid',       Heroes.SHOW_COMBAT_GRID_OPT);
   ReadInt('Show Combat Mouse Hex',  Heroes.SHOW_COMBAT_MOUSE_HEX_OPT);
@@ -388,7 +392,7 @@ begin
   WriteInt('Test Write',             Heroes.TEST_READ_OPT);
   WriteInt('Test Blit',              Heroes.TEST_BLIT_OPT);
   WriteStr('Unique System ID',       Heroes.UNIQUE_SYSTEM_ID_OPT);
-  WriteStr('Network Default Name',   Heroes.NETWORK_DEF_NAME_OPT);
+  WriteStr('Network default Name',   Heroes.NETWORK_DEF_NAME_OPT);
   WriteInt('Autosave',               Heroes.AUTOSAVE_OPT);
   WriteInt('Show Combat Grid',       Heroes.SHOW_COMBAT_GRID_OPT);
   WriteInt('Show Combat Mouse Hex',  Heroes.SHOW_COMBAT_MOUSE_HEX_OPT);
@@ -461,17 +465,61 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_UN_C
 
-function Hook_TowerShotDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
-begin
-  PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
-  result                      :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_TowerShotDamage
-
-function Hook_MoatDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX :=  ZvsAppliedDamage^;
   result      :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_MoatDamage
+end; // .function Hook_ApplyDamage_Ebx
+
+function Hook_ApplyDamage_Esi (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  Context.ESI :=  ZvsAppliedDamage^;
+  result      :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_ApplyDamage_Esi
+
+function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  Context.ESI                 :=  ZvsAppliedDamage^;
+  PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
+  result                      :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_ApplyDamage_Esi
+
+function Hook_ApplyDamage_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
+  result                      :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_ApplyDamage_Arg1
+
+function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  Context.EBX                    := ZvsAppliedDamage^;
+  PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
+  result                         := Core.EXEC_DEF_CODE;
+end; // .function Hook_ApplyDamage_Ebx_Local7
+
+function Hook_ApplyDamage_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
+  result                         := Core.EXEC_DEF_CODE;
+end; // .function Hook_ApplyDamage_ocal7
+
+function Hook_ApplyDamage_Local4 (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  PINTEGER(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
+  result                         := Core.EXEC_DEF_CODE;
+end; // .function Hook_ApplyDamage_Local4
+
+function Hook_ApplyDamage_Local8 (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  PINTEGER(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
+  result                         := Core.EXEC_DEF_CODE;
+end; // .function Hook_ApplyDamage_Local8
+
+function Hook_ApplyDamage_Local13 (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  PINTEGER(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
+  result                          := Core.EXEC_DEF_CODE;
+end; // .function Hook_ApplyDamage_Local13
 
 function Hook_GetWoGAndErmVersions (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -577,7 +625,7 @@ begin
     );
   end; // .if
   
-  (* Remove duplicate ResetErm call *)
+  (* Remove duplicate ResetAll call *)
   PINTEGER($7055BF)^ :=  integer($90909090);
   PBYTE($7055C3)^    :=  $90;
   
@@ -615,12 +663,21 @@ begin
   (* Fix UN:C to work with redirected addresses also *)
   Core.ApiHook(@Hook_UN_C, Core.HOOKTYPE_BRIDGE, Ptr($732086));
   
-  (* Fix tower shot damage in the log after !?MF1 *)
-  Core.ApiHook(@Hook_TowerShotDamage, Core.HOOKTYPE_BRIDGE, Ptr($465964));
-  
-  (* Fix moat damage in the log after !?MF1 *)
-  Core.ApiHook(@Hook_MoatDamage, Core.HOOKTYPE_BRIDGE, Ptr($469A98));
-  
+  (* Fix ApplyDamage calls, so that !?MF1 damage is displayed correctly in log *)
+  Core.ApiHook(@Hook_ApplyDamage_Ebx_Local7,  Core.HOOKTYPE_BRIDGE, Ptr($43F95B + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Ebx,         Core.HOOKTYPE_BRIDGE, Ptr($43FA5E + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Local7,      Core.HOOKTYPE_BRIDGE, Ptr($43FD3D + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Ebx,         Core.HOOKTYPE_BRIDGE, Ptr($4400DF + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Esi_Arg1,    Core.HOOKTYPE_BRIDGE, Ptr($440858 + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Ebx,         Core.HOOKTYPE_BRIDGE, Ptr($440E70 + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Arg1,        Core.HOOKTYPE_BRIDGE, Ptr($441048 + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Esi,         Core.HOOKTYPE_BRIDGE, Ptr($44124C + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Local4,      Core.HOOKTYPE_BRIDGE, Ptr($441739 + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Local8,      Core.HOOKTYPE_BRIDGE, Ptr($44178A + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Arg1,        Core.HOOKTYPE_BRIDGE, Ptr($46595F + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Ebx,         Core.HOOKTYPE_BRIDGE, Ptr($469A93 + 5));
+  Core.ApiHook(@Hook_ApplyDamage_Local13,     Core.HOOKTYPE_BRIDGE, Ptr($5A1065 + 5));
+
   (* Fix negative offsets handling in fonts *)
   PBYTE($4B534A)^ :=  $B6;
   PBYTE($4B53E6)^ :=  $B6;
@@ -642,7 +699,8 @@ begin
   );
   
   (* Disable MP3 trigger *)
-  Core.p.WriteHexPatch($59AC51, 'BF F4 33 6A 00');
+  // Overriden by Lodman redirection
+  // Core.p.WriteHexPatch($59AC51, 'BF F4 33 6A 00');
 end; // .procedure OnAfterWoG
 
 begin

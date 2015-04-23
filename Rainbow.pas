@@ -15,7 +15,7 @@ const
 
   DEF_COLOR = -1;
   
-  TextColorMode:  PWORD = Ptr($694DB0);
+  TextColorMode: PWORD = Ptr($694DB0);
 
 
 type
@@ -225,8 +225,8 @@ begin
   NamedColors['WhiteSmoke']           :=  Ptr(Color32To16($F5F5F5));
   NamedColors['Yellow']               :=  Ptr(Color32To16($FFFF00));
   NamedColors['YellowGreen']          :=  Ptr(Color32To16($9ACD32));
-  NamedColors['r']                    :=  NamedColors['Red'];
-  NamedColors['g']                    :=  NamedColors['Green'];
+  NamedColors['r']                    :=  Ptr(Color32To16($F2223E));
+  NamedColors['g']                    :=  Ptr(Color32To16($FFFE794));
   NamedColors['b']                    :=  NamedColors['Blue'];
   NamedColors['y']                    :=  NamedColors['Yellow'];
   NamedColors['w']                    :=  NamedColors['White'];

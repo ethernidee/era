@@ -15,6 +15,17 @@ const
   (* Stacks on battlefield *)
   NUM_BATTLE_STACKS = 42;
   
+  (*  BattleMon  *)
+  STACK_STRUCT_SIZE = 1352;
+  STACK_TYPE        = $34;
+  STACK_POS         = $38;
+  STACK_POS_SHIFT   = $44;
+  STACK_NUM         = $4C;
+  STACK_LOSTHP      = $58;
+  STACK_FLAGS       = $84;
+  STACK_HP          = $C0;
+  STACK_SIDE        = $F4;
+
   (* Game version *)
   ROE         = 0;
   AB          = 1;
@@ -78,7 +89,7 @@ const
     ShowDialog: LONGBOOL;
     Compress:   INTBOOL;
     SaveToData: LONGBOOL
-  ); THISCALL ([$699538]);
+  ); THISCALL ([GAME_MANAGER]);
   }
   SAVEGAME_FUNC     = $4BEB60;
   LOAD_LOD          = $559420;  // F (Name: pchar); THISCALL (PLod);
@@ -90,11 +101,28 @@ const
   hWnd:           PINTEGER  = Ptr($699650);
   hHeroes3Event:  PINTEGER  = Ptr($69965C);
   MarkedSavegame: pchar     = Ptr($68338C);
+  Mp3Name:        pchar     = Ptr($6A33F4);
   
   GameVersion:  PINTEGER  = Ptr($67F554);
+  
+  (* Managers *)
+  GAME_MANAGER     = $699538;
+  HERO_WND_MANAGER = $6992D0;
+  
+  (* Colors *)
+  RED_COLOR         = '0F2223E';
+  HEROES_GOLD_COLOR = '0FFFE794';
 
 
 type
+  PValue  = ^TValue;
+  TValue  = packed record
+    case byte of
+      0:  (v:   integer);
+      1:  (p:   pointer);
+      2:  (pc:  pchar);
+  end; // .record TValue
+
   PTxtFile  = ^TTxtFile;
   TTxtFile  = packed record
     Dummy:    array [0..$17] of byte;
@@ -143,7 +171,7 @@ type
   TMFree  = procedure (Addr: pointer); cdecl;
   
   TGzipWrite  = procedure (Data: pointer; DataSize: integer); cdecl;
-  TGzipRead   = procedure (Dest: pointer; DataSize: integer); cdecl;
+  TGzipRead   = function (Dest: pointer; DataSize: integer): integer; cdecl;
   TWndProc    = function (hWnd, Msg, wParam, lParam: integer): LONGBOOL; stdcall;
   
   TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
@@ -156,13 +184,15 @@ const
   AdvManagerPtr:  PPAdvManager  = Ptr($6992D0);
   WndManagerPtr:  ^PWndManager  = Ptr($6992D0);
 
-  GzipWrite:  TGzipWrite  = Ptr($704062);
-  GzipRead:   TGzipRead   = Ptr($7040A7);
-  WndProc:    TWndProc    = Ptr($4F8290);
+  ZvsGzipWrite: TGzipWrite  = Ptr($704062);
+  ZvsGzipRead:  TGzipRead   = Ptr($7040A7);
+  WndProc:      TWndProc    = Ptr($4F8290);
   
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
 
 
+procedure GZipWrite (Count: integer; {n} Addr: pointer);
+function  GzipRead (Count: integer; {n} Addr: pointer): integer;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
 procedure ForceTxtUnload (Name: pchar); stdcall;
 procedure LoadLod (const LodName: string; Res: PLod);
@@ -172,10 +202,39 @@ function  IsTwoLevelMap: boolean;
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
 function  GetStackIdByPos (StackPos: integer): integer;
 procedure RedrawHeroMeetingScreen;
+function  IsCampaign: boolean;
+function  GetMapFileName: string;
+function  GetCampaignFileName: string;
+function  GetCampaignMapInd: integer;
+{Low level}
+function  GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
+function  GetVal (BaseAddr, Offset: integer): PValue; overload;
 
-  
+
 (***) implementation (***)
 
+
+function GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
+begin
+  result  :=  Utils.PtrOfs(BaseAddr, Offset);
+end; // .function GetVal
+
+function GetVal (BaseAddr, Offset: integer): PValue; overload;
+begin
+  result  :=  Utils.PtrOfs(Ptr(BaseAddr), Offset);
+end; // .function GetVal
+
+procedure GZipWrite (Count: integer; {n} Addr: pointer);
+begin
+  {!} Assert(Utils.IsValidBuf(Addr, Count));
+  ZvsGzipWrite(Addr, Count);
+end; // .procedure GZipWrite
+
+function GzipRead (Count: integer; {n} Addr: pointer): integer;
+begin
+  {!} Assert(Utils.IsValidBuf(Addr, Count));
+  result := ZvsGzipRead(Addr, Count) + Count;
+end; // .function 
 
 function LoadTxt (Name: pchar): {n} PTxtFile;
 begin
@@ -234,13 +293,13 @@ end; // .procedure GetDialogsIds
 
 function GetMapSize: integer; ASSEMBLER; {$W+}
 asm
-  MOV EAX, [$699538]
+  MOV EAX, [GAME_MANAGER]
   MOV EAX, [EAX + $1FC44]
 end; // .function GetMapSize
 
 function IsTwoLevelMap: boolean; ASSEMBLER; {$W+}
 asm
-  MOV EAX, [$699538]
+  MOV EAX, [GAME_MANAGER]
   MOVZX EAX, byte [EAX + $1FC48]
 end; // .function IsTwoLevelMap
 
@@ -325,5 +384,48 @@ asm
   MOV EAX, $5AF150
   CALL EAX
 end; // .procedure RedrawHeroMeetingScreen
+
+function IsCampaign: boolean;
+begin
+  result := PBYTE($69779C)^ <> 0;
+end; // .function IsCampaign
+
+function GetMapFileName: string;
+begin
+  result := pchar(PINTEGER(GAME_MANAGER)^ + $1F6D9);
+end; // .function GetMapFileName
+
+function GetCampaignFileName: string;
+type
+  TFuncRes = packed record
+    _0:               integer;
+    CampaignFileName: pchar;
+    _1:               array [0..247] of byte;
+  end; // .record TFuncRes
+
+var
+  FuncRes: TFuncRes;
+  FuncResPtr: ^TFuncRes;
+
+begin
+  {!} Assert(IsCampaign);
+  asm
+    LEA EAX, FuncRes
+    PUSH EAX
+    MOV ECX, [GAME_MANAGER]
+    ADD ECX, $1F458
+    MOV EAX, $45A0C0
+    CALL EAX
+    MOV [FuncResPtr], EAX
+  end; // .asm
+  
+  result := FuncResPtr.CampaignFileName;
+end; // .function GetCampaignFileName
+
+function GetCampaignMapInd: integer;
+begin
+  {!} Assert(IsCampaign);
+  result := PBYTE(PINTEGER(GAME_MANAGER)^ + $1F45A)^;
+end; // .function GetCampaignMapInd
 
 end.

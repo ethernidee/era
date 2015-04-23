@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils,
-  Core, GameExt, Heroes, Erm;
+  Core, PatchApi, GameExt, Heroes, Erm;
 
 const
   NO_STACK  = -1;
@@ -41,6 +41,9 @@ var
   (* AI Calculate stack attack effect delayed parameters *)
   AIAttackerId: integer;
   AIDefenderId: integer;
+  
+  (* Controlling OnGameEnter and OnGameLeave events *)
+  MainGameLoopDepth: integer = 0;
   
   
 function Hook_BattleHint_GetAttacker (Context: Core.PHookContext): LONGBOOL; stdcall;
@@ -173,6 +176,8 @@ begin
     {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:       EventName :=  'OnStackToStackDamage';
     {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT:  EventName :=  'OnAICalcStackAttackEffect';
     {*} Erm.TRIGGER_ONCHAT:                     EventName :=  'OnChat';
+    {*} Erm.TRIGGER_ONGAMEENTER:                EventName :=  'OnGameEnter';
+    {*} Erm.TRIGGER_ONGAMELEAVE:                EventName :=  'OnGameLeave';
     (* end Era Triggers *)
   else
     if EventID >= Erm.TRIGGER_OB_POS then begin
@@ -230,7 +235,7 @@ var
   GameState:  Heroes.TGameState;
   
 begin
-  result  :=  FALSE;
+  result := FALSE;
   
   if Msg = WM_KEYDOWN then begin
     Heroes.GetGameState(GameState);
@@ -485,6 +490,22 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_LeaveChat
 
+procedure Hook_MainGameLoop (h: PatchApi.THiHook; This: pointer); stdcall;
+begin
+  if MainGameLoopDepth = 0 then begin
+    Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);
+  end; // .if
+  
+  Inc(MainGameLoopDepth);
+  PatchApi.Call(PatchApi.THISCALL_, h.GetDefaultFunc(), [This]);
+  Dec(MainGameLoopDepth);
+  
+  if MainGameLoopDepth = 0 then begin
+    Erm.FireErmEventEx(Erm.TRIGGER_ONGAMELEAVE, []);
+    GameExt.SetMapFolder('');
+  end; // .if
+end; // .procedure Hook_MainGameLoop
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -513,6 +534,10 @@ begin
   Core.Hook(@Hook_ChatInput, Core.HOOKTYPE_BRIDGE, 6, Ptr($554780));
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402298));
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
+  
+  (* MainGameCycle: OnEnterGame, OnLeaveGame and MapFolder settings*)
+  Core.p.WriteHiHook($4B0BA0, PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,
+                     @Hook_MainGameLoop);
 end; // .procedure OnAfterWoG
 
 begin

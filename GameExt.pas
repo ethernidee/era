@@ -19,8 +19,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.461';
-  ERA_VERSION_INT = 2461;
+  ERA_VERSION_STR = '2.47.0';
+  ERA_VERSION_INT = 2470;
 
 
 type
@@ -69,7 +69,9 @@ function  PatchExists (const PatchName: string): boolean; stdcall;
 function  PluginExists (const PluginName: string): boolean; stdcall;
 procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall;
 function  GetRealAddr (Addr: pointer): pointer; stdcall;
-
+function  GetMapFolder: string; stdcall;
+procedure SetMapFolder (const NewMapFolder: string);
+function  GetMapResourcePath (const OrigResourcePath: string): string; stdcall;
 
 procedure Init (hDll: integer);
 
@@ -87,9 +89,11 @@ var
 
 {O} MemRedirections:        {O} Lists.TList {OF PMemRedirection};
 
+  MapFolder: string = '';
+
 
 (***) implementation (***)
-
+uses Heroes;
 
 procedure LoadPlugins;
 const
@@ -394,6 +398,35 @@ begin
     result      :=  Utils.PtrOfs(Redirection.NewAddr, integer(Addr) - integer(Redirection.OldAddr));
   end; // .if
 end; // .function GetRealAddr
+
+function GetMapFolder: string;
+begin
+  if MapFolder = '' then begin
+    if Heroes.IsCampaign then begin
+      MapFolder := 'Maps\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '')
+                   + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd);
+    end // .if
+    else begin
+      MapFolder := 'Maps\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
+    end; // .else
+  end; // .if
+  
+  result := MapFolder;
+end; // .function GetMapFolder
+
+procedure SetMapFolder (const NewMapFolder: string);
+begin
+  MapFolder := NewMapFolder;
+end; // .procedure SetMapFolder
+
+function GetMapResourcePath (const OrigResourcePath: string): string;
+begin
+  result := GetMapFolder + '\' + OrigResourcePath;
+  
+  if not SysUtils.FileExists(result) then begin
+    result := OrigResourcePath;
+  end; // .if
+end; // .function GetMapResourcePath
 
 procedure Init (hDll: integer);
 begin

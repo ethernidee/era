@@ -1,21 +1,20 @@
 unit Lodman;
 {
-DESCRIPTION:  LOD archives manager
+DESCRIPTION:  LOD archives manager. Includes resource redirection support
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 BASED ON:     "Lods" plugin by Sav, WoG Sources by ZVS
 }
 
 (***)  interface  (***)
 uses
-  SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers,
-  GameExt, Heroes, Stores;
+  Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib, Log, Json,
+  StrUtils, GameExt, Heroes, Stores;
 
 const
   MAX_NUM_LODS  = 100;
   DEF_NUM_LODS  = 8;
   
-  LODREDIR_SAVE_SECTION = 'EraRedirs';
-
+  LODREDIR_SAVE_SECTION = 'Era.ResourceRedirections';
 
 type
   (* IMPORT *)
@@ -60,11 +59,20 @@ function  FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean;
 (***) implementation (***)
 
 
+const
+  GLOBAL_REDIRECTIONS_CONFIG_DIR         = 'Data\Redirections';
+  GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR = GLOBAL_REDIRECTIONS_CONFIG_DIR + '\Missing';
+  MUSIC_DIR                              = 'Mp3';
+
+  REDIRECT_ONLY_MISSING         = TRUE;
+  REDIRECT_MISSING_AND_EXISTING = NOT REDIRECT_ONLY_MISSING;
+
 var
 {O} GlobalLodRedirs:  {O} AssocArrays.TAssocArray {OF TString};
 {O} LodRedirs:        {O} AssocArrays.TAssocArray {OF TString};
 {O} LodList:          Lists.TStringList;
     NumLods:          integer = DEF_NUM_LODS;
+    RedirCritSection: Windows.TRTLCriticalSection;
 
 
 procedure UnregisterLod (LodInd: integer);
@@ -185,70 +193,150 @@ begin
   end; // .if
 end; // .function FindFileLod
 
+function FileIsInLods (const FileName: string): boolean;
+var
+  FoundLod: string;
+
+begin
+  result := FindFileLod(FileName, FoundLod);
+end; // .function FileIsInLods 
+
+function FindRedirection (const FileName: string; out Redirected: string): boolean;
+var
+{U} Redirection: TString;
+
+begin
+  Redirection := LodRedirs[FileName];
+  // * * * * * //
+  result := FALSE;
+
+  if Redirection = nil then begin
+    Redirection :=  GlobalLodRedirs[FileName];
+  end; // .if
+
+  if Redirection <> nil then begin
+    Redirected := Redirection.Value;
+    result     := TRUE;
+  end; // .if
+end; // .function FindRedirection
+
+(* Loads global redirection rules from json configs *)
+procedure LoadGlobalRedirectionConfig (const ConfigDir: string; RedirectOnlyMissing: boolean);
+var
+{U} Config:             TlkJsonObject;
+    ResourceName:       string;
+    WillBeRedirected:   boolean;
+    ConfigFileContents: string;
+    i:                  integer;
+
+begin
+  Config := nil;
+  // * * * * * //
+  with Files.Locate(ConfigDir + '\*.json', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      if Files.ReadFileContents(ConfigDir + '\' + FoundName, ConfigFileContents) then begin
+        Utils.CastOrFree(TlkJson.ParseText(ConfigFileContents), TlkJsonObject, Config);
+        
+        if Config <> nil then begin
+          for i := 0 to Config.Count - 1 do begin
+            ResourceName := Config.NameOf[i];
+
+            if GlobalLodRedirs[ResourceName] = nil then begin
+              WillBeRedirected := not RedirectOnlyMissing;
+
+              if RedirectOnlyMissing then begin
+                if AnsiEndsText(ResourceName, '.mp3') then begin
+                  WillBeRedirected := not FileExists(MUSIC_DIR + '\' + ResourceName);
+                end else begin
+                  WillBeRedirected := not FileIsInLods(ResourceName);
+                end; // .else
+              end; // .if
+              
+              if WillBeRedirected then begin
+                GlobalLodRedirs[ResourceName] := TString.Create(Config.getString(i));
+              end; // .if
+            end; // .if
+          end; // .for
+        end else begin
+          Core.NotifyError('Invalid json config: "' + ConfigDir + '\' + FoundName + '"');
+        end; // .else
+      end; // .if
+    end; // .while
+  end; // .with
+  // * * * * * //
+  FreeAndNil(Config);
+end; // .procedure LoadGlobalRedirectionConfig
+
 function Hook_LoadLods (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
-{O} Locator:  Files.TFileLocator;
-{O} FileInfo: Files.TFileItemInfo;
-    FileName: string;
-    i:        integer;
+  i: integer;
   
 begin
-  Locator   :=  Files.TFileLocator.Create;
-  FileInfo  :=  nil;
-  // * * * * * //
   UnregisterDeadLods;
   
-  Locator.DirPath :=  'Data';
-  Locator.InitSearch('*.pac');
-  
-  while Locator.NotEnd and (LodList.Count <= (High(TLodTable) - NumLods)) do begin
-    FileName  :=  SysUtils.AnsiLowerCase(Locator.GetNextItem(Files.TItemInfo(FileInfo)));
-    
-    if (SysUtils.ExtractFileExt(FileName) = '.pac') and not FileInfo.IsDir then begin
-      LodList.Add(FileName);
-    end; // .if
-    
-    SysUtils.FreeAndNil(FileInfo);
-  end; // .while
-  
-  Locator.FinitSearch;
+  with Files.Locate('Data\*.pac', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      LodList.Add(FoundName);
+    end; // .while
+  end; // .with
   
   for i := LodList.Count - 1 downto 0 do begin
     Heroes.LoadLod(LodList[i], @ZvsLodTable[NumLods]);
     ZvsAddLodToList(NumLods);
     Inc(NumLods);
   end; // .for
-  
+
   result  :=  Core.EXEC_DEF_CODE;
-  // * * * * * //
-  SysUtils.FreeAndNil(Locator);
 end; // .function Hook_LoadLods
 
 function Hook_FindFileInLod (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
-  FileName:     string;
-  Redirection:  TString;
+  Redirected: string;
 
-begin
-  FileName    :=  PPCHAR(Context.EBP + $8)^;
-  Redirection :=  LodRedirs[FileName];
-  
-  if Redirection = nil then begin
-    Redirection :=  GlobalLodRedirs[FileName];
-  end; // .if
-  
-  if Redirection <> nil then begin
-    PPCHAR(Context.EBP + $8)^ :=  pointer(Redirection.Value);
+begin 
+  if FindRedirection(PPCHAR(Context.EBP + $8)^, Redirected) then begin
+    PPCHAR(Context.EBP + $8)^ :=  pchar(Redirected);
   end; // .if
   
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_FindFileInLod
+
+function Hook_OnMp3Start (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
+  DEFAULT_BUFFER_SIZE = 128;
+
+var
+  FileName:   string;
+  Redirected: string;
+
+begin
+  (* Carefully copy redirected value to persistent storage and don't change anything in LodRedirs *)
+  {!} Windows.EnterCriticalSection(RedirCritSection);
+  FileName := Heroes.Mp3Name + '.mp3';
+  
+  if FindRedirection('*.mp3', Redirected) or FindRedirection(FileName, Redirected) then begin
+    Utils.SetPcharValue(Heroes.Mp3Name, SysUtils.ChangeFileExt(Redirected, ''),
+                        DEFAULT_BUFFER_SIZE);
+  end; // .if
+
+  result := Core.EXEC_DEF_CODE;
+  {!} Windows.LeaveCriticalSection(RedirCritSection);
+end; // .function Hook_OnMp3Start
+
+function Hook_AfterLoadLods (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
+  GameExt.FireEvent('OnAfterLoadLods', nil, 0);
+  result := Core.EXEC_DEF_CODE;
+end; // .function Hook_AfterLoadLods
 
 procedure RedirectFile (const OldFileName, NewFileName: string);
 var
   Redirection:  TString;
    
 begin
+  {!} Windows.EnterCriticalSection(RedirCritSection);
+
   if NewFileName = '' then begin
     if OldFileName = '' then begin
       LodRedirs.Clear;
@@ -267,6 +355,8 @@ begin
       Redirection.Value :=  NewFileName;
     end; // .else
   end; // .else
+  
+  {!} Windows.LeaveCriticalSection(RedirCritSection);
 end; // .procedure RedirectFile
 
 procedure GlobalRedirectFile (const OldFileName, NewFileName: string);
@@ -274,6 +364,8 @@ var
   Redirection:  TString;
    
 begin
+  {!} Windows.EnterCriticalSection(RedirCritSection);
+
   if NewFileName = '' then begin
     if OldFileName = '' then begin
       GlobalLodRedirs.Clear;
@@ -292,6 +384,8 @@ begin
       Redirection.Value :=  NewFileName;
     end; // .else
   end; // .else
+  
+  {!} Windows.LeaveCriticalSection(RedirCritSection);
 end; // .procedure GlobalRedirectFile
 
 procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
@@ -300,39 +394,17 @@ begin
 end; // .procedure OnBeforeErmInstructions
 
 procedure OnSavegameWrite (Event: PEvent); stdcall;
-var
-{U} Redirection:  TString;
-    OldFileName:  string;
-    NumRedirs:    integer;
-    
-  procedure WriteStr (const Str: string);
-  var
-    StrLen: integer;
-     
-  begin
-    StrLen  :=  Length(Str);
-    Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, LODREDIR_SAVE_SECTION);
-    
-    if StrLen > 0 then begin
-      Stores.WriteSavegameSection(StrLen, pointer(Str), LODREDIR_SAVE_SECTION);
-    end; // .if
-  end; // .procedure WriteStr
-
 begin
-  Redirection :=  nil;
-  // * * * * * //
-  NumRedirs :=  LodRedirs.ItemCount;
-  Stores.WriteSavegameSection(sizeof(NumRedirs), @NumRedirs, LODREDIR_SAVE_SECTION);
-  
-  LodRedirs.BeginIterate;
-  
-  while LodRedirs.IterateNext(OldFileName, pointer(Redirection)) do begin
-    WriteStr(OldFileName);
-    WriteStr(Redirection.Value);
-    Redirection :=  nil;
-  end; // .while
-  
-  LodRedirs.EndIterate;
+  with Stores.NewRider(LODREDIR_SAVE_SECTION) do begin
+    WriteInt(LodRedirs.ItemCount);
+
+    with DataLib.IterateDict(LodRedirs) do begin
+      while IterNext do begin
+        WriteStr(IterKey);
+        WriteStr(TString(IterValue).Value);
+      end; // .while
+    end; // .with
+  end; // .with
 end; // .procedure OnSavegameWrite
 
 procedure OnSavegameRead (Event: PEvent); stdcall;
@@ -341,48 +413,51 @@ var
   OldFileName:  string;
   NewFileName:  string;
   i:            integer;
-    
-  function ReadStr: string;
-  var
-    StrLen: integer;
-     
-  begin
-    Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, LODREDIR_SAVE_SECTION);
-    SetLength(result, StrLen);
-    
-    if StrLen > 0 then begin
-      Stores.ReadSavegameSection(StrLen, pointer(result), LODREDIR_SAVE_SECTION);
-    end; // .if
-  end; // .function ReadStr
 
 begin
+  {!} Windows.EnterCriticalSection(RedirCritSection);
   LodRedirs.Clear;
-  Stores.ReadSavegameSection(sizeof(NumRedirs), @NumRedirs, LODREDIR_SAVE_SECTION);
-  
-  for i := 0 to NumRedirs - 1 do begin
-    OldFileName             :=  ReadStr;
-    NewFileName             :=  ReadStr;
-    LodRedirs[OldFileName]  :=  TString.Create(NewFileName);
-  end; // .for
+
+  with Stores.NewRider(LODREDIR_SAVE_SECTION) do begin
+    NumRedirs := ReadInt;
+
+    for i := 0 to NumRedirs - 1 do begin
+      OldFileName            := ReadStr;
+      NewFileName            := ReadStr;
+      LodRedirs[OldFileName] := TString.Create(NewFileName);
+    end; // .for
+  end; // .with 
+
+  {!} Windows.LeaveCriticalSection(RedirCritSection);
 end; // .procedure OnSavegameRead
 
 procedure OnBeforeWoG (Event: PEvent); stdcall;
 begin
-  // Remove WoG h3custom and h3wog lods registration
+  (* Remove WoG h3custom and h3wog lods registration *)
   PWORD($7015E5)^ :=  $38EB;
   Core.Hook(@Hook_LoadLods, Core.HOOKTYPE_BRIDGE, 5, Ptr($559408));
   
-  // Lods files redirection mechanism
+  (* Lods files redirection mechanism *)
   Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FB106));
   Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FACA6));
 end; // .procedure OnBeforeWoG
 
+procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
-  GlobalLodRedirs :=  AssocArrays.NewStrictAssocArr(TString);
-  LodRedirs       :=  AssocArrays.NewStrictAssocArr(TString);
-  LodList         :=  Lists.NewSimpleStrList;
+  (* Mp3 redirection mechanism *)
+  Core.ApiHook(@Hook_OnMp3Start, Core.HOOKTYPE_BRIDGE, Ptr($59AC51));
+
+  LoadGlobalRedirectionConfig(GLOBAL_REDIRECTIONS_CONFIG_DIR, REDIRECT_MISSING_AND_EXISTING);
+end; // .procedure OnAfterWoG
+
+begin
+  Windows.InitializeCriticalSection(RedirCritSection);
+  GlobalLodRedirs := AssocArrays.NewStrictAssocArr(TString);
+  LodRedirs       := AssocArrays.NewStrictAssocArr(TString);
+  LodList         := Lists.NewSimpleStrList;
 
   GameExt.RegisterHandler(OnBeforeWoG,              'OnBeforeWoG');
+  GameExt.RegisterHandler(OnAfterWoG,               'OnAfterWoG');
   GameExt.RegisterHandler(OnBeforeErmInstructions,  'OnBeforeErmInstructions');
   GameExt.RegisterHandler(OnSavegameWrite,          'OnSavegameWrite');
   GameExt.RegisterHandler(OnSavegameRead,           'OnSavegameRead');

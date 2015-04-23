@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, Utils, Crypto, TextScan, AssocArrays, CFiles, Files, Ini,
+  SysUtils, Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini,
   Lists, StrLib, Math, Windows,
   Core, Heroes, GameExt;
 
@@ -23,6 +23,7 @@ const
   ERM_CMD_MAX_PARAMS_NUM  = 16;
   MAX_ERM_SCRIPTS_NUM     = 100;
   MIN_ERM_SCRIPT_SIZE     = Length('ZVSE'#13#10);
+  LINE_END_MARKER         = #10;
 
   (* Erm script state*)
   SCRIPT_NOT_USED = 0;
@@ -102,6 +103,7 @@ const
   TRIGGER_INVALID   = -1;
   
   (* Era Triggers *)
+  FIRST_ERA_TRIGGER                 = 77000;
   TRIGGER_BEFORE_SAVE_GAME          = 77000;  // DEPRECATED;
   TRIGGER_SAVEGAME_WRITE            = 77001;
   TRIGGER_SAVEGAME_READ             = 77002;
@@ -118,6 +120,9 @@ const
   TRIGGER_ONSTACKTOSTACKDAMAGE      = 77012;
   TRIGGER_ONAICALCSTACKATTACKEFFECT = 77013;
   TRIGGER_ONCHAT                    = 77014;
+  TRIGGER_ONGAMEENTER               = 77015;
+  TRIGGER_ONGAMELEAVE               = 77016;
+  {!} LAST_ERA_TRIGGER              = TRIGGER_ONGAMELEAVE;
   
   ZvsProcessErm:  Utils.TProcedure  = Ptr($74C816);
 
@@ -177,9 +182,15 @@ type
   PErmCmdParams = ^TErmCmdParams;
   TErmCmdParams = array [0..ERM_CMD_MAX_PARAMS_NUM - 1] of TErmCmdParam;
 
+  TErmCmdId = packed record
+    case boolean of
+      TRUE:  (Name: array [0..1] of char);
+      FALSE: (Id: word);
+  end; // .record TErmCmdId
+  
   PErmCmd = ^TErmCmd;
   TErmCmd = packed record
-    Name:         array [0..1] of char;
+    CmdId:        TErmCmdId;
     Disabled:     boolean;
     PrevDisabled: boolean;
     Conditions:   TErmCmdConditions;
@@ -192,17 +203,27 @@ type
   
   PErmVVars = ^TErmVVars;
   TErmVVars = array [1..10000] of integer;
+  PWVars    = ^TWVars;
+  TWVars    = array [0..255, 1..200] of integer;
   TErmZVar  = array [0..511] of char;
   PErmZVars = ^TErmZVars;
   TErmZVars = array [1..1000] of TErmZVar;
+  PErmNZVars = ^TErmNZVars;
+  TErmNZVars = array [1..10] of TErmZVar;
   PErmYVars = ^TErmYVars;
   TErmYVars = array [1..100] of integer;
+  PErmNYVars = ^TErmNYVars;
+  TErmNYVars = array [1..100] of integer;
   PErmXVars = ^TErmXVars;
   TErmXVars = array [1..16] of integer;
   PErmFlags = ^TErmFlags;
   TErmFlags = array [1..1000] of boolean;
   PErmEVars = ^TErmEVars;
   TErmEVars = array [1..100] of single;
+  PErmNEVars = ^TErmNEVars;
+  TErmNEVars = array [1..100] of single;
+  PErmQuickVars = ^TErmQuickVars;
+  TErmQuickVars = array [0..14] of integer;
 
   TZvsLoadErmScript = function (ScriptId: integer): integer; cdecl;
   TZvsLoadErmTxt    = function (IsNewLoad: integer): integer; cdecl;
@@ -249,11 +270,12 @@ const
 
 procedure ZvsProcessCmd (Cmd: PErmCmd);
 procedure ShowMessage (const Mes: string);
-procedure ExecErmCmd (const CmdStr: string); stdcall;
+procedure ExecErmCmd (const CmdStr: string);
 procedure ReloadErm; stdcall;
 procedure ExtractErm; stdcall;
-  
-  
+procedure FireErmEventEx (EventId: integer; Params: array of integer);  
+
+
 (***) implementation (***)
 uses Stores;
 
@@ -265,7 +287,7 @@ const
 var
 {O} ScriptNames:      Lists.TStringList;
 {O} ErmScanner:       TextScan.TTextScanner;
-{O} ErmCmdCach:       {O} TAssocArray {OF PErmCmd};
+{O} ErmCmdCache:      {O} TAssocArray {OF PErmCmd};
 {O} SavedYVars:       {O} Lists.TList {OF TYVars};
     ErmTriggerDepth:  integer = 0;
 
@@ -292,7 +314,7 @@ begin
     'y':      ValType :=  ValY;
     'z':      ValType :=  ValZ;
   else
-    result  :=  FALSE;
+    result := FALSE;
     ShowMessage('Invalid ERM value type: "' + c + '"');
   end; // .switch
 end; // .function GetErmValType
@@ -327,27 +349,19 @@ asm
   ADD ESP, $0C
 end; // .procedure ZvsProcessCmd
 
-procedure ClearErmCmdCach;
-var
-{U} Cmd:  PErmCmd;
-    Key:  string;
-  
+procedure ClearErmCmdCache;
 begin
-  Cmd :=  nil;
-  // * * * * * //
-  ErmCmdCach.BeginIterate;
-  
-  while ErmCmdCach.IterateNext(Key, pointer(Cmd)) do begin
-    FreeMem(Cmd.CmdHeader.Value);
-    Dispose(Cmd); Cmd :=  nil;
-  end; // .while
-  
-  ErmCmdCach.EndIterate;
+  with DataLib.IterateDict(ErmCmdCache) do begin
+    while IterNext do begin
+      FreeMem(PErmCmd(IterValue).CmdHeader.Value);
+      Dispose(PErmCmd(IterValue));
+    end; // .while
+  end; // .with 
 
-  ErmCmdCach.Clear;
-end; // .procedure ClearErmCmdCach
+  ErmCmdCache.Clear;
+end; // .procedure ClearErmCmdCache
 
-procedure ExecErmCmd (const CmdStr: string);
+procedure ExecSingleErmCmd (const CmdStr: string);
 const
   LETTERS = ['A'..'Z'];
   DIGITS  = ['0'..'9'];
@@ -367,115 +381,121 @@ var
     StartPos: integer;
     Token:    string;
     c:        char;
-  
+
   begin
-    result  :=  ErmScanner.GetCurrChar(c) and (c in NUMBER);
-    
+    result := ErmScanner.GetCurrChar(c) and (c in NUMBER);
+
     if result then begin
       if c in SIGNS then begin
-        StartPos  :=  ErmScanner.Pos;
+        StartPos := ErmScanner.Pos;
         ErmScanner.GotoNextChar;
         ErmScanner.SkipCharset(DIGITS);
-        Token :=  ErmScanner.GetSubstrAtPos(StartPos, ErmScanner.Pos - StartPos);
+        Token := ErmScanner.GetSubstrAtPos(StartPos, ErmScanner.Pos - StartPos);
       end // .if
       else begin
         ErmScanner.ReadToken(DIGITS, Token);
       end; // .else
       
-      result  :=
-        SysUtils.TryStrToInt(Token, Num)  and
-        ErmScanner.GetCurrChar(c)         and
-        (c in DELIMS);
+      result := SysUtils.TryStrToInt(Token, Num) and ErmScanner.GetCurrChar(c) and (c in DELIMS);
     end; // .if
   end; // .function ReadNum
   
   function ReadArg (out Arg: TErmCmdParam): boolean;
   var
-    ValType:  TErmValType;
-    IndType:  TErmValType;
+    ValType: TErmValType;
+    IndType: TErmValType;
   
   begin
-    result  :=  ErmScanner.GetCurrChar(c) and GetErmValType(c, ValType);
+    result := ErmScanner.GetCurrChar(c) and GetErmValType(c, ValType);
     
     if result then begin
-      IndType :=  ValNum;
+      IndType := ValNum;
       
       if ValType <> ValNum then begin
-        result  :=
-          ErmScanner.GotoNextChar   and
-          ErmScanner.GetCurrChar(c) and
-          GetErmValType(c, IndType);
-        
+        result := ErmScanner.GotoNextChar and ErmScanner.GetCurrChar(c) and
+                  GetErmValType(c, IndType);
+
         if result and (IndType <> ValNum) then begin
           ErmScanner.GotoNextChar;
         end; // .if
       end; // .if
+      
       if result then begin
-        result  :=  ReadNum(Arg.Value);
+        result := ReadNum(Arg.Value);
         
         if result then begin
-          Arg.ValType :=  ORD(IndType) shl 4 + ORD(ValType);
+          Arg.ValType := ORD(IndType) shl 4 + ORD(ValType);
         end; // .if
       end; // .if
     end; // .if
   end; // .function ReadArg
   
 begin
-  Cmd :=  ErmCmdCach[CmdStr];
+  Cmd := ErmCmdCache[CmdStr];
   // * * * * * //
-  Res :=  TRUE;
+  Res := TRUE;
   
   if Cmd = nil then begin
     New(Cmd);
     FillChar(Cmd^, sizeof(Cmd^), 0);
-    ErmScanner.Connect(CmdStr, #10);
-    Res     :=  ErmScanner.ReadToken(LETTERS, CmdName) and (Length(CmdName) = 2);
-    NumArgs :=  0;
+    ErmScanner.Connect(CmdStr, LINE_END_MARKER);
+    Res     := ErmScanner.ReadToken(LETTERS, CmdName) and (Length(CmdName) = 2);
+    NumArgs := 0;
     
-    while
-      Res                                 and
-      ErmScanner.GetCurrChar(c)           and
-      (c <> ':')                          and
-      (NumArgs < ERM_CMD_MAX_PARAMS_NUM)
+    while Res and ErmScanner.GetCurrChar(c) and (c <> ':') and (NumArgs < ERM_CMD_MAX_PARAMS_NUM)
     do begin
-      Res :=  ReadArg(Cmd.Params[NumArgs]) and ErmScanner.GetCurrChar(c);
-      
+      Res := ReadArg(Cmd.Params[NumArgs]) and ErmScanner.GetCurrChar(c);
+
       if Res then begin
         Inc(NumArgs);
-        
+
         if c = '/' then begin
           ErmScanner.GotoNextChar;
         end; // .if
       end; // .if
     end; // .while
-    
-    Res :=  Res and ErmScanner.GotoNextChar;
-    
+
+    Res := Res and ErmScanner.GotoNextChar;
+
     if Res then begin
+      // Allocate memory, because ERM engine changes command contents during execution
       GetMem(Cmd.CmdHeader.Value, Length(CmdStr) + 1);
       Utils.CopyMem(Length(CmdStr) + 1, pointer(CmdStr), Cmd.CmdHeader.Value);
       
-      Cmd.CmdBody.Value   :=  Utils.PtrOfs(Cmd.CmdHeader.Value, ErmScanner.Pos - 1);
-      Cmd.Name[0]         :=  CmdName[1];
-      Cmd.Name[1]         :=  CmdName[2];
-      Cmd.NumParams       :=  NumArgs;
-      Cmd.CmdHeader.Len   :=  ErmScanner.Pos - 1;
-      Cmd.CmdBody.Len     :=  Length(CmdStr) - ErmScanner.Pos + 1;
+      Cmd.CmdBody.Value := Utils.PtrOfs(Cmd.CmdHeader.Value, ErmScanner.Pos - 1);
+      Cmd.CmdId.Name[0] := CmdName[1];
+      Cmd.CmdId.Name[1] := CmdName[2];
+      Cmd.NumParams     := NumArgs;
+      Cmd.CmdHeader.Len := ErmScanner.Pos - 1;
+      Cmd.CmdBody.Len   := Length(CmdStr) - ErmScanner.Pos + 1;
       
-      if ErmCmdCach.ItemCount = ERM_CMD_CACH_LIMIT then begin
-        ClearErmCmdCach;
+      if ErmCmdCache.ItemCount = ERM_CMD_CACH_LIMIT then begin
+        ClearErmCmdCache;
       end; // .if
       
-      ErmCmdCach[CmdStr]  :=  Cmd;
+      ErmCmdCache[CmdStr] := Cmd;
     end; // .if
   end; // .if
   
   if not Res then begin
-    ShowMessage('Invalid erm command "' + CmdStr + '"');
+    ShowMessage('ExecErmCmd: Invalid command "' + CmdStr + '"');
   end // .if
   else begin
     ZvsProcessCmd(Cmd);
   end; // .else
+end; // .procedure ExecSingleErmCmd
+
+procedure ExecErmCmd (const CmdStr: string);
+var
+  Commands: Utils.TArrayOfStr;
+  i:        integer;
+   
+begin
+  Commands := StrLib.ExplodeEx(CmdStr, ';', StrLib.INCLUDE_DELIM, not StrLib.LIMIT_TOKENS, 0);
+
+  for i := 0 to High(Commands) - 1 do begin
+    ExecSingleErmCmd(Commands[i]);
+  end; // .for
 end; // .procedure ExecErmCmd
 
 procedure LoadScriptFromMemory (const ScriptName, ScriptContents: string);
@@ -769,23 +789,38 @@ begin
   ExecErmCmd('IF:Lz1;');
 end; // .procedure ExtractErm
 
-function Hook_ProcessErm (Context: Core.PHookContext): LONGBOOL; stdcall;
+procedure FireErmEventEx (EventId: integer; Params: array of integer);
 var
-{O} YVars:      TYVars;
-    EventArgs:  TOnBeforeTriggerArgs;
+  i: integer;
 
 begin
-  YVars :=  TYVars.Create;
-  // * * * * * //
+  {!} Assert(Length(Params) <= Length(GameExt.EraEventParams^));
+  GameExt.EraSaveEventParams;
   
+  for i := 0 to High(Params) do begin
+    EraEventParams[i] := Params[i];
+  end; // .for
+  
+  Erm.FireErmEvent(EventId);
+  GameExt.EraRestoreEventParams;
+end; // .procedure FireErmEventEx
+
+function Hook_ProcessErm (Context: Core.PHookContext): LONGBOOL; stdcall;
+var
+{O} YVars:     TYVars;
+    EventArgs: TOnBeforeTriggerArgs;
+
+begin
+  YVars := TYVars.Create;
+  // * * * * * //
   if CurrErmEventID^ >= Erm.TRIGGER_FU30000 then begin
     SetLength(YVars.Value, Length(y^));
     Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
   end; // .if
   
-  SavedYVars.Add(YVars); YVars  :=  nil;
+  SavedYVars.Add(YVars); YVars := nil;
   
-  (*  ProcessErm - initializing v996..v1000 variables  *)
+  (* ProcessErm - initializing v996..v1000 variables *)
   asm
     CMP DWORD [$793C80], 0
     JL @L005
@@ -820,25 +855,25 @@ begin
   end; // .asm
   
   Inc(ErmTriggerDepth);
-  EventArgs.TriggerID         :=  CurrErmEventID^;
-  EventArgs.BlockErmExecution :=  FALSE;
+  EventArgs.TriggerID         := CurrErmEventID^;
+  EventArgs.BlockErmExecution := FALSE;
   GameExt.FireEvent('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
   
   if EventArgs.BlockErmExecution then begin
-    CurrErmEventID^ :=  TRIGGER_INVALID;
+    CurrErmEventID^ := TRIGGER_INVALID;
   end; // .if
   
-  result  :=  Core.EXEC_DEF_CODE;
+  result := Core.EXEC_DEF_CODE;
   // * * * * * //
   SysUtils.FreeAndNil(YVars);
-end; // .function Hook_ProcessErm_End
+end; // .function Hook_ProcessErm
 
 function Hook_ProcessErm_End (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
-{O} YVars:  TYVars;
+{O} YVars: TYVars;
 
 begin
-  YVars :=  SavedYVars.Pop;
+  YVars := SavedYVars.Pop;
   // * * * * * //
   GameExt.FireEvent('OnAfterTrigger', CurrErmEventID, sizeof(CurrErmEventID^));
   
@@ -847,7 +882,7 @@ begin
   end; // .if
   
   Dec(ErmTriggerDepth);
-  result  :=  Core.EXEC_DEF_CODE;
+  result := Core.EXEC_DEF_CODE;
   // * * * * * //
   SysUtils.FreeAndNil(YVars);
 end; // .function Hook_ProcessErm_End
@@ -865,23 +900,23 @@ end; // .procedure Hook_ErmCastleBuilding
 
 function Hook_ErmHeroArt (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  result  :=  ((PINTEGER(Context.EBP - $E8)^ shr 8) and 7) = 0;
+  result := ((PINTEGER(Context.EBP - $E8)^ shr 8) and 7) = 0;
   
   if not result then begin
-    Context.RetAddr :=  Ptr($744B85);
+    Context.RetAddr := Ptr($744B85);
   end; // .if
 end; // .function Hook_ErmHeroArt
 
 function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  f[1]    :=  FALSE;
-  result  :=  Core.EXEC_DEF_CODE;
+  f[1]   := FALSE;
+  result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_FindFreeSlot
 
 function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  f[1]    :=  TRUE;
-  result  :=  Core.EXEC_DEF_CODE;
+  f[1]   := TRUE;
+  result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_FoundFreeSlot
 
 function Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookContext): LONGBOOL; stdcall;
@@ -893,24 +928,24 @@ var
   Hero: pointer;
 
 begin
-  Hero  :=  PPOINTER(Context.EBP + HERO_PTR_OFFSET)^;
+  Hero := PPOINTER(Context.EBP + HERO_PTR_OFFSET)^;
   Dec(PBYTE(Utils.PtrOfs(Hero, NUM_BAG_ARTS_OFFSET))^);
-  result  :=  Core.EXEC_DEF_CODE;
+  result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_DeleteFromBag
 
 function Hook_DlgCallback (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
-  NO_CMD  = 0;
+  NO_CMD = 0;
 
 begin
-  ErmDlgCmd^  :=  NO_CMD;
-  result      :=  Core.EXEC_DEF_CODE;
+  ErmDlgCmd^ := NO_CMD;
+  result     := Core.EXEC_DEF_CODE;
 end; // .function Hook_DlgCallback
 
 function Hook_CM3 (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   MOUSE_STRUCT_ITEM_OFS = +$8;
-  CM3_RES_ADDR = $A6929C;
+  CM3_RES_ADDR          = $A6929C;
 
 var
   SwapManager: integer;
@@ -932,7 +967,7 @@ begin
   end; // .asm
   
   PINTEGER(Context.EDI + MOUSE_STRUCT_ITEM_OFS)^ := PINTEGER(CM3_RES_ADDR)^;
-  result :=  Core.EXEC_DEF_CODE;
+  result := Core.EXEC_DEF_CODE;
 end; // .function Hook_CM3
 
 procedure OnSavegameWrite (Event: GameExt.PEvent); stdcall;
@@ -991,17 +1026,17 @@ end; // .function Hook_LoadErmScripts
 
 function Hook_LoadErtFile (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
-  ARG_FILENAME  = 2;
+  ARG_FILENAME = 2;
 
 var
   FileName: pchar;
   
 begin
-  FileName  :=  pchar(PINTEGER(Context.EBP + 12)^);
+  FileName := pchar(PINTEGER(Context.EBP + 12)^);
   Utils.CopyMem(SysUtils.StrLen(FileName) + 1, FileName, Ptr(Context.EBP - $410));
   
-  Context.RetAddr :=  Ptr($72C760);
-  result          :=  not Core.EXEC_DEF_CODE;
+  Context.RetAddr := Ptr($72C760);
+  result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadErtFile
 
 procedure OnBeforeErm (Event: GameExt.PEvent); stdcall;
@@ -1017,7 +1052,7 @@ end; // .procedure OnBeforeErm
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* Remove WoG CM3 trigger *)
-  PINTEGER($78C210)^ := $887668;
+  Core.p.WriteDword($78C210, $887668);
 end; // .procedure OnBeforeWoG
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -1048,19 +1083,16 @@ begin
   Core.Hook(@Hook_LoadErtFile, Core.HOOKTYPE_BRIDGE, 5, Ptr($72C660));
   
   (* Disable connection between script number and option state in WoG options *)
-  PINTEGER($777E48    )^  :=  $000118E9;
-  PINTEGER($777E48 + 4)^  :=  integer($90909000);
-  PWORD   ($777E48 + 8)^  :=  $9090;
+  Core.p.WriteDataPatch($777E48, ['E9180100009090909090']);
   
   (* Fix CM3 trigger allowing to handle all clicks *)
   Core.ApiHook(@Hook_CM3, Core.HOOKTYPE_BRIDGE, Ptr($5B0255));
-  PINTEGER($5B02DD)^ := integer($8D08478B);
-  PWORD($5B02DD + 4)^ := word($FF70);
+  Core.p.WriteDataPatch($5B02DD, ['8B47088D70FF']);
 end; // .procedure OnAfterWoG
 
 begin
-  ErmScanner  :=  TextScan.TTextScanner.Create;
-  ErmCmdCach  :=  AssocArrays.NewSimpleAssocArr
+  ErmScanner  := TextScan.TTextScanner.Create;
+  ErmCmdCache := AssocArrays.NewSimpleAssocArr
   (
     Crypto.AnsiCRC32,
     AssocArrays.NO_KEY_PREPROCESS_FUNC
