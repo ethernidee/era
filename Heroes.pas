@@ -1,13 +1,13 @@
-UNIT Heroes;
+unit Heroes;
 {
 DESCRIPTION:  Internal game functions and structures
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES Utils;
+(***)  interface  (***)
+uses Utils;
 
-CONST
+const
   (* Game settings *)
   GAME_SETTINGS_FILE    = 'heroes3.ini';
   GAME_SETTINGS_SECTION = 'Settings';
@@ -41,8 +41,8 @@ CONST
   TEST_READ_OPT:              PINTEGER  = Ptr($69957C);
   TEST_BLIT_OPT:              PINTEGER  = Ptr($699580);
   BINK_VIDEO_OPT:             PINTEGER  = Ptr($6987F8);
-  UNIQUE_SYSTEM_ID_OPT:       PCHAR     = Ptr($698838);
-  NETWORK_DEF_NAME_OPT:       PCHAR     = Ptr($698867);
+  UNIQUE_SYSTEM_ID_OPT:       pchar     = Ptr($698838);
+  NETWORK_DEF_NAME_OPT:       pchar     = Ptr($698867);
   AUTOSAVE_OPT:               PINTEGER  = Ptr($6987C0);
   SHOW_COMBAT_GRID_OPT:       PINTEGER  = Ptr($69880C);
   SHOW_COMBAT_MOUSE_HEX_OPT:  PINTEGER  = Ptr($698810);
@@ -58,8 +58,8 @@ CONST
   MAIN_GAME_X_OPT:            PINTEGER  = Ptr($698800);
   MAIN_GAME_Y_OPT:            PINTEGER  = Ptr($698804);
   MAIN_GAME_FULL_SCREEN_OPT:  PINTEGER  = Ptr($698808);
-  APP_PATH_OPT:               PCHAR     = Ptr($698614);
-  CD_DRIVE_OPT:               PCHAR     = Ptr($698888);
+  APP_PATH_OPT:               pchar     = Ptr($698614);
+  CD_DRIVE_OPT:               pchar     = Ptr($698888);
   
   (* Dialog Ids *)
   ADVMAP_DLGID              = $402AE0;
@@ -68,7 +68,7 @@ CONST
   HERO_MEETING_SCREEN_DLGID = $5AE6E0;
   TOWN_SCREEN_DLGID         = $5C5CB0;
 
-  LOAD_TXT_FUNC   = $55C2B0;  // F (Name: PCHAR); FASTCALL;
+  LOAD_TXT_FUNC   = $55C2B0;  // F (Name: pchar); FASTCALL;
   UNLOAD_TXT_FUNC = $55D300;  // F (PTxtFile); FASTCALL;
   {
   F
@@ -81,75 +81,75 @@ CONST
   ); THISCALL ([$699538]);
   }
   SAVEGAME_FUNC     = $4BEB60;
-  LOAD_LOD          = $559420;  // F (Name: PCHAR); THISCALL (PLod);
+  LOAD_LOD          = $559420;  // F (Name: pchar); THISCALL (PLod);
   LOAD_LODS         = $559390;
   LOAD_DEF_SETTINGS = $50B420;  // F();
-  SMACK_OPEN        = $63A464;  // F(FileName: PCHAR; BufSize, BufMask: INT): HANDLE OR 0; STDCALL;
-  BINK_OPEN         = $63A390;  // F(hFile, BufMask OR $8000000: INT): HANDLE OR 0; STDCALL;
+  SMACK_OPEN        = $63A464;  // F(FileName: pchar; BufSize, BufMask: int): HANDLE or 0; stdcall;
+  BINK_OPEN         = $63A390;  // F(hFile, BufMask or $8000000: int): HANDLE or 0; stdcall;
   
   hWnd:           PINTEGER  = Ptr($699650);
   hHeroes3Event:  PINTEGER  = Ptr($69965C);
-  MarkedSavegame: PCHAR     = Ptr($68338C);
+  MarkedSavegame: pchar     = Ptr($68338C);
   
   GameVersion:  PINTEGER  = Ptr($67F554);
 
 
-TYPE
+type
   PTxtFile  = ^TTxtFile;
-  TTxtFile  = PACKED RECORD
-    Dummy:    ARRAY [0..$17] OF BYTE;
-    RefCount: INTEGER;
+  TTxtFile  = packed record
+    Dummy:    array [0..$17] of byte;
+    RefCount: integer;
     (* Dummy *)
-  END; // .RECORD TTxtFile
+  end; // .record TTxtFile
   
   PLod  = ^TLod;
-  TLod  = PACKED RECORD
-    Dummy:  ARRAY [0..399] OF BYTE;
-  END; // .RECORD TLod
+  TLod  = packed record
+    Dummy:  array [0..399] of byte;
+  end; // .record TLod
   
   PGameState  = ^TGameState;
-  TGameState  = PACKED RECORD
-    RootDlgId:    INTEGER;
-    CurrentDlgId: INTEGER;
-  END; // .RECORD TGameState
+  TGameState  = packed record
+    RootDlgId:    integer;
+    CurrentDlgId: integer;
+  end; // .record TGameState
 
   PPINTEGER = ^PINTEGER;
 
   PPAdvManager  = ^PAdvManager;
   PAdvManager   = ^TAdvManager;
-  TAdvManager   = PACKED RECORD
-    Dummy:            ARRAY [0..79] OF BYTE;
+  TAdvManager   = packed record
+    Dummy:            array [0..79] of byte;
     RootDlgIdPtr:     PPINTEGER;
     CurrentDlgIdPtr:  PPINTEGER;
     (* Dummy *)
-  END; // .RECORD TAdvManager
+  end; // .record TAdvManager
   
   PScreenPcx16  = ^TScreenPcx16;
-  TScreenPcx16  = PACKED RECORD
-    Dummy:  ARRAY [0..35] OF BYTE;
-    Width:  INTEGER;
-    Height: INTEGER;
+  TScreenPcx16  = packed record
+    Dummy:  array [0..35] of byte;
+    Width:  integer;
+    Height: integer;
     (* Dummy *)
-  END; // .RECORD TScreenPcx16
+  end; // .record TScreenPcx16
   
   PWndManager = ^TWndManager;
-  TWndManager = PACKED RECORD
-    Dummy:        ARRAY [0..63] OF BYTE;
+  TWndManager = packed record
+    Dummy:        array [0..63] of byte;
     ScreenPcx16:  PScreenPcx16;
     (* Dummy *)
-  END; // .RECORD TWndManager
+  end; // .record TWndManager
 
-  TMAlloc = FUNCTION (Size: INTEGER): POINTER; CDECL;
-  TMFree  = PROCEDURE (Addr: POINTER); CDECL;
+  TMAlloc = function (Size: integer): pointer; cdecl;
+  TMFree  = procedure (Addr: pointer); cdecl;
   
-  TGzipWrite  = PROCEDURE (Data: POINTER; DataSize: INTEGER); CDECL;
-  TGzipRead   = PROCEDURE (Dest: POINTER; DataSize: INTEGER); CDECL;
-  TWndProc    = FUNCTION (hWnd, Msg, wParam, lParam: INTEGER): LONGBOOL; STDCALL;
+  TGzipWrite  = procedure (Data: pointer; DataSize: integer); cdecl;
+  TGzipRead   = procedure (Dest: pointer; DataSize: integer); cdecl;
+  TWndProc    = function (hWnd, Msg, wParam, lParam: integer): LONGBOOL; stdcall;
   
-  TGetBattleCellByPos = FUNCTION (Pos: INTEGER): POINTER; CDECL;
+  TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
 
 
-CONST
+const
   MAlloc: TMAlloc = Ptr($617492);
   MFree:  TMFree  = Ptr($60B0F0);
 
@@ -163,143 +163,143 @@ CONST
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
 
 
-FUNCTION  LoadTxt (Name: PCHAR): {n} PTxtFile; STDCALL;
-PROCEDURE ForceTxtUnload (Name: PCHAR); STDCALL;
-PROCEDURE LoadLod (CONST LodName: STRING; Res: PLod);
-PROCEDURE GetGameState (OUT GameState: TGameState); STDCALL;
-FUNCTION  GetMapSize: INTEGER;
-FUNCTION  IsTwoLevelMap: BOOLEAN;
-FUNCTION  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): INTEGER;
-FUNCTION  GetStackIdByPos (StackPos: INTEGER): INTEGER;
-PROCEDURE RedrawHeroMeetingScreen;
+function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
+procedure ForceTxtUnload (Name: pchar); stdcall;
+procedure LoadLod (const LodName: string; Res: PLod);
+procedure GetGameState (out GameState: TGameState); stdcall;
+function  GetMapSize: integer;
+function  IsTwoLevelMap: boolean;
+function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
+function  GetStackIdByPos (StackPos: integer): integer;
+procedure RedrawHeroMeetingScreen;
 
   
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-FUNCTION LoadTxt (Name: PCHAR): {n} PTxtFile;
-BEGIN
-  ASM
+function LoadTxt (Name: pchar): {n} PTxtFile;
+begin
+  asm
     MOV ECX, Name
     MOV EAX, LOAD_TXT_FUNC
     CALL EAX
-    MOV @RESULT, EAX
-  END; // .ASM
-END; // .FUNCTION LoadTxt
+    MOV @result, EAX
+  end; // .asm
+end; // .function LoadTxt
 
-PROCEDURE ForceTxtUnload (Name: PCHAR);
-VAR
+procedure ForceTxtUnload (Name: pchar);
+var
 {U} Txt:  PTxtFile;
   
-BEGIN
+begin
   Txt :=  LoadTxt(Name);
   // * * * * * //
-  IF Txt <> NIL THEN BEGIN
+  if Txt <> nil then begin
     Txt.RefCount  :=  1;
     
-    ASM
+    asm
       MOV ECX, Txt
       MOV EAX, UNLOAD_TXT_FUNC
       CALL EAX
-    END; // .ASM
-  END; // .IF
-END; // .PROCEDURE ForceTxtUnload
+    end; // .asm
+  end; // .if
+end; // .procedure ForceTxtUnload
 
-PROCEDURE LoadLod (CONST LodName: STRING; Res: PLod);
-BEGIN
-  {!} ASSERT(Res <> NIL);
-  ASM
+procedure LoadLod (const LodName: string; Res: PLod);
+begin
+  {!} Assert(Res <> nil);
+  asm
     MOV ECX, Res
     PUSH LodName
     MOV EAX, LOAD_LOD
     CALL EAX
-  END; // .ASM
-END; // .PROCEDURE LoadLod
+  end; // .asm
+end; // .procedure LoadLod
 
-PROCEDURE GetGameState (OUT GameState: TGameState);
-BEGIN
-  IF AdvManagerPtr^.RootDlgIdPtr <> NIL THEN BEGIN
+procedure GetGameState (out GameState: TGameState);
+begin
+  if AdvManagerPtr^.RootDlgIdPtr <> nil then begin
     GameState.RootDlgId :=  AdvManagerPtr^.RootDlgIdPtr^^;
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     GameState.RootDlgId :=  0;
-  END; // .ELSE
-  IF AdvManagerPtr^.CurrentDlgIdPtr <> NIL THEN BEGIN
+  end; // .else
+  if AdvManagerPtr^.CurrentDlgIdPtr <> nil then begin
     GameState.CurrentDlgId  :=  AdvManagerPtr^.CurrentDlgIdPtr^^;
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     GameState.CurrentDlgId  :=  0;
-  END; // .ELSE
-END; // .PROCEDURE GetDialogsIds
+  end; // .else
+end; // .procedure GetDialogsIds
 
-FUNCTION GetMapSize: INTEGER; ASSEMBLER; {$W+}
-ASM
+function GetMapSize: integer; ASSEMBLER; {$W+}
+asm
   MOV EAX, [$699538]
   MOV EAX, [EAX + $1FC44]
-END; // .FUNCTION GetMapSize
+end; // .function GetMapSize
 
-FUNCTION IsTwoLevelMap: BOOLEAN; ASSEMBLER; {$W+}
-ASM
+function IsTwoLevelMap: boolean; ASSEMBLER; {$W+}
+asm
   MOV EAX, [$699538]
-  MOVZX EAX, BYTE [EAX + $1FC48]
-END; // .FUNCTION IsTwoLevelMap
+  MOVZX EAX, byte [EAX + $1FC48]
+end; // .function IsTwoLevelMap
 
-FUNCTION GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): INTEGER;
-CONST
+function GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
+const
   SLOTS_PER_SIDE  = 21;
   SIDE_OFFSET     = $18;
   STACKID_OFFSET  = $19;
   
-VAR
-  Side: BYTE;
+var
+  Side: byte;
 
-BEGIN
+begin
   Side  :=  BattleCell[SIDE_OFFSET];
   
-  IF Side = 255 THEN BEGIN
-    RESULT  :=  -1;
-  END // .IF
-  ELSE BEGIN
-    RESULT  :=  SLOTS_PER_SIDE * Side + BattleCell[STACKID_OFFSET];
-  END; // .ELSE
-END; // .FUNCTION GetBattleCellStackId
+  if Side = 255 then begin
+    result  :=  -1;
+  end // .if
+  else begin
+    result  :=  SLOTS_PER_SIDE * Side + BattleCell[STACKID_OFFSET];
+  end; // .else
+end; // .function GetBattleCellStackId
 
-FUNCTION GetStackIdByPos (StackPos: INTEGER): INTEGER;
-TYPE
+function GetStackIdByPos (StackPos: integer): integer;
+type
   PStackField = ^TStackField;
-  TStackField = PACKED RECORD
-    v:  INTEGER;
-  END; // .RECORD TStackField
+  TStackField = packed record
+    v:  integer;
+  end; // .record TStackField
 
-CONST
+const
   NO_STACK  = -1;
 
   STACK_POS = $38;
 
-  FUNCTION Stacks (Ind: INTEGER; FieldOfs: INTEGER): PStackField; INLINE;
-  BEGIN
-    RESULT  :=  Utils.PtrOfs(PPOINTER($699420)^, 21708 + 1352 * Ind + FieldOfs);
-  END; // .FUNCTION Stacks
+  function Stacks (Ind: integer; FieldOfs: integer): PStackField; inline;
+  begin
+    result  :=  Utils.PtrOfs(PPOINTER($699420)^, 21708 + 1352 * Ind + FieldOfs);
+  end; // .function Stacks
 
-VAR
-  i:  INTEGER;
+var
+  i:  integer;
   
-BEGIN
-  RESULT  :=  -1;
+begin
+  result  :=  -1;
   i       :=  0;
   
-  WHILE (i < NUM_BATTLE_STACKS) AND (RESULT = NO_STACK) DO BEGIN
-    IF Stacks(i, STACK_POS).v = StackPos THEN BEGIN
-      RESULT  :=  i;
-    END // .IF
-    ELSE BEGIN
-      INC(i);
-    END; // .ELSE
-  END; // .WHILE
-END; // .FUNCTION GetStackIdByPos
+  while (i < NUM_BATTLE_STACKS) and (result = NO_STACK) do begin
+    if Stacks(i, STACK_POS).v = StackPos then begin
+      result  :=  i;
+    end // .if
+    else begin
+      Inc(i);
+    end; // .else
+  end; // .while
+end; // .function GetStackIdByPos
 
-PROCEDURE RedrawHeroMeetingScreen; ASSEMBLER;
-ASM
+procedure RedrawHeroMeetingScreen; ASSEMBLER;
+asm
   MOV ECX, [$6A3D90]
   PUSH ECX
   MOV EAX, $5B1200
@@ -324,6 +324,6 @@ ASM
   POP ECX
   MOV EAX, $5AF150
   CALL EAX
-END; // .PROCEDURE RedrawHeroMeetingScreen
+end; // .procedure RedrawHeroMeetingScreen
 
-END.
+end.

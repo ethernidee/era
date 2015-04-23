@@ -1,59 +1,59 @@
-UNIT EraSettings;
+unit EraSettings;
 {
 DESCRIPTION:  Settings management
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   SysUtils, Utils, Log, Ini,
   Heroes, GameExt, EraLog, SndVid, Tweaks, Stores;
   
   
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-FUNCTION GetOptValue (CONST OptionName: STRING): STRING;
-CONST
+function GetOptValue (const OptionName: string): string;
+const
   ERA_SECTION = 'Era';
 
-BEGIN
-  IF Ini.ReadStrFromIni(OptionName, ERA_SECTION, Heroes.GAME_SETTINGS_FILE, RESULT) THEN BEGIN
-    RESULT := SysUtils.Trim(RESULT);
-  END // .IF
-  ELSE BEGIN
-    RESULT := '';
-  END; // .ELSE
-END; // .FUNCTION GetOptValue
+begin
+  if Ini.ReadStrFromIni(OptionName, ERA_SECTION, Heroes.GAME_SETTINGS_FILE, result) then begin
+    result := SysUtils.Trim(result);
+  end // .if
+  else begin
+    result := '';
+  end; // .else
+end; // .function GetOptValue
 
-PROCEDURE InstallLogger (Logger: Log.TLogger);
-VAR
+procedure InstallLogger (Logger: Log.TLogger);
+var
   LogRec: TLogRec;
 
-BEGIN
-  {!} ASSERT(Logger <> NIL);
+begin
+  {!} Assert(Logger <> nil);
   Log.Seek(0);
 
-  WHILE Log.Read(LogRec) DO BEGIN
+  while Log.Read(LogRec) do begin
     Logger.Write(LogRec.EventSource, LogRec.Operation, LogRec.Description);
-  END; // .WHILE
+  end; // .while
   
   Log.InstallLogger(Logger, Log.FREE_OLD_LOGGER);
-END; // .PROCEDURE InstallLogger
+end; // .procedure InstallLogger
 
-PROCEDURE OnEraStart (Event: GameExt.PEvent); STDCALL;
-BEGIN
-  IF GetOptValue('Debug') = '1' THEN BEGIN
-    IF GetOptValue('Debug.Destination') = 'File' THEN BEGIN
+procedure OnEraStart (Event: GameExt.PEvent); stdcall;
+begin
+  if GetOptValue('Debug') = '1' then begin
+    if GetOptValue('Debug.Destination') = 'File' then begin
       InstallLogger(EraLog.TFileLogger.Create(GetOptValue('Debug.File')));
-    END // .IF
-    ELSE BEGIN     
+    end // .if
+    else begin     
       InstallLogger(EraLog.TConsoleLogger.Create('Era Log'));
-    END; // .ELSE
-  END // .IF
-  ELSE BEGIN
+    end; // .else
+  end // .if
+  else begin
     InstallLogger(EraLog.TMemoryLogger.Create);
-  END; // .ELSE
+  end; // .else
   
   Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
   
@@ -62,8 +62,8 @@ BEGIN
   Tweaks.FixGetHostByNameOpt  := GetOptValue('FixGetHostByName') = '1';
   Tweaks.UseOnlyOneCpuCoreOpt := GetOptValue('UseOnlyOneCpuCore') = '1';
   Stores.EraSectionsSize      := SysUtils.StrToInt(GetOptValue('SavedGameExtraBlockSize'));
-END; // .PROCEDURE OnEraStart
+end; // .procedure OnEraStart
 
-BEGIN
+begin
   GameExt.RegisterHandler(OnEraStart, 'OnEraStart');
-END.
+end.

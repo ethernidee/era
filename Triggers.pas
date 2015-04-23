@@ -1,103 +1,103 @@
-UNIT Triggers;
+unit Triggers;
 {
 DESCRIPTION:  Extends ERM with new triggers
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   Windows, SysUtils, Utils,
   Core, GameExt, Heroes, Erm;
 
-CONST
+const
   NO_STACK  = -1;
   
   STACK_POS_OFS = $38;
 
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-CONST
-  (* Extended MM Trigger *)
+const
+  (* extended MM Trigger *)
   ATTACKER_STACK_N_PARAM  = 0;
   DEFENDER_STACK_N_PARAM  = 1;
   MIN_DAMAGE_PARAM        = 2;
   MAX_DAMAGE_PARAM        = 3;
 
   
-VAR
+var
   PrevWndProc:  Heroes.TWndProc;
   
   (* Calculate damage delayed parameters *)
-  AttackerId:           INTEGER;
-  DefenderId:           INTEGER;
-  BasicDamage:          INTEGER;
-  DamageBonus:          INTEGER;
-  IsDistantAttack:      INTEGER;
-  IsTheoreticalAttack:  INTEGER;
-  Distance:             INTEGER;
+  AttackerId:           integer;
+  DefenderId:           integer;
+  BasicDamage:          integer;
+  DamageBonus:          integer;
+  IsDistantAttack:      integer;
+  IsTheoreticalAttack:  integer;
+  Distance:             integer;
   
   (* AI Calculate stack attack effect delayed parameters *)
-  AIAttackerId: INTEGER;
-  AIDefenderId: INTEGER;
+  AIAttackerId: integer;
+  AIDefenderId: integer;
   
   
-FUNCTION Hook_BattleHint_GetAttacker (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_BattleHint_GetAttacker (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   GameExt.EraSaveEventParams;
   GameExt.EraEventParams[ATTACKER_STACK_N_PARAM]  :=  Context.EAX;
   GameExt.EraEventParams[DEFENDER_STACK_N_PARAM]  :=  NO_STACK;
   GameExt.EraEventParams[MIN_DAMAGE_PARAM]        :=  -1;
   GameExt.EraEventParams[MAX_DAMAGE_PARAM]        :=  -1;
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_BattleHint_GetAttacker
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_BattleHint_GetAttacker
 
-FUNCTION Hook_BattleHint_GetDefender (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_BattleHint_GetDefender (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   GameExt.EraEventParams[DEFENDER_STACK_N_PARAM]  :=  Context.EAX;
-  RESULT                                          :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_BattleHint_GetDefender
+  result                                          :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_BattleHint_GetDefender
 
-FUNCTION Hook_BattleHint_CalcMinMaxDamage (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_BattleHint_CalcMinMaxDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   GameExt.EraEventParams[MIN_DAMAGE_PARAM]  :=  Context.EDI;
   GameExt.EraEventParams[MAX_DAMAGE_PARAM]  :=  Context.EAX;
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_BattleHint_CalcMinMaxDamage
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_BattleHint_CalcMinMaxDamage
 
-FUNCTION Hook_MMTrigger (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_MMTrigger (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   GameExt.EraRestoreEventParams;
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_MMTrigger
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_MMTrigger
 
-PROCEDURE OnBeforeTrigger (Event: GameExt.PEvent); STDCALL;
-VAR
+procedure OnBeforeTrigger (Event: GameExt.PEvent); stdcall;
+var
 {U} EventArgs:      Erm.POnBeforeTriggerArgs;
-    EventName:      STRING;
-    BaseEventName:  STRING;
-    EventID:        INTEGER;
+    EventName:      string;
+    BaseEventName:  string;
+    EventID:        integer;
     
-    x:              INTEGER;
-    y:              INTEGER;
-    z:              INTEGER;
+    x:              integer;
+    y:              integer;
+    z:              integer;
     
-    ObjType:        INTEGER;
-    ObjSubtype:     INTEGER;
+    ObjType:        integer;
+    ObjSubtype:     integer;
 
-BEGIN
-  {!} ASSERT(Event <> NIL);
+begin
+  {!} Assert(Event <> nil);
   EventArgs :=  Erm.POnBeforeTriggerArgs(Event.Data);
   // * * * * * //
   EventName :=  '';
   EventID   :=  EventArgs.TriggerID;
   
-  GameExt.FireEvent('OnTrigger ' + SysUtils.IntToStr(EventID), NIL, 0);
+  GameExt.FireEvent('OnTrigger ' + SysUtils.IntToStr(EventID), nil, 0);
   
-  CASE EventID OF
+  case EventID of
     {*} Erm.TRIGGER_TM1..Erm.TRIGGER_TM100:
       EventName :=  'OnErmTimer ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_TM1 + 1); 
     {*} Erm.TRIGGER_HE0..Erm.TRIGGER_HE198:
@@ -173,131 +173,131 @@ BEGIN
     {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:       EventName :=  'OnStackToStackDamage';
     {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT:  EventName :=  'OnAICalcStackAttackEffect';
     {*} Erm.TRIGGER_ONCHAT:                     EventName :=  'OnChat';
-    (* End Era Triggers *)
-  ELSE
-    IF EventID >= Erm.TRIGGER_OB_POS THEN BEGIN
-      IF ((EventID AND Erm.TRIGGER_OB_POS) OR (EventID AND Erm.TRIGGER_LE_POS)) <> 0 THEN BEGIN
-        x :=  EventID AND 1023;
-        y :=  (EventID SHR 16) AND 1023;
-        z :=  (EventID SHR 26) AND 1;
+    (* end Era Triggers *)
+  else
+    if EventID >= Erm.TRIGGER_OB_POS then begin
+      if ((EventID and Erm.TRIGGER_OB_POS) or (EventID and Erm.TRIGGER_LE_POS)) <> 0 then begin
+        x :=  EventID and 1023;
+        y :=  (EventID shr 16) and 1023;
+        z :=  (EventID shr 26) and 1;
         
-        IF (EventID AND Erm.TRIGGER_LE_POS) <> 0 THEN BEGIN
+        if (EventID and Erm.TRIGGER_LE_POS) <> 0 then begin
           BaseEventName :=  'OnLocalEvent ';
-        END // .IF
-        ELSE BEGIN
-          IF (EventID AND Erm.TRIGGER_OB_LEAVE) <> 0 THEN BEGIN
+        end // .if
+        else begin
+          if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
             BaseEventName :=  'OnAfterVisitObject ';
-          END // .IF
-          ELSE BEGIN
+          end // .if
+          else begin
             BaseEventName :=  'OnBeforeVisitObject ';
-          END; // .ELSE
-        END; // .ELSE
+          end; // .else
+        end; // .else
         
         EventName :=
           BaseEventName + SysUtils.IntToStr(x) + '/' +
           SysUtils.IntToStr(y) + '/' + SysUtils.IntToStr(z);
-      END // .IF
-      ELSE BEGIN
-        ObjType     :=  (EventID SHR 12) AND 255;
-        ObjSubtype  :=  (EventID AND 255) - 1;
+      end // .if
+      else begin
+        ObjType     :=  (EventID shr 12) and 255;
+        ObjSubtype  :=  (EventID and 255) - 1;
         
-        IF (EventID AND Erm.TRIGGER_OB_LEAVE) <> 0 THEN BEGIN
+        if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
           BaseEventName :=  'OnAfterVisitObject ';
-        END // .IF
-        ELSE BEGIN
+        end // .if
+        else begin
           BaseEventName :=  'OnBeforeVisitObject ';
-        END; // .ELSE
+        end; // .else
         
         EventName :=
           BaseEventName + SysUtils.IntToStr(ObjType) + '/' + SysUtils.IntToStr(ObjSubtype);
-      END; // .ELSE
-    END; // .IF
-  END; // .SWITCH
+      end; // .else
+    end; // .if
+  end; // .switch
   
-  IF EventName <> '' THEN BEGIN
-    GameExt.FireEvent(EventName, @EventArgs.BlockErmExecution, SIZEOF(EventArgs.BlockErmExecution));
-  END; // .IF
-END; // .PROCEDURE OnBeforeTrigger
+  if EventName <> '' then begin
+    GameExt.FireEvent(EventName, @EventArgs.BlockErmExecution, sizeof(EventArgs.BlockErmExecution));
+  end; // .if
+end; // .procedure OnBeforeTrigger
 
-FUNCTION MainWndProc (hWnd, Msg, wParam, lParam: INTEGER): LONGBOOL; STDCALL;
-CONST
+function MainWndProc (hWnd, Msg, wParam, lParam: integer): LONGBOOL; stdcall;
+const
   WM_KEYDOWN          = $100;
   KEY_F11             = 122;
   KEY_F12             = 123;
   ENABLE_DEF_REACTION = 0;
 
-VAR
+var
   GameState:  Heroes.TGameState;
   
-BEGIN
-  RESULT  :=  FALSE;
+begin
+  result  :=  FALSE;
   
-  IF Msg = WM_KEYDOWN THEN BEGIN
+  if Msg = WM_KEYDOWN then begin
     Heroes.GetGameState(GameState);
     
-    IF
-      (GameState.RootDlgId = Heroes.ADVMAP_DLGID) AND
-      (wParam IN [KEY_F11, KEY_F12])
-    THEN BEGIN
-      CASE wParam OF
+    if
+      (GameState.RootDlgId = Heroes.ADVMAP_DLGID) and
+      (wParam in [KEY_F11, KEY_F12])
+    then begin
+      case wParam of
         KEY_F12:  Erm.ReloadErm;
         KEY_F11:  Erm.ExtractErm;
-      END; // .SWITCH
-    END // .IF
-    ELSE BEGIN
+      end; // .switch
+    end // .if
+    else begin
       GameExt.EraSaveEventParams;
       
       GameExt.EraEventParams[0] :=  wParam;
       GameExt.EraEventParams[1] :=  ENABLE_DEF_REACTION;
       
-      IF GameState.RootDlgId = Heroes.ADVMAP_DLGID THEN BEGIN
+      if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
         Erm.FireErmEvent(Erm.TRIGGER_KEYPRESS);
-      END // .IF
-      ELSE BEGIN
+      end // .if
+      else begin
         GameExt.FireEvent('OnKeyPressed', GameExt.NO_EVENT_DATA, 0);
-      END; // .ELSE
+      end; // .else
       
-      RESULT  :=  GameExt.EraEventParams[1] = ENABLE_DEF_REACTION;
+      result  :=  GameExt.EraEventParams[1] = ENABLE_DEF_REACTION;
       
       GameExt.EraRestoreEventParams;
       
-      IF RESULT THEN BEGIN
+      if result then begin
         PrevWndProc(hWnd, Msg, wParam, lParam);
-      END; // .IF
-    END; // .ELSE
-  END // .IF
-  ELSE BEGIN
-    RESULT  :=  PrevWndProc(hWnd, Msg, wParam, lParam);
-  END; // .ELSE
-END; // .FUNCTION MainWndProc
+      end; // .if
+    end; // .else
+  end // .if
+  else begin
+    result  :=  PrevWndProc(hWnd, Msg, wParam, lParam);
+  end; // .else
+end; // .function MainWndProc
 
-FUNCTION Hook_CreateWindow (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_CreateWindow (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   PrevWndProc :=  Ptr
   (
-    Windows.SetWindowLong(Heroes.hWnd^, Windows.GWL_WNDPROC, INTEGER(@MainWndProc))
+    Windows.SetWindowLong(Heroes.hWnd^, Windows.GWL_WNDPROC, integer(@MainWndProc))
   );
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_CreateWindow
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_CreateWindow
 
-FUNCTION Hook_BeforeErmInstructions (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_BeforeErmInstructions (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   GameExt.EraSaveEventParams;
   GameExt.FireEvent('OnBeforeErm', GameExt.NO_EVENT_DATA, 0);
   GameExt.EraRestoreEventParams;
 
-  IF NOT Erm.ZvsIsGameLoading^ THEN BEGIN
+  if not Erm.ZvsIsGameLoading^ then begin
     GameExt.EraSaveEventParams;
     GameExt.FireEvent('OnBeforeErmInstructions', GameExt.NO_EVENT_DATA, 0);
     GameExt.EraRestoreEventParams;
-  END; // .IF
+  end; // .if
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_BeforeErmInstructions
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_BeforeErmInstructions
 
-FUNCTION Hook_StartCalcDamage (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_StartCalcDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   AttackerId  :=  Heroes.GetStackIdByPos(PINTEGER(Context.EBX + STACK_POS_OFS)^);
   DefenderId  :=  Heroes.GetStackIdByPos(PINTEGER(Context.ESI + STACK_POS_OFS)^);
   
@@ -306,17 +306,17 @@ BEGIN
   IsTheoreticalAttack :=  PINTEGER(Context.EBP + 20)^;
   Distance            :=  PINTEGER(Context.EBP + 24)^;
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_StartCalcDamage
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_StartCalcDamage
 
-FUNCTION Hook_CalcDamage_GetDamageBonus (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_CalcDamage_GetDamageBonus (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   DamageBonus :=  Context.EAX;
-  RESULT      :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_CalcDamage_GetDamageBonus
+  result      :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_CalcDamage_GetDamageBonus
 
-FUNCTION Hook_EndCalcDamage (Context: Core.PHookContext): LONGBOOL; STDCALL;
-CONST
+function Hook_EndCalcDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
   ATTACKER            = 0;
   DEFENDER            = 1;
   FINAL_DAMAGE_CONST  = 2;
@@ -327,7 +327,7 @@ CONST
   DISTANCE_ARG        = 7;
   IS_THEORETICAL      = 8;
 
-BEGIN
+begin
   GameExt.EraSaveEventParams;
 
   GameExt.EraEventParams[ATTACKER]            :=  AttackerId;
@@ -345,27 +345,27 @@ BEGIN
   
   GameExt.EraRestoreEventParams;
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_EndCalcDamage
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_EndCalcDamage
 
-FUNCTION Hook_AI_CalcStackAttackEffect_Start (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_AI_CalcStackAttackEffect_Start (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   AIAttackerId  :=  Heroes.GetBattleCellStackId
     (Heroes.GetBattleCellByPos(PINTEGER(PINTEGER(Context.ESP + 8)^ + STACK_POS_OFS)^));
   AIDefenderId  :=  Heroes.GetBattleCellStackId
     (Heroes.GetBattleCellByPos(PINTEGER(PINTEGER(Context.ESP + 16)^ + STACK_POS_OFS)^));
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_AI_CalcStackAttackEffect_Start
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_AI_CalcStackAttackEffect_Start
 
-FUNCTION Hook_AI_CalcStackAttackEffect_End (Context: Core.PHookContext): LONGBOOL; STDCALL;
-CONST
+function Hook_AI_CalcStackAttackEffect_End (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
   ATTACKER            = 0;
   DEFENDER            = 1;
   EFFECT_VALUE        = 2;
   EFFECT_VALUE_CONST  = 3;
 
-BEGIN
+begin
   GameExt.EraSaveEventParams;
 
   GameExt.EraEventParams[ATTACKER]            :=  AIAttackerId;
@@ -378,11 +378,11 @@ BEGIN
   
   GameExt.EraRestoreEventParams;
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_AI_CalcStackAttackEffect_End
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_AI_CalcStackAttackEffect_End
 
-FUNCTION Hook_EnterChat (Context: Core.PHookContext): LONGBOOL; STDCALL;
-CONST
+function Hook_EnterChat (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
   NUM_ARGS  = 0;
   
   (* Event parameters *)
@@ -391,33 +391,33 @@ CONST
   
   ON_ENTER_CHAT = 0;
 
-BEGIN
+begin
   GameExt.EraSaveEventParams;
   
   GameExt.EraEventParams[EVENT_SUBTYPE] :=  ON_ENTER_CHAT;
   GameExt.EraEventParams[BLOCK_CHAT]    :=  0;
   
   Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
-  RESULT  :=  NOT LONGBOOL(GameExt.EraEventParams[BLOCK_CHAT]);
+  result  :=  not LONGBOOL(GameExt.EraEventParams[BLOCK_CHAT]);
   
   GameExt.EraRestoreEventParams;
   
-  IF NOT RESULT THEN BEGIN
+  if not result then begin
     Context.RetAddr :=  Core.Ret(NUM_ARGS);
-  END; // .IF
-END; // .FUNCTION Hook_EnterChat
+  end; // .if
+end; // .function Hook_EnterChat
 
-PROCEDURE ClearChatBox; ASSEMBLER;
-ASM
+procedure ClearChatBox; ASSEMBLER;
+asm
   PUSH ESI
   MOV ESI, ECX
   MOV EAX, [ESI + $38]
   PUSH $5547A0
   // RET
-END; // .PROCEDURE ClearChatBox
+end; // .procedure ClearChatBox
 
-FUNCTION Hook_ChatInput (Context: Core.PHookContext): LONGBOOL; STDCALL;
-CONST 
+function Hook_ChatInput (Context: Core.PHookContext): LONGBOOL; stdcall;
+const 
   (* Event parameters *)
   ARG_EVENT_SUBTYPE = 0;
   ARG_CHAT_INPUT    = 1;
@@ -431,11 +431,11 @@ CONST
   ACTION_CLOSE_BOX  = 1;
   ACTION_DEFAULT    = 2;
 
-VAR
-  Action: INTEGER;
-  Obj:    INTEGER;
+var
+  Action: integer;
+  Obj:    integer;
   
-BEGIN
+begin
   GameExt.EraSaveEventParams;
   
   GameExt.EraEventParams[ARG_EVENT_SUBTYPE] :=  ON_CHAT_INPUT;
@@ -448,33 +448,33 @@ BEGIN
   
   GameExt.EraRestoreEventParams;
   
-  RESULT  :=  NOT Core.EXEC_DEF_CODE;
+  result  :=  not Core.EXEC_DEF_CODE;
   
-  CASE Action OF 
+  case Action of 
     ACTION_CLEAR_BOX: Context.RetAddr :=  @ClearChatBox;
-    ACTION_CLOSE_BOX: BEGIN
+    ACTION_CLOSE_BOX: begin
       Context.RetAddr :=  @ClearChatBox;
     
-      ASM
+      asm
         MOV ECX, Obj
         MOV EDX, [ECX]
         MOV EAX, [EDX + $64]
         CALL EAX
-      END; // .ASM
-    END; // .CASE ACTION_CLOSE_BOX    
-  ELSE
-    RESULT  :=  Core.EXEC_DEF_CODE;
-  END; // .SWITCH Action
-END; // .FUNCTION Hook_ChatInput
+      end; // .asm
+    end; // .case ACTION_CLOSE_BOX    
+  else
+    result  :=  Core.EXEC_DEF_CODE;
+  end; // .switch Action
+end; // .function Hook_ChatInput
 
-FUNCTION Hook_LeaveChat (Context: Core.PHookContext): LONGBOOL; STDCALL;
-CONST
+function Hook_LeaveChat (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
   (* Event parameters *)
   EVENT_SUBTYPE = 0;
   
   ON_LEAVE_CHAT = 2;
 
-BEGIN
+begin
   GameExt.EraSaveEventParams;
   
   GameExt.EraEventParams[EVENT_SUBTYPE] :=  ON_LEAVE_CHAT;
@@ -482,12 +482,12 @@ BEGIN
   
   GameExt.EraRestoreEventParams;
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_LeaveChat
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_LeaveChat
 
-PROCEDURE OnAfterWoG (Event: GameExt.PEvent); STDCALL;
-BEGIN
-  (* Extended MM Trigger *)
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+begin
+  (* extended MM Trigger *)
   Core.Hook(@Hook_BattleHint_GetAttacker, Core.HOOKTYPE_BRIDGE, 7, Ptr($492409));
   Core.Hook(@Hook_BattleHint_GetDefender, Core.HOOKTYPE_BRIDGE, 7, Ptr($492442));
   Core.Hook(@Hook_BattleHint_CalcMinMaxDamage, Core.HOOKTYPE_BRIDGE, 5, Ptr($493053));
@@ -513,9 +513,9 @@ BEGIN
   Core.Hook(@Hook_ChatInput, Core.HOOKTYPE_BRIDGE, 6, Ptr($554780));
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402298));
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
-END; // .PROCEDURE OnAfterWoG
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
   GameExt.RegisterHandler(OnBeforeTrigger, 'OnBeforeTrigger');
-END.
+end.

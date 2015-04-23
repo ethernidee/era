@@ -46,7 +46,7 @@ begin
     $5A106A:  PINTEGER(Context.EBP - $34)^  :=  WOG_MF_DAMAGE^;
   else
     {!} Assert(FALSE);
-  end; // .SWITCH HookAddr
+  end; // .switch HookAddr
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_AfterApplyDamage
 

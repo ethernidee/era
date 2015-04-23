@@ -1,139 +1,139 @@
-UNIT Tweaks;
+unit Tweaks;
 {
 DESCRIPTION:  Game improvements
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
   CFiles, Files, Ini,
   PatchApi, Core, GameExt, Heroes, Lodman;
 
-CONST
-  // f (Value: PCHAR; MaxResLen: INTEGER; DefValue, Key, SectionName, FileName: PCHAR): INTEGER; CDECL;
+const
+  // f (Value: pchar; MaxResLen: integer; DefValue, Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsReadStrIni   = Ptr($773A46);
-  // f (Res: PINTEGER; DefValue: INTEGER; Key, SectionName, FileName: PCHAR): INTEGER; CDECL;
+  // f (Res: PINTEGER; DefValue: integer; Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsReadIntIni   = Ptr($7739D1);
-  // f (Value: PCHAR; Key, SectionName, FileName: PCHAR): INTEGER; CDECL;
+  // f (Value: pchar; Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsWriteStrIni  = Ptr($773B34);
-  // f (Value, Key, SectionName, FileName: PCHAR): INTEGER; CDECL;
+  // f (Value, Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsWriteIntIni  = Ptr($773ACB);
   
   ZvsAppliedDamage: PINTEGER  = Ptr($2811888);
 
 
-VAR
-  CPUPatchOpt:          BOOLEAN;
-  FixGetHostByNameOpt:  BOOLEAN;
-  UseOnlyOneCpuCoreOpt: BOOLEAN;
+var
+  CPUPatchOpt:          boolean;
+  FixGetHostByNameOpt:  boolean;
+  UseOnlyOneCpuCoreOpt: boolean;
   
   
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-VAR
+var
   hTimerEvent:          THandle;
   InetCriticalSection:  Windows.TRTLCriticalSection;
-  ZvsLibImageTemplate:  STRING;
-  ZvsLibGamePath:       STRING;
+  ZvsLibImageTemplate:  string;
+  ZvsLibGamePath:       string;
 
 
-FUNCTION Hook_ReadIntIni
+function Hook_ReadIntIni
 (
   Res:          PINTEGER;
-  DefValue:     INTEGER;
-  Key:          PCHAR;
-  SectionName:  PCHAR;
-  FileName:     PCHAR
-): INTEGER; CDECL;
+  DefValue:     integer;
+  Key:          pchar;
+  SectionName:  pchar;
+  FileName:     pchar
+): integer; cdecl;
 
-VAR
-  Value:  STRING;
+var
+  Value:  string;
   
-BEGIN
-  RESULT  :=  0;
+begin
+  result  :=  0;
   
-  IF
-    (NOT Ini.ReadStrFromIni(Key, SectionName, FileName, Value)) OR
-    NOT SysUtils.TryStrToInt(Value, Res^)
-  THEN BEGIN
+  if
+    (not Ini.ReadStrFromIni(Key, SectionName, FileName, Value)) or
+    not SysUtils.TryStrToInt(Value, Res^)
+  then begin
     Res^  :=  DefValue;
-  END; // .IF
-END; // .FUNCTION Hook_ReadIntIni
+  end; // .if
+end; // .function Hook_ReadIntIni
 
-FUNCTION Hook_ReadStrIni
+function Hook_ReadStrIni
 (
-  Res:          PCHAR;
-  MaxResLen:    INTEGER;
-  DefValue:     PCHAR;
-  Key:          PCHAR;
-  SectionName:  PCHAR;
-  FileName:     PCHAR
-): INTEGER; CDECL;
+  Res:          pchar;
+  MaxResLen:    integer;
+  DefValue:     pchar;
+  Key:          pchar;
+  SectionName:  pchar;
+  FileName:     pchar
+): integer; cdecl;
 
-VAR
-  Value:  STRING;
+var
+  Value:  string;
   
-BEGIN
-  RESULT  :=  0;
+begin
+  result  :=  0;
   
-  IF
-    (NOT Ini.ReadStrFromIni(Key, SectionName, FileName, Value)) OR
-    (LENGTH(Value) > MaxResLen)
-  THEN BEGIN
+  if
+    (not Ini.ReadStrFromIni(Key, SectionName, FileName, Value)) or
+    (Length(Value) > MaxResLen)
+  then begin
     Value :=  DefValue;
-  END; // .IF
+  end; // .if
   
-  IF Value <> '' THEN BEGIN
-    Utils.CopyMem(LENGTH(Value) + 1, POINTER(Value), Res);
-  END // .IF
-  ELSE BEGIN
+  if Value <> '' then begin
+    Utils.CopyMem(Length(Value) + 1, pointer(Value), Res);
+  end // .if
+  else begin
     Res^  :=  #0;
-  END; // .ELSE
-END; // .FUNCTION Hook_ReadStrIni
+  end; // .else
+end; // .function Hook_ReadStrIni
 
-FUNCTION Hook_WriteStrIni (Value, Key, SectionName, FileName: PCHAR): INTEGER; CDECL;
-BEGIN
-  RESULT  :=  0;
+function Hook_WriteStrIni (Value, Key, SectionName, FileName: pchar): integer; cdecl;
+begin
+  result  :=  0;
   
-  IF Ini.WriteStrToIni(Key, Value, SectionName, FileName) THEN BEGIN
+  if Ini.WriteStrToIni(Key, Value, SectionName, FileName) then begin
     Ini.SaveIni(FileName);
-  END; // .IF
-END; // .FUNCTION Hook_WriteStrIni
+  end; // .if
+end; // .function Hook_WriteStrIni
 
-FUNCTION Hook_WriteIntIni (Value: INTEGER; Key, SectionName, FileName: PCHAR): INTEGER; CDECL;
-BEGIN
-  RESULT  :=  0;
+function Hook_WriteIntIni (Value: integer; Key, SectionName, FileName: pchar): integer; cdecl;
+begin
+  result  :=  0;
   
-  IF Ini.WriteStrToIni(Key, SysUtils.IntToStr(Value), SectionName, FileName) THEN BEGIN
+  if Ini.WriteStrToIni(Key, SysUtils.IntToStr(Value), SectionName, FileName) then begin
     Ini.SaveIni(FileName);
-  END; // .IF
-END; // .FUNCTION Hook_ReadIntIni
+  end; // .if
+end; // .function Hook_ReadIntIni
 
-FUNCTION Hook_ZvsGetWindowWidth (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_ZvsGetWindowWidth (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   Context.ECX :=  WndManagerPtr^.ScreenPcx16.Width;
-  RESULT      :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ZvsGetWindowWidth
+  result      :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_ZvsGetWindowWidth
 
-FUNCTION Hook_ZvsGetWindowHeight (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_ZvsGetWindowHeight (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   Context.EDX :=  WndManagerPtr^.ScreenPcx16.Height;
-  RESULT      :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ZvsGetWindowHeight
+  result      :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_ZvsGetWindowHeight
 
-PROCEDURE MarkFreshestSavegame;
-VAR
+procedure MarkFreshestSavegame;
+var
 {O} Locator:          Files.TFileLocator;
 {O} FileInfo:         Files.TFileItemInfo;
-    FileName:         STRING;
+    FileName:         string;
     FreshestTime:     INT64;
-    FreshestFileName: STRING;
+    FreshestFileName: string;
   
-BEGIN
+begin
   Locator   :=  Files.TFileLocator.Create;
-  FileInfo  :=  NIL;
+  FileInfo  :=  nil;
   // * * * * * //
   FreshestFileName  :=  #0;
   FreshestTime      :=  0;
@@ -141,142 +141,142 @@ BEGIN
   Locator.DirPath   :=  'Games';
   Locator.InitSearch('*.*');
   
-  WHILE Locator.NotEnd DO BEGIN
+  while Locator.NotEnd do begin
     FileName  :=  Locator.GetNextItem(CFiles.TItemInfo(FileInfo));
     
-    IF
-      ((FileInfo.Data.dwFileAttributes AND Windows.FILE_ATTRIBUTE_DIRECTORY) = 0) AND
+    if
+      ((FileInfo.Data.dwFileAttributes and Windows.FILE_ATTRIBUTE_DIRECTORY) = 0) and
       (INT64(FileInfo.Data.ftLastWriteTime) > FreshestTime)
-    THEN BEGIN
+    then begin
       FreshestFileName  :=  FileName;
       FreshestTime      :=  INT64(FileInfo.Data.ftLastWriteTime);
-    END; // .IF
+    end; // .if
     SysUtils.FreeAndNil(FileInfo);
-  END; // .WHILE
+  end; // .while
   
   Locator.FinitSearch;
   
-  Utils.CopyMem(LENGTH(FreshestFileName) + 1, POINTER(FreshestFileName), Heroes.MarkedSavegame);
+  Utils.CopyMem(Length(FreshestFileName) + 1, pointer(FreshestFileName), Heroes.MarkedSavegame);
   // * * * * * //
   SysUtils.FreeAndNil(Locator);
-END; // .PROCEDURE MarkFreshestSavegame
+end; // .procedure MarkFreshestSavegame
 
-FUNCTION Hook_SetHotseatHeroName (Context: Core.PHookContext): LONGBOOL; STDCALL;
-VAR
-  PlayerName:     STRING;
-  NewPlayerName:  STRING;
-  EcxReg:         INTEGER;
+function Hook_SetHotseatHeroName (Context: Core.PHookContext): LONGBOOL; stdcall;
+var
+  PlayerName:     string;
+  NewPlayerName:  string;
+  EcxReg:         integer;
 
-BEGIN
-  PlayerName    :=  PCHAR(Context.EAX);
+begin
+  PlayerName    :=  pchar(Context.EAX);
   NewPlayerName :=  PlayerName + ' 1';
   EcxReg        :=  Context.ECX;
   
-  ASM
+  asm
     MOV ECX, EcxReg
     PUSH NewPlayerName
     MOV EDX, [ECX]
     CALL [EDX + $34]
-  END; // .ASM
+  end; // .asm
   
   NewPlayerName :=  PlayerName + ' 2';
   EcxReg        :=  Context.EBX;
   
-  ASM
+  asm
     MOV ECX, EcxReg
     MOV ECX, [ECX + $54]
     PUSH NewPlayerName
     MOV EDX, [ECX]
     CALL [EDX + $34]
-  END; // .ASM
+  end; // .asm
   
-  RESULT  :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_SetHotseatHeroName
+  result  :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_SetHotseatHeroName
 
-FUNCTION Hook_PeekMessageA (Hook: PatchApi.THiHook; var lpMsg: TMsg; hWnd: Windows.HWND;
-                            wMsgFilterMin, wMsgFilterMax, wRemoveMsg: UINT): BOOL; STDCALL;
-BEGIN
+function Hook_PeekMessageA (Hook: PatchApi.THiHook; var lpMsg: TMsg; hWnd: Windows.HWND;
+                            wMsgFilterMin, wMsgFilterMax, wRemoveMsg: UINT): BOOL; stdcall;
+begin
   Windows.WaitForSingleObject(hTimerEvent, 1);
-  RESULT := BOOL(PatchApi.Call(PatchApi.STDCALL_, Hook.GetDefaultFunc,
+  result := BOOL(PatchApi.Call(PatchApi.STDCALL_, Hook.GetDefaultFunc,
                                [@lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax, wRemoveMsg]));
-END; // .FUNCTION Hook_PeekMessageA
+end; // .function Hook_PeekMessageA
 
-FUNCTION New_Zvslib_GetPrivateProfileStringA
+function New_Zvslib_GetPrivateProfileStringA
 (
-  Section:  PCHAR;
-  Key:      PCHAR;
-  DefValue: PCHAR;
-  Buf:      PCHAR;
-  BufSize:  INTEGER;
-  FileName: PCHAR
-): INTEGER; STDCALL;
+  Section:  pchar;
+  Key:      pchar;
+  DefValue: pchar;
+  Buf:      pchar;
+  BufSize:  integer;
+  FileName: pchar
+): integer; stdcall;
   
-VAR
-  Res:  STRING;
+var
+  Res:  string;
 
-BEGIN
+begin
   Res :=  '';
 
-  IF NOT Ini.ReadStrFromIni(Key, Section, FileName, Res) THEN BEGIN
+  if not Ini.ReadStrFromIni(Key, Section, FileName, Res) then begin
     Res :=  DefValue;
-  END; // .IF
+  end; // .if
   
-  IF BufSize <= LENGTH(Res) THEN BEGIN
+  if BufSize <= Length(Res) then begin
     SetLength(Res, BufSize - 1);
-  END; // .IF
+  end; // .if
   
-  Utils.CopyMem(LENGTH(Res) + 1, PCHAR(Res), Buf);
+  Utils.CopyMem(Length(Res) + 1, pchar(Res), Buf);
   
-  RESULT :=  LENGTH(Res) + 1;
-END; // .FUNCTION New_Zvslib_GetPrivateProfileStringA
+  result :=  Length(Res) + 1;
+end; // .function New_Zvslib_GetPrivateProfileStringA
 
-PROCEDURE ReadGameSettings;
-  PROCEDURE ReadInt (CONST Key: STRING; Res: PINTEGER);
-  VAR
-    StrValue: STRING;
-    Value:    INTEGER;
+procedure ReadGameSettings;
+  procedure ReadInt (const Key: string; Res: PINTEGER);
+  var
+    StrValue: string;
+    Value:    integer;
      
-  BEGIN
-    IF
+  begin
+    if
       Ini.ReadStrFromIni
       (
         Key,
         Heroes.GAME_SETTINGS_SECTION,
         Heroes.GAME_SETTINGS_FILE,
         StrValue
-      ) AND
+      ) and
       SysUtils.TryStrToInt(StrValue, Value)
-    THEN BEGIN
+    then begin
       Res^  :=  Value;
-    END; // .IF
-  END; // .PROCEDURE ReadInt
+    end; // .if
+  end; // .procedure ReadInt
   
-  PROCEDURE ReadStr (CONST Key: STRING; Res: PCHAR);
-  VAR
-    StrValue: STRING;
+  procedure ReadStr (const Key: string; Res: pchar);
+  var
+    StrValue: string;
      
-  BEGIN
-    IF
+  begin
+    if
       Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, Heroes.GAME_SETTINGS_FILE, StrValue)
-    THEN BEGIN
-      Utils.CopyMem(LENGTH(StrValue) + 1, PCHAR(StrValue), Res);
-    END; // .IF
-  END; // .PROCEDURE ReadStr
+    then begin
+      Utils.CopyMem(Length(StrValue) + 1, pchar(StrValue), Res);
+    end; // .if
+  end; // .procedure ReadStr
   
-CONST
+const
   UNIQUE_ID_LEN   = 3;
   UNIQUE_ID_MASK  = $FFF;
   
-VAR
-  RandomValue:  INTEGER;
-  RandomStr:    STRING;
-  i:            INTEGER;
+var
+  RandomValue:  integer;
+  RandomStr:    string;
+  i:            integer;
    
-BEGIN
-  ASM
+begin
+  asm
     MOV EAX, Heroes.LOAD_DEF_SETTINGS
     CALL EAX
-  END; // .ASM
+  end; // .asm
 
   ReadInt('Show Intro',             Heroes.SHOW_INTRO_OPT);
   ReadInt('Music Volume',           Heroes.MUSIC_VOLUME_OPT);
@@ -300,17 +300,17 @@ BEGIN
   ReadInt('Test Blit',              Heroes.TEST_BLIT_OPT);
   ReadStr('Unique System ID',       Heroes.UNIQUE_SYSTEM_ID_OPT);
   
-  IF Heroes.UNIQUE_SYSTEM_ID_OPT^ = #0 THEN BEGIN
+  if Heroes.UNIQUE_SYSTEM_ID_OPT^ = #0 then begin
     Randomize;
-    RandomValue :=  (INTEGER(Windows.GetTickCount) + Random(MAXLONGINT)) AND UNIQUE_ID_MASK;
+    RandomValue :=  (integer(Windows.GetTickCount) + Random(MAXLONGINT)) and UNIQUE_ID_MASK;
     SetLength(RandomStr, UNIQUE_ID_LEN);
     
-    FOR i:=1 TO UNIQUE_ID_LEN DO BEGIN
-      RandomStr[i]  :=  UPCASE(StrLib.ByteToHexChar(RandomValue AND $F));
-      RandomValue   :=  RandomValue SHR 4;
-    END; // .FOR
+    for i:=1 to UNIQUE_ID_LEN do begin
+      RandomStr[i]  :=  UPCASE(StrLib.ByteToHexChar(RandomValue and $F));
+      RandomValue   :=  RandomValue shr 4;
+    end; // .for
     
-    Utils.CopyMem(LENGTH(RandomStr) + 1, POINTER(RandomStr), Heroes.UNIQUE_SYSTEM_ID_OPT);
+    Utils.CopyMem(Length(RandomStr) + 1, pointer(RandomStr), Heroes.UNIQUE_SYSTEM_ID_OPT);
     
     Ini.WriteStrToIni
     (
@@ -321,7 +321,7 @@ BEGIN
     );
     
     Ini.SaveIni(Heroes.GAME_SETTINGS_FILE);
-  END; // .IF
+  end; // .if
   
   ReadStr('Network Default Name',   Heroes.NETWORK_DEF_NAME_OPT);
   ReadInt('Autosave',               Heroes.AUTOSAVE_OPT);
@@ -341,11 +341,11 @@ BEGIN
   ReadInt('Main Game Full Screen',  Heroes.MAIN_GAME_FULL_SCREEN_OPT);
   ReadStr('AppPath',                Heroes.APP_PATH_OPT);
   ReadStr('CDDrive',                Heroes.CD_DRIVE_OPT);
-END; // .PROCEDURE ReadGameSettings
+end; // .procedure ReadGameSettings
 
-PROCEDURE WriteGameSettings;
-  PROCEDURE WriteInt (CONST Key: STRING; Value: PINTEGER); 
-  BEGIN
+procedure WriteGameSettings;
+  procedure WriteInt (const Key: string; Value: PINTEGER); 
+  begin
     Ini.WriteStrToIni
     (
       Key,
@@ -353,10 +353,10 @@ PROCEDURE WriteGameSettings;
       Heroes.GAME_SETTINGS_SECTION,
       Heroes.GAME_SETTINGS_FILE
     );
-  END; // .PROCEDURE WriteInt
+  end; // .procedure WriteInt
   
-  PROCEDURE WriteStr (CONST Key: STRING; Value: PCHAR);
-  BEGIN
+  procedure WriteStr (const Key: string; Value: pchar);
+  begin
     Ini.WriteStrToIni
     (
       Key,
@@ -364,9 +364,9 @@ PROCEDURE WriteGameSettings;
       Heroes.GAME_SETTINGS_SECTION,
       Heroes.GAME_SETTINGS_FILE
     );
-  END; // .PROCEDURE WriteStr
+  end; // .procedure WriteStr
    
-BEGIN
+begin
   WriteInt('Show Intro',             Heroes.SHOW_INTRO_OPT);
   WriteInt('Music Volume',           Heroes.MUSIC_VOLUME_OPT);
   WriteInt('Sound Volume',           Heroes.SOUND_VOLUME_OPT);
@@ -408,140 +408,140 @@ BEGIN
   WriteStr('CDDrive',                Heroes.CD_DRIVE_OPT);
   
   Ini.SaveIni(Heroes.GAME_SETTINGS_FILE);
-END; // .PROCEDURE WriteGameSettings
+end; // .procedure WriteGameSettings
 
-FUNCTION Hook_GetHostByName (Hook: PatchApi.THiHook; Name: PCHAR): WinSock.PHostEnt; STDCALL;
-TYPE
+function Hook_GetHostByName (Hook: PatchApi.THiHook; Name: pchar): WinSock.PHostEnt; stdcall;
+type
   PEndlessPIntArr = ^TEndlessPIntArr;
-  TEndlessPIntArr = ARRAY [0..MAXLONGINT DIV 4 - 1] OF PINTEGER;
+  TEndlessPIntArr = array [0..MAXLONGINT div 4 - 1] of PINTEGER;
   
-VAR
+var
 {U} HostEnt:  WinSock.PHostEnt;
 {U} Addrs:    PEndlessPIntArr;
-    i:        INTEGER;
+    i:        integer;
 
-  FUNCTION IsLocalAddr (Addr: INTEGER): BOOLEAN;
-  TYPE
-    TInt32 = PACKED ARRAY [0..3] OF BYTE;
+  function IsLocalAddr (Addr: integer): boolean;
+  type
+    TInt32 = packed array [0..3] of byte;
   
-  BEGIN
-    RESULT := (TInt32(Addr)[0] = 10) OR ((TInt32(Addr)[0] = 172) AND Math.InRange(TInt32(Addr)[1],
-                                                                                  16, 31)) OR
-                                        ((TInt32(Addr)[0] = 192) AND (TInt32(Addr)[1] = 168));
-  END; // .FUNCTION IsLocalAddr
+  begin
+    result := (TInt32(Addr)[0] = 10) or ((TInt32(Addr)[0] = 172) and Math.InRange(TInt32(Addr)[1],
+                                                                                  16, 31)) or
+                                        ((TInt32(Addr)[0] = 192) and (TInt32(Addr)[1] = 168));
+  end; // .function IsLocalAddr
     
-BEGIN
+begin
   {!} Windows.EnterCriticalSection(InetCriticalSection);
   
-  RESULT := Ptr(PatchApi.Call(PatchApi.STDCALL_, Hook.GetDefaultFunc(), [Name]));
-  HostEnt := RESULT;
+  result := Ptr(PatchApi.Call(PatchApi.STDCALL_, Hook.GetDefaultFunc(), [Name]));
+  HostEnt := result;
   
-  IF HostEnt.h_length = SIZEOF(INTEGER) THEN BEGIN
-    Addrs := POINTER(HostEnt.h_addr_list);
+  if HostEnt.h_length = sizeof(integer) then begin
+    Addrs := pointer(HostEnt.h_addr_list);
     
-    IF (Addrs[0] <> NIL) AND IsLocalAddr(Addrs[0]^) THEN BEGIN
+    if (Addrs[0] <> nil) and IsLocalAddr(Addrs[0]^) then begin
       i := 1;
 
-      WHILE (Addrs[i] <> NIL) AND IsLocalAddr(Addrs[i]^) DO BEGIN
-        INC(i);
-      END; // .WHILE
+      while (Addrs[i] <> nil) and IsLocalAddr(Addrs[i]^) do begin
+        Inc(i);
+      end; // .while
 
-      IF Addrs[i] <> NIL THEN BEGIN
+      if Addrs[i] <> nil then begin
         Utils.Exchange(Addrs[0]^, Addrs[i]^);
-      END; // .IF
-    END; // .IF
-  END; // .IF
+      end; // .if
+    end; // .if
+  end; // .if
   
   {!} Windows.LeaveCriticalSection(InetCriticalSection);
-END; // .FUNCTION Hook_GetHostByName
+end; // .function Hook_GetHostByName
 
-FUNCTION Hook_UN_C (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_UN_C (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   PPOINTER(Context.EBP - $0C)^  :=  GameExt.GetRealAddr(PPOINTER(Context.EBP - $0C)^);
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_UN_C
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_UN_C
 
-FUNCTION Hook_TowerShotDamage (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_TowerShotDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
-  RESULT                      :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_TowerShotDamage
+  result                      :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_TowerShotDamage
 
-FUNCTION Hook_MoatDamage (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_MoatDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   Context.EBX :=  ZvsAppliedDamage^;
-  RESULT      :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_MoatDamage
+  result      :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_MoatDamage
 
-FUNCTION Hook_GetWoGAndErmVersions (Context: Core.PHookContext): LONGBOOL; STDCALL;
-CONST
+function Hook_GetWoGAndErmVersions (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
   NEW_WOG_VERSION = 400;
   
-BEGIN
+begin
   PINTEGER(Context.EBP - $0C)^  :=  NEW_WOG_VERSION;
   PINTEGER(Context.EBP - $24)^  :=  GameExt.ERA_VERSION_INT;
-  RESULT                        :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_GetWoGAndErmVersions
+  result                        :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_GetWoGAndErmVersions
 
-FUNCTION Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): LONGBOOL; STDCALL;
-CONST
+function Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
   MIN_NUM_TOKENS  = 2;
   TOKEN_LODNAME   = 0;
   TOKEN_DEFNAME   = 1;
   
   EBP_ARG_IMAGE_TEMPLATE  = 16;
 
-VAR
-  ImageSettings:  STRING;
+var
+  ImageSettings:  string;
   Tokens:         StrLib.TArrayOfStr;
-  LodName:        STRING;
+  LodName:        string;
   
-BEGIN
+begin
   ImageSettings :=  PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^;
   Tokens        :=  StrLib.Explode(ImageSettings, ';');
 
-  IF
-    (LENGTH(Tokens) >= MIN_NUM_TOKENS)  AND
+  if
+    (Length(Tokens) >= MIN_NUM_TOKENS)  and
     (FindFileLod(Tokens[TOKEN_DEFNAME], LodName))
-  THEN BEGIN
+  then begin
     Tokens[TOKEN_LODNAME] :=  SysUtils.ExtractFileName(LodName);
     ZvsLibImageTemplate   :=  StrLib.Join(Tokens, ';');
-    PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^ :=  PCHAR(ZvsLibImageTemplate);
-  END; // .IF
+    PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^ :=  pchar(ZvsLibImageTemplate);
+  end; // .if
   
   //fatalerror(PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^);
   
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ZvsLib_ExtractDef
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_ZvsLib_ExtractDef
 
-FUNCTION Hook_ZvsLib_ExtractDef_GetGamePath (Context: Core.PHookContext): LONGBOOL; STDCALL;
-CONST
+function Hook_ZvsLib_ExtractDef_GetGamePath (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
   EBP_LOCAL_GAME_PATH = 16;
 
-BEGIN
+begin
   ZvsLibGamePath  :=  SysUtils.ExtractFileDir(ParamStr(0));
-  {!} ASSERT(LENGTH(ZvsLibGamePath) > 0);
+  {!} Assert(Length(ZvsLibGamePath) > 0);
   // Increase string ref count for C++ Builder AnsiString
-  INC(PINTEGER(Utils.PtrOfs(POINTER(ZvsLibGamePath), -8))^);
+  Inc(PINTEGER(Utils.PtrOfs(pointer(ZvsLibGamePath), -8))^);
   
-  PPCHAR(Context.EBP - EBP_LOCAL_GAME_PATH)^ :=  PCHAR(ZvsLibGamePath);
+  PPCHAR(Context.EBP - EBP_LOCAL_GAME_PATH)^ :=  pchar(ZvsLibGamePath);
   Context.RetAddr :=  Utils.PtrOfs(Context.RetAddr, 486);
-  RESULT          :=  NOT Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ZvsLib_ExtractDef_GetGamePath
+  result          :=  not Core.EXEC_DEF_CODE;
+end; // .function Hook_ZvsLib_ExtractDef_GetGamePath
 
-PROCEDURE OnAfterWoG (Event: GameExt.PEvent); STDCALL;
-CONST
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+const
   ZVSLIB_EXTRACTDEF_OFS             = 100668;
   ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS = 260;
   
-  NOP7: STRING  = #$90#$90#$90#$90#$90#$90#$90;
+  NOP7: string  = #$90#$90#$90#$90#$90#$90#$90;
   
-VAR
-  Zvslib1Handle:  INTEGER;
-  Addr:           INTEGER;
-  NewAddr:        POINTER;
+var
+  Zvslib1Handle:  integer;
+  Addr:           integer;
+  NewAddr:        pointer;
 
-BEGIN
+begin
   (* Ini handling *)
   Core.Hook(@Hook_ReadStrIni, Core.HOOKTYPE_JUMP, 5, ZvsReadStrIni);
   Core.Hook(@Hook_WriteStrIni, Core.HOOKTYPE_JUMP, 5, ZvsWriteStrIni);
@@ -555,30 +555,30 @@ BEGIN
   MarkFreshestSavegame;
   
   (* Fix multi-thread CPU problem *)
-  IF UseOnlyOneCpuCoreOpt THEN BEGIN
+  if UseOnlyOneCpuCoreOpt then begin
     Windows.SetProcessAffinityMask(Windows.GetCurrentProcess, 1);
-  END; // .IF
+  end; // .if
   
   (* Fix HotSeat second hero name *)
   Core.Hook(@Hook_SetHotseatHeroName, Core.HOOKTYPE_BRIDGE, 6, Ptr($5125B0));
-  Core.WriteAtCode(LENGTH(NOP7), POINTER(NOP7), Ptr($5125F9));
+  Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
   
   (* Universal CPU patch *)
-  IF CPUPatchOpt THEN BEGIN
-    hTimerEvent := Windows.CreateEvent(NIL, TRUE, FALSE, 'CPUPatch');
+  if CPUPatchOpt then begin
+    hTimerEvent := Windows.CreateEvent(nil, TRUE, FALSE, 'CPUPatch');
     
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA')),
+      integer(Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
       @Hook_PeekMessageA
     );
-  END; // .IF
+  end; // .if
   
   (* Remove duplicate ResetErm call *)
-  PINTEGER($7055BF)^ :=  INTEGER($90909090);
+  PINTEGER($7055BF)^ :=  integer($90909090);
   PBYTE($7055C3)^    :=  $90;
   
   (* Optimize zvslib1.dll ini handling *)
@@ -586,31 +586,31 @@ BEGIN
   Addr            :=  Zvslib1Handle + 1666469;
   Addr            :=  PINTEGER(Addr + PINTEGER(Addr)^ + 6)^;
   NewAddr         :=  @New_Zvslib_GetPrivateProfileStringA;
-  Core.WriteAtCode(SIZEOF(NewAddr), @NewAddr, POINTER(Addr));
+  Core.WriteAtCode(sizeof(NewAddr), @NewAddr, pointer(Addr));
   
   (* Redirect reading/writing game settings to ini *)
   // No saving settings after reading them
   PBYTE($50B964)^     :=  $C3;
-  PINTEGER($50B965)^  :=  INTEGER($90909090);
+  PINTEGER($50B965)^  :=  integer($90909090);
   
-  PPOINTER($50B920)^  :=  Ptr(INTEGER(@ReadGameSettings) - $50B924);
-  PPOINTER($50BA2F)^  :=  Ptr(INTEGER(@WriteGameSettings) - $50BA33);
-  PPOINTER($50C371)^  :=  Ptr(INTEGER(@WriteGameSettings) - $50C375);
+  PPOINTER($50B920)^  :=  Ptr(integer(@ReadGameSettings) - $50B924);
+  PPOINTER($50BA2F)^  :=  Ptr(integer(@WriteGameSettings) - $50BA33);
+  PPOINTER($50C371)^  :=  Ptr(integer(@WriteGameSettings) - $50C375);
   
   (* Fix game version to enable map generator *)
   Heroes.GameVersion^ :=  Heroes.SOD_AND_AB;
   
   (* Fix gethostbyname function to return external IP address at first place *)
-  IF FixGetHostByNameOpt THEN BEGIN
+  if FixGetHostByNameOpt then begin
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname')),
+      integer(Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
       @Hook_GetHostByName
     );
-  END; // .IF
+  end; // .if
   
   (* Fix UN:C to work with redirected addresses also *)
   Core.ApiHook(@Hook_UN_C, Core.HOOKTYPE_BRIDGE, Ptr($732086));
@@ -643,9 +643,9 @@ BEGIN
   
   (* Disable MP3 trigger *)
   Core.p.WriteHexPatch($59AC51, 'BF F4 33 6A 00');
-END; // .PROCEDURE OnAfterWoG
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   Windows.InitializeCriticalSection(InetCriticalSection);
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
-END.
+end.

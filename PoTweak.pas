@@ -1,60 +1,60 @@
-UNIT PoTweak;
+unit PoTweak;
 {
 DESCRIPTION:  Fixing Erm PO command to support maps of any size
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES Core, GameExt, Heroes, Stores;
+(***)  interface  (***)
+uses Core, GameExt, Heroes, Stores;
 
-CONST
+const
   FILE_SECTION_NAME = 'EraPO';
 
 
-TYPE
+type
   PSquare = ^TSquare;
-  TSquare = INTEGER;
+  TSquare = integer;
 
   PSquare2  = ^TSquare2;
-  TSquare2  = PACKED ARRAY [0..15] OF BYTE;
+  TSquare2  = packed array [0..15] of byte;
 
 
-CONST
+const
   ErmSquare:  ^PSquare  = Ptr($27C9678);
   ErmSquare2: ^PSquare2 = Ptr($9A48A0);
 
 
-VAR
-  Squares:  ARRAY OF BYTE;
-  Squares2: ARRAY OF BYTE;
+var
+  Squares:  array of byte;
+  Squares2: array of byte;
   
-  MapSize:        INTEGER;
-  BasicPoSize:    INTEGER;
-  SquaresSize:    INTEGER;
-  Squares2Size:   INTEGER;
-  SecondDimSize:  INTEGER;
-  SecondDimSize2: INTEGER;
+  MapSize:        integer;
+  BasicPoSize:    integer;
+  SquaresSize:    integer;
+  Squares2Size:   integer;
+  SecondDimSize:  integer;
+  SecondDimSize2: integer;
 
 
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-PROCEDURE PatchSquaresRefs;
-BEGIN
+procedure PatchSquaresRefs;
+begin
   MapSize       :=  Heroes.GetMapSize;
   BasicPoSize   :=  MapSize * MapSize * 2;
-  SquaresSize   :=  BasicPoSize * SIZEOF(TSquare);
-  Squares2Size  :=  BasicPoSize * SIZEOF(TSquare2);
+  SquaresSize   :=  BasicPoSize * sizeof(TSquare);
+  Squares2Size  :=  BasicPoSize * sizeof(TSquare2);
   
-  IF SquaresSize > LENGTH(Squares) THEN BEGIN
+  if SquaresSize > Length(Squares) then begin
     SetLength(Squares, SquaresSize);
-  END; // .IF
-  IF Squares2Size > LENGTH(Squares2) THEN BEGIN
+  end; // .if
+  if Squares2Size > Length(Squares2) then begin
     SetLength(Squares2, Squares2Size);
-  END; // .IF
+  end; // .if
   
-  SecondDimSize   :=  MapSize * 2 * SIZEOF(TSquare);
-  SecondDimSize2  :=  MapSize * 2 * SIZEOF(TSquare2);
+  SecondDimSize   :=  MapSize * 2 * sizeof(TSquare);
+  SecondDimSize2  :=  MapSize * 2 * sizeof(TSquare2);
   
   // Patch Squares
   PPOINTER($73644C)^  :=  @Squares[0];
@@ -101,44 +101,44 @@ BEGIN
   // Fix cycles
   PINTEGER($752B14)^  :=  MapSize;
   PINTEGER($752B33)^  :=  MapSize;
-END; // .PROCEDURE PatchSquaresRefs
+end; // .procedure PatchSquaresRefs
 
-PROCEDURE OnSavegameWrite (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnSavegameWrite (Event: GameExt.PEvent); stdcall;
+begin
   Stores.WriteSavegameSection(SquaresSize, @Squares[0], FILE_SECTION_NAME);
   Stores.WriteSavegameSection(Squares2Size, @Squares2[0], FILE_SECTION_NAME);
-END; // .PROCEDURE OnSavegameWrite
+end; // .procedure OnSavegameWrite
 
-PROCEDURE OnSavegameRead (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnSavegameRead (Event: GameExt.PEvent); stdcall;
+begin
   Stores.ReadSavegameSection(SquaresSize, @Squares[0], FILE_SECTION_NAME);
   Stores.ReadSavegameSection(Squares2Size, @Squares2[0], FILE_SECTION_NAME);
-END; // .PROCEDURE OnSavegameRead
+end; // .procedure OnSavegameRead
 
-FUNCTION Hook_ResetErm (Context: Core.PHookContext): LONGBOOL; STDCALL;
-BEGIN
+function Hook_ResetErm (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   PatchSquaresRefs;
-  RESULT  :=  Core.EXEC_DEF_CODE;
-END; // .FUNCTION Hook_ResetErm
+  result  :=  Core.EXEC_DEF_CODE;
+end; // .function Hook_ResetErm
 
-PROCEDURE OnAfterWoG (Event: GameExt.PEvent); STDCALL;
-BEGIN
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+begin
   // Disable Squares Save/Load
-  PINTEGER($751189)^  :=  INTEGER($909023EB);
-  PBYTE($75118D)^     :=  BYTE($90);
-  PINTEGER($75196F)^  :=  INTEGER($909023EB);
-  PBYTE($751973)^     :=  BYTE($90);
+  PINTEGER($751189)^  :=  integer($909023EB);
+  PBYTE($75118D)^     :=  byte($90);
+  PINTEGER($75196F)^  :=  integer($909023EB);
+  PBYTE($751973)^     :=  byte($90);
   
   // Disable Squares2 Save/Load
-  PINTEGER($75157C)^  :=  INTEGER($909020EB);
-  PBYTE($751580)^     :=  BYTE($90);
-  PINTEGER($75246C)^  :=  INTEGER($909023EB);
-  PBYTE($752470)^     :=  BYTE($90);
-END; // .PROCEDURE OnAfterWoG
+  PINTEGER($75157C)^  :=  integer($909020EB);
+  PBYTE($751580)^     :=  byte($90);
+  PINTEGER($75246C)^  :=  integer($909023EB);
+  PBYTE($752470)^     :=  byte($90);
+end; // .procedure OnAfterWoG
 
-BEGIN
+begin
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
   GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
   GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
   Core.Hook(@Hook_ResetErm, Core.HOOKTYPE_BRIDGE, 5, Ptr($7525A4));
-END.
+end.

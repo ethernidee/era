@@ -81,7 +81,7 @@ var
 
 begin
   result := Files.ReadFileContents(FilePath, FileContents) and
-            (length(FileContents) >= sizeof(TBinPatchFile));
+            (Length(FileContents) >= sizeof(TBinPatchFile));
 
   if result then begin
     PatchContents := FileContents;
@@ -123,7 +123,7 @@ begin
   with Files.Locate(DirPath + '\*.bin', Files.ONLY_FILES) do begin
     while FindNext do begin
       if LoadBinPatch(DirPath + '\' + FoundName, FileContents) then begin
-        PatchList.AddObj(FoundName, Ptr(length(FileContents)));
+        PatchList.AddObj(FoundName, Ptr(Length(FileContents)));
         ApplyBinPatch(FoundName, pointer(FileContents));
       end; // .if
     end; // .while

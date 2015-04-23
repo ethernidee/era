@@ -1,15 +1,15 @@
-UNIT AdvErm;
+unit AdvErm;
 {
 DESCRIPTION:  Era custom Memory implementation
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  INTERFACE  (***)
-USES
+(***)  interface  (***)
+uses
   Windows, SysUtils, Math, Utils, AssocArrays, DataLib,
   PatchApi, Core, GameExt, Erm, Stores, Heroes;
 
-CONST
+const
   SPEC_SLOT = -1;
   NO_SLOT   = -1;
   
@@ -31,757 +31,757 @@ CONST
   MODIFIER_CONCAT = 5;
 
 
-TYPE
+type
   (* IMPORT *)
   TObjDict = DataLib.TObjDict;
 
-  TErmCmdContext = PACKED RECORD
+  TErmCmdContext = packed record
     
-  END; // .RECORD TErmCmdContext
+  end; // .record TErmCmdContext
 
-  TReceiverHandler = PROCEDURE;
+  TReceiverHandler = procedure;
 
   TVarType  = (INT_VAR, STR_VAR);
   
-  TSlot = CLASS
+  TSlot = class
     ItemsType:  TVarType;
-    IsTemp:     BOOLEAN;
-    IntItems:   ARRAY OF INTEGER;
-    StrItems:   ARRAY OF STRING;
-  END; // .CLASS TSlot
+    IsTemp:     boolean;
+    IntItems:   array of integer;
+    StrItems:   array of string;
+  end; // .class TSlot
   
-  TAssocVar = CLASS
-    IntValue: INTEGER;
-    StrValue: STRING;
-  END; // .CLASS TAssocVar
+  TAssocVar = class
+    IntValue: integer;
+    StrValue: string;
+  end; // .class TAssocVar
   
-  TServiceParam = PACKED RECORD
-    IsStr:          BOOLEAN;
-    OperGet:        BOOLEAN;
-    Dummy:          WORD;
-    Value:          INTEGER;
-    StrValue:       PCHAR;
-    ParamModifier:  INTEGER;
-  END; // .RECORD TServiceParam
+  TServiceParam = packed record
+    IsStr:          boolean;
+    OperGet:        boolean;
+    Dummy:          word;
+    Value:          integer;
+    StrValue:       pchar;
+    ParamModifier:  integer;
+  end; // .record TServiceParam
 
   PServiceParams  = ^TServiceParams;
-  TServiceParams  = ARRAY [0..23] OF TServiceParam;
+  TServiceParams  = array [0..23] of TServiceParam;
 
 
-FUNCTION ExtendedEraService
+function ExtendedEraService
 (
-      Cmd:        CHAR;
-      NumParams:  INTEGER;
+      Cmd:        char;
+      NumParams:  integer;
       Params:     PServiceParams;
-  OUT Err:        PCHAR
-): BOOLEAN; STDCALL;
+  out Err:        pchar
+): boolean; stdcall;
 
 
-EXPORTS
+exports
   ExtendedEraService;
 
   
-(***) IMPLEMENTATION (***)
+(***) implementation (***)
 
 
-VAR
+var
 {O} NewReceivers: {O} TObjDict {OF TErmCmdHandler};
 
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
 {O} AssocMem:   {O} AssocArrays.TAssocArray {OF TAssocVar};
-    FreeSlotN:  INTEGER = SPEC_SLOT - 1;
+    FreeSlotN:  integer = SPEC_SLOT - 1;
 
 
-PROCEDURE RegisterReceiver (ReceiverName: INTEGER; ReceiverHandler: TReceiverHandler);
-VAR
+procedure RegisterReceiver (ReceiverName: integer; ReceiverHandler: TReceiverHandler);
+var
   OldReceiverHandler: TReceiverHandler;
    
-BEGIN
+begin
   OldReceiverHandler := NewReceivers[Ptr(ReceiverName)];
 
-  IF @OldReceiverHandler = NIL THEN BEGIN
+  if @OldReceiverHandler = nil then begin
     NewReceivers[Ptr(ReceiverName)] := @ReceiverHandler;
-  END // .IF
-  ELSE BEGIN
-    Erm.ShowMessage('Receiver "' + CHR(ReceiverName AND $FF) + CHR(ReceiverName SHR 8 AND $FF) + '" is already registered!');
-  END; // .ELSE
-END; // .PROCEDURE RegisterReceiver
+  end // .if
+  else begin
+    Erm.ShowMessage('Receiver "' + CHR(ReceiverName and $FF) + CHR(ReceiverName shr 8 and $FF) + '" is already registered!');
+  end; // .else
+end; // .procedure RegisterReceiver
     
-PROCEDURE ModifyWithIntParam (VAR Dest: INTEGER; VAR Param: TServiceParam);
-BEGIN
-  CASE Param.ParamModifier OF 
+procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
+begin
+  case Param.ParamModifier of 
     NO_MODIFIER:  Dest := Param.Value;
     MODIFIER_ADD: Dest := Dest + Param.Value;
     MODIFIER_SUB: Dest := Dest - Param.Value;
     MODIFIER_MUL: Dest := Dest * Param.Value;
-    MODIFIER_DIV: Dest := Dest DIV Param.Value;
-  END; // .SWITCH Paramo.ParamModifier
-END; // .PROCEDURE ModifyWithParam
+    MODIFIER_DIV: Dest := Dest div Param.Value;
+  end; // .switch Paramo.ParamModifier
+end; // .procedure ModifyWithParam
     
-FUNCTION CheckCmdParams (Params: PServiceParams; CONST Checks: ARRAY OF BOOLEAN): BOOLEAN;
-VAR
-  i:  INTEGER;
+function CheckCmdParams (Params: PServiceParams; const Checks: array of boolean): boolean;
+var
+  i:  integer;
 
-BEGIN
-  {!} ASSERT(Params <> NIL);
-  {!} ASSERT(NOT ODD(LENGTH(Checks)));
-  RESULT  :=  TRUE;
+begin
+  {!} Assert(Params <> nil);
+  {!} Assert(not ODD(Length(Checks)));
+  result  :=  TRUE;
   i       :=  0;
   
-  WHILE RESULT AND (i <= HIGH(Checks)) DO BEGIN
-    RESULT  :=
-      (Params[i SHR 1].IsStr  = Checks[i])  AND
-      (Params[i SHR 1].OperGet = Checks[i + 1]);
+  while result and (i <= High(Checks)) do begin
+    result  :=
+      (Params[i shr 1].IsStr  = Checks[i])  and
+      (Params[i shr 1].OperGet = Checks[i + 1]);
     
     i :=  i + 2;
-  END; // .WHILE
-END; // .FUNCTION CheckCmdParams
+  end; // .while
+end; // .function CheckCmdParams
 
-FUNCTION GetSlotItemsCount (Slot: TSlot): INTEGER;
-BEGIN
-  {!} ASSERT(Slot <> NIL);
-  IF Slot.ItemsType = INT_VAR THEN BEGIN
-    RESULT  :=  LENGTH(Slot.IntItems);
-  END // .IF
-  ELSE BEGIN
-    RESULT  :=  LENGTH(Slot.StrItems);
-  END; // .ELSE
-END; // .FUNCTION GetSlotItemsCount
+function GetSlotItemsCount (Slot: TSlot): integer;
+begin
+  {!} Assert(Slot <> nil);
+  if Slot.ItemsType = INT_VAR then begin
+    result  :=  Length(Slot.IntItems);
+  end // .if
+  else begin
+    result  :=  Length(Slot.StrItems);
+  end; // .else
+end; // .function GetSlotItemsCount
 
-PROCEDURE SetSlotItemsCount (NewNumItems: INTEGER; Slot: TSlot);
-BEGIN
-  {!} ASSERT(NewNumItems >= 0);
-  {!} ASSERT(Slot <> NIL);
-  IF Slot.ItemsType = INT_VAR THEN BEGIN
+procedure SetSlotItemsCount (NewNumItems: integer; Slot: TSlot);
+begin
+  {!} Assert(NewNumItems >= 0);
+  {!} Assert(Slot <> nil);
+  if Slot.ItemsType = INT_VAR then begin
     SetLength(Slot.IntItems, NewNumItems);
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     SetLength(Slot.StrItems, NewNumItems);
-  END; // .ELSE
-END; // .PROCEDURE SetSlotItemsCount
+  end; // .else
+end; // .procedure SetSlotItemsCount
 
-FUNCTION NewSlot (ItemsCount: INTEGER; ItemsType: TVarType; IsTemp: BOOLEAN): TSlot;
-BEGIN
-  {!} ASSERT(ItemsCount >= 0);
-  RESULT            :=  TSlot.Create;
-  RESULT.ItemsType  :=  ItemsType;
-  RESULT.IsTemp     :=  IsTemp;
+function NewSlot (ItemsCount: integer; ItemsType: TVarType; IsTemp: boolean): TSlot;
+begin
+  {!} Assert(ItemsCount >= 0);
+  result            :=  TSlot.Create;
+  result.ItemsType  :=  ItemsType;
+  result.IsTemp     :=  IsTemp;
   
-  SetSlotItemsCount(ItemsCount, RESULT);
-END; // .FUNCTION NewSlot
+  SetSlotItemsCount(ItemsCount, result);
+end; // .function NewSlot
   
-FUNCTION GetSlot (SlotN: INTEGER; OUT {U} Slot: TSlot; OUT Error: STRING): BOOLEAN;
-BEGIN
-  {!} ASSERT(Slot = NIL);
+function GetSlot (SlotN: integer; out {U} Slot: TSlot; out Error: string): boolean;
+begin
+  {!} Assert(Slot = nil);
   Slot    :=  Slots[Ptr(SlotN)];
-  RESULT  :=  Slot <> NIL;
+  result  :=  Slot <> nil;
   
-  IF NOT RESULT THEN BEGIN
+  if not result then begin
     Error :=  'Slot #' + SysUtils.IntToStr(SlotN) + ' does not exist.';
-  END; // .IF
-END; // .FUNCTION GetSlot 
+  end; // .if
+end; // .function GetSlot 
 
-FUNCTION AllocSlot (ItemsCount: INTEGER; ItemsType: TVarType; IsTemp: BOOLEAN): INTEGER;
-BEGIN
-  WHILE Slots[Ptr(FreeSlotN)] <> NIL DO BEGIN
-    DEC(FreeSlotN);
+function AllocSlot (ItemsCount: integer; ItemsType: TVarType; IsTemp: boolean): integer;
+begin
+  while Slots[Ptr(FreeSlotN)] <> nil do begin
+    Dec(FreeSlotN);
     
-    IF FreeSlotN > 0 THEN BEGIN
+    if FreeSlotN > 0 then begin
       FreeSlotN :=  SPEC_SLOT - 1;
-    END; // .IF
-  END; // .WHILE
+    end; // .if
+  end; // .while
   
   Slots[Ptr(FreeSlotN)] :=  NewSlot(ItemsCount, ItemsType, IsTemp);
-  RESULT                :=  FreeSlotN;
-  DEC(FreeSlotN);
+  result                :=  FreeSlotN;
+  Dec(FreeSlotN);
   
-  IF FreeSlotN > 0 THEN BEGIN
+  if FreeSlotN > 0 then begin
     FreeSlotN :=  SPEC_SLOT - 1;
-  END; // .IF
-END; // .FUNCTION AllocSlot
+  end; // .if
+end; // .function AllocSlot
 
-FUNCTION ExtendedEraService
+function ExtendedEraService
 (
-      Cmd:        CHAR;
-      NumParams:  INTEGER;
+      Cmd:        char;
+      NumParams:  integer;
       Params:     PServiceParams;
-  OUT Err:        PCHAR
-): BOOLEAN;
+  out Err:        pchar
+): boolean;
 
-VAR
+var
 {U} Slot:               TSlot;
 {U} AssocVarValue:      TAssocVar;
-    AssocVarName:       STRING;
-    Error:              STRING;
-    StrLen:             INTEGER;
-    NewSlotItemsCount:  INTEGER;
+    AssocVarName:       string;
+    Error:              string;
+    StrLen:             integer;
+    NewSlotItemsCount:  integer;
     GameState:          TGameState;
 
-BEGIN
-  Slot          :=  NIL;
-  AssocVarValue :=  NIL;
+begin
+  Slot          :=  nil;
+  AssocVarValue :=  nil;
   // * * * * * //
-  RESULT  :=  TRUE;
+  result  :=  TRUE;
   Error   :=  'Invalid command parameters.';
   
-  CASE Cmd OF 
+  case Cmd of 
     'M':
-      BEGIN
-        CASE NumParams OF
+      begin
+        case NumParams of
           // M; delete all slots
           0:
-            BEGIN
+            begin
               Slots.Clear;
-            END; // .CASE 0
+            end; // .case 0
           // M(Slot); delete specified slot
           1:
-            BEGIN
-              RESULT  :=
-                CheckCmdParams(Params, [NOT IS_STR, NOT OPER_GET])  AND
+            begin
+              result  :=
+                CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
                 (Params[0].Value <> SPEC_SLOT);
               
-              IF RESULT THEN BEGIN
+              if result then begin
                 Slots.DeleteItem(Ptr(Params[0].Value));
-              END; // .IF
-            END; // .CASE 1
-          // M(Slot)/[?]ItemsCount; analog of SetLength/LENGTH
+              end; // .if
+            end; // .case 1
+          // M(Slot)/[?]ItemsCount; analog of SetLength/Length
           2:
-            BEGIN
-              RESULT  :=
-                CheckCmdParams(Params, [NOT IS_STR, NOT OPER_GET])  AND
-                (NOT Params[1].IsStr)                               AND
-                (Params[1].OperGet OR (Params[1].Value >= 0));
+            begin
+              result  :=
+                CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
+                (not Params[1].IsStr)                               and
+                (Params[1].OperGet or (Params[1].Value >= 0));
 
-              IF RESULT THEN BEGIN          
-                IF Params[1].OperGet THEN BEGIN
+              if result then begin          
+                if Params[1].OperGet then begin
                   Slot  :=  Slots[Ptr(Params[0].Value)];
                   
-                  IF Slot <> NIL THEN BEGIN
+                  if Slot <> nil then begin
                     PINTEGER(Params[1].Value)^  :=  GetSlotItemsCount(Slot);
-                  END // .IF
-                  ELSE BEGIN
+                  end // .if
+                  else begin
                     PINTEGER(Params[1].Value)^  :=  NO_SLOT;
-                  END; // .ELSE
-                  END // .IF
-                ELSE BEGIN
-                  RESULT  :=  GetSlot(Params[0].Value, Slot, Error);
+                  end; // .else
+                  end // .if
+                else begin
+                  result  :=  GetSlot(Params[0].Value, Slot, Error);
                   
-                  IF RESULT THEN BEGIN
+                  if result then begin
                     NewSlotItemsCount := GetSlotItemsCount(Slot);
                     ModifyWithIntParam(NewSlotItemsCount, Params[1]);
                     SetSlotItemsCount(NewSlotItemsCount, Slot);
-                  END; // .IF
-                END; // .ELSE
-              END; // .IF
-            END; // .CASE 2
-          // M(Slot)/(VarN)/[?](Value) OR M(Slot)/?addr/(VarN)
+                  end; // .if
+                end; // .else
+              end; // .if
+            end; // .case 2
+          // M(Slot)/(VarN)/[?](Value) or M(Slot)/?addr/(VarN)
           3:
-            BEGIN
-              RESULT  :=
-                CheckCmdParams(Params, [NOT IS_STR, NOT OPER_GET])  AND
-                GetSlot(Params[0].Value, Slot, Error)               AND
-                (NOT Params[1].IsStr);
+            begin
+              result  :=
+                CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
+                GetSlot(Params[0].Value, Slot, Error)               and
+                (not Params[1].IsStr);
               
-              IF RESULT THEN BEGIN
-                IF Params[1].OperGet THEN BEGIN
-                  RESULT  :=
-                    (NOT Params[2].OperGet) AND
-                    (NOT Params[2].IsStr)   AND
+              if result then begin
+                if Params[1].OperGet then begin
+                  result  :=
+                    (not Params[2].OperGet) and
+                    (not Params[2].IsStr)   and
                     Math.InRange(Params[2].Value, 0, GetSlotItemsCount(Slot) - 1);
                   
-                  IF RESULT THEN BEGIN
-                    IF Slot.ItemsType = INT_VAR THEN BEGIN
+                  if result then begin
+                    if Slot.ItemsType = INT_VAR then begin
                       PPOINTER(Params[1].Value)^  :=  @Slot.IntItems[Params[2].Value];
-                    END // .IF
-                    ELSE BEGIN
-                      PPOINTER(Params[1].Value)^  :=  POINTER(Slot.StrItems[Params[2].Value]);
-                    END; // .ELSE
-                  END; // .IF
-                END // .IF
-                ELSE BEGIN
-                  RESULT  :=
-                    (NOT Params[1].OperGet) AND
-                    (NOT Params[1].IsStr)   AND
+                    end // .if
+                    else begin
+                      PPOINTER(Params[1].Value)^  :=  pointer(Slot.StrItems[Params[2].Value]);
+                    end; // .else
+                  end; // .if
+                end // .if
+                else begin
+                  result  :=
+                    (not Params[1].OperGet) and
+                    (not Params[1].IsStr)   and
                     Math.InRange(Params[1].Value, 0, GetSlotItemsCount(Slot) - 1);
                   
-                  IF RESULT THEN BEGIN
-                    IF Params[2].OperGet THEN BEGIN
-                      IF Slot.ItemsType = INT_VAR THEN BEGIN
-                        IF Params[2].IsStr THEN BEGIN
+                  if result then begin
+                    if Params[2].OperGet then begin
+                      if Slot.ItemsType = INT_VAR then begin
+                        if Params[2].IsStr then begin
                           Windows.LStrCpy
                           (
                             Ptr(Params[2].Value),
                             Ptr(Slot.IntItems[Params[1].Value])
                           );
-                        END // .IF
-                        ELSE BEGIN
+                        end // .if
+                        else begin
                           PINTEGER(Params[2].Value)^  :=  Slot.IntItems[Params[1].Value];
-                        END; // .ELSE
-                      END // .IF
-                      ELSE BEGIN
+                        end; // .else
+                      end // .if
+                      else begin
                         Windows.LStrCpy
                         (
                           Ptr(Params[2].Value),
-                          PCHAR(Slot.StrItems[Params[1].Value])
+                          pchar(Slot.StrItems[Params[1].Value])
                         );
-                      END; // .ELSE
-                    END // .IF
-                    ELSE BEGIN
-                      IF Slot.ItemsType = INT_VAR THEN BEGIN
-                        IF Params[2].IsStr THEN BEGIN
-                          IF Params[2].ParamModifier = MODIFIER_CONCAT THEN BEGIN
-                            StrLen := SysUtils.StrLen(PCHAR(Slot.IntItems[Params[1].Value]));
+                      end; // .else
+                    end // .if
+                    else begin
+                      if Slot.ItemsType = INT_VAR then begin
+                        if Params[2].IsStr then begin
+                          if Params[2].ParamModifier = MODIFIER_CONCAT then begin
+                            StrLen := SysUtils.StrLen(pchar(Slot.IntItems[Params[1].Value]));
                             
                             Windows.LStrCpy
                             (
                               Utils.PtrOfs(Ptr(Slot.IntItems[Params[1].Value]), StrLen),
                               Ptr(Params[2].Value)
                             );
-                          END // .IF
-                          ELSE BEGIN
+                          end // .if
+                          else begin
                             Windows.LStrCpy
                             (
                               Ptr(Slot.IntItems[Params[1].Value]),
                               Ptr(Params[2].Value)
                             );
-                          END; // .ELSE
-                        END // .IF
-                        ELSE BEGIN
+                          end; // .else
+                        end // .if
+                        else begin
                           Slot.IntItems[Params[1].Value]  :=  Params[2].Value;
-                        END; // .ELSE
-                      END // .IF
-                      ELSE BEGIN
-                        IF Params[2].Value = 0 THEN BEGIN
-                          Params[2].Value := INTEGER(PCHAR(''));
-                        END; // .IF
+                        end; // .else
+                      end // .if
+                      else begin
+                        if Params[2].Value = 0 then begin
+                          Params[2].Value := integer(pchar(''));
+                        end; // .if
                         
-                        IF Params[2].ParamModifier = MODIFIER_CONCAT THEN BEGIN
+                        if Params[2].ParamModifier = MODIFIER_CONCAT then begin
                           Slot.StrItems[Params[1].Value] := Slot.StrItems[Params[1].Value] +
-                                                            PCHAR(Params[2].Value);
-                        END // .IF
-                        ELSE BEGIN
-                          Slot.StrItems[Params[1].Value] := PCHAR(Params[2].Value);
-                        END; // .ELSE
-                      END; // .ELSE
-                    END; // .ELSE
-                  END; // .IF
-                END; // .ELSE
-              END; // .IF
-            END; // .CASE 3
+                                                            pchar(Params[2].Value);
+                        end // .if
+                        else begin
+                          Slot.StrItems[Params[1].Value] := pchar(Params[2].Value);
+                        end; // .else
+                      end; // .else
+                    end; // .else
+                  end; // .if
+                end; // .else
+              end; // .if
+            end; // .case 3
           4:
-            BEGIN
-              RESULT  :=  CheckCmdParams
+            begin
+              result  :=  CheckCmdParams
               (
                 Params,
                 [
-                  NOT IS_STR,
-                  NOT OPER_GET,
-                  NOT IS_STR,
-                  NOT OPER_GET,
-                  NOT IS_STR,
-                  NOT OPER_GET,
-                  NOT IS_STR,
-                  NOT OPER_GET
+                  not IS_STR,
+                  not OPER_GET,
+                  not IS_STR,
+                  not OPER_GET,
+                  not IS_STR,
+                  not OPER_GET,
+                  not IS_STR,
+                  not OPER_GET
                 ]
-              ) AND
-              (Params[0].Value >= SPEC_SLOT)                        AND
-              (Params[1].Value >= 0)                                AND
-              Math.InRange(Params[2].Value, 0, ORD(HIGH(TVarType))) AND
-              ((Params[3].Value = IS_TEMP) OR (Params[3].Value = NOT_TEMP));
+              ) and
+              (Params[0].Value >= SPEC_SLOT)                        and
+              (Params[1].Value >= 0)                                and
+              Math.InRange(Params[2].Value, 0, ORD(High(TVarType))) and
+              ((Params[3].Value = IS_TEMP) or (Params[3].Value = NOT_TEMP));
               
-              IF RESULT THEN BEGIN
-                IF Params[0].Value = SPEC_SLOT THEN BEGIN
+              if result then begin
+                if Params[0].Value = SPEC_SLOT then begin
                   Erm.v[1]  :=  AllocSlot
                   (
                     Params[1].Value, TVarType(Params[2].Value), Params[3].Value = IS_TEMP
                   );
-                END // .IF
-                ELSE BEGIN
+                end // .if
+                else begin
                   Slots[Ptr(Params[0].Value)] :=  NewSlot
                   (
                     Params[1].Value, TVarType(Params[2].Value), Params[3].Value = IS_TEMP
                   );
-                END; // .ELSE
-              END; // .IF
-            END; // .CASE 4
-        ELSE
-          RESULT  :=  FALSE;
+                end; // .else
+              end; // .if
+            end; // .case 4
+        else
+          result  :=  FALSE;
           Error   :=  'Invalid number of parameters.';
-        END; // .SWITCH NumParams
-      END; // .CASE "M"
+        end; // .switch NumParams
+      end; // .case "M"
     'K':
-      BEGIN
-        CASE NumParams OF 
+      begin
+        case NumParams of 
           // C(str)/?(len)
           2:
-            BEGIN
-              RESULT  :=  (NOT Params[0].OperGet) AND (NOT Params[1].IsStr) AND (Params[1].OperGet);
+            begin
+              result  :=  (not Params[0].OperGet) and (not Params[1].IsStr) and (Params[1].OperGet);
               
-              IF RESULT THEN BEGIN
-                PINTEGER(Params[1].Value)^  :=  SysUtils.StrLen(POINTER(Params[0].Value));
-              END; // .IF
-            END; // .CASE 2
+              if result then begin
+                PINTEGER(Params[1].Value)^  :=  SysUtils.StrLen(pointer(Params[0].Value));
+              end; // .if
+            end; // .case 2
           // C(str)/(ind)/[?](strchar)
           3:
-            BEGIN
-              RESULT  :=
-                (NOT Params[0].OperGet) AND
-                (NOT Params[1].IsStr)   AND
-                (NOT Params[1].OperGet) AND
-                (Params[1].Value >= 0)  AND
+            begin
+              result  :=
+                (not Params[0].OperGet) and
+                (not Params[1].IsStr)   and
+                (not Params[1].OperGet) and
+                (Params[1].Value >= 0)  and
                 (Params[2].IsStr);
               
-              IF RESULT THEN BEGIN
-                IF Params[2].OperGet THEN BEGIN
-                  PCHAR(Params[2].Value)^     :=  PEndlessCharArr(Params[0].Value)[Params[1].Value];
-                  PCHAR(Params[2].Value + 1)^ :=  #0;
-                END // .IF
-                ELSE BEGIN
-                  PEndlessCharArr(Params[0].Value)[Params[1].Value] :=  PCHAR(Params[2].Value)^;
-                END; // .ELSE
-              END; // .IF
-            END; // .CASE 3
+              if result then begin
+                if Params[2].OperGet then begin
+                  pchar(Params[2].Value)^     :=  PEndlessCharArr(Params[0].Value)[Params[1].Value];
+                  pchar(Params[2].Value + 1)^ :=  #0;
+                end // .if
+                else begin
+                  PEndlessCharArr(Params[0].Value)[Params[1].Value] :=  pchar(Params[2].Value)^;
+                end; // .else
+              end; // .if
+            end; // .case 3
           4:
-            BEGIN
-              RESULT  :=
-                (NOT Params[0].IsStr)   AND
-                (NOT Params[0].OperGet) AND
+            begin
+              result  :=
+                (not Params[0].IsStr)   and
+                (not Params[0].OperGet) and
                 (Params[0].Value >= 0);
               
-              IF RESULT AND (Params[0].Value > 0) THEN BEGIN
-                Utils.CopyMem(Params[0].Value, POINTER(Params[1].Value), POINTER(Params[2].Value));
-              END; // .IF
-            END; // .CASE 4
-        ELSE
-          RESULT  :=  FALSE;
+              if result and (Params[0].Value > 0) then begin
+                Utils.CopyMem(Params[0].Value, pointer(Params[1].Value), pointer(Params[2].Value));
+              end; // .if
+            end; // .case 4
+        else
+          result  :=  FALSE;
           Error   :=  'Invalid number of parameters.';
-        END; // .SWITCH NumParams
-      END; // .CASE "K"
+        end; // .switch NumParams
+      end; // .case "K"
     'W':
-      BEGIN
-        CASE NumParams OF 
+      begin
+        case NumParams of 
           // Clear all
           0:
-            BEGIN
+            begin
               AssocMem.Clear;
-            END; // .CASE 0
+            end; // .case 0
           // Delete var
           1:
-            BEGIN
-              RESULT  :=  NOT Params[0].OperGet;
+            begin
+              result  :=  not Params[0].OperGet;
               
-              IF RESULT THEN BEGIN
-                IF Params[0].IsStr THEN BEGIN
-                  AssocVarName  :=  PCHAR(Params[0].Value);
-                END // .IF
-                ELSE BEGIN
+              if result then begin
+                if Params[0].IsStr then begin
+                  AssocVarName  :=  pchar(Params[0].Value);
+                end // .if
+                else begin
                   AssocVarName  :=  SysUtils.IntToStr(Params[0].Value);
-                END; // .ELSE
+                end; // .else
                 
                 AssocMem.DeleteItem(AssocVarName);
-              END; // .IF
-            END; // .CASE 1
-          // Get/Set var
+              end; // .if
+            end; // .case 1
+          // Get/set var
           2:
-            BEGIN
-              RESULT  :=  NOT Params[0].OperGet;
+            begin
+              result  :=  not Params[0].OperGet;
               
-              IF RESULT THEN BEGIN
-                IF Params[0].IsStr THEN BEGIN
-                  AssocVarName  :=  PCHAR(Params[0].Value);
-                END // .IF
-                ELSE BEGIN
+              if result then begin
+                if Params[0].IsStr then begin
+                  AssocVarName  :=  pchar(Params[0].Value);
+                end // .if
+                else begin
                   AssocVarName  :=  SysUtils.IntToStr(Params[0].Value);
-                END; // .ELSE
+                end; // .else
                 
                 AssocVarValue :=  AssocMem[AssocVarName];
                 
-                IF Params[1].OperGet THEN BEGIN
-                  IF Params[1].IsStr THEN BEGIN
-                    IF (AssocVarValue = NIL) OR (AssocVarValue.StrValue = '') THEN BEGIN
-                      PCHAR(Params[1].Value)^ :=  #0;
-                    END // .IF
-                    ELSE BEGIN
+                if Params[1].OperGet then begin
+                  if Params[1].IsStr then begin
+                    if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
+                      pchar(Params[1].Value)^ :=  #0;
+                    end // .if
+                    else begin
                       Utils.CopyMem
                       (
-                        LENGTH(AssocVarValue.StrValue) + 1,
-                        POINTER(AssocVarValue.StrValue),
-                        POINTER(Params[1].Value)
+                        Length(AssocVarValue.StrValue) + 1,
+                        pointer(AssocVarValue.StrValue),
+                        pointer(Params[1].Value)
                       );
-                    END; // .ELSE
-                  END // .IF
-                  ELSE BEGIN
-                    IF AssocVarValue = NIL THEN BEGIN
+                    end; // .else
+                  end // .if
+                  else begin
+                    if AssocVarValue = nil then begin
                       PINTEGER(Params[1].Value)^  :=  0;
-                    END // .IF
-                    ELSE BEGIN
+                    end // .if
+                    else begin
                       PINTEGER(Params[1].Value)^  :=  AssocVarValue.IntValue;
-                    END; // .ELSE
-                  END; // .ELSE
-                END // .IF
-                ELSE BEGIN
-                  IF AssocVarValue = NIL THEN BEGIN
+                    end; // .else
+                  end; // .else
+                end // .if
+                else begin
+                  if AssocVarValue = nil then begin
                     AssocVarValue           :=  TAssocVar.Create;
                     AssocMem[AssocVarName]  :=  AssocVarValue;
-                  END; // .IF
+                  end; // .if
                   
-                  IF Params[1].IsStr THEN BEGIN
-                    IF Params[1].ParamModifier <> MODIFIER_CONCAT THEN BEGIN
-                      AssocVarValue.StrValue  :=  PCHAR(Params[1].Value);
-                    END // .IF
-                    ELSE BEGIN
-                      AssocVarValue.StrValue := AssocVarValue.StrValue + PCHAR(Params[1].Value);
-                    END; // .ELSE
-                  END // .IF
-                  ELSE BEGIN
+                  if Params[1].IsStr then begin
+                    if Params[1].ParamModifier <> MODIFIER_CONCAT then begin
+                      AssocVarValue.StrValue  :=  pchar(Params[1].Value);
+                    end // .if
+                    else begin
+                      AssocVarValue.StrValue := AssocVarValue.StrValue + pchar(Params[1].Value);
+                    end; // .else
+                  end // .if
+                  else begin
                     ModifyWithIntParam(AssocVarValue.IntValue, Params[1]);
-                  END; // .ELSE
-                END; // .ELSE
-              END; // .IF
-            END; // .CASE 2
-        ELSE
-          RESULT  :=  FALSE;
+                  end; // .else
+                end; // .else
+              end; // .if
+            end; // .case 2
+        else
+          result  :=  FALSE;
           Error   :=  'Invalid number of parameters.';
-        END; // .SWITCH
-      END; // .CASE "W"
+        end; // .switch
+      end; // .case "W"
     'D':
-      BEGIN
+      begin
         GetGameState(GameState);
         
-        IF GameState.CurrentDlgId = ADVMAP_DLGID THEN BEGIN
+        if GameState.CurrentDlgId = ADVMAP_DLGID then begin
           Erm.ExecErmCmd('UN:R1;');
-        END // .IF
-        ELSE IF GameState.CurrentDlgId = TOWN_SCREEN_DLGID THEN BEGIN
+        end // .if
+        else if GameState.CurrentDlgId = TOWN_SCREEN_DLGID then begin
           Erm.ExecErmCmd('UN:R4;');
-        END // .ELSEIF
-        ELSE IF GameState.CurrentDlgId = HERO_SCREEN_DLGID THEN BEGIN
+        end // .ELSEIF
+        else if GameState.CurrentDlgId = HERO_SCREEN_DLGID then begin
           Erm.ExecErmCmd('UN:R3/-1;');
-        END // .ELSEIF
-        ELSE IF GameState.CurrentDlgId = HERO_MEETING_SCREEN_DLGID THEN BEGIN
+        end // .ELSEIF
+        else if GameState.CurrentDlgId = HERO_MEETING_SCREEN_DLGID then begin
           Heroes.RedrawHeroMeetingScreen;
-        END; // .ELSEIF
-      END; // .CASE "D"
-  ELSE
-    RESULT  :=  FALSE;
+        end; // .ELSEIF
+      end; // .case "D"
+  else
+    result  :=  FALSE;
     Error   :=  'Unknown command "' + Cmd +'".';
-  END; // .SWITCH Cmd
+  end; // .switch Cmd
   
-  IF NOT RESULT THEN BEGIN
+  if not result then begin
     Error :=  'Error executing Era command SN:' + Cmd + ':'#13#10 + Error;
-    Utils.CopyMem(LENGTH(Error) + 1, POINTER(Error), @Erm.z[1]);
+    Utils.CopyMem(Length(Error) + 1, pointer(Error), @Erm.z[1]);
     Err   :=  @Erm.z[1];
-  END; // .IF
-END; // .FUNCTION ExtendedEraService
+  end; // .if
+end; // .function ExtendedEraService
 
-PROCEDURE OnBeforeErmInstructions (Event: PEvent); STDCALL;
-BEGIN
+procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
+begin
   Slots.Clear;
   AssocMem.Clear;
-END; // .PROCEDURE OnBeforeErmInstructions
+end; // .procedure OnBeforeErmInstructions
 
-PROCEDURE SaveSlots;
-VAR
+procedure SaveSlots;
+var
 {U} Slot:     TSlot;
-    SlotN:    INTEGER;
-    NumSlots: INTEGER;
-    NumItems: INTEGER;
-    StrLen:   INTEGER;
-    i:        INTEGER;
+    SlotN:    integer;
+    NumSlots: integer;
+    NumItems: integer;
+    StrLen:   integer;
+    i:        integer;
   
-BEGIN
+begin
   SlotN :=  0;
-  Slot  :=  NIL;
+  Slot  :=  nil;
   // * * * * * //
   NumSlots  :=  Slots.ItemCount;
-  Stores.WriteSavegameSection(SIZEOF(NumSlots), @NumSlots, SLOTS_SAVE_SECTION);
+  Stores.WriteSavegameSection(sizeof(NumSlots), @NumSlots, SLOTS_SAVE_SECTION);
   
   Slots.BeginIterate;
   
-  WHILE Slots.IterateNext(POINTER(SlotN), POINTER(Slot)) DO BEGIN
-    Stores.WriteSavegameSection(SIZEOF(SlotN), @SlotN, SLOTS_SAVE_SECTION);
-    Stores.WriteSavegameSection(SIZEOF(Slot.ItemsType), @Slot.ItemsType, SLOTS_SAVE_SECTION);
-    Stores.WriteSavegameSection(SIZEOF(Slot.IsTemp), @Slot.IsTemp, SLOTS_SAVE_SECTION);
+  while Slots.IterateNext(pointer(SlotN), pointer(Slot)) do begin
+    Stores.WriteSavegameSection(sizeof(SlotN), @SlotN, SLOTS_SAVE_SECTION);
+    Stores.WriteSavegameSection(sizeof(Slot.ItemsType), @Slot.ItemsType, SLOTS_SAVE_SECTION);
+    Stores.WriteSavegameSection(sizeof(Slot.IsTemp), @Slot.IsTemp, SLOTS_SAVE_SECTION);
     
     NumItems  :=  GetSlotItemsCount(Slot);
-    Stores.WriteSavegameSection(SIZEOF(NumItems), @NumItems, SLOTS_SAVE_SECTION);
+    Stores.WriteSavegameSection(sizeof(NumItems), @NumItems, SLOTS_SAVE_SECTION);
     
-    IF (NumItems > 0) AND NOT Slot.IsTemp THEN BEGIN
-      IF Slot.ItemsType = INT_VAR THEN BEGIN
+    if (NumItems > 0) and not Slot.IsTemp then begin
+      if Slot.ItemsType = INT_VAR then begin
         Stores.WriteSavegameSection
         (
-          SIZEOF(INTEGER) * NumItems,
+          sizeof(integer) * NumItems,
           @Slot.IntItems[0], SLOTS_SAVE_SECTION
         );
-      END // .IF
-      ELSE BEGIN
-        FOR i:=0 TO NumItems - 1 DO BEGIN
-          StrLen  :=  LENGTH(Slot.StrItems[i]);
-          Stores.WriteSavegameSection(SIZEOF(StrLen), @StrLen, SLOTS_SAVE_SECTION);
+      end // .if
+      else begin
+        for i:=0 to NumItems - 1 do begin
+          StrLen  :=  Length(Slot.StrItems[i]);
+          Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
           
-          IF StrLen > 0 THEN BEGIN
-            Stores.WriteSavegameSection(StrLen, POINTER(Slot.StrItems[i]), SLOTS_SAVE_SECTION);
-          END; // .IF
-        END; // .FOR
-      END; // .ELSE
-    END; // .IF
+          if StrLen > 0 then begin
+            Stores.WriteSavegameSection(StrLen, pointer(Slot.StrItems[i]), SLOTS_SAVE_SECTION);
+          end; // .if
+        end; // .for
+      end; // .else
+    end; // .if
     
     SlotN :=  0;
-    Slot  :=  NIL;
-  END; // .WHILE
+    Slot  :=  nil;
+  end; // .while
   
   Slots.EndIterate;
-END; // .PROCEDURE SaveSlots
+end; // .procedure SaveSlots
 
-PROCEDURE SaveAssocMem;
-VAR
+procedure SaveAssocMem;
+var
 {U} AssocVarValue:  TAssocVar;
-    AssocVarName:   STRING;
-    NumVars:        INTEGER;
-    StrLen:         INTEGER;
+    AssocVarName:   string;
+    NumVars:        integer;
+    StrLen:         integer;
   
-BEGIN
-  AssocVarValue :=  NIL;
+begin
+  AssocVarValue :=  nil;
   // * * * * * //
   NumVars :=  AssocMem.ItemCount;
-  Stores.WriteSavegameSection(SIZEOF(NumVars), @NumVars, ASSOC_SAVE_SECTION);
+  Stores.WriteSavegameSection(sizeof(NumVars), @NumVars, ASSOC_SAVE_SECTION);
   
   AssocMem.BeginIterate;
   
-  WHILE AssocMem.IterateNext(AssocVarName, POINTER(AssocVarValue)) DO BEGIN
-    StrLen  :=  LENGTH(AssocVarName);
-    Stores.WriteSavegameSection(SIZEOF(StrLen), @StrLen, ASSOC_SAVE_SECTION);
-    Stores.WriteSavegameSection(StrLen, POINTER(AssocVarName), ASSOC_SAVE_SECTION);
+  while AssocMem.IterateNext(AssocVarName, pointer(AssocVarValue)) do begin
+    StrLen  :=  Length(AssocVarName);
+    Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
+    Stores.WriteSavegameSection(StrLen, pointer(AssocVarName), ASSOC_SAVE_SECTION);
     
     Stores.WriteSavegameSection
     (
-      SIZEOF(AssocVarValue.IntValue),
+      sizeof(AssocVarValue.IntValue),
       @AssocVarValue.IntValue,
       ASSOC_SAVE_SECTION
     );
     
-    StrLen  :=  LENGTH(AssocVarValue.StrValue);
-    Stores.WriteSavegameSection(SIZEOF(StrLen), @StrLen, ASSOC_SAVE_SECTION);
-    Stores.WriteSavegameSection(StrLen, POINTER(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
+    StrLen  :=  Length(AssocVarValue.StrValue);
+    Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
+    Stores.WriteSavegameSection(StrLen, pointer(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
     
-    AssocVarValue :=  NIL;
-  END; // .WHILE
+    AssocVarValue :=  nil;
+  end; // .while
   
   AssocMem.EndIterate;
-END; // .PROCEDURE SaveAssocMem
+end; // .procedure SaveAssocMem
 
-PROCEDURE OnSavegameWrite (Event: PEvent); STDCALL;
-BEGIN
+procedure OnSavegameWrite (Event: PEvent); stdcall;
+begin
   SaveSlots;
   SaveAssocMem;
-END; // .PROCEDURE OnSavegameWrite
+end; // .procedure OnSavegameWrite
 
-PROCEDURE LoadSlots;
-VAR
+procedure LoadSlots;
+var
 {U} Slot:       TSlot;
-    SlotN:      INTEGER;
-    NumSlots:   INTEGER;
+    SlotN:      integer;
+    NumSlots:   integer;
     ItemsType:  TVarType;
-    IsTempSlot: BOOLEAN;
-    NumItems:   INTEGER;
-    StrLen:     INTEGER;
-    i:          INTEGER;
-    y:          INTEGER;
+    IsTempSlot: boolean;
+    NumItems:   integer;
+    StrLen:     integer;
+    i:          integer;
+    y:          integer;
 
-BEGIN
-  Slot      :=  NIL;
+begin
+  Slot      :=  nil;
   NumSlots  :=  0;
   // * * * * * //
   Slots.Clear;
-  Stores.ReadSavegameSection(SIZEOF(NumSlots), @NumSlots, SLOTS_SAVE_SECTION);
+  Stores.ReadSavegameSection(sizeof(NumSlots), @NumSlots, SLOTS_SAVE_SECTION);
   
-  FOR i:=0 TO NumSlots - 1 DO BEGIN
-    Stores.ReadSavegameSection(SIZEOF(SlotN), @SlotN, SLOTS_SAVE_SECTION);
-    Stores.ReadSavegameSection(SIZEOF(ItemsType), @ItemsType, SLOTS_SAVE_SECTION);
-    Stores.ReadSavegameSection(SIZEOF(IsTempSlot), @IsTempSlot, SLOTS_SAVE_SECTION);
+  for i:=0 to NumSlots - 1 do begin
+    Stores.ReadSavegameSection(sizeof(SlotN), @SlotN, SLOTS_SAVE_SECTION);
+    Stores.ReadSavegameSection(sizeof(ItemsType), @ItemsType, SLOTS_SAVE_SECTION);
+    Stores.ReadSavegameSection(sizeof(IsTempSlot), @IsTempSlot, SLOTS_SAVE_SECTION);
     
-    Stores.ReadSavegameSection(SIZEOF(NumItems), @NumItems, SLOTS_SAVE_SECTION);
+    Stores.ReadSavegameSection(sizeof(NumItems), @NumItems, SLOTS_SAVE_SECTION);
     
     Slot              :=  NewSlot(NumItems, ItemsType, IsTempSlot);
     Slots[Ptr(SlotN)] :=  Slot;
     SetSlotItemsCount(NumItems, Slot);
     
-    IF NOT IsTempSlot AND (NumItems > 0) THEN BEGIN
-      IF ItemsType = INT_VAR THEN BEGIN
+    if not IsTempSlot and (NumItems > 0) then begin
+      if ItemsType = INT_VAR then begin
         Stores.ReadSavegameSection
         (
-          SIZEOF(INTEGER) * NumItems,
+          sizeof(integer) * NumItems,
           @Slot.IntItems[0],
           SLOTS_SAVE_SECTION
         );
-      END // .IF
-      ELSE BEGIN
-        FOR y:=0 TO NumItems - 1 DO BEGIN
-          Stores.ReadSavegameSection(SIZEOF(StrLen), @StrLen, SLOTS_SAVE_SECTION);
+      end // .if
+      else begin
+        for y:=0 to NumItems - 1 do begin
+          Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
           SetLength(Slot.StrItems[y], StrLen);
-          Stores.ReadSavegameSection(StrLen, POINTER(Slot.StrItems[y]), SLOTS_SAVE_SECTION);
-        END; // .FOR
-      END; // .ELSE
-    END; // .IF
-  END; // .FOR
-END; // .PROCEDURE LoadSlots
+          Stores.ReadSavegameSection(StrLen, pointer(Slot.StrItems[y]), SLOTS_SAVE_SECTION);
+        end; // .for
+      end; // .else
+    end; // .if
+  end; // .for
+end; // .procedure LoadSlots
 
-PROCEDURE LoadAssocMem;
-VAR
+procedure LoadAssocMem;
+var
 {O} AssocVarValue:  TAssocVar;
-    AssocVarName:   STRING;
-    NumVars:        INTEGER;
-    StrLen:         INTEGER;
-    i:              INTEGER;
+    AssocVarName:   string;
+    NumVars:        integer;
+    StrLen:         integer;
+    i:              integer;
   
-BEGIN
-  AssocVarValue :=  NIL;
+begin
+  AssocVarValue :=  nil;
   NumVars       :=  0;
   // * * * * * //
   AssocMem.Clear;
-  Stores.ReadSavegameSection(SIZEOF(NumVars), @NumVars, ASSOC_SAVE_SECTION);
+  Stores.ReadSavegameSection(sizeof(NumVars), @NumVars, ASSOC_SAVE_SECTION);
   
-  FOR i:=0 TO NumVars - 1 DO BEGIN
+  for i:=0 to NumVars - 1 do begin
     AssocVarValue :=  TAssocVar.Create;
     
-    Stores.ReadSavegameSection(SIZEOF(StrLen), @StrLen, ASSOC_SAVE_SECTION);
+    Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
     SetLength(AssocVarName, StrLen);
-    Stores.ReadSavegameSection(StrLen, POINTER(AssocVarName), ASSOC_SAVE_SECTION);
+    Stores.ReadSavegameSection(StrLen, pointer(AssocVarName), ASSOC_SAVE_SECTION);
     
     Stores.ReadSavegameSection
     (
-      SIZEOF(AssocVarValue.IntValue),
+      sizeof(AssocVarValue.IntValue),
       @AssocVarValue.IntValue,
       ASSOC_SAVE_SECTION
     );
     
-    Stores.ReadSavegameSection(SIZEOF(StrLen), @StrLen, ASSOC_SAVE_SECTION);
+    Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
     SetLength(AssocVarValue.StrValue, StrLen);
-    Stores.ReadSavegameSection(StrLen, POINTER(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
+    Stores.ReadSavegameSection(StrLen, pointer(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
     
-    IF (AssocVarValue.IntValue <> 0) OR (AssocVarValue.StrValue <> '') THEN BEGIN
-      AssocMem[AssocVarName]  :=  AssocVarValue; AssocVarValue  :=  NIL;
-    END // .IF
-    ELSE BEGIN
+    if (AssocVarValue.IntValue <> 0) or (AssocVarValue.StrValue <> '') then begin
+      AssocMem[AssocVarName]  :=  AssocVarValue; AssocVarValue  :=  nil;
+    end // .if
+    else begin
       SysUtils.FreeAndNil(AssocVarValue);
-    END; // .ELSE
-  END; // .FOR
-END; // .PROCEDURE LoadAssocMem
+    end; // .else
+  end; // .for
+end; // .procedure LoadAssocMem
 
-PROCEDURE OnSavegameRead (Event: PEvent); STDCALL;
-BEGIN
+procedure OnSavegameRead (Event: PEvent); stdcall;
+begin
   LoadSlots;
   LoadAssocMem;
-END; // .PROCEDURE OnSavegameRead
+end; // .procedure OnSavegameRead
 
-(*FUNCTION HookFindErm_NewReceivers (Hook: TLoHook; Context: PHookContext): INTEGER; STDCALL;
-CONST
+(*function HookFindErm_NewReceivers (Hook: TLoHook; Context: PHookContext): integer; stdcall;
+const
   FuncParseParams = $73FDDC; // int cdecl f (Mes& M)
   
-VAR
-  NumParams: INTEGER;
+var
+  NumParams: integer;
 
-BEGIN
-  IF  THEN BEGIN
+begin
+  if  then begin
     // M.c[0]=':';
     PCharByte(Context.EBP - $8C])^ := ':';
     // Ind=M.i;
@@ -792,20 +792,20 @@ BEGIN
     PINTEGER(Context.EBP - $358)^ := 0;
     // ParSet = Num
     PINTEGER(Context.EBP - $3F8)^ := NumParams;
-  END // .IF
-  ELSE BEGIN
+  end // .if
+  else begin
     
-  END; // .ELSE
-  // BREKA IS JUMP TO JMP SHORT 0074B8C5
-  RESULT  :=  EXEC_DEFAULT;
-END; // .FUNCTION HookFindErm_NewReceivers*)
+  end; // .else
+  // BREKA IS JUMP to JMP SHORT 0074B8C5
+  result  :=  EXEC_DEFAULT;
+end; // .function HookFindErm_NewReceivers*)
 
-PROCEDURE OnBeforeWoG (Event: PEvent); STDCALL;
-BEGIN
+procedure OnBeforeWoG (Event: PEvent); stdcall;
+begin
   (*Core.p.WriteLoHook($74B6B2, @HookFindErm_NewReceivers);*)
-END; // .PROCEDURE OnBeforeWoG
+end; // .procedure OnBeforeWoG
 
-BEGIN
+begin
   (*NewReceivers  :=  DataLib.NewObjDict(Utils.OWNS_ITEMS);*)
 
   Slots     :=  AssocArrays.NewStrictObjArr(TSlot);
@@ -815,4 +815,4 @@ BEGIN
   GameExt.RegisterHandler(OnBeforeErmInstructions, 'OnBeforeErmInstructions');
   GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
   GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
-END.
+end.

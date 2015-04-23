@@ -216,7 +216,7 @@ begin
           BaseEventName + SysUtils.IntToStr(ObjType) + '/' + SysUtils.IntToStr(ObjSubtype);
       end; // .else
     end; // .if
-  end; // .SWITCH
+  end; // .switch
 end; // .function GetTriggerReadableName
 
 (***) implementation (***)
