@@ -27,7 +27,7 @@ const
   OPCODE_CALL     = $E8;
   OPCODE_RET      = $C3;
   
-  EXEC_DEF_CODE   = TRUE;
+  EXEC_DEF_CODE   = true;
   
   (* Erm triggers *)
   TRIGGER_FU1       = 0;

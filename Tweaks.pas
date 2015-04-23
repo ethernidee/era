@@ -613,7 +613,7 @@ begin
   
   (* Universal CPU patch *)
   if CPUPatchOpt then begin
-    hTimerEvent := Windows.CreateEvent(nil, TRUE, FALSE, 'CPUPatch');
+    hTimerEvent := Windows.CreateEvent(nil, true, false, 'CPUPatch');
     
     Core.p.WriteHiHook
     (

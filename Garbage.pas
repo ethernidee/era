@@ -45,7 +45,7 @@ begin
     $469A98:  Context.EBX                   :=  WOG_MF_DAMAGE^;
     $5A106A:  PINTEGER(Context.EBP - $34)^  :=  WOG_MF_DAMAGE^;
   else
-    {!} Assert(FALSE);
+    {!} Assert(false);
   end; // .switch HookAddr
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_AfterApplyDamage
@@ -99,9 +99,9 @@ begin
   // * * * * * //
   Locator.DirPath :=  SCRIPTS_PATH;
 
-  ScriptList.CaseInsensitive   :=  TRUE;
-  ScriptList.Sorted            :=  TRUE;
-  ScriptList.ForbidDuplicates  :=  TRUE;
+  ScriptList.CaseInsensitive   :=  true;
+  ScriptList.Sorted            :=  true;
+  ScriptList.ForbidDuplicates  :=  true;
 
   Locator.InitSearch('*.erm');
   
@@ -143,9 +143,9 @@ begin
   
   Locator.FinitSearch;
 
-  ScriptList.Sorted            :=  FALSE;
-  ScriptList.ForbidDuplicates  :=  FALSE;
-  ScriptList.CaseInsensitive   :=  FALSE;
+  ScriptList.Sorted            :=  false;
+  ScriptList.ForbidDuplicates  :=  false;
+  ScriptList.CaseInsensitive   :=  false;
 
   (* Sort via insertion by Priority *)
   for i:=1 to ScriptList.Count - 1 do begin
@@ -288,7 +288,7 @@ var
     end; // .function FindFirstChar
   
   begin
-    result          :=  FALSE;
+    result          :=  false;
     StrBasePos      :=  s;
     PatternBasePos  :=  p;
   
@@ -308,7 +308,7 @@ begin
   s               :=  1;
   p               :=  1;
   State           :=  STATE_STRICT_COMPARE;
-  result          :=  FALSE;
+  result          :=  false;
   
   if StrictMatch then begin
     while SkipWillcards and FindNextStr do begin end;

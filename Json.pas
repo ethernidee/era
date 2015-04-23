@@ -1821,7 +1821,7 @@ var
             case s[j] of
               '\': result := result + '\';
               '"': result := result + '"';
-              '''': Result := Result + '''';
+              '''': result := result + '''';
               '/': result := result + '/';
               'b': result := result + #8;
               'f': result := result + #12;

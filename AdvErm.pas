@@ -16,8 +16,8 @@ const
   IS_TEMP   = 0;
   NOT_TEMP  = 1;
   
-  IS_STR    = TRUE;
-  OPER_GET  = TRUE;
+  IS_STR    = true;
+  OPER_GET  = true;
   
   SLOTS_SAVE_SECTION  = 'Era.DynArrays_SN_M';
   ASSOC_SAVE_SECTION  = 'Era.AssocArray_SN_W';
@@ -126,7 +126,7 @@ var
 begin
   {!} Assert(Params <> nil);
   {!} Assert(not ODD(Length(Checks)));
-  result  :=  TRUE;
+  result  :=  true;
   i       :=  0;
   
   while result and (i <= High(Checks)) do begin
@@ -222,7 +222,7 @@ begin
   Slot          :=  nil;
   AssocVarValue :=  nil;
   // * * * * * //
-  result  :=  TRUE;
+  result  :=  true;
   Error   :=  'Invalid command parameters';
   
   case Cmd of 
@@ -406,7 +406,7 @@ begin
               end; // .if
             end; // .case 4
         else
-          result  :=  FALSE;
+          result  :=  false;
           Error   :=  'Invalid number of command parameters';
         end; // .switch NumParams
       end; // .case "M"
@@ -454,7 +454,7 @@ begin
               end; // .if
             end; // .case 4
         else
-          result  :=  FALSE;
+          result  :=  false;
           Error   :=  'Invalid number of command parameters';
         end; // .switch NumParams
       end; // .case "K"
@@ -541,7 +541,7 @@ begin
               end; // .if
             end; // .case 2
         else
-          result  :=  FALSE;
+          result  :=  false;
           Error   :=  'Invalid number of command parameters';
         end; // .switch
       end; // .case "W"
@@ -563,7 +563,7 @@ begin
         end; // .ELSEIF
       end; // .case "D"
   else
-    result  :=  FALSE;
+    result  :=  false;
     Error   :=  'Unknown command "' + Cmd +'".';
   end; // .switch Cmd
   

@@ -184,8 +184,8 @@ type
 
   TErmCmdId = packed record
     case boolean of
-      TRUE:  (Name: array [0..1] of char);
-      FALSE: (Id: word);
+      true:  (Name: array [0..1] of char);
+      false: (Id: word);
   end; // .record TErmCmdId
   
   PErmCmd = ^TErmCmd;
@@ -302,7 +302,7 @@ end; // .procedure ShowMessage
     
 function GetErmValType (c: char; out ValType: TErmValType): boolean;
 begin
-  result  :=  TRUE;
+  result  :=  true;
   
   case c of
     '+', '-': ValType :=  ValNum;
@@ -314,7 +314,7 @@ begin
     'y':      ValType :=  ValY;
     'z':      ValType :=  ValZ;
   else
-    result := FALSE;
+    result := false;
     ShowMessage('Invalid ERM value type: "' + c + '"');
   end; // .switch
 end; // .function GetErmValType
@@ -433,7 +433,7 @@ var
 begin
   Cmd := ErmCmdCache[CmdStr];
   // * * * * * //
-  Res := TRUE;
+  Res := true;
   
   if Cmd = nil then begin
     New(Cmd);
@@ -744,7 +744,7 @@ begin
     ZvsClearErmScripts;  
     LoadErmScripts;
     
-    ZvsIsGameLoading^ :=  TRUE;
+    ZvsIsGameLoading^ :=  true;
     ZvsFindErm;
     Utils.CopyMem(Length(SUCCESS_MES) + 1, pointer(SUCCESS_MES), @z[1]);
     ExecErmCmd('IF:Lz1;');
@@ -856,7 +856,7 @@ begin
   
   Inc(ErmTriggerDepth);
   EventArgs.TriggerID         := CurrErmEventID^;
-  EventArgs.BlockErmExecution := FALSE;
+  EventArgs.BlockErmExecution := false;
   GameExt.FireEvent('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
   
   if EventArgs.BlockErmExecution then begin
@@ -909,13 +909,13 @@ end; // .function Hook_ErmHeroArt
 
 function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  f[1]   := FALSE;
+  f[1]   := false;
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_FindFreeSlot
 
 function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  f[1]   := TRUE;
+  f[1]   := true;
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_FoundFreeSlot
 
@@ -1097,7 +1097,7 @@ begin
     Crypto.AnsiCRC32,
     AssocArrays.NO_KEY_PREPROCESS_FUNC
   );
-  IsWoG^      :=  TRUE;
+  IsWoG^      :=  true;
   ScriptNames :=  Lists.NewSimpleStrList;
   SavedYVars  :=  Lists.NewStrictList(TYVars);
   

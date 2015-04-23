@@ -59,8 +59,8 @@ var
 {O} Tracker: TTracker;
     
     (* Options *)
-    EnableDebuggerOpt:  boolean = FALSE;
-    EnableTracingOpt:   boolean = FALSE;
+    EnableDebuggerOpt:  boolean = false;
+    EnableTracingOpt:   boolean = false;
     NumTracedEventsOpt: integer = 0;
     NumTracedCmdsOpt:   integer = 0;
   
@@ -81,8 +81,8 @@ begin
   fLastEventN         := 0;
   fEventRecsPos       := 0;
   fCmdRecsPos         := 0;
-  fEventRecsIsCircBuf := FALSE;
-  fCmdRecsIsCircBuf   := FALSE;
+  fEventRecsIsCircBuf := false;
+  fCmdRecsIsCircBuf   := false;
 end; // .procedure TTracker.Reset
 
 procedure TrackEvent (EventId: integer);

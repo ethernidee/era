@@ -235,7 +235,7 @@ var
   GameState:  Heroes.TGameState;
   
 begin
-  result := FALSE;
+  result := false;
   
   if Msg = WM_KEYDOWN then begin
     Heroes.GetGameState(GameState);

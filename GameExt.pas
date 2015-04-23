@@ -322,7 +322,7 @@ begin
   Redirection :=  nil;
   
   // * * * * * //
-  result    :=  FALSE;
+  result    :=  false;
   LeftInd   :=  0;
   RightInd  :=  MemRedirections.Count - 1;
   

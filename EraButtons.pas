@@ -142,7 +142,7 @@ begin
             Line[COL_TYPE]  :=  TYPE_DUMMY;
           end // .ELSEIF
           else begin
-            {!} Assert(FALSE);
+            {!} Assert(false);
           end; // .else
           
           ButtonName  :=  Line[COL_NAME];

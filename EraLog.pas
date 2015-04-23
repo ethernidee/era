@@ -60,12 +60,12 @@ const
 
 function TLogger.Read (out LogRec: TLogRec): boolean;
 begin
-  result  :=  FALSE;
+  result  :=  false;
 end; // .function TLogger.Read
 
 function TLogger.IsLocked: boolean;
 begin
-  result  :=  FALSE;
+  result  :=  false;
 end; // .function TLogger.IsLocked
 
 procedure TLogger.Lock;
@@ -79,23 +79,23 @@ end; // .procedure TLogger.Unlock
 function TLogger.GetPos (out Pos: integer): boolean;
 begin
   Pos     :=  -1;
-  result  :=  FALSE;
+  result  :=  false;
 end; // .function TLogger.GetPos
 
 function TLogger.Seek (NewPos: integer): boolean;
 begin
-  result  :=  FALSE;
+  result  :=  false;
 end; // .function TLogger.Seek
 
 function TLogger.GetCount (out Count: integer): boolean;
 begin
   Count   :=  -1;
-  result  :=  FALSE;
+  result  :=  false;
 end; // .function TLogger.GetCount
 
 function TMemoryLogger.Write (const EventSource, Operation, Description: string): boolean;
 begin
-  result  :=  TRUE;
+  result  :=  true;
 end; // .function TMemoryLogger.Write
 
 constructor TConsoleLogger.Create (const Title: string);
@@ -122,7 +122,7 @@ begin
     RECORD_END_SEPARATOR
   );
   
-  result  :=  TRUE;
+  result  :=  true;
 end; // .function TConsoleLogger.Write
 
 constructor TFileLogger.Create (const FilePath: string);

@@ -333,7 +333,7 @@ begin
     while not TextScanner.EndOfText do begin
       StartPos      :=  TextScanner.Pos;
       NumSpaceChars :=  0;
-      IsBlockEnd    :=  FALSE;
+      IsBlockEnd    :=  false;
       
       while not IsBlockEnd and TextScanner.GetCurrChar(c) do begin
         if c = '{' then begin
@@ -481,13 +481,13 @@ function Hook_SetupColorMode (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
     Color32To16 :=  Color32To15Func;
-    {!} Assert(FALSE);// !FIXME
+    {!} Assert(false);// !FIXME
   end // .if
   else if TextColorMode^ = TEXTMODE_16BITS then begin
     Color32To16 :=  Color32To16Func;
   end // .ELSEIF
   else begin
-    {!} Assert(FALSE);
+    {!} Assert(false);
   end; // .else
   
   NameStdColors;
@@ -560,13 +560,13 @@ function Hook_RegisterDefFrame (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
     Color32To16 :=  Color32To15Func;
-    {!} Assert(FALSE);// !FIXME
+    {!} Assert(false);// !FIXME
   end // .if
   else if TextColorMode^ = TEXTMODE_16BITS then begin
     Color32To16 :=  Color32To16Func;
   end // .ELSEIF
   else begin
-    {!} Assert(FALSE);
+    {!} Assert(false);
   end; // .else
   
   NameStdColors;

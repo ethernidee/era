@@ -64,8 +64,8 @@ const
   GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR = GLOBAL_REDIRECTIONS_CONFIG_DIR + '\Missing';
   MUSIC_DIR                              = 'Mp3';
 
-  REDIRECT_ONLY_MISSING         = TRUE;
-  REDIRECT_MISSING_AND_EXISTING = NOT REDIRECT_ONLY_MISSING;
+  REDIRECT_ONLY_MISSING         = true;
+  REDIRECT_MISSING_AND_EXISTING = not REDIRECT_ONLY_MISSING;
 
 var
 {O} GlobalLodRedirs:  {O} AssocArrays.TAssocArray {OF TString};
@@ -154,7 +154,7 @@ end; // .procedure UnregisterDeadLods
 function FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean; 
 begin
   {!} Assert(Lod <> nil);
-  result  :=  FALSE;
+  result  :=  false;
   
   if FileName <> '' then begin
     asm
@@ -176,7 +176,7 @@ var
 begin
   Lod :=  Utils.PtrOfs(ZvsLodTable, sizeof(Heroes.TLod) * (NumLods - 1));
   // * * * * * //
-  result  :=  FALSE;
+  result  :=  false;
   i       :=  NumLods - 1;
    
   while not result and (i >= 0) do begin
@@ -208,7 +208,7 @@ var
 begin
   Redirection := LodRedirs[FileName];
   // * * * * * //
-  result := FALSE;
+  result := false;
 
   if Redirection = nil then begin
     Redirection :=  GlobalLodRedirs[FileName];
@@ -216,7 +216,7 @@ begin
 
   if Redirection <> nil then begin
     Redirected := Redirection.Value;
-    result     := TRUE;
+    result     := true;
   end; // .if
 end; // .function FindRedirection
 

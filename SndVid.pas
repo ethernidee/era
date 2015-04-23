@@ -76,7 +76,7 @@ begin
   OldErrMode  :=  Windows.SetErrorMode(Windows.SEM_FAILCRITICALERRORS);
   Drives      :=  Windows.GetLogicalDrives;
   GameCDPath  :=  'A:\';
-  GameCDFound :=  FALSE;
+  GameCDFound :=  false;
   {!} Assert(Drives <> 0);
   
   i :=  0;
@@ -132,7 +132,7 @@ begin
       end; // .case ARC_SND
     else
       ItemSize  :=  0;
-      {!} Assert(FALSE);
+      {!} Assert(false);
     end; // .case ArcType
     
     if (WinWrappers.FileRead(hFile, NumItems, sizeof(NumItems))) and (NumItems > 0) then begin
@@ -194,7 +194,7 @@ begin
   end // .ELSEIF
   else begin
     ArcExt  :=  '';
-    {!} Assert(FALSE);
+    {!} Assert(false);
   end; // .else
   
   Locator.DirPath :=  'Data';
@@ -242,7 +242,7 @@ begin
   LoadArc('Data\video.vid', ARC_VID);
   LoadArc('Data\h3ab_ahd.vid', ARC_VID);
   
-  Context.EAX     :=  byte(TRUE);
+  Context.EAX     :=  byte(true);
   Context.RetAddr :=  Core.Ret(NUM_ARGS);
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadVideoHeaders
@@ -362,7 +362,7 @@ begin
   LoadArc('Data\heroes3.snd', ARC_SND);
   LoadArc('Data\h3ab_ahd.snd', ARC_SND);
   
-  Context.EAX     :=  byte(TRUE);
+  Context.EAX     :=  byte(true);
   Context.RetAddr :=  Core.Ret(NUM_ARGS);
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadSndHeaders
@@ -412,10 +412,10 @@ begin
     SysUtils.FileSeek(ItemInfo.hFile, ItemInfo.Offset, SET_POSITION);
     SysUtils.FileRead(ItemInfo.hFile, ResourceBuf.Addr^, ItemInfo.Size);
 
-    Context.EAX :=  byte(TRUE);
+    Context.EAX :=  byte(true);
   end // .if
   else begin
-    Context.EAX :=  byte(FALSE);
+    Context.EAX :=  byte(false);
   end; // .else
   
   Context.RetAddr :=  Core.Ret(NUM_ARGS);
