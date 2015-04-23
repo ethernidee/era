@@ -1,46 +1,45 @@
-unit Extern;
+UNIT Extern;
 {
 DESCRIPTION:  API Wrappers for plugins
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-(***)  interface  (***)
+(***)  INTERFACE  (***)
 
-uses Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman;
+USES Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman;
 
 
-procedure NotifyError (Err: pchar); stdcall;
-procedure FatalError (Err: pchar); stdcall;
-procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
-procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer); stdcall;
-procedure ExecErmCmd (CmdStr: pchar); stdcall;
-procedure FireErmEvent (EventID: integer); stdcall;
-procedure ClearIniCache (FileName: pchar);
-function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall;
-function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall;
-function  SaveIni (FilePath: pchar): boolean; stdcall;
-procedure NameColor (Color32: integer; Name: pchar); stdcall;
-procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
+PROCEDURE FatalError (Err: PCHAR); STDCALL;
+PROCEDURE RegisterHandler (Handler: TEventHandler; EventName: PCHAR); STDCALL;
+PROCEDURE FireEvent (EventName: PCHAR; {n} EventData: POINTER; DataSize: INTEGER); STDCALL;
+PROCEDURE ExecErmCmd (CmdStr: PCHAR); STDCALL;
+PROCEDURE FireErmEvent (EventID: INTEGER); STDCALL;
+PROCEDURE ClearIniCache (FileName: PCHAR);
+FUNCTION  ReadStrFromIni (Key, SectionName, FilePath, Res: PCHAR): BOOLEAN; STDCALL;
+FUNCTION  WriteStrToIni (Key, Value, SectionName, FilePath: PCHAR): BOOLEAN; STDCALL;
+FUNCTION  SaveIni (FilePath: PCHAR): BOOLEAN; STDCALL;
+PROCEDURE NameColor (Color32: INTEGER; Name: PCHAR); STDCALL;
+PROCEDURE WriteSavegameSection (DataSize: INTEGER; {n} Data: POINTER; SectionName: PCHAR); STDCALL;
 
-function  ReadSavegameSection
+FUNCTION  ReadSavegameSection
 (
-      DataSize:     integer;
-  {n} Dest:         pointer;
-      SectionName:  pchar
-): integer; stdcall;
+      DataSize:     INTEGER;
+  {n} Dest:         POINTER;
+      SectionName:  PCHAR
+): INTEGER; STDCALL;
 
-function  GetButtonID (ButtonName: pchar): integer; stdcall;
-function  PatchExists (PatchName: pchar): boolean; stdcall;
-function  PluginExists (PluginName: pchar): boolean; stdcall;
-procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
-procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall;
+FUNCTION  GetButtonID (ButtonName: PCHAR): INTEGER; STDCALL;
+FUNCTION  PatchExists (PatchName: PCHAR): BOOLEAN; STDCALL;
+FUNCTION  PluginExists (PluginName: PCHAR): BOOLEAN; STDCALL;
+PROCEDURE RedirectFile (OldFileName, NewFileName: PCHAR); STDCALL;
+PROCEDURE GlobalRedirectFile (OldFileName, NewFileName: PCHAR); STDCALL;
 
 
-exports
+EXPORTS
   Core.WriteAtCode,
   Core.Hook,
   Core.ApiHook,
-  NotifyError,
+  Core.KillThisProcess,
   FatalError,
   RegisterHandler,
   FireEvent,
@@ -65,105 +64,99 @@ exports
   RedirectFile,
   GlobalRedirectFile,
   GameExt.RedirectMemoryBlock,
-  GameExt.GetRealAddr,
-  GameExt.GenerateDebugInfo;
+  GameExt.GetRealAddr;
 
 
-(***) implementation (***)
+(***) IMPLEMENTATION (***)
 
 
-procedure NameColor (Color32: integer; Name: pchar);
-begin
+PROCEDURE NameColor (Color32: INTEGER; Name: PCHAR);
+BEGIN
   Rainbow.NameColor(Color32, Name);
-end; // .procedure NameColor
+END; // .PROCEDURE NameColor
 
-procedure ClearIniCache (FileName: pchar);
-begin
+PROCEDURE ClearIniCache (FileName: PCHAR);
+BEGIN
   Ini.ClearIniCache(FileName);
-end; // .procedure ClearIniCache
+END; // .PROCEDURE ClearIniCache
 
-function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean;
-var
-  ResStr: string;
+FUNCTION ReadStrFromIni (Key, SectionName, FilePath, Res: PCHAR): BOOLEAN;
+VAR
+  ResStr: STRING;
 
-begin
-  result  :=  Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr);
-  Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
-end; // .function ReadStrFromIni
+BEGIN
+  RESULT  :=  Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr);
+  Utils.CopyMem(LENGTH(ResStr) + 1, PCHAR(ResStr), Res);
+END; // .FUNCTION ReadStrFromIni
 
-function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean;
-begin
-  result  :=  Ini.WriteStrToIni(Key, Value, SectionName, FilePath);
-end; // .function WriteStrToIni
+FUNCTION WriteStrToIni (Key, Value, SectionName, FilePath: PCHAR): BOOLEAN;
+BEGIN
+  RESULT  :=  Ini.WriteStrToIni(Key, Value, SectionName, FilePath);
+END; // .FUNCTION WriteStrToIni
 
-function SaveIni (FilePath: pchar): boolean;
-begin
-  result  :=  Ini.SaveIni(FilePath);
-end; // .function SaveIni
+FUNCTION SaveIni (FilePath: PCHAR): BOOLEAN;
+BEGIN
+  RESULT  :=  Ini.SaveIni(FilePath);
+END; // .FUNCTION SaveIni
 
-procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar);
-begin
+PROCEDURE WriteSavegameSection (DataSize: INTEGER; {n} Data: POINTER; SectionName: PCHAR);
+BEGIN
   Stores.WriteSavegameSection(DataSize, Data, SectionName);
-end; // .procedure WriteSavegameSection
+END; // .PROCEDURE WriteSavegameSection
 
-function ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar): integer;
-begin
-  result  :=  Stores.ReadSavegameSection(DataSize, Dest, SectionName);
-end; // .function ReadSavegameSection
+FUNCTION ReadSavegameSection (DataSize: INTEGER; {n} Dest: POINTER; SectionName: PCHAR): INTEGER;
+BEGIN
+  RESULT  :=  Stores.ReadSavegameSection(DataSize, Dest, SectionName);
+END; // .FUNCTION ReadSavegameSection
 
-procedure ExecErmCmd (CmdStr: pchar);
-begin
+PROCEDURE ExecErmCmd (CmdStr: PCHAR);
+BEGIN
   Erm.ExecErmCmd(CmdStr);
-end; // .procedure ExecErmCmd
+END; // .PROCEDURE ExecErmCmd
 
-procedure FireErmEvent (EventID: integer);
-begin
+PROCEDURE FireErmEvent (EventID: INTEGER);
+BEGIN
   Erm.FireErmEvent(EventID);
-end; // .procedure FireErmEvent
+END; // .PROCEDURE FireErmEvent
 
-procedure RegisterHandler (Handler: TEventHandler; EventName: pchar);
-begin
+PROCEDURE RegisterHandler (Handler: TEventHandler; EventName: PCHAR);
+BEGIN
   GameExt.RegisterHandler(Handler, EventName);
-end; // .procedure RegisterHandler
+END; // .PROCEDURE RegisterHandler
 
-procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer);
-begin
+PROCEDURE FireEvent (EventName: PCHAR; {n} EventData: POINTER; DataSize: INTEGER);
+BEGIN
   GameExt.FireEvent(EventName, EventData, DataSize);
-end; // .procedure FireEvent
+END; // .PROCEDURE FireEvent
 
-procedure NotifyError (Err: pchar);
-begin
-  Core.NotifyError(Err);
-end; // .procedure NotifyError
-
-procedure FatalError (Err: pchar);
-begin
+PROCEDURE FatalError (Err: PCHAR);
+BEGIN
   Core.FatalError(Err);
-end; // .procedure FatalError
+END; // .PROCEDURE FatalError
 
-function GetButtonID (ButtonName: pchar): integer; stdcall;
-begin
-  result  :=  EraButtons.GetButtonID(ButtonName);
-end; // .function GetButtonID
+FUNCTION GetButtonID (ButtonName: PCHAR): INTEGER; STDCALL;
+BEGIN
+  RESULT  :=  EraButtons.GetButtonID(ButtonName);
+END; // .FUNCTION GetButtonID
 
-function PatchExists (PatchName: pchar): boolean;
-begin
-  result  :=  GameExt.PatchExists(PatchName);
-end; // .function PatchExists
+FUNCTION PatchExists (PatchName: PCHAR): BOOLEAN;
+BEGIN
+  RESULT  :=  GameExt.PatchExists(PatchName);
+END; // .FUNCTION PatchExists
 
-function PluginExists (PluginName: pchar): boolean;
-begin
-  result  :=  GameExt.PluginExists(PluginName);
-end; // .function PluginExists
+FUNCTION PluginExists (PluginName: PCHAR): BOOLEAN;
+BEGIN
+  RESULT  :=  GameExt.PluginExists(PluginName);
+END; // .FUNCTION PluginExists
 
-procedure RedirectFile (OldFileName, NewFileName: pchar);
-begin
+PROCEDURE RedirectFile (OldFileName, NewFileName: PCHAR);
+BEGIN
   Lodman.RedirectFile(OldFileName, NewFileName);
-end; // .procedure RedirectFile
+END; // .PROCEDURE RedirectFile
 
-procedure GlobalRedirectFile (OldFileName, NewFileName: pchar);
-begin
+PROCEDURE GlobalRedirectFile (OldFileName, NewFileName: PCHAR);
+BEGIN
   Lodman.GlobalRedirectFile(OldFileName, NewFileName);
-end; // .procedure GlobalRedirectFile
+END; // .PROCEDURE GlobalRedirectFile
 
-end.
+END.
