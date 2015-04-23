@@ -488,13 +488,22 @@ end; // .procedure ExecSingleErmCmd
 procedure ExecErmCmd (const CmdStr: string);
 var
   Commands: Utils.TArrayOfStr;
+  Command:  string;
   i:        integer;
    
 begin
   Commands := StrLib.ExplodeEx(CmdStr, ';', StrLib.INCLUDE_DELIM, not StrLib.LIMIT_TOKENS, 0);
 
-  for i := 0 to High(Commands) - 1 do begin
-    ExecSingleErmCmd(Commands[i]);
+  for i := 0 to High(Commands) do begin
+    Command := SysUtils.Trim(Commands[i]);
+
+    if Command <> '' then begin
+      if (i = High(Commands)) and (Command[Length(Command)] <> ';') then begin
+        Command := Command + ';';
+      end; // .if
+
+      ExecSingleErmCmd(Command);
+    end; // .if
   end; // .for
 end; // .procedure ExecErmCmd
 
