@@ -701,6 +701,9 @@ begin
   (* Disable MP3 trigger *)
   // Overriden by Lodman redirection
   // Core.p.WriteHexPatch($59AC51, 'BF F4 33 6A 00');
+
+  (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
+  Core.p.WriteDataPatch($4DC358, ['A0']);
 end; // .procedure OnAfterWoG
 
 begin
