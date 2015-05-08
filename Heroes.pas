@@ -143,14 +143,32 @@ type
 
   PPINTEGER = ^PINTEGER;
 
-  PPAdvManager  = ^PAdvManager;
-  PAdvManager   = ^TAdvManager;
-  TAdvManager   = packed record
-    Dummy:            array [0..79] of byte;
-    RootDlgIdPtr:     PPINTEGER;
-    CurrentDlgIdPtr:  PPINTEGER;
-    (* Dummy *)
+  PMapTile = ^TMapTile;
+  TMapTile = packed record
+    _0: array [1..38] of byte;
+  end; // .record TMapTile
+
+  PMapTiles = ^TMapTiles;
+  TMapTiles = array [0..255 * 255 * 2 - 1] of TMapTile;
+
+  TMapCoords = array [0..2] of integer;
+
+  PPAdvManager = ^PAdvManager;
+  PAdvManager  = ^TAdvManager;
+  TAdvManager  = packed record
+    _0:              array [1..80] of byte;
+    RootDlgIdPtr:    PPINTEGER;
+    CurrentDlgIdPtr: PPINTEGER;
   end; // .record TAdvManager
+
+  PPGameManager = ^PGameManager;
+  PGameManager  = ^TGameManager;
+  TGameManager  = packed record
+    _0:              array [1..130112] of byte;
+    MapTiles:        PMapTiles;
+    MapSize:         integer;
+    IsTwoLevelMap:   boolean;
+  end; // .record TGameManager
   
   PScreenPcx16  = ^TScreenPcx16;
   TScreenPcx16  = packed record
@@ -182,7 +200,8 @@ const
   MFree:  TMFree  = Ptr($60B0F0);
 
   AdvManagerPtr:  PPAdvManager  = Ptr($6992D0);
-  WndManagerPtr:  ^PWndManager  = Ptr($6992D0);
+  WndManagerPtr:  ^PWndManager  = Ptr($6992D0); // CHECKME!
+  GameManagerPtr: PPGameManager = Ptr(GAME_MANAGER);
 
   ZvsGzipWrite: TGzipWrite  = Ptr($704062);
   ZvsGzipRead:  TGzipRead   = Ptr($7040A7);
@@ -199,6 +218,8 @@ procedure LoadLod (const LodName: string; Res: PLod);
 procedure GetGameState (out GameState: TGameState); stdcall;
 function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
+function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
+procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
 function  GetStackIdByPos (StackPos: integer): integer;
 procedure RedrawHeroMeetingScreen;
@@ -303,6 +324,38 @@ asm
   MOVZX EAX, byte [EAX + $1FC48]
 end; // .function IsTwoLevelMap
 
+function GetObjectEntranceTile (MapTile: PMapTile): PMapTile; assembler; {W+}
+asm
+  PUSH EBP
+  MOV EBP, ESP
+  PUSH 0
+  PUSH 0
+  PUSH 0
+  MOV ECX, ESP
+  PUSH 0
+  PUSH 0
+  PUSH MapTile
+  MOV EAX, $40AF10
+  CALL EAX
+  MOV ESP, EBP
+  POP EBP
+end; // .function GetObjectEntranceTile
+
+procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
+var
+  TileIndex: integer;
+  MapSize:   integer;
+
+begin
+  {!} Assert(MapTile <> nil);
+  TileIndex := (integer(MapTile) - integer(@GameManagerPtr^.MapTiles[0])) div sizeof(TMapTile);
+  MapSize   := GameManagerPtr^.MapSize;
+  Coords[0] := TileIndex mod MapSize;
+  TileIndex := TileIndex div MapSize;
+  Coords[1] := TileIndex mod MapSize;
+  Coords[2] := TileIndex div MapSize;
+end; // .procedure MapTileToCoords
+
 function GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
 const
   SLOTS_PER_SIDE  = 21;
@@ -360,28 +413,34 @@ end; // .function GetStackIdByPos
 procedure RedrawHeroMeetingScreen; ASSEMBLER;
 asm
   MOV ECX, [$6A3D90]
-  PUSH ECX
+  PUSH 0
+  MOV EAX, $5AF4E0
+  CALL EAX
+
+  MOV ECX, [$6A3D90]
+  PUSH 1
+  MOV EAX, $5AF4E0
+  CALL EAX
+
+  MOV ECX, [$6A3D90]
   MOV EAX, $5B1200
   CALL EAX
-  
-  MOV ECX, [ESP]
-  MOV ECX, [ECX + $38]
-  PUSH $0FFFF
+
+  MOV ECX, [$6A3D90]
+  MOV ECX, [ECX + 56]
+  MOV EAX, [ECX]
+  MOV EAX, [EAX + 20]
+  PUSH $0000FFFF
   PUSH $FFFF0001
   PUSH 0
-  MOV EDX, [ECX]
-  CALL [EDX + $14]
+  CALL EAX
 
   MOV ECX, [$6992D0]
-  PUSH 600
-  PUSH 800
+  PUSH DWORD [$40144F] // 600
+  PUSH DWORD [$401448] // 800
   PUSH 0
   PUSH 0
   MOV EAX, $603190
-  CALL EAX
-
-  POP ECX
-  MOV EAX, $5AF150
   CALL EAX
 end; // .procedure RedrawHeroMeetingScreen
 

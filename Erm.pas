@@ -10,9 +10,13 @@ uses
   Lists, StrLib, Math, Windows,
   Core, Heroes, GameExt;
 
+type
+  TStrList = DataLib.TStrList;
+  TDict    = DataLib.TDict;
+
 const
-  SCRIPT_NAMES_SECTION  = 'Era.ScriptNames';
-  ERM_SCRIPTS_PATH      = 'Data\s';
+  SCRIPT_NAMES_SECTION = 'Era.ScriptNames';
+  ERM_SCRIPTS_PATH     = 'Data\s';
 
   (* Erm command conditions *)
   LEFT_COND   = 0;
@@ -34,6 +38,11 @@ const
 
   AltScriptsPath: pchar     = Ptr($2730F68);
   CurrErmEventID: PINTEGER  = Ptr($27C1950);
+
+  (* Trigger if-else-then *)
+  ZVS_TRIGGER_IF_TRUE     = 1;
+  ZVS_TRIGGER_IF_FALSE    = 0;
+  ZVS_TRIGGER_IF_INACTIVE = -1;
 
   (* Erm triggers *)
   TRIGGER_FU1       = 0;
@@ -124,7 +133,29 @@ const
   TRIGGER_ONGAMELEAVE               = 77016;
   {!} LAST_ERA_TRIGGER              = TRIGGER_ONGAMELEAVE;
   
+  FUNC_AUTO_ID = 95000;
+
   ZvsProcessErm:  Utils.TProcedure  = Ptr($74C816);
+
+  (* WoG Options *)
+  NUM_WOG_OPTIONS           = 1000;
+  CURRENT_WOG_OPTIONS       = 0;
+  GLOBAL_WOG_OPTIONS        = 1;
+  WOG_OPTION_ERROR          = 905;
+  WOG_OPTION_DISABLE_ERRORS = 904;
+  DONT_WOGIFY               = 0;
+  WOGIFY_ALL                = 2;
+  
+  (*  Msg result  *)
+  MSG_RES_OK        = 0;
+  MSG_RES_CANCEL    = 2;
+  MSG_RES_LEFTPIC   = 0;
+  MSG_RES_RIGHTPIC  = 1;
+  
+  (*  Dialog Pictures Types and Subtypes  *)
+  NO_PIC_TYPE = -1;
+
+  NUM_WOG_HEROES = 156;
 
 
 type
@@ -200,6 +231,9 @@ type
     CmdHeader:    TErmString; // ##:...
     CmdBody:      TErmString; // #^...^/...
   end; // .record TErmCmd
+
+  PZvsTriggerIfs = ^TZvsTriggerIfs;
+  TZvsTriggerIfs = array [0..9] of shortint;
   
   PErmVVars = ^TErmVVars;
   TErmVVars = array [1..10000] of integer;
@@ -229,6 +263,7 @@ type
   TZvsLoadErmTxt    = function (IsNewLoad: integer): integer; cdecl;
   TZvsLoadErtFile   = function (Dummy, FileName: pchar): integer; cdecl;
   TZvsShowMessage   = function (Mes: pchar; MesType: integer; DummyZero: integer): integer; cdecl;
+  TZvsCheckFlags    = function (Flags: PErmCmdConditions): longbool; cdecl;
   TFireErmEvent     = function (EventId: integer): integer; cdecl;
   
   POnBeforeTriggerArgs  = ^TOnBeforeTriggerArgs;
@@ -241,21 +276,67 @@ type
     Value: Utils.TArrayOfInt;
   end; // .class TYVars
 
+  TWoGOptions = array [CURRENT_WOG_OPTIONS..GLOBAL_WOG_OPTIONS, 0..NUM_WOG_OPTIONS - 1] of integer;
+  
+  TMesType =
+  (
+    MES_MES         = 1,
+    MES_QUESTION    = 2,
+    MES_RMB_HINT    = 4,
+    MES_CHOOSE      = 7,
+    MES_MAY_CHOOSE  = 10
+  );
+
+  THeroSpecRecord = packed record
+    Setup:       array [0..6] of integer;
+
+    case boolean of
+      false: (
+        ShortName:   pchar;
+        FullName:    pchar;
+        Description: pchar;
+      );
+    
+      true: (Descr: array [0..2] of pchar;);
+  end; // .record THeroSpecRecord
+
+  PHeroSpecsTable = ^THeroSpecsTable;
+  THeroSpecsTable = array [0..NUM_WOG_HEROES - 1] of THeroSpecRecord;
+
+  THeroSpecSettings = packed record
+    PicNum:    integer;
+    ZVarDescr: array [0..2] of integer;
+  end; // .record THeroSpecSettings
+
+  PHeroSpecSettingsTable = ^THeroSpecSettingsTable;
+  THeroSpecSettingsTable = array [0..NUM_WOG_HEROES - 1] of THeroSpecSettings;
 
 const
   (* WoG vars *)
+  QuickVars: PErmQuickVars = Ptr($27718D0);
   v:  PErmVVars = Ptr($887668);
+  w:  PWVars    = Ptr($A4AB10);
   z:  PErmZVars = Ptr($9273E8);
   y:  PErmYVars = Ptr($A48D80);
   x:  PErmXVars = Ptr($91DA38);
   f:  PErmFlags = Ptr($91F2E0);
   e:  PErmEVars = Ptr($A48F18);
+  nz: PErmNZVars = Ptr($A46D28);
+  ny: PErmNYVars = Ptr($A46A30);
+  ne: PErmNEVars = Ptr($27F93B8);
 
-  ZvsIsGameLoading: PBOOLEAN          = Ptr($A46BC0);
-  ErmScriptsInfo:   PErmScriptsInfo   = Ptr($A49270);
-  ErmScripts:       PScriptsPointers  = Ptr($A468A0);
-  IsWoG:            plongbool         = Ptr($803288);
-  ErmDlgCmd:        PINTEGER          = Ptr($887658);
+  ZvsIsGameLoading:   PBOOLEAN          = Ptr($A46BC0);
+  ZvsTriggerIfs:      PZvsTriggerIfs    = Ptr($A46D18);
+  ZvsTriggerIfsDepth: pinteger          = Ptr($A46D22);
+  ErmScriptsInfo:     PErmScriptsInfo   = Ptr($A49270);
+  ErmScripts:         PScriptsPointers  = Ptr($A468A0);
+  IsWoG:              plongbool         = Ptr($803288);
+  WoGOptions:         ^TWoGOptions      = Ptr($2771920);
+  ErmDlgCmd:          PINTEGER          = Ptr($887658);
+  MrMonPtr:           PPOINTER          = Ptr($2846884); // MB_Mon
+  HeroSpecsTable:     PHeroSpecsTable   = Ptr($7B4C40);
+  HeroSpecsTableBack: PHeroSpecsTable   = Ptr($91DA78);
+  HeroSpecSettingsTable: PHeroSpecSettingsTable = Ptr($A49BC0);
 
   (* WoG funcs *)
   ZvsFindErm:         Utils.TProcedure  = Ptr($749955);
@@ -265,6 +346,7 @@ const
   ZvsLoadErmTxt:      TZvsLoadErmTxt    = Ptr($72C8B1);
   ZvsLoadErtFile:     TZvsLoadErtFile   = Ptr($72C641);
   ZvsShowMessage:     TZvsShowMessage   = Ptr($70FB63);
+  ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
 
 
@@ -277,7 +359,7 @@ procedure FireErmEventEx (EventId: integer; Params: array of integer);
 
 
 (***) implementation (***)
-uses Stores;
+uses Stores, AdvErm;
 
 
 const
@@ -541,44 +623,294 @@ begin
   end; // .if
 end; // .procedure LoadErtFile
 
-function PreprocessErm (const Script: string): string;
+function PreprocessErm (const ScriptName, Script: string): string;
+const
+  ANY_CHAR            = [#0..#255];
+  FUNCNAME_CHARS      = ANY_CHAR - [')', #10, #13];
+  LABEL_CHARS         = ANY_CHAR - [']', #10, #13];
+  SPECIAL_CHARS       = ['[', '!'];
+  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';'];
+
+  NO_LABEL = -1;
+
+type
+  TScope = (GLOBAL_SCOPE, CMD_SCOPE);
+
 var
-{O} StrBuilder: StrLib.TStrBuilder;
-{O} Scanner:    TextScan.TTextScanner;
-    StartPos:   integer;
-    c:          char;
+{
+  For unresolved labels value for key is index of previous unresolved label in Buf.
+  Zero indexes are ignored.
+}
+{O} Buf:                TStrList {of integer};
+{O} Scanner:            TextScan.TTextScanner;
+{O} Labels:             TDict {of CmdN + 1};
+{U} FuncAutoId:         AdvErm.TAssocVar;
+    UnresolvedLabelInd: integer; // index of last unresolved label or NO_LABEL
+    CmdN:               integer; // index of next command
+    MarkedPos:          integer;
+    c:                  char;
+
+  procedure ShowError (ErrPos: integer; const Error: string);
+  var
+    LineN:   integer;
+    LinePos: integer;
+
+  begin
+    if not Scanner.PosToLine(ErrPos, LineN, LinePos) then begin
+      LineN   := -1;
+      LinePos := -1;
+    end; // .if
+    
+    ShowMessage(Format('{~gold}Error in "%s".'#10'Line: %d. Position: %d.{~}'#10 +
+                       '%s.'#10#10'Context:'#10#10'%s',
+                       [ScriptName, LineN, LinePos, Error,
+                        Scanner.GetSubstrAtPos(ErrPos - 20, 20) + ' <<< ' +
+                        Scanner.GetSubstrAtPos(ErrPos + 0,  100)]));
+  end; // .procedure ShowError
+
+  procedure MarkPos;
+  begin
+    MarkedPos := Scanner.Pos;
+  end; // .procedure MarkPos
+
+  procedure FlushMarked;
+  begin
+    if Scanner.Pos > MarkedPos then begin
+      Buf.Add(Scanner.GetSubstrAtPos(MarkedPos, Scanner.Pos - MarkedPos));
+      MarkedPos := Scanner.Pos;
+    end; // .if
+  end; // .procedure FlushMarked
+
+  procedure ParseFuncName;
+  var
+  {U} FuncVar:  AdvErm.TAssocVar;
+      FuncName: string;
+      c:        char;
+
+  begin
+    FuncVar := nil;
+    // * * * * * //
+    FlushMarked;
+    Scanner.GotoNextChar;
+
+    if Scanner.ReadToken(FUNCNAME_CHARS, FuncName) and Scanner.GetCurrChar(c) then begin
+      if c = ')' then begin
+        Scanner.GotoNextChar;
+        FuncVar := AdvErm.GetOrCreateAssocVar(FuncName);
+
+        if FuncVar.IntValue = 0 then begin
+          FuncVar.IntValue := FuncAutoId.IntValue;
+          Inc(FuncAutoId.IntValue);
+        end; // .if
+
+        Buf.Add(IntToStr(FuncVar.IntValue));
+      end else begin
+        ShowError(Scanner.Pos, 'Unexpected line end in function name');
+        Buf.Add('999999');
+      end; // .else
+    end else begin
+      ShowError(Scanner.Pos, 'Missing closing ")"');
+      Buf.Add('999999');
+    end; // .else
+
+    MarkPos;
+  end; // .procedure ParseFuncName
+
+  procedure DeclareLabel (const LabelName: string);
+  begin
+    if Labels[LabelName] = nil then begin
+      Labels[LabelName] := Ptr(CmdN + 1);
+    end else begin
+      ShowError(Scanner.Pos, 'Duplicate label "' + LabelName + '"');
+    end; // .else
+  end; // .procedure DeclareLabel
+
+  procedure ParseLabel (Scope: TScope);
+  var
+    IsDeclaration: boolean;
+    LabelName:     string;
+    LabelValue:    integer;
+    c:             char;
+
+  begin
+    FlushMarked;
+    Scanner.GotoNextChar;
+
+    IsDeclaration := Scanner.GetCurrChar(c) and (c = ':');
+
+    if IsDeclaration then begin
+      Scanner.GotoNextChar;
+    end; // .if
+    
+    if Scanner.ReadToken(LABEL_CHARS, LabelName) and Scanner.GetCurrChar(c) then begin
+      if c = ']' then begin
+        Scanner.GotoNextChar;
+
+        if IsDeclaration then begin
+          if Scope = GLOBAL_SCOPE then begin
+            DeclareLabel(LabelName);
+          end else begin
+            ShowError(Scanner.Pos, 'Label declaration inside command is prohibited');
+          end; // .else
+        end else begin
+          if Scope = CMD_SCOPE then begin
+            LabelValue := integer(Labels[LabelName]);
+
+            if LabelValue = 0 then begin
+              UnresolvedLabelInd := Buf.AddObj(LabelName, Ptr(UnresolvedLabelInd));
+            end else begin
+              Buf.Add(IntToStr(LabelValue - 1));
+            end; // .else
+          end else begin
+            FlushMarked;
+          end; // .else
+        end; // .else
+      end else begin
+        ShowError(Scanner.Pos, 'Unexpected line end in label name');
+
+        if not IsDeclaration then begin
+          Buf.Add('999999');
+        end; // .if
+      end; // .else
+    end else begin
+      ShowError(Scanner.Pos, 'Missing closing "]"');
+
+      if not IsDeclaration then begin
+        Buf.Add('999999');
+      end; // .if
+    end; // .else
+
+    MarkPos;
+  end; // .procedure ParseLabel
+
+  procedure ResolveLabels;
+  var
+    LabelName:  string;
+    LabelValue: integer;
+    i:          integer;
+
+  begin
+    i := UnresolvedLabelInd;
+
+    while i <> NO_LABEL do begin
+      LabelName  := Buf[i];
+      LabelValue := integer(Labels[LabelName]);
+
+      if LabelValue = 0 then begin
+        ShowError(Scanner.Pos, 'Unresolved label "' + LabelName + '"');
+        Buf[i] := '999999';
+      end else begin
+        Buf[i] := IntToStr(LabelValue - 1);
+      end; // .else
+
+      i := integer(Buf.Values[i]);
+    end; // .while
+
+    UnresolvedLabelInd := NO_LABEL;
+  end; // .procedure ResolveLabels
+
+  procedure ParseCmd;
+  var
+    c: char;
+
+  begin
+    Scanner.GotoNextChar;
+    c := ' ';
+
+    while Scanner.FindCharset(INCMD_SPECIAL_CHARS) and Scanner.GetCurrChar(c) and (c <> ';') do begin
+      case c of
+        '[': begin
+          if Scanner.GetCharAtRelPos(+1, c) and (c <> ':') then begin
+            ParseLabel(CMD_SCOPE);
+          end else begin
+            Scanner.GotoNextChar;
+          end; // .else
+        end; // .case '['
+
+        '(': begin
+          ParseFuncName;
+        end; // .case '('
+
+        '^': begin
+          Scanner.GotoNextChar;
+          Scanner.FindChar('^');
+          Scanner.GotoNextChar;
+        end; // .case '^'
+      end; // .switch c
+    end; // .while
+
+    if c = ';' then begin
+      Scanner.GotoNextChar;
+      Inc(CmdN);
+    end; // .if
+  end; // .procedure ParseCmd
 
 begin
-  StrBuilder  :=  StrLib.TStrBuilder.Create;
-  Scanner     :=  TextScan.TTextScanner.Create;
+  Buf        := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  Scanner    := TextScan.TTextScanner.Create;
+  Labels     := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  FuncAutoId := AdvErm.GetOrCreateAssocVar('Era.FuncAutoId');
   // * * * * * //
   Scanner.Connect(Script, #10);
-  StartPos  :=  1;
+  MarkedPos          := 1;
+  CmdN               := 999000; // CmdN must not be used in instructions
+  UnresolvedLabelInd := NO_LABEL;
   
-  while Scanner.FindChar('!') do begin
-    if
-      Scanner.GetCharAtRelPos(+1, c) and (c = '!') and
-      Scanner.GetCharAtRelPos(+2, c) and (c = '!')
-    then begin
-      StrBuilder.Append(Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos));
-      Scanner.SkipChars('!');
-      StartPos  :=  Scanner.Pos;
-    end // .if
-    else begin
-      Scanner.GotoRelPos(+2);
-    end; // .else
+  while Scanner.FindCharset(SPECIAL_CHARS) do begin
+    Scanner.GetCurrChar(c);
+
+    case c of
+      '!': begin
+        Scanner.GotoNextChar;
+
+        if Scanner.GetCurrChar(c) then begin
+          case c of
+            '!': begin
+              if Scanner.GetCharAtRelPos(+1, c) and (c = '!') then begin
+                FlushMarked;
+                Scanner.SkipChars('!');
+                MarkPos;
+              end else begin
+                ParseCmd;
+              end; // .else
+            end; // .case '!'
+
+            '?': begin
+              ResolveLabels;
+              Labels.Clear;
+              CmdN := -1;
+              ParseCmd;
+            end; // .case '?'
+
+            '#': begin
+              ParseCmd;
+            end; // .case '!'
+          end; // .switch c
+        end; // .if
+      end; // .case '!'
+
+      '[': begin
+        if Scanner.GetCharAtRelPos(+1, c) and (c = ':') then begin
+          ParseLabel(GLOBAL_SCOPE);
+        end else begin
+          Scanner.GotoNextChar;
+        end; // .else
+      end; // .case '['
+    end; // .switch c
   end; // .while
-  
-  if StartPos = 1 then begin
-    result  :=  Script;
+
+  if MarkedPos = 1 then begin
+    result := Script;
   end // .if
   else begin
-    StrBuilder.Append(Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos));
-    result  :=  StrBuilder.BuildStr;
+    FlushMarked;
+    ResolveLabels;
+    result := Buf.ToText('');
   end; // .else
   // * * * * * //
-  SysUtils.FreeAndNil(StrBuilder);
+  SysUtils.FreeAndNil(Buf);
   SysUtils.FreeAndNil(Scanner);
+  SysUtils.FreeAndNil(Labels);
 end; // .function PreprocessErm
 
 function LoadScript (const ScriptName: string): boolean;
@@ -589,7 +921,7 @@ begin
   result  :=  Files.ReadFileContents(ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents);
   
   if result then begin
-    LoadScriptFromMemory(ScriptName, PreprocessErm(ScriptContents));
+    LoadScriptFromMemory(ScriptName, PreprocessErm(ScriptName, ScriptContents));
     LoadErtFile(ScriptName);
   end; // .if
 end; // .function LoadScript
@@ -670,6 +1002,76 @@ begin
   SysUtils.FreeAndNil(Locator);
 end; // .function GetFileList
 
+procedure RegisterErmEventNames;
+begin
+  AdvErm.GetOrCreateAssocVar('OnBeforeBattle').IntValue                  := Erm.TRIGGER_BA0;
+  AdvErm.GetOrCreateAssocVar('OnAfterBattle').IntValue                   := Erm.TRIGGER_BA1;
+  AdvErm.GetOrCreateAssocVar('OnBattleRound').IntValue                   := Erm.TRIGGER_BR;
+  AdvErm.GetOrCreateAssocVar('OnBeforeBattleAction').IntValue            := Erm.TRIGGER_BG0;
+  AdvErm.GetOrCreateAssocVar('OnAfterBattleAction').IntValue             := Erm.TRIGGER_BG1;
+  AdvErm.GetOrCreateAssocVar('OnWanderingMonsterReach').IntValue         := Erm.TRIGGER_MW0;
+  AdvErm.GetOrCreateAssocVar('OnWanderingMonsterDeath').IntValue         := Erm.TRIGGER_MW1;
+  AdvErm.GetOrCreateAssocVar('OnMagicBasicResistance').IntValue          := Erm.TRIGGER_MR0;
+  AdvErm.GetOrCreateAssocVar('OnMagicCorrectedResistance').IntValue      := Erm.TRIGGER_MR1;
+  AdvErm.GetOrCreateAssocVar('OnDwarfMagicResistance').IntValue          := Erm.TRIGGER_MR2;
+  AdvErm.GetOrCreateAssocVar('OnAdventureMapRightMouseClick').IntValue   := Erm.TRIGGER_CM0;
+  AdvErm.GetOrCreateAssocVar('OnTownMouseClick').IntValue                := Erm.TRIGGER_CM1;
+  AdvErm.GetOrCreateAssocVar('OnHeroScreenMouseClick').IntValue          := Erm.TRIGGER_CM2;
+  AdvErm.GetOrCreateAssocVar('OnHeroesMeetScreenMouseClick').IntValue    := Erm.TRIGGER_CM3;
+  AdvErm.GetOrCreateAssocVar('OnBattleScreenMouseClick').IntValue        := Erm.TRIGGER_CM4;
+  AdvErm.GetOrCreateAssocVar('OnAdventureMapLeftMouseClick').IntValue    := Erm.TRIGGER_CM5;
+  AdvErm.GetOrCreateAssocVar('OnEquipArt').IntValue                      := Erm.TRIGGER_AE0;
+  AdvErm.GetOrCreateAssocVar('OnUnequipArt').IntValue                    := Erm.TRIGGER_AE1;
+  AdvErm.GetOrCreateAssocVar('OnBattleMouseHint').IntValue               := Erm.TRIGGER_MM0;
+  AdvErm.GetOrCreateAssocVar('OnTownMouseHint').IntValue                 := Erm.TRIGGER_MM1;
+  AdvErm.GetOrCreateAssocVar('OnMp3MusicChange').IntValue                := Erm.TRIGGER_MP;
+  AdvErm.GetOrCreateAssocVar('OnSoundPlay').IntValue                     := Erm.TRIGGER_SN;
+  AdvErm.GetOrCreateAssocVar('OnBeforeAdventureMagic').IntValue          := Erm.TRIGGER_MG0;
+  AdvErm.GetOrCreateAssocVar('OnAfterAdventureMagic').IntValue           := Erm.TRIGGER_MG1;
+  AdvErm.GetOrCreateAssocVar('OnEnterTown').IntValue                     := Erm.TRIGGER_TH0;
+  AdvErm.GetOrCreateAssocVar('OnLeaveTown').IntValue                     := Erm.TRIGGER_TH1;
+  AdvErm.GetOrCreateAssocVar('OnBeforeBattleBeforeDataSend').IntValue    := Erm.TRIGGER_IP0;
+  AdvErm.GetOrCreateAssocVar('OnBeforeBattleAfterDataReceived').IntValue := Erm.TRIGGER_IP1;
+  AdvErm.GetOrCreateAssocVar('OnAfterBattleBeforeDataSend').IntValue     := Erm.TRIGGER_IP2;
+  AdvErm.GetOrCreateAssocVar('OnAfterBattleAfterDataReceived').IntValue  := Erm.TRIGGER_IP3;
+  AdvErm.GetOrCreateAssocVar('OnOpenCommanderWindow').IntValue           := Erm.TRIGGER_CO0;
+  AdvErm.GetOrCreateAssocVar('OnCloseCommanderWindow').IntValue          := Erm.TRIGGER_CO1;
+  AdvErm.GetOrCreateAssocVar('OnAfterCommanderBuy').IntValue             := Erm.TRIGGER_CO2;
+  AdvErm.GetOrCreateAssocVar('OnAfterCommanderResurrect').IntValue       := Erm.TRIGGER_CO3;
+  AdvErm.GetOrCreateAssocVar('OnBeforeBattleForThisPcDefender').IntValue := Erm.TRIGGER_BA50;
+  AdvErm.GetOrCreateAssocVar('OnAfterBattleForThisPcDefender').IntValue  := Erm.TRIGGER_BA51;
+  AdvErm.GetOrCreateAssocVar('OnBeforeBattleUniversal').IntValue         := Erm.TRIGGER_BA52;
+  AdvErm.GetOrCreateAssocVar('OnAfterBattleUniversal').IntValue          := Erm.TRIGGER_BA53;
+  AdvErm.GetOrCreateAssocVar('OnAfterLoadGame').IntValue                 := Erm.TRIGGER_GM0;
+  AdvErm.GetOrCreateAssocVar('OnBeforeSaveGame').IntValue                := Erm.TRIGGER_GM1;
+  AdvErm.GetOrCreateAssocVar('OnAfterErmInstructions').IntValue          := Erm.TRIGGER_PI;
+  AdvErm.GetOrCreateAssocVar('OnCustomDialogEvent').IntValue             := Erm.TRIGGER_DL;
+  AdvErm.GetOrCreateAssocVar('OnHeroMove').IntValue                      := Erm.TRIGGER_HM;
+  AdvErm.GetOrCreateAssocVar('OnHeroGainLevel').IntValue                 := Erm.TRIGGER_HL;
+  AdvErm.GetOrCreateAssocVar('OnSetupBattlefield').IntValue              := Erm.TRIGGER_BF;
+  AdvErm.GetOrCreateAssocVar('OnMonsterPhysicalDamage').IntValue         := Erm.TRIGGER_MF1;
+  AdvErm.GetOrCreateAssocVar('OnEverySecond').IntValue                   := Erm.TRIGGER_TL0;
+  AdvErm.GetOrCreateAssocVar('OnEvery2Seconds').IntValue                 := Erm.TRIGGER_TL1;
+  AdvErm.GetOrCreateAssocVar('OnEvery5Seconds').IntValue                 := Erm.TRIGGER_TL2;
+  AdvErm.GetOrCreateAssocVar('OnEvery10Seconds').IntValue                := Erm.TRIGGER_TL3;
+  AdvErm.GetOrCreateAssocVar('OnEveryMinute').IntValue                   := Erm.TRIGGER_TL4;
+  AdvErm.GetOrCreateAssocVar('OnSavegameWrite').IntValue                 := Erm.TRIGGER_SAVEGAME_WRITE;
+  AdvErm.GetOrCreateAssocVar('OnSavegameRead').IntValue                  := Erm.TRIGGER_SAVEGAME_READ;
+  AdvErm.GetOrCreateAssocVar('OnKeyPressed').IntValue                    := Erm.TRIGGER_KEYPRESS;
+  AdvErm.GetOrCreateAssocVar('OnOpenHeroScreen').IntValue                := Erm.TRIGGER_OPEN_HEROSCREEN;
+  AdvErm.GetOrCreateAssocVar('OnCloseHeroScreen').IntValue               := Erm.TRIGGER_CLOSE_HEROSCREEN;
+  AdvErm.GetOrCreateAssocVar('OnBattleStackObtainsTurn').IntValue        := Erm.TRIGGER_STACK_OBTAINS_TURN;
+  AdvErm.GetOrCreateAssocVar('OnBattleRegeneratePhase').IntValue         := Erm.TRIGGER_REGENERATE_PHASE;
+  AdvErm.GetOrCreateAssocVar('OnAfterSaveGame').IntValue                 := Erm.TRIGGER_AFTER_SAVE_GAME;
+  AdvErm.GetOrCreateAssocVar('OnBeforeHeroInteraction').IntValue         := Erm.TRIGGER_BEFOREHEROINTERACT;
+  AdvErm.GetOrCreateAssocVar('OnAfterHeroInteraction').IntValue          := Erm.TRIGGER_AFTERHEROINTERACT;
+  AdvErm.GetOrCreateAssocVar('OnStackToStackDamage').IntValue            := Erm.TRIGGER_ONSTACKTOSTACKDAMAGE;
+  AdvErm.GetOrCreateAssocVar('OnAICalcStackAttackEffect').IntValue       := Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT;
+  AdvErm.GetOrCreateAssocVar('OnChat').IntValue                          := Erm.TRIGGER_ONCHAT;
+  AdvErm.GetOrCreateAssocVar('OnGameEnter').IntValue                     := Erm.TRIGGER_ONGAMEENTER;
+  AdvErm.GetOrCreateAssocVar('OnGameLeave').IntValue                     := Erm.TRIGGER_ONGAMELEAVE;
+end; // .procedure RegisterErmEventNames
+
 procedure LoadErmScripts;
 const
   SCRIPTS_LIST_FILEPATH = ERM_SCRIPTS_PATH + '\load only these scripts.txt';
@@ -688,6 +1090,15 @@ begin
   ScriptBuilder :=  StrLib.TStrBuilder.Create;
   ScriptList    :=  nil;
   // * * * * * //
+  (* Because Associative Memory from AdvErm is used more widely, we need to manually init it
+     on game start. Tha lack of generic "GameStart" event leads us to solution of initiating
+     memory here *)
+  if not Erm.ZvsIsGameLoading^ then begin
+    AdvErm.ResetMemory;
+    AdvErm.GetOrCreateAssocVar('Era.FuncAutoId').IntValue := FUNC_AUTO_ID;
+  end; // .if
+
+  RegisterErmEventNames;  
   ScriptNames.Clear;
   
   for i := 0 to MAX_ERM_SCRIPTS_NUM - 1 do begin
@@ -706,7 +1117,7 @@ begin
         LoadErtFile(ForcedScripts[i]);
         
         if Length(FileContents) > MIN_ERM_SCRIPT_SIZE then begin
-          FileContents  :=  PreprocessErm(FileContents);
+          FileContents  :=  PreprocessErm(ForcedScripts[i], FileContents);
           ScriptBuilder.AppendBuf(Length(FileContents) - 2, pointer(FileContents));
           ScriptBuilder.Append(#10);
         end; // .if
@@ -750,10 +1161,9 @@ const
 begin
   if ErmTriggerDepth = 0 then begin
     ZvsClearErtStrings;
-    ZvsClearErmScripts;  
+    ZvsClearErmScripts;
+    ZvsIsGameLoading^ := true;
     LoadErmScripts;
-    
-    ZvsIsGameLoading^ :=  true;
     ZvsFindErm;
     Utils.CopyMem(Length(SUCCESS_MES) + 1, pointer(SUCCESS_MES), @z[1]);
     ExecErmCmd('IF:Lz1;');
@@ -813,6 +1223,67 @@ begin
   Erm.FireErmEvent(EventId);
   GameExt.EraRestoreEventParams;
 end; // .procedure FireErmEventEx
+
+function FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
+begin
+  result := CmdPtr;
+  
+  if result <> nil then begin
+    Dec(result);
+    
+    while result^ <> '!' do begin
+      Dec(result);
+    end; // .while
+    
+    Inc(result);
+    
+    if result^ = '#' then begin
+      // [!]#
+      Dec(result);
+    end // .if
+    else begin
+      // ![!]
+      Dec(result, 2);
+    end; // .else
+  end; // .if
+end; // .function FindErmCmdBeginning
+
+function GrabErmCmd ({n} CmdPtr: pchar): string;
+var
+  StartPos: pchar;
+  EndPos:   pchar;
+
+begin
+  if CmdPtr <> nil then begin
+    StartPos := FindErmCmdBeginning(CmdPtr);
+    EndPos   := CmdPtr;
+    
+    repeat
+      Inc(EndPos);
+    until (EndPos^ = ';') or (EndPos^ = #0);
+    
+    if EndPos^ = ';' then begin
+      Inc(EndPos);
+    end; // .if
+    
+    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
+  end; // .if
+end; // .function GrabErmCmd
+
+function ErmCurrHero: {n} pointer;
+begin
+  result := PPOINTER($27F9970)^;
+end; // .function ErmCurrHero
+
+function ErmCurrHeroInd: integer; // or -1
+begin
+  if ErmCurrHero <> nil then begin
+    result := PINTEGER(Utils.PtrOfs(ErmCurrHero, $1A))^;
+  end // .if
+  else begin
+    result := -1;
+  end; // .else
+end; // .function 
 
 function Hook_ProcessErm (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
@@ -895,6 +1366,51 @@ begin
   // * * * * * //
   SysUtils.FreeAndNil(YVars);
 end; // .function Hook_ProcessErm_End
+
+function LoadWoGOptions (FilePath: pchar): boolean; ASSEMBLER;
+asm
+  PUSH $0FA0
+  PUSH $2771920
+  PUSH EAX // FilePath
+  MOV EAX, $773867
+  CALL EAX
+  ADD ESP, $0C
+  CMP EAX, 0
+  JGE @OK // ==>
+  xor EAX, EAX
+  JMP @Done
+@OK:
+  xor EAX, EAX
+  Inc EAX
+@Done:
+end; // .function LoadWoGOptions
+
+function Hook_UN_J3_End (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
+  RESET_OPTIONS_COMMAND = ':clear:';
+  WOG_OPTION_MAP_RULES  = 101;
+  USE_SELECTED_RULES    = 2;
+
+var
+  WoGOptionsFile: string;
+  i:              integer;
+
+begin
+  WoGOptionsFile := pchar(Context.ECX);
+
+  if WoGOptionsFile = RESET_OPTIONS_COMMAND then begin
+    for i := 0 to High(WoGOptions[CURRENT_WOG_OPTIONS]) do begin
+      WoGOptions[CURRENT_WOG_OPTIONS][i] := 0;
+    end; // .for
+    
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_MAP_RULES] := USE_SELECTED_RULES;
+  end // .if
+  else if not LoadWoGOptions(pchar(WoGOptionsFile)) then begin
+    ShowMessage('Cannot load file with WoG options: ' + WoGOptionsFile);
+  end; // .ELSEIF
+  
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_UN_J3_End
 
 {$W-}
 procedure Hook_ErmCastleBuilding; ASSEMBLER;
@@ -1048,12 +1564,54 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadErtFile
 
+function Hook_MR_N (c: Core.PHookContext): longbool; stdcall;
+begin
+  c.eax     := Heroes.GetStackIdByPos(Heroes.GetVal(MrMonPtr^, STACK_POS).v);
+  c.RetAddr := Ptr($75DC76);
+  result    := not Core.EXEC_DEF_CODE;
+end; // .function Hook_MR_N
+
+function Hook_CmdElse (Context: Core.PHookContext): longbool; stdcall;
+var
+  CmdFlags: PErmCmdConditions;
+  
+begin
+  if ZvsTriggerIfs[ZvsTriggerIfsDepth^] = ZVS_TRIGGER_IF_TRUE then begin
+    ZvsTriggerIfs[ZvsTriggerIfsDepth^] := ZVS_TRIGGER_IF_INACTIVE;
+  end else if ZvsTriggerIfs[ZvsTriggerIfsDepth^] = ZVS_TRIGGER_IF_FALSE then begin
+    CmdFlags := Ptr(pinteger(Context.EBP - $19C)^ * $29C + $212 + pinteger(Context.EBP - 4)^);
+    ZvsTriggerIfs[ZvsTriggerIfsDepth^] := 1 - integer(ZvsCheckFlags(CmdFlags));
+  end; // .elseif
+  
+  Context.RetAddr := Ptr($74CA64);
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_CmdElse
+
+function Hook_FU_P_RetValue (C: Core.PHookContext): longbool; stdcall;
+var
+{U} OldXVars: PErmXVars;
+    Transfer: integer;
+    i:        integer;
+  
+begin
+  OldXVars := Ptr(C.EBP - $15E0);
+  
+  for i := Low(x^) to High(x^) do begin
+    Transfer    := x[i];
+    x[i]        := OldXVars[i];
+    OldXVars[i] := Transfer;
+  end; // .for
+
+  C.RetAddr := Ptr($74CA64);
+  result    := Core.EXEC_DEF_CODE;
+end; // .function Hook_FU_P_RetValue
+
 procedure OnBeforeErm (Event: GameExt.PEvent); stdcall;
 var
   ResetEra: Utils.TProcedure;
 
 begin
-  ResetEra  :=  Windows.GetProcAddress(GameExt.hAngel, 'ResetEra');
+  ResetEra := Windows.GetProcAddress(GameExt.hAngel, 'ResetEra');
   {!} Assert(@ResetEra <> nil);
   ResetEra;
 end; // .procedure OnBeforeErm
@@ -1097,6 +1655,22 @@ begin
   (* Fix CM3 trigger allowing to handle all clicks *)
   Core.ApiHook(@Hook_CM3, Core.HOOKTYPE_BRIDGE, Ptr($5B0255));
   Core.p.WriteDataPatch($5B02DD, ['8B47088D70FF']);
+
+  (* !!el&[condition] support *)
+  Core.ApiHook(@Hook_CmdElse, Core.HOOKTYPE_BRIDGE, Ptr($74CC0D));
+
+  (* UN:J3 does not reset commanders or load scripts. New: it can be used to reset wog options *)
+  Core.ApiHook(@Hook_UN_J3_End, Core.HOOKTYPE_BRIDGE, Ptr($733A85));
+
+  (* Fix MR:N in !?MR1 !?MR2 *)
+  Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
+  Core.p.WriteDataPatch($439840, ['8B4D08909090']);
+  Core.p.WriteDataPatch($439857, ['8B4D08909090']);
+
+  (* Allow !!FU:P?x[n] syntax. *)
+  Core.ApiHook(@Hook_FU_P_RetValue, Core.HOOKTYPE_BRIDGE, Ptr($72D04A));
+  Core.p.WriteDataPatch($72D0A0, ['8D849520EAFFFF']);
+  Core.p.WriteDataPatch($72D0B2, ['E9E70000009090909090']);
 end; // .procedure OnAfterWoG
 
 begin
@@ -1110,9 +1684,9 @@ begin
   ScriptNames :=  Lists.NewSimpleStrList;
   SavedYVars  :=  Lists.NewStrictList(TYVars);
   
-  GameExt.RegisterHandler(OnBeforeWoG, 'OnBeforeWoG');
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  GameExt.RegisterHandler(OnBeforeWoG,     'OnBeforeWoG');
+  GameExt.RegisterHandler(OnAfterWoG,      'OnAfterWoG');
   GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
-  GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
-  GameExt.RegisterHandler(OnBeforeErm, 'OnBeforeErm');
+  GameExt.RegisterHandler(OnSavegameRead,  'OnSavegameRead');
+  GameExt.RegisterHandler(OnBeforeErm,     'OnBeforeErm');
 end.

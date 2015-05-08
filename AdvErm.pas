@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Math, Utils, AssocArrays, DataLib,
+  Windows, SysUtils, Math, Utils, AssocArrays, DataLib, TypeWrappers,
   PatchApi, Core, GameExt, Erm, Stores, Heroes;
 
 const
@@ -21,6 +21,7 @@ const
   
   SLOTS_SAVE_SECTION  = 'Era.DynArrays_SN_M';
   ASSOC_SAVE_SECTION  = 'Era.AssocArray_SN_W';
+  HINTS_SAVE_SECTION  = 'Era.Hints_SN_H';
   
   (* TParamModifier *)
   NO_MODIFIER     = 0;
@@ -30,10 +31,15 @@ const
   MODIFIER_DIV    = 4;
   MODIFIER_CONCAT = 5;
 
+  (* Hint code flags *)
+  CODE_TYPE_SUBTYPE = $01000000;
+
 
 type
   (* IMPORT *)
+  TDict    = DataLib.TDict;
   TObjDict = DataLib.TObjDict;
+  TString  = TypeWrappers.TString;
 
   TErmCmdContext = packed record
     
@@ -67,6 +73,8 @@ type
   PServiceParams  = ^TServiceParams;
   TServiceParams  = array [0..23] of TServiceParam;
 
+procedure ResetMemory;
+function GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
 
 function ExtendedEraService
 (
@@ -76,6 +84,8 @@ function ExtendedEraService
   out Err:        pchar
 ): boolean; stdcall;
 
+var
+{O} AssocMem: {O} AssocArrays.TAssocArray {OF TAssocVar};
 
 exports
   ExtendedEraService;
@@ -87,8 +97,8 @@ exports
 var
 {O} NewReceivers: {O} TObjDict {OF TErmCmdHandler};
 
+{O} Hints:      {O} TDict {of [O] TObjDict of TString};
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
-{O} AssocMem:   {O} AssocArrays.TAssocArray {OF TAssocVar};
     FreeSlotN:  integer = SPEC_SLOT - 1;
     ErrBuf:     array [0..255] of char;
 
@@ -201,6 +211,158 @@ begin
   end; // .if
 end; // .function AllocSlot
 
+function GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
+begin
+  result := AssocMem[VarName];
+
+  if result = nil then begin
+    result            := TAssocVar.Create;
+    AssocMem[VarName] := result;
+  end; // .if
+end; // .function GetOrCreateAssocVar
+
+function SN_H (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+var
+{U} Section:     TObjDict;
+{U} StrValue:    TString;
+    SectionName: string;
+    Hint:        string;
+    HintRaw:     pchar;
+    Code:        integer;
+    DeleteHint:  boolean;
+
+    ObjType:    integer;
+    ObjSubtype: integer;
+
+    x: integer;
+    y: integer;
+    z: integer;
+
+    Hero:     integer;
+    NameType: integer;
+
+  (* Returns new hint address or nil if hint was deleted *)
+  function UpdateHint: {n} pchar;
+  begin
+    if DeleteHint then begin
+      Section.DeleteItem(Ptr(Code));
+      result := nil;
+    end else begin
+      Hint     := Params[3].StrValue;
+      StrValue := TString(Section[Ptr(Code)]);
+
+      if StrValue = nil then begin
+        StrValue           := TString.Create(Hint);
+        Section[Ptr(Code)] := StrValue;
+      end else begin
+        StrValue.Value := Hint;
+      end; // .else
+
+      result := pchar(StrValue.Value);
+    end; // .else
+  end; // .function UpdateHint
+
+begin
+  Section  := nil;
+  StrValue := nil;
+  result   := true;
+  // * * * * * //
+  if NumParams >= 3 then begin
+    result := not Params[0].OperGet and Params[0].IsStr;
+
+    if result then begin
+      SectionName := Params[0].StrValue;
+      DeleteHint  := (SectionName <> '') and (SectionName[1] = '-');
+
+      if DeleteHint then begin
+        SectionName := Copy(SectionName, 2);
+      end; // .if
+
+      Section := TObjDict(Hints[SectionName]);
+      result  := Section <> nil;
+
+      if result then begin
+        if SectionName = 'object' then begin
+          // SN:H^object^/type/subtype or -1/hint
+          if NumParams = 4 then begin
+            result := not Params[1].OperGet and not Params[2].OperGet and not Params[3].OperGet and
+                      not Params[1].IsStr   and not Params[2].IsStr   and Params[3].IsStr;
+            
+            if result then begin
+              ObjType    := Params[1].Value;
+              ObjSubtype := Params[2].Value;
+              result     := Math.InRange(ObjType, -1, 254) and Math.InRange(ObjSubtype, -1, 254);
+
+              if result then begin
+                if ObjType = -1 then begin
+                  ObjType := 255;
+                end; // .if
+
+                if ObjSubtype = -1 then begin
+                  ObjSubtype := 255;
+                end; // .if
+
+                Code := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
+                UpdateHint;
+              end; // .if
+            end; // .if
+          // SN:H^object^/x/y/z/hint
+          end else if NumParams = 5 then begin
+            result := not Params[1].OperGet and not Params[2].OperGet and not Params[3].OperGet and
+                      not Params[4].OperGet and not Params[1].IsStr   and not Params[2].IsStr
+                      and not Params[3].IsStr and Params[4].IsStr;
+
+            if result then begin
+              x      := Params[1].Value;
+              y      := Params[2].Value;
+              z      := Params[3].Value;
+              result := Math.InRange(x, 0, 255) and Math.InRange(y, 0, 255) and Math.InRange(z, 0, 255);
+
+              if result then begin
+                Code := x or (y shl 8) or (z shl 16);
+                UpdateHint;
+              end; // .if
+            end; // .if
+          end else begin
+            result := false;
+            Error  := 'Invalid number of command parameters';
+          end; // .else
+        end else if SectionName = 'spec' then begin
+          // SN:H^spec^/hero/short (0), full (1) or descr (2)/hint
+          if NumParams = 4 then begin
+            result := not Params[1].OperGet and not Params[2].OperGet and not Params[3].OperGet and
+                      not Params[1].IsStr   and not Params[2].IsStr   and Params[3].IsStr;
+
+            if result then begin
+              Hero     := Params[1].Value;
+              NameType := Params[2].Value;
+              result   := Math.InRange(Hero, 0, Erm.NUM_WOG_HEROES - 1) and Math.InRange(NameType, 0, 2);
+              
+              if result then begin
+                Code    := Hero or (NameType shl 8);
+                HintRaw := UpdateHint;
+                Erm.HeroSpecSettingsTable[Hero].ZVarDescr[NameType] := 0;
+
+                if DeleteHint then begin
+                  Erm.HeroSpecsTable[Hero].Descr[NameType] := Erm.HeroSpecsTableBack[Hero].Descr[NameType];
+                end else begin
+                  Erm.HeroSpecsTable[Hero].Descr[NameType] := HintRaw;
+                end; // .else
+              end; // .if
+            end; // .if
+          end else begin
+            result := false;
+            Error  := 'Invalid number of command parameters';
+          end; // .else
+        end; // .elsif
+      end; // .if
+    end; // .if
+  end else begin
+    result := false;
+    Error  := 'Invalid number of command parameters';
+  end; // .else
+end; // .function SN_H
+
 function ExtendedEraService
 (
       Cmd:        char;
@@ -218,12 +380,16 @@ var
     NewSlotItemsCount:  integer;
     GameState:          TGameState;
 
+{U} Tile:    Heroes.PMapTile;
+    Coords:  Heroes.TMapCoords;
+    MapSize: integer;
+
 begin
   Slot          :=  nil;
   AssocVarValue :=  nil;
   // * * * * * //
-  result  :=  true;
-  Error   :=  'Invalid command parameters';
+  result := true;
+  Error  := 'Invalid command parameters';
   
   case Cmd of 
     'M':
@@ -554,17 +720,52 @@ begin
         end // .if
         else if GameState.CurrentDlgId = TOWN_SCREEN_DLGID then begin
           Erm.ExecErmCmd('UN:R4;');
-        end // .ELSEIF
+        end // .elseif
         else if GameState.CurrentDlgId = HERO_SCREEN_DLGID then begin
           Erm.ExecErmCmd('UN:R3/-1;');
-        end // .ELSEIF
+        end // .elseif
         else if GameState.CurrentDlgId = HERO_MEETING_SCREEN_DLGID then begin
           Heroes.RedrawHeroMeetingScreen;
-        end; // .ELSEIF
+        end; // .elseif
       end; // .case "D"
+    'O':
+      begin
+        // O?$/?$/?$
+        if NumParams = 3 then begin
+          result := Params[0].OperGet and Params[1].OperGet and Params[2].OperGet and
+                    not Params[0].IsStr and not Params[1].IsStr and not Params[2].IsStr;
+
+          if result then begin
+            Coords[0] := pinteger(Params[0].Value)^;
+            Coords[1] := pinteger(Params[1].Value)^;
+            Coords[2] := pinteger(Params[2].Value)^;
+            MapSize   := GameManagerPtr^.MapSize;
+
+            if (Coords[0] < 0) or (Coords[0] >= MapSize) or (Coords[1] < 0) or
+               (Coords[1] >= MapSize) or (Coords[2] < 0) or (Coords[2] > 1) or
+               ((Coords[2] = 1) and not GameManagerPtr^.IsTwoLevelMap)
+            then begin
+              result := false;
+              Error  := Format('Invalid coordinates: %d %d %d', [Coords[0], Coords[1], Coords[2]]);
+            end else begin
+              Tile := @GameManagerPtr^.MapTiles[(Coords[2] * MapSize + Coords[1]) * MapSize + Coords[0]];
+              Tile := Heroes.GetObjectEntranceTile(Tile);
+              Heroes.MapTileToCoords(Tile, Coords);
+              pinteger(Params[0].Value)^ := Coords[0];
+              pinteger(Params[1].Value)^ := Coords[1];
+              pinteger(Params[2].Value)^ := Coords[2];
+            end; // .else
+          end; // .if
+        end else begin
+          result := false;
+          Error  := 'Invalid number of command parameters';
+        end; // .else
+      end; // .case "O"
+
+    'H': result := SN_H(NumParams, Params, Error);
   else
-    result  :=  false;
-    Error   :=  'Unknown command "' + Cmd +'".';
+    result := false;
+    Error  := 'Unknown command "' + Cmd +'".';
   end; // .switch Cmd
   
   if not result then begin
@@ -574,11 +775,20 @@ begin
   end; // .if
 end; // .function ExtendedEraService
 
-procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
+procedure ResetMemory;
 begin
   Slots.Clear;
   AssocMem.Clear;
-end; // .procedure OnBeforeErmInstructions
+end; // .procedure ResetMemory
+
+procedure ResetHints;
+begin
+  with DataLib.IterateDict(Hints) do begin
+    while IterNext do begin
+      TObjDict(IterValue).Clear;
+    end; // .while
+  end; // .with
+end; // .procedure ResetHints
 
 procedure SaveSlots;
 var
@@ -670,10 +880,43 @@ begin
   AssocMem.EndIterate;
 end; // .procedure SaveAssocMem
 
+procedure SaveHints;
+var
+{U} HintSection: TObjDict;
+
+begin
+  HintSection := nil;
+  // * * * * * //
+  with Stores.NewRider(HINTS_SAVE_SECTION) do begin
+    // Write number of hint sections
+    WriteInt(Hints.ItemCount);
+    
+    // Process each hint section in a loop
+    with DataLib.IterateDict(Hints) do begin
+      while IterNext do begin
+        // Write hint section name and records count and get hint section object
+        WriteStr(IterKey);
+        HintSection := TObjDict(IterValue);
+        WriteInt(HintSection.ItemCount);
+
+        // Process hint section records
+        with DataLib.IterateObjDict(HintSection) do begin
+          while IterNext do begin
+            // Write item code and hint string
+            WriteInt(integer(IterKey));
+            WriteStr(TString(IterValue).Value);
+          end; // .while
+        end; // .with
+      end; // .while
+    end; // .with
+  end; // .with
+end; // .procedure SaveHints
+
 procedure OnSavegameWrite (Event: PEvent); stdcall;
 begin
   SaveSlots;
   SaveAssocMem;
+  SaveHints;
 end; // .procedure OnSavegameWrite
 
 procedure LoadSlots;
@@ -768,11 +1011,107 @@ begin
   end; // .for
 end; // .procedure LoadAssocMem
 
+procedure LoadHints;
+var
+{U} HintSection:     TObjDict;
+    NumHintSections: integer;
+    NumRecords:      integer;
+    ItemCode:        integer;
+    i, k:            integer;
+
+    Hero:     integer;
+    NameType: integer;
+
+begin
+  HintSection := nil;
+  // * * * * * //
+  ResetHints;
+  
+  with Stores.NewRider(HINTS_SAVE_SECTION) do begin
+    // Read number of hint sections
+    NumHintSections := ReadInt;
+
+    // Read each hint section in a loop
+    for i := 1 to NumHintSections do begin
+      // Read hint section name and create hint section object
+      HintSection    := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+      Hints[ReadStr] := HintSection;
+      NumRecords     := ReadInt;
+
+      // Read hint section records
+      for k := 1 to NumRecords do begin
+        // Read item code and hint string
+        ItemCode := ReadInt;
+        HintSection[Ptr(ItemCode)] := TString.Create(ReadStr);
+      end; // .for
+    end; // .for
+  end; // .with
+
+  (* Apply hero specialties hints *)
+  HintSection := TObjDict(Hints['spec']);
+
+  if HintSection <> nil then begin
+    with DataLib.IterateObjDict(HintSection) do begin
+      while IterNext do begin
+        Hero                                            := integer(IterKey) and $FF;
+        NameType                                        := integer(IterKey) shr 8;
+        HeroSpecsTable[Hero].Descr[NameType]            := pchar(TString(IterValue).Value);
+        HeroSpecSettingsTable[Hero].ZVarDescr[NameType] := 0;
+      end; // .while
+    end; // .with
+  end; // .if
+end; // .procedure LoadHints
+
 procedure OnSavegameRead (Event: PEvent); stdcall;
 begin
   LoadSlots;
   LoadAssocMem;
+  LoadHints;
 end; // .procedure OnSavegameRead
+
+function Hook_ZvsCheckObjHint (C: Core.PHookContext): longbool; stdcall;
+var
+{U} HintSection: TObjDict;
+{U} StrValue:    TString;
+    Code:        integer;
+    ObjType:     integer;
+    ObjSubtype:  integer;
+
+begin
+  HintSection := TObjDict(Hints['object']);
+  Code        := pinteger(C.EBP - 12)^ or (pinteger(C.EBP - 8)^ shl 8)
+                 or (pinteger(C.EBP - 24)^ shl 16);
+  StrValue    := HintSection[Ptr(Code)];
+  
+  if StrValue = nil then begin
+    ObjType    := pword(pinteger(C.EBP + 8)^ + $1E)^;
+    ObjSubtype := pword(pinteger(C.EBP + 8)^ + $22)^;
+    Code       := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
+    StrValue   := HintSection[Ptr(Code)];
+
+    if StrValue = nil then begin
+      Code     := ObjType or $FF00 or CODE_TYPE_SUBTYPE;
+      StrValue := HintSection[Ptr(Code)];
+
+      if StrValue = nil then begin
+        Code     := (ObjSubtype shl 8) or $FF or CODE_TYPE_SUBTYPE;
+        StrValue := HintSection[Ptr(Code)];
+
+        if StrValue = nil then begin
+          StrValue := HintSection[Ptr($FFFF or CODE_TYPE_SUBTYPE)];
+        end; // .if
+      end; // .if
+    end; // .if
+  end; // .if
+
+  if StrValue <> nil then begin
+    Utils.SetPcharValue(ppointer(C.EBP + 12)^, StrValue.Value, 512);
+    C.RetAddr := Ptr($74DFFB);
+    result    := not Core.EXEC_DEF_CODE;
+  end else begin
+    result := Core.EXEC_DEF_CODE;
+  end; // .else
+end; // .function Hook_ZvsCheckObjHint
 
 (*function HookFindErm_NewReceivers (Hook: TLoHook; Context: PHookContext): integer; stdcall;
 const
@@ -806,13 +1145,37 @@ begin
   (*Core.p.WriteLoHook($74B6B2, @HookFindErm_NewReceivers);*)
 end; // .procedure OnBeforeWoG
 
+procedure OnAfterWoG (Event: PEvent); stdcall;
+begin
+  (* SN:H for adventure map object hints *)
+  Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
+
+  (* Apply SN:H hints for heroes specialties on game loading *)
+  //Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
+end; // .procedure OnAfterWoG
+
+procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
+begin
+  // NOTE! Erm module now manually calls ResetMemory
+  ResetHints;
+end; // .procedure OnBeforeErmInstructions
+
+procedure InitHints;
+begin
+  Hints['object'] := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  Hints['spec']   := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+end; // .procedure InitHints
+
 begin
   (*NewReceivers  :=  DataLib.NewObjDict(Utils.OWNS_ITEMS);*)
 
-  Slots     :=  AssocArrays.NewStrictObjArr(TSlot);
-  AssocMem  :=  AssocArrays.NewStrictAssocArr(TAssocVar);
+  Slots    := AssocArrays.NewStrictObjArr(TSlot);
+  AssocMem := AssocArrays.NewStrictAssocArr(TAssocVar);
+  Hints    := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  InitHints;
   
   (*GameExt.RegisterHandler(OnBeforeWoG, 'OnBeforeWoG');*)
+  GameExt.RegisterHandler(OnAfterWoG,              'OnAfterWoG');
   GameExt.RegisterHandler(OnBeforeErmInstructions, 'OnBeforeErmInstructions');
   GameExt.RegisterHandler(OnSavegameWrite,         'OnSavegameWrite');
   GameExt.RegisterHandler(OnSavegameRead,          'OnSavegameRead');

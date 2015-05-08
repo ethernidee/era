@@ -44,6 +44,8 @@ end; // .procedure InstallLogger
 procedure OnEraStart (Event: GameExt.PEvent); stdcall;
 begin
   if GetOptValue('Debug') = '1' then begin
+    VFS.DebugOpt := GetOptValue('Debug.VFS') = '1';
+
     if GetOptValue('Debug.Destination') = 'File' then begin
       InstallLogger(EraLog.TFileLogger.Create(GetOptValue('Debug.File')));
     end // .if
