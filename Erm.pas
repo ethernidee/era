@@ -327,7 +327,7 @@ const
 
   ZvsIsGameLoading:   PBOOLEAN          = Ptr($A46BC0);
   ZvsTriggerIfs:      PZvsTriggerIfs    = Ptr($A46D18);
-  ZvsTriggerIfsDepth: pinteger          = Ptr($A46D22);
+  ZvsTriggerIfsDepth: pbyte             = Ptr($A46D22);
   ErmScriptsInfo:     PErmScriptsInfo   = Ptr($A49270);
   ErmScripts:         PScriptsPointers  = Ptr($A468A0);
   IsWoG:              plongbool         = Ptr($803288);

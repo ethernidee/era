@@ -7,6 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, Log, Ini,
+  VFS,
   Heroes, GameExt, EraLog, SndVid, Tweaks, Stores;
   
   
