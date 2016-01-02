@@ -14,7 +14,7 @@ uses
 (***) implementation (***)
 
 
-function GetOptValue (const OptionName: string): string;
+function GetOptValue (const OptionName: string; const defVal: string = ''): string;
 const
   ERA_SECTION = 'Era';
 
@@ -23,7 +23,7 @@ begin
     result := SysUtils.Trim(result);
   end // .if
   else begin
-    result := '';
+    result := defVal;
   end; // .else
 end; // .function GetOptValue
 
@@ -44,11 +44,11 @@ end; // .procedure InstallLogger
 
 procedure OnEraStart (Event: GameExt.PEvent); stdcall;
 begin
-  if GetOptValue('Debug') = '1' then begin
-    VFS.DebugOpt := GetOptValue('Debug.VFS') = '1';
+  if GetOptValue('Debug', '0') = '1' then begin
+    VFS.DebugOpt := GetOptValue('Debug.VFS', '1') = '1';
 
-    if GetOptValue('Debug.Destination') = 'File' then begin
-      InstallLogger(EraLog.TFileLogger.Create(GetOptValue('Debug.File')));
+    if GetOptValue('Debug.Destination', 'File') = 'File' then begin
+      InstallLogger(EraLog.TFileLogger.Create(GetOptValue('Debug.File', 'eralog.txt')));
     end // .if
     else begin     
       InstallLogger(EraLog.TConsoleLogger.Create('Era Log'));
@@ -60,11 +60,11 @@ begin
   
   Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
   
-  SndVid.LoadCDOpt            := GetOptValue('LoadCD')            = '1';
-  Tweaks.CPUPatchOpt          := GetOptValue('CPUPatch')          = '1';
-  Tweaks.FixGetHostByNameOpt  := GetOptValue('FixGetHostByName')  = '1';
-  Tweaks.UseOnlyOneCpuCoreOpt := GetOptValue('UseOnlyOneCpuCore') = '1';
-  Stores.EraSectionsSize      := SysUtils.StrToIntDef(GetOptValue('SavedGameExtraBlockSize'), 4000000);
+  SndVid.LoadCDOpt            := GetOptValue('LoadCD',            '0') = '1';
+  Tweaks.CPUPatchOpt          := GetOptValue('CPUPatch',          '1') = '1';
+  Tweaks.FixGetHostByNameOpt  := GetOptValue('FixGetHostByName',  '1') = '1';
+  Tweaks.UseOnlyOneCpuCoreOpt := GetOptValue('UseOnlyOneCpuCore', '1') = '1';
+  Stores.EraSectionsSize      := SysUtils.StrToIntDef(GetOptValue('SavedGameExtraBlockSize', '4000000'), 4000000);
 end; // .procedure OnEraStart
 
 begin
