@@ -60,11 +60,11 @@ begin
   
   Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
   
-  SndVid.LoadCDOpt            := GetOptValue('LoadCD') = '1';
-  Tweaks.CPUPatchOpt          := GetOptValue('CPUPatch') = '1';
-  Tweaks.FixGetHostByNameOpt  := GetOptValue('FixGetHostByName') = '1';
+  SndVid.LoadCDOpt            := GetOptValue('LoadCD')            = '1';
+  Tweaks.CPUPatchOpt          := GetOptValue('CPUPatch')          = '1';
+  Tweaks.FixGetHostByNameOpt  := GetOptValue('FixGetHostByName')  = '1';
   Tweaks.UseOnlyOneCpuCoreOpt := GetOptValue('UseOnlyOneCpuCore') = '1';
-  Stores.EraSectionsSize      := SysUtils.StrToInt(GetOptValue('SavedGameExtraBlockSize'));
+  Stores.EraSectionsSize      := SysUtils.StrToIntDef(GetOptValue('SavedGameExtraBlockSize'), 4000000);
 end; // .procedure OnEraStart
 
 begin
