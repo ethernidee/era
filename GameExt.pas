@@ -6,43 +6,34 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Utils, Lists, CFiles, Files, Crypto, AssocArrays,
-  Math, VFS, Core;
+  Windows, Math, SysUtils,
+  Utils, DataLib, CFiles, Files, FilesEx, Crypto, StrLib, Core,
+  VFS, BinPatching;
+
+type
+  (* Import *)
+  TList       = DataLib.TList;
+  TStringList = DataLib.TStrList;
 
 const
-  (* Pathes *)
-  ERA_DLL_NAME  = 'era.dll';
-  PLUGINS_PATH  = 'EraPlugins';
-  PATCHES_PATH  = 'EraPlugins';
+  (* Paths *)
+  ERA_DLL_NAME          = 'era.dll';
+  PLUGINS_PATH          = 'EraPlugins';
+  PATCHES_PATH          = 'EraPlugins';
+  DEBUG_DIR             = 'Debug\Era';
+  DEBUG_EVENT_LIST_PATH = DEBUG_DIR + '\event list.txt';
+  DEBUG_PATCH_LIST_PATH = DEBUG_DIR + '\patch list.txt';
   
   CONST_STR = -1;
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.47.0';
-  ERA_VERSION_INT = 2470;
+  ERA_VERSION_STR = '2.47.2';
+  ERA_VERSION_INT = 2472;
+
 
 
 type
-  PPatchFile  = ^TPatchFile;
-  TPatchFile  = packed record (* FORMAT *)
-    NumPatches: integer;
-    (*
-    Patches:    array NumPatches of TBinPatch;
-    *)
-    Patches:    Utils.TEmptyRec;
-  end; // .record TPatchFile
-
-  PBinPatch = ^TBinPatch;
-  TBinPatch = packed record (* FORMAT *)
-    Addr:     pointer;
-    NumBytes: integer;
-    (*
-    Bytes:    array NumBytes of byte;
-    *)
-    Bytes:    Utils.TEmptyRec;
-  end; // .record TBinPatch
-
   PEvent  = ^TEvent;
   TEvent  = packed record
       Name:     string;
@@ -51,6 +42,22 @@ type
   end; // .record TEvent
 
   TEventHandler = procedure (Event: PEvent); stdcall;
+
+  TEventInfo = class
+   protected
+    {On} fHandlers:      TList {of TEventHandler};
+         fNumTimesFired: integer;
+
+    function GetNumHandlers: integer;
+   public
+    destructor Destroy; override;
+
+    procedure AddHandler (Handler: pointer);
+
+    property Handlers:      {n} TList {of TEventHandler} read fHandlers;
+    property NumHandlers:   integer                      read GetNumHandlers;
+    property NumTimesFired: integer                      read fNumTimesFired write fNumTimesFired;
+  end; // .class TEventInfo
   
   PEraEventParams = ^TEraEventParams;
   TEraEventParams = array [0..15] of integer;
@@ -72,13 +79,15 @@ function  GetRealAddr (Addr: pointer): pointer; stdcall;
 function  GetMapFolder: string; stdcall;
 procedure SetMapFolder (const NewMapFolder: string);
 function  GetMapResourcePath (const OrigResourcePath: string): string; stdcall;
+procedure GenerateDebugInfo;
+
 
 procedure Init (hDll: integer);
 
 
 var
-{O} PluginsList:            Lists.TStringList {OF TDllHandle};
-{O} Events:                 {O} AssocArrays.TAssocArray {OF Lists.TList};
+{O} PluginsList:            DataLib.TStrList {OF TDllHandle};
+{O} Events:                 {O} DataLib.TDict {OF TEventInfo};
     hAngel:                 integer;  // Era 1.8x DLL
     hEra:                   integer;  // Era 1.9+ DLL
     (* Compability with Era 1.8x *)
@@ -87,13 +96,37 @@ var
     EraRestoreEventParams:  Utils.TProcedure;
 {U} EraEventParams:         PEraEventParams;
 
-{O} MemRedirections:        {O} Lists.TList {OF PMemRedirection};
+{O} MemRedirections:        {O} DataLib.TList {OF PMemRedirection};
 
   MapFolder: string = '';
 
 
 (***) implementation (***)
 uses Heroes;
+
+destructor TEventInfo.Destroy;
+begin
+  FreeAndNil(fHandlers);
+end; // .destructor TEventInfo.Destroy
+
+procedure TEventInfo.AddHandler (Handler: pointer);
+begin
+  {!} Assert(Handler <> nil);
+  if fHandlers = nil then begin
+    fHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
+  end; // .if
+
+  fHandlers.Add(Handler);
+end; // .procedure TEventInfo.AddHandler
+
+function TEventInfo.GetNumHandlers: integer;
+begin
+  if fHandlers = nil then begin
+    result := 0;
+  end else begin
+    result := fHandlers.Count;
+  end; // .else
+end; // .function TEventInfo.GetNumHandlers
 
 procedure LoadPlugins;
 const
@@ -106,23 +139,23 @@ var
     DllHandle:  integer;
   
 begin
-  Locator   :=  Files.TFileLocator.Create;
-  ItemInfo  :=  nil;
+  Locator  := Files.TFileLocator.Create;
+  ItemInfo := nil;
   // * * * * * //
-  Locator.DirPath :=  PLUGINS_PATH;
+  Locator.DirPath := PLUGINS_PATH;
   Locator.InitSearch('*.era');
   
   while Locator.NotEnd do begin
     // Providing Era Handle in v1
-    PINTEGER(ERM_V_1)^  :=  hEra;
-    DllName             :=  SysUtils.AnsiLowerCase(Locator.GetNextItem(Files.TItemInfo(ItemInfo)));
+    PINTEGER(ERM_V_1)^ := hEra;
+    DllName            := SysUtils.AnsiLowerCase(Locator.GetNextItem(Files.TItemInfo(ItemInfo)));
     if
       not ItemInfo.IsDir                          and
       (SysUtils.ExtractFileExt(DllName) = '.era') and
       ItemInfo.HasKnownSize                       and
       (ItemInfo.FileSize > 0)
     then begin
-      DllHandle :=  Windows.LoadLibrary(pchar(PLUGINS_PATH + '\' + DllName));
+      DllHandle := Windows.LoadLibrary(pchar(PLUGINS_PATH + '\' + DllName));
       {!} Assert(DllHandle <> 0);
       Windows.DisableThreadLibraryCalls(DllHandle);
       PluginsList.AddObj(DllName, Ptr(DllHandle));
@@ -135,66 +168,6 @@ begin
   // * * * * * //
   SysUtils.FreeAndNil(Locator);
 end; // .procedure LoadPlugins
-
-procedure ApplyBinPatch (const FilePath: string);
-var
-{U} Patch:      PBinPatch;
-    FileData:   string;
-    NumPatches: integer;
-    i:          integer;  
-  
-begin
-  if not Files.ReadFileContents(FilePath, FileData) then begin
-    Core.FatalError('Cannot open binary patch file "' + FilePath + '"');
-  end // .if
-  else begin
-    NumPatches  :=  PPatchFile(FileData).NumPatches;
-    Patch       :=  @PPatchFile(FileData).Patches;
-    try
-      for i:=1 to NumPatches do begin
-        Core.WriteAtCode(Patch.NumBytes, @Patch.Bytes, Patch.Addr);
-        Patch :=  Utils.PtrOfs(Patch, sizeof(Patch^) + Patch.NumBytes);
-      end; // .for 
-    except
-      Core.FatalError('Cannot apply binary patch file "' + FilePath + '"'#13#10'Access violation');
-    end; // .try
-  end; // .else
-end; // .procedure ApplyBinPatch
-
-procedure ApplyPatches (const SubFolder: string);
-const
-  MIN_PATCH_SIZE  = 4;
-
-var
-{O} Locator:  Files.TFileLocator;
-{O} ItemInfo: Files.TFileItemInfo;
-    FileName: string;
-  
-begin
-  Locator   :=  Files.TFileLocator.Create;
-  ItemInfo  :=  nil;
-  // * * * * * //
-  Locator.DirPath :=  PATCHES_PATH + '\' + SubFolder;
-  Locator.InitSearch('*.bin');
-  
-  while Locator.NotEnd do begin
-    FileName  :=  SysUtils.AnsiLowerCase(Locator.GetNextItem(Files.TItemInfo(ItemInfo)));
-    if
-      not ItemInfo.IsDir                            and
-      (SysUtils.ExtractFileExt(FileName) = '.bin')  and
-      ItemInfo.HasKnownSize                         and
-      (ItemInfo.FileSize > MIN_PATCH_SIZE)
-    then begin
-      ApplyBinPatch(Locator.DirPath + '\' + FileName);
-    end; // .if
-    
-    SysUtils.FreeAndNil(ItemInfo);
-  end; // .while
-  
-  Locator.FinitSearch;
-  // * * * * * //
-  SysUtils.FreeAndNil(Locator);
-end; // .procedure ApplyPatches
 
 procedure InitWoG; ASSEMBLER;
 asm
@@ -211,66 +184,54 @@ end; // .procedure InitWoG
 
 procedure RegisterHandler (Handler: TEventHandler; const EventName: string);
 var
-{U} Handlers: {U} Lists.TList {OF TEventHandler};
+{U} EventInfo: TEventInfo;
   
 begin
   {!} Assert(@Handler <> nil);
-  Handlers  :=  Events[EventName];
+  EventInfo := Events[EventName];
   // * * * * * //
-  if Handlers = nil then begin
-    Handlers          :=  Lists.NewSimpleList;
-    Events[EventName] :=  Handlers;
+  if EventInfo = nil then begin
+    EventInfo         := TEventInfo.Create;
+    Events[EventName] := EventInfo;
   end; // .if
-  
-  Handlers.Add(@Handler);
+
+  EventInfo.AddHandler(@Handler);
 end; // .procedure RegisterHandler
 
 procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer);
 var
-{O} Event:    PEvent;
-{U} Handlers: {U} Lists.TList {OF TEventHandler};
-    i:        integer;
+    Event:     TEvent;
+{U} EventInfo: TEventInfo;
+    i:         integer;
 
 begin
-  {!} Assert(DataSize >= 0);
-  {!} Assert((EventData <> nil) or (DataSize = 0));
-  New(Event);
-  Handlers  :=  Events[EventName];
+  {!} Assert(Utils.IsValidBuf(EventData, DataSize));
+  EventInfo := Events[EventName];
   // * * * * * //
-  Event.Name      :=  EventName;
-  Event.Data      :=  EventData;
-  Event.DataSize  :=  DataSize;
+  Event.Name     := EventName;
+  Event.Data     := EventData;
+  Event.DataSize := DataSize;
+
+  if EventInfo = nil then begin
+    EventInfo         := TEventInfo.Create;
+    Events[EventName] := EventInfo;
+  end; // .if
   
-  if Handlers <> nil then begin
-    for i:=0 to Handlers.Count - 1 do begin
-      TEventHandler(Handlers[i])(Event);
+  EventInfo.NumTimesFired := EventInfo.NumTimesFired + 1;
+
+  if EventInfo.Handlers <> nil then begin
+    for i := 0 to EventInfo.Handlers.Count - 1 do begin
+      TEventHandler(EventInfo.Handlers[i])(@Event);
     end; // .for
   end; // .if
-  // * * * * * //
-  Dispose(Event);
 end; // .procedure FireEvent
 
 function PatchExists (const PatchName: string): boolean;
-const
-  MIN_PATCH_SIZE  = 4;
-
 var
-  FileSize: integer;
+  PatchInd: integer;
 
 begin
-  result  :=
-  (
-    Files.GetFileSize(PATCHES_PATH + '\' + PatchName + '.bin', FileSize)  and
-    (FileSize > MIN_PATCH_SIZE)
-  ) or
-  (
-    Files.GetFileSize(PATCHES_PATH + '\BeforeWoG\' + PatchName + '.bin', FileSize)  and
-    (FileSize > MIN_PATCH_SIZE)
-  ) or
-  (
-    Files.GetFileSize(PATCHES_PATH + '\AfterWoG\' + PatchName + '.bin', FileSize) and
-    (FileSize > MIN_PATCH_SIZE)
-  );
+  result := BinPatching.PatchList.Find(PatchName, PatchInd);
 end; // .function PatchExists
 
 function PluginExists (const PluginName: string): boolean;
@@ -300,13 +261,13 @@ begin
       Math.Min(cardinal(Addr1), cardinal(Addr2))
     ) < (cardinal(Size1) + cardinal(Size2))
   then begin
-    result  :=  0;
+    result := 0;
   end // .if
   else if cardinal(Addr1) < cardinal(Addr2) then begin
-    result  :=  -1;
+    result := -1;
   end // .ELSEIF
   else begin
-    result  :=  +1;
+    result := +1;
   end; // .else
 end; // .function CompareMemoryBlocks
 
@@ -319,29 +280,29 @@ var
   
 begin
   {!} Assert(Size >= 0);
-  Redirection :=  nil;
+  Redirection := nil;
   
   // * * * * * //
-  result    :=  false;
-  LeftInd   :=  0;
-  RightInd  :=  MemRedirections.Count - 1;
+  result   := false;
+  LeftInd  := 0;
+  RightInd := MemRedirections.Count - 1;
   
   while (LeftInd <= RightInd) and not result do begin
-    BlockInd      :=  LeftInd + (RightInd - LeftInd) div 2;
-    Redirection   :=  MemRedirections[BlockInd];
-    ComparisonRes :=  CompareMemoryBlocks(Addr, Size, Redirection.OldAddr, Redirection.BlockSize);
-    result        :=  ComparisonRes = 0;
+    BlockInd      := LeftInd + (RightInd - LeftInd) div 2;
+    Redirection   := MemRedirections[BlockInd];
+    ComparisonRes := CompareMemoryBlocks(Addr, Size, Redirection.OldAddr, Redirection.BlockSize);
+    result        := ComparisonRes = 0;
     
     if ComparisonRes < 0 then begin
-      RightInd  :=  BlockInd - 1;
+      RightInd := BlockInd - 1;
     end // .if
     else if ComparisonRes > 0 then begin
-      LeftInd   :=  BlockInd + 1;
+      LeftInd  := BlockInd + 1;
     end; // .ELSEIF
   end; // .while
 
   if not result then begin
-    BlockInd :=  LeftInd;
+    BlockInd := LeftInd;
   end; // .if
 end; // .function FindMemoryRedirection
 
@@ -355,18 +316,18 @@ begin
   {!} Assert(OldAddr <> nil);
   {!} Assert(BlockSize > 0);
   {!} Assert(NewAddr <> nil);
-  OldRedirection  :=  nil;
-  NewRedirection  :=  nil;
+  OldRedirection := nil;
+  NewRedirection := nil;
   // * * * * * //
   if not FindMemoryRedirection(OldAddr, BlockSize, BlockInd) then begin
     New(NewRedirection);
-    NewRedirection.OldAddr    :=  OldAddr;
-    NewRedirection.BlockSize  :=  BlockSize;
-    NewRedirection.NewAddr    :=  NewAddr;
-    MemRedirections.Insert(NewRedirection, BlockInd); NewRedirection  :=  nil;
+    NewRedirection.OldAddr   := OldAddr;
+    NewRedirection.BlockSize := BlockSize;
+    NewRedirection.NewAddr   := NewAddr;
+    MemRedirections.Insert(NewRedirection, BlockInd); NewRedirection := nil;
   end // .if
   else begin
-    OldRedirection  :=  MemRedirections[BlockInd];
+    OldRedirection := MemRedirections[BlockInd];
     Core.FatalError
     (
       'Cannot redirect block at address $' +
@@ -389,13 +350,13 @@ var
     BlockInd:     integer;
 
 begin
-  Redirection :=  nil;
+  Redirection := nil;
   // * * * * * //
-  result  :=  Addr;
+  result := Addr;
   
   if FindMemoryRedirection(Addr, sizeof(byte), BlockInd) then begin
-    Redirection :=  MemRedirections[BlockInd];
-    result      :=  Utils.PtrOfs(Redirection.NewAddr, integer(Addr) - integer(Redirection.OldAddr));
+    Redirection := MemRedirections[BlockInd];
+    result      := Utils.PtrOfs(Redirection.NewAddr, integer(Addr) - integer(Redirection.OldAddr));
   end; // .if
 end; // .function GetRealAddr
 
@@ -428,9 +389,87 @@ begin
   end; // .if
 end; // .function GetMapResourcePath
 
+procedure GenerateDebugInfo;
+begin
+  FireEvent('OnGenerateDebugInfo', nil, 0);
+end; // .procedure GenerateDebugInfo
+
+procedure DumpEventList;
+var
+{O} EventList: TStrList {of TEventInfo};
+{U} EventInfo: TEventInfo;
+    i, j:      integer;
+
+begin
+  EventList := nil;
+  EventInfo := nil;
+  // * * * * * //
+  {!} Core.ModuleContext.Lock;
+
+  with FilesEx.WriteFormattedOutput(DEBUG_EVENT_LIST_PATH) do begin
+    Line('> Format: [Event name] ([Number of handlers], [Fired N times])');
+    EmptyLine;
+
+    EventList := DataLib.DictToStrList(Events, DataLib.CASE_INSENSITIVE);
+    EventList.Sort;
+
+    for i := 0 to EventList.Count - 1 do begin
+      EventInfo := TEventInfo(EventList.Values[i]);
+      Line(Format('%s (%d, %d)', [EventList[i], EventInfo.NumHandlers, EventInfo.NumTimesFired]));
+    end; // .for
+
+    EmptyLine; EmptyLine;
+    Line('> Event handlers');
+    EmptyLine;
+    
+    for i := 0 to EventList.Count - 1 do begin
+      EventInfo := TEventInfo(EventList.Values[i]);
+      
+      if EventInfo.NumHandlers > 0 then begin
+        Line(EventList[i] + ':');
+      end; // .if
+      
+      Indent;
+
+      for j := 0 to EventInfo.NumHandlers - 1 do begin
+        Line(Core.ModuleContext.AddrToStr(EventInfo.Handlers[j]));
+      end; // .for
+
+      Unindent;
+    end; // .for
+  end; // .with
+
+  {!} Core.ModuleContext.Unlock;
+  // * * * * * //
+  FreeAndNil(EventList);
+end; // .procedure DumpEventList
+
+procedure DumpPatchList;
+var
+  i: integer;
+
+begin
+  BinPatching.PatchList.Sort;
+
+  with FilesEx.WriteFormattedOutput(DEBUG_PATCH_LIST_PATH) do begin
+    Line('> Format: [Patch name] (Patch size)');
+    EmptyLine;
+
+    for i := 0 to BinPatching.PatchList.Count - 1 do begin
+      Line(Format('%s (%d)', [BinPatching.PatchList[i], integer(BinPatching.PatchList.Values[i])]));
+    end; // .for
+  end; // .with
+end; // .procedure DumpPatchList
+
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+begin
+  DumpEventList;
+  DumpPatchList;
+end; // .procedure OnGenerateDebugInfo
+
 procedure Init (hDll: integer);
 begin
-  hEra  :=  hDll;
+  hEra := hDll;
   Windows.DisableThreadLibraryCalls(hEra);
   
   FireEvent('OnEraStart', NO_EVENT_DATA, 0);
@@ -450,23 +489,19 @@ begin
   
   LoadPlugins;
   FireEvent('OnBeforeWoG', NO_EVENT_DATA, 0);
-  ApplyPatches('BeforeWoG');
+  BinPatching.ApplyPatches(PATCHES_PATH + '\BeforeWoG');
   
   InitWoG;
   EraInit;
   
   FireEvent('OnAfterWoG', NO_EVENT_DATA, 0);
-  ApplyPatches('AfterWoG');
+  BinPatching.ApplyPatches(PATCHES_PATH + '\AfterWoG');
+
+  RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end; // .procedure Init
 
 begin
-  PluginsList     :=  Lists.NewSimpleStrList;
-  Events          :=  AssocArrays.NewStrictAssocArr(Lists.TList);
-  MemRedirections :=  Lists.NewList
-  (
-    Utils.OWNS_ITEMS,
-    not Utils.ITEMS_ARE_OBJECTS,
-    Utils.NO_TYPEGUARD,
-    Utils.ALLOW_NIL
-  );
+  PluginsList     := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  Events          := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  MemRedirections := DataLib.NewList(not Utils.OWNS_ITEMS);
 end.

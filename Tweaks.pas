@@ -577,6 +577,148 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsLib_ExtractDef_GetGamePath
 
+procedure DumpWinPeModuleList;
+const
+  DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
+
+var
+  i: integer;
+
+begin
+  {!} Core.ModuleContext.Lock;
+  Core.ModuleContext.UpdateModuleList;
+
+  with FilesEx.WriteFormattedOutput(DEBUG_WINPE_MODULE_LIST_PATH) do begin
+    Line('> Win32 executable modules');
+    EmptyLine;
+
+    for i := 0 to Core.ModuleContext.ModuleList.Count - 1 do begin
+      Line(Core.ModuleContext.ModuleInfo[i].ToStr);
+    end; // .for
+  end; // .with
+
+  {!} Core.ModuleContext.Unlock;
+end; // .procedure DumpWinPeModuleList
+
+procedure DumpExceptionContext (ExcRec: PExceptionRecord; Context: Windows.PContext);
+const
+  DEBUG_EXCEPTION_CONTEXT_PATH = GameExt.DEBUG_DIR + '\exception context.txt';
+
+var
+  ExceptionText: string;
+  LineText:      string;
+  Ebp:           integer;
+  Esp:           integer;
+  RetAddr:       integer;
+  i:             integer;
+
+begin
+  {!} Core.ModuleContext.Lock;
+  Core.ModuleContext.UpdateModuleList;
+
+  with FilesEx.WriteFormattedOutput(DEBUG_EXCEPTION_CONTEXT_PATH) do begin
+    case ExcRec.ExceptionCode of
+      $C0000005: begin
+        if ExcRec.ExceptionInformation[0] <> 0 then begin
+          ExceptionText := 'Failed to write data at ' + Format('%x', [integer(ExcRec.ExceptionInformation[1])]);
+        end else begin
+          ExceptionText := 'Failed to read data at ' + Format('%x', [integer(ExcRec.ExceptionInformation[1])]);
+        end; // .else
+      end; // .case $C0000005
+
+      $C000008C: ExceptionText := 'Array index is out of bounds';
+      $80000003: ExceptionText := 'Breakpoint encountered';
+      $80000002: ExceptionText := 'Data access misalignment';
+      $C000008D: ExceptionText := 'One of the operands in a floating-point operation is denormal';
+      $C000008E: ExceptionText := 'Attempt to divide a floating-point value by a floating-point divisor of zero';
+      $C000008F: ExceptionText := 'The result of a floating-point operation cannot be represented exactly as a decimal fraction';
+      $C0000090: ExceptionText := 'Invalid floating-point exception';
+      $C0000091: ExceptionText := 'The exponent of a floating-point operation is greater than the magnitude allowed by the corresponding type';
+      $C0000092: ExceptionText := 'The stack overflowed or underflowed as the result of a floating-point operation';
+      $C0000093: ExceptionText := 'The exponent of a floating-point operation is less than the magnitude allowed by the corresponding type';
+      $C000001D: ExceptionText := 'Attempt to execute an illegal instruction';
+      $C0000006: ExceptionText := 'Attempt to access a page that was not present, and the system was unable to load the page';
+      $C0000094: ExceptionText := 'Attempt to divide an integer value by an integer divisor of zero';
+      $C0000095: ExceptionText := 'Integer arithmetic overflow';
+      $C0000026: ExceptionText := 'An invalid exception disposition was returned by an exception handler';
+      $C0000025: ExceptionText := 'Attempt to continue from an exception that isn''t continuable';
+      $C0000096: ExceptionText := 'Attempt to execute a privilaged instruction.';
+      $80000004: ExceptionText := 'Single step exception';
+      $C00000FD: ExceptionText := 'Stack overflow';
+      else       ExceptionText := 'Unknown exception';
+    end; // .switch ExcRec.ExceptionCode
+    
+    Line(ExceptionText + '.');
+    Line(Format('EIP: %s. Code: %x', [Core.ModuleContext.AddrToStr(Ptr(Context.Eip)), ExcRec.ExceptionCode]));
+    EmptyLine;
+    Line('> Registers');
+
+    Line('EAX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Eax)));
+    Line('ECX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ecx)));
+    Line('EDC: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edx)));
+    Line('EBX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebx)));
+    Line('ESP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esp)));
+    Line('EBP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebp)));
+    Line('ESI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esi)));
+    Line('EDI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edi)));
+
+    EmptyLine;
+    Line('> Callstack');
+    Ebp     := Context.Ebp;
+    RetAddr := 1;
+
+    try
+      while (Ebp <> 0) and (RetAddr <> 0) do begin
+        RetAddr := pinteger(Ebp + 4)^;
+
+        if RetAddr <> 0 then begin
+          Line(Core.ModuleContext.AddrToStr(Ptr(RetAddr)));
+          Ebp := pinteger(Ebp)^;
+        end; // .if
+      end; // .while
+    except
+      // Stop processing callstack
+    end; // .try
+
+    EmptyLine;
+    Line('> Stack');
+    Esp := Context.Esp - sizeof(integer) * 5;
+
+    try
+      for i := 1 to 40 do begin
+        LineText := IntToHex(Esp, 8);
+
+        if Esp = integer(Context.Esp) then begin
+          LineText := LineText + '*';
+        end; // .if
+
+        LineText := LineText + ': ' + Core.ModuleContext.AddrToStr(ppointer(Esp)^);
+        Inc(Esp, sizeof(integer));
+        Line(LineText);
+      end; // .for
+    except
+      // Stop stack traversing
+    end; // .try
+  end; // .with
+
+  {!} Core.ModuleContext.Unlock;
+end; // .procedure DumpExceptionContext
+
+function TopLevelExceptionHandler (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
+const
+  EXCEPTION_CONTINUE_SEARCH = 0;
+
+begin
+  DumpExceptionContext(ExceptionPtrs.ExceptionRecord, ExceptionPtrs.ContextRecord);
+  GameExt.FireEvent('OnGenerateDebugInfo', nil, 0);
+  result := EXCEPTION_CONTINUE_SEARCH;
+end; // .function TopLevelExceptionHandler
+
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+begin
+  DumpWinPeModuleList;
+end; // .procedure OnGenerateDebugInfo
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 const
   ZVSLIB_EXTRACTDEF_OFS             = 100668;
@@ -704,9 +846,14 @@ begin
 
   (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
   Core.p.WriteDataPatch($4DC358, ['A0']);
+
+  (* Install global top-level exception filter *)
+  Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
+  Windows.SetUnhandledExceptionFilter(@TopLevelExceptionHandler);
 end; // .procedure OnAfterWoG
 
 begin
   Windows.InitializeCriticalSection(InetCriticalSection);
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  GameExt.RegisterHandler(OnAfterWoG,  'OnAfterWoG');
+  RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end.

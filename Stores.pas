@@ -9,6 +9,9 @@ uses
   SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib, DlgMes,
   Core, GameExt, Heroes, Erm;
 
+const
+  DUMP_SAVEGAME_SECTIONS_DIR = GameExt.DEBUG_DIR + '\Savegame Sections';
+
 type
   (* IMPORT *)
   TAssocArray = AssocArrays.TAssocArray;
@@ -36,7 +39,8 @@ function  NewRider (const SectionName: string): IRider;
 
 
 var
-  EraSectionsSize:  integer = 0; // 0 to turn off padding
+  DumpSavegameSectionsOpt: boolean;
+  EraSectionsSize:         integer = 0; // 0 to turn off padding to fixed size
 
 
 (***) implementation (***)
@@ -59,7 +63,7 @@ type
     function  Read (Size: integer; {n} Addr: PBYTE): integer;
     // if nothing to read, returns 0
     function  ReadInt: integer;
-    // if nothing to read, returns ''
+    // if nothing to read, return ''
     function  ReadStr: string;
     procedure Flush;
     
@@ -96,6 +100,12 @@ begin
     end; // .if
     
     Section.AppendBuf(DataSize, Data);
+
+    if DumpSavegameSectionsOpt then begin
+      
+      Files.AppendFileContents(StrLib.BufToStr(Data, DataSize),
+                               DUMP_SAVEGAME_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
+    end; // .if
   end; // .if
 end; // .procedure WriteSavegameSection
 
@@ -300,6 +310,11 @@ var
 begin
   StrBuilder := nil;
   // * * * * * //
+  if DumpSavegameSectionsOpt then begin
+    Files.DeleteDir(DUMP_SAVEGAME_SECTIONS_DIR);
+    SysUtils.CreateDir(DUMP_SAVEGAME_SECTIONS_DIR);
+  end; // .if
+
   WritingStorage.Clear;
   Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_WRITE, []);
   GameExt.FireEvent('$OnEraSaveScripts', GameExt.NO_EVENT_DATA, 0);
@@ -318,6 +333,11 @@ begin
       DataLen   := Length(BuiltData);
       GzipWrite(sizeof(DataLen), @DataLen);
       GzipWrite(Length(BuiltData), pointer(BuiltData));
+
+      if DumpSavegameSectionsOpt then begin
+        Files.WriteFileContents(BuiltData, DUMP_SAVEGAME_SECTIONS_DIR
+                                           + '\' + IterKey + '.joined.txt');
+      end; // .if
     end; // .while
   end; // .with 
   

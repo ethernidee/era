@@ -88,33 +88,6 @@ begin
   end; // .if
 end; // .function LoadBinPatch
 
-function CompileJsonPatch (const JsonSource, JsonContents: string;
-                           out Patch: Utils.TArrayOfByte): boolean;
-var
-{U} Json:  TlkJsonList;
-    Error: string;
-    i:     integer;
-
-  function ReadHexInt (): integer;
-  begin
-    
-  end; // .function ReadHexInt
-
-begin
-  Utils.CastOrFree(TlkJson.ParseText(JsonContents), TlkJsonList, Json);
-  result := Json <> nil;
-
-  if result then begin
-    i := 0;
-
-    while result and (i < Json.Count) do begin
-      Json.Child[i]
-    end; // .while
-  end else begin
-    NotifyError('Invalid json patch file "' + JsonSource + '"');
-  end; // .else
-end; // .function CompileJsonPatch
-
 procedure ApplyPatches (const DirPath: string);
 var
   FileContents: string;

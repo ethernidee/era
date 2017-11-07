@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Math, Utils, AssocArrays, DataLib, TypeWrappers,
+  Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files,
   PatchApi, Core, GameExt, Erm, Stores, Heroes;
 
 const
@@ -34,6 +34,7 @@ const
   (* Hint code flags *)
   CODE_TYPE_SUBTYPE = $01000000;
 
+  ERM_MEMORY_DUMP_FILE = GameExt.DEBUG_DIR + '\erm memory dump.txt';
 
 type
   (* IMPORT *)
@@ -1140,9 +1141,370 @@ begin
   result  :=  EXEC_DEFAULT;
 end; // .function HookFindErm_NewReceivers*)
 
+procedure DumpErmMemory (const DumpFilePath: string);
+const
+  ERM_CONTEXT_LEN = 300;
+  
+type
+  TVarType          = (INT_VAR, FLOAT_VAR, STR_VAR, BOOL_VAR);
+  PEndlessErmStrArr = ^TEndlessErmStrArr;
+  TEndlessErmStrArr = array [0..MAXLONGINT div sizeof(Erm.TErmZVar) - 1] of TErmZVar;
+
+var
+{O} Buf:              StrLib.TStrBuilder;
+    PositionLocated:  boolean;
+    ErmContextHeader: string;
+    ErmContext:       string;
+    ScriptName:       string;
+    LineN, LinePos:   integer;
+    ErmContextStart:  pchar;
+    i:                integer;
+    
+  procedure WriteSectionHeader (const Header: string);
+  begin
+    if Buf.Size > 0 then begin
+      Buf.Append(#13#10);
+    end; // .if
+    
+    Buf.Append('> ' + Header + #13#10);
+  end; // .procedure WriteSectionHeader
+  
+  procedure Append (const Str: string);
+  begin
+    Buf.Append(Str);
+  end; // .procedure Append
+  
+  procedure LineEnd;
+  begin
+    Buf.Append(#13#10);
+  end; // .procedure LineEnd
+  
+  procedure Line (const Str: string);
+  begin
+    Buf.Append(Str + #13#10);
+  end; // .procedure Line
+  
+  function ErmStrToWinStr (const Str: string): string;
+  begin
+    result := StringReplace
+    (
+      StringReplace(Str, #13, '', [rfReplaceAll]), #10, #13#10, [rfReplaceAll]
+    );
+  end; // .function ErmStrToWinStr
+  
+  procedure DumpVars (const Caption, VarPrefix: string; VarType: TVarType; VarsPtr: pointer;
+                      NumVars, StartInd: integer);
+  var
+    IntArr:        PEndlessIntArr;
+    FloatArr:      PEndlessSingleArr;
+    StrArr:        PEndlessErmStrArr;
+    BoolArr:       PEndlessBoolArr;
+    
+    RangeStart:    integer;
+    StartIntVal:   integer;
+    StartFloatVal: single;
+    StartStrVal:   string;
+    StartBoolVal:  boolean;
+    
+    i:             integer;
+    
+    function GetVarName (RangeStart, RangeEnd: integer): string;
+    begin
+      result := VarPrefix + IntToStr(StartInd + RangeStart);
+      
+      if RangeEnd - RangeStart > 1 then begin
+        result := result + '..' + VarPrefix + IntToStr(StartInd + RangeEnd - 1);
+      end; // .if
+      
+      result := result + ' = ';
+    end; // .function GetVarName
+     
+  begin
+    {!} Assert(VarsPtr <> nil);
+    {!} Assert(NumVars >= 0);
+    if Caption <> '' then begin
+      WriteSectionHeader(Caption); LineEnd;
+    end; // .if
+
+    case VarType of 
+      INT_VAR:
+        begin
+          IntArr := VarsPtr;
+          i      := 0;
+          
+          while i < NumVars do begin
+            RangeStart  := i;
+            StartIntVal := IntArr[i];
+            Inc(i);
+            
+            while (i < NumVars) and (IntArr[i] = StartIntVal) do begin
+              Inc(i);
+            end; // .while
+            
+            Line(GetVarName(RangeStart, i) + IntToStr(StartIntVal));
+          end; // .while
+        end; // .case INT_VAR
+      FLOAT_VAR:
+        begin
+          FloatArr := VarsPtr;
+          i        := 0;
+          
+          while i < NumVars do begin
+            RangeStart    := i;
+            StartFloatVal := FloatArr[i];
+            Inc(i);
+            
+            while (i < NumVars) and (FloatArr[i] = StartFloatVal) do begin
+              Inc(i);
+            end; // .while
+            
+            Line(GetVarName(RangeStart, i) + Format('%0.3f', [StartFloatVal]));
+          end; // .while
+        end; // .case FLOAT_VAR
+      STR_VAR:
+        begin
+          StrArr := VarsPtr;
+          i      := 0;
+          
+          while i < NumVars do begin
+            RangeStart  := i;
+            StartStrVal := pchar(@StrArr[i]);
+            Inc(i);
+            
+            while (i < NumVars) and (pchar(@StrArr[i]) = StartStrVal) do begin
+              Inc(i);
+            end; // .while
+            
+            Line(GetVarName(RangeStart, i) + '"' + ErmStrToWinStr(StartStrVal) + '"');
+          end; // .while
+        end; // .case STR_VAR
+      BOOL_VAR:
+        begin
+          BoolArr := VarsPtr;
+          i       := 0;
+          
+          while i < NumVars do begin
+            RangeStart   := i;
+            StartBoolVal := BoolArr[i];
+            Inc(i);
+            
+            while (i < NumVars) and (BoolArr[i] = StartBoolVal) do begin
+              Inc(i);
+            end; // .while
+            
+            Line(GetVarName(RangeStart, i) + IntToStr(byte(StartBoolVal)));
+          end; // .while
+        end; // .case BOOL_VAR
+    else
+      {!} Assert(FALSE);
+    end; // .SWITCH 
+  end; // .procedure DumpVars
+  
+  procedure DumpAssocVars;
+  var
+  {O} AssocList: {U} DataLib.TStrList {OF TAssocVar};
+  {U} AssocVar:  TAssocVar;
+      i:         integer;
+  
+  begin
+    AssocList := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+    AssocVar  := nil;
+    // * * * * * //
+    WriteSectionHeader('Associative vars'); LineEnd;
+  
+    with DataLib.IterateDict(AssocMem) do begin
+      while IterNext do begin
+        AssocList.AddObj(IterKey, IterValue);
+      end; // .while
+    end; // .with 
+    
+    AssocList.Sort;
+    
+    for i := 0 to AssocList.Count - 1 do begin
+      AssocVar := AssocList.Values[i];
+        
+      if (AssocVar.IntValue <> 0) or (AssocVar.StrValue <> '') then begin
+        Append(AssocList[i] + ' = ');
+        
+        if AssocVar.IntValue <> 0 then begin
+          Append(IntToStr(AssocVar.IntValue));
+          
+          if AssocVar.StrValue <> '' then begin
+            Append(', ');
+          end; // .if
+        end; // .if
+        
+        if AssocVar.StrValue <> '' then begin
+          Append('"' + ErmStrToWinStr(AssocVar.StrValue) + '"');
+        end; // .if
+        
+        LineEnd;
+      end; // .if
+    end; // .for
+    // * * * * * //
+    SysUtils.FreeAndNil(AssocList);
+  end; // .procedure DumpAssocVars;
+  
+  procedure DumpSlots;
+  var
+  {O} SlotList:     {U} DataLib.TList {IF SlotInd: POINTER};
+  {U} Slot:         TSlot;
+      SlotInd:      integer;
+      RangeStart:   integer;
+      StartIntVal:  integer;
+      StartStrVal:  string;
+      i, k:         integer;
+      
+    function GetVarName (RangeStart, RangeEnd: integer): string;
+    begin
+      result := 'm' + IntToStr(SlotInd) + '[' + IntToStr(RangeStart);
+      
+      if RangeEnd - RangeStart > 1 then begin
+        result := result + '..' + IntToStr(RangeEnd - 1);
+      end; // .if
+      
+      result := result + '] = ';
+    end; // .function GetVarName
+     
+  begin
+    SlotList := DataLib.NewList(not Utils.OWNS_ITEMS);
+    // * * * * * //
+    WriteSectionHeader('Memory slots (dynamical arrays)');
+    
+    with DataLib.IterateObjDict(Slots) do begin
+      while IterNext do begin
+        SlotList.Add(IterKey);
+      end; // .while
+    end; // .with
+    
+    SlotList.Sort;
+    
+    for i := 0 to SlotList.Count - 1 do begin
+      SlotInd := integer(SlotList[i]);
+      Slot    := Slots[Ptr(SlotInd)];
+      LineEnd; Append('; ');
+
+      if Slot.IsTemp then begin
+        Append('Temporal array (#');
+      end // .if
+      else begin
+        Append('Permanent array (#');
+      end; // .else
+      
+      Append(IntToStr(SlotInd) + ') of ');
+      
+      if Slot.ItemsType = AdvErm.INT_VAR then begin
+        Line(IntToStr(Length(Slot.IntItems)) + ' integers');
+        k := 0;
+        
+        while k < Length(Slot.IntItems) do begin
+          RangeStart  := k;
+          StartIntVal := Slot.IntItems[k];
+          Inc(k);
+          
+          while (k < Length(Slot.IntItems)) and (Slot.IntItems[k] = StartIntVal) do begin
+            Inc(k);
+          end; // .while
+          
+          Line(GetVarName(RangeStart, k) + IntToStr(StartIntVal));
+        end; // .while
+      end // .if
+      else begin
+        Line(IntToStr(Length(Slot.StrItems)) + ' strings');
+        k := 0;
+        
+        while k < Length(Slot.StrItems) do begin
+          RangeStart  := k;
+          StartStrVal := Slot.StrItems[k];
+          Inc(k);
+          
+          while (k < Length(Slot.StrItems)) and (Slot.StrItems[k] = StartStrVal) do begin
+            Inc(k);
+          end; // .while
+          
+          Line(GetVarName(RangeStart, k) + '"' + ErmStrToWinStr(StartStrVal) + '"');
+        end; // .while
+      end; // .else
+    end; // .for
+    // * * * * * //
+    SysUtils.FreeAndNil(SlotList);
+  end; // .procedure DumpSlots
+
+begin
+  Buf := StrLib.TStrBuilder.Create;
+  // * * * * * //
+  WriteSectionHeader('ERA version: ' + GameExt.ERA_VERSION_STR);
+  
+  if ErmErrCmdPtr^ <> nil then begin
+    ErmContextHeader := 'ERM context';
+    PositionLocated  := Erm.AddrToScriptNameAndLine(Erm.ErmErrCmdPtr^, ScriptName, LineN, LinePos);
+    
+    if PositionLocated then begin
+      ErmContextHeader := ErmContextHeader + ' in ' + ScriptName + ':' + IntToStr(LineN) + ':' + IntToStr(LinePos);
+    end; // .if
+    
+    WriteSectionHeader(ErmContextHeader); LineEnd;
+
+    try
+      ErmContextStart := Erm.FindErmCmdBeginning(Erm.ErmErrCmdPtr^);
+      ErmContext      := StrLib.ExtractFromPchar(ErmContextStart, ERM_CONTEXT_LEN) + '...';
+
+      if StrLib.IsBinaryStr(ErmContext) then begin
+        ErmContext := '';
+      end; // .if
+    except
+      ErmContext := '';
+    end; // .try
+
+    Line(ErmContext);
+  end; // .if
+  
+  WriteSectionHeader('Quick vars (f..t)'); LineEnd;
+  
+  for i := 0 to High(Erm.QuickVars^) do begin
+    Line(CHR(ORD('f') + i) + ' = ' + IntToStr(Erm.QuickVars[i]));
+  end; // .for
+  
+  DumpVars('Vars y1..y100', 'y', INT_VAR, @Erm.y[1], 100, 1);
+  DumpVars('Vars y-1..y-100', 'y-', INT_VAR, @Erm.ny[1], 100, 1);
+  DumpVars('Vars z-1..z-10', 'z-', STR_VAR, @Erm.nz[1], 10, 1);
+  DumpVars('Vars e1..e100', 'e', FLOAT_VAR, @Erm.e[1], 100, 1);
+  DumpVars('Vars e-1..e-100', 'e-', FLOAT_VAR, @Erm.ne[1], 100, 1);
+  DumpAssocVars;
+  DumpSlots;
+  DumpVars('Vars f1..f1000', 'f', BOOL_VAR, @Erm.f[1], 1000, 1);
+  DumpVars('Vars v1..v10000', 'v', INT_VAR, @Erm.v[1], 10000, 1);
+  WriteSectionHeader('Hero vars w1..w200');
+  
+  for i := 0 to High(Erm.w^) do begin
+    LineEnd;
+    Line('; Hero #' + IntToStr(i));
+    DumpVars('', 'w', INT_VAR, @Erm.w[i, 1], 200, 1);
+  end; // .for
+  
+  DumpVars('Vars z1..z1000', 'z', STR_VAR, @Erm.z[1], 1000, 1);  
+  Files.WriteFileContents(Buf.BuildStr, DumpFilePath);
+  // * * * * * //
+  SysUtils.FreeAndNil(Buf);
+end; // .procedure DumpErmMemory
+
+function Hook_DumpErmVars (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  DumpErmMemory(ERM_MEMORY_DUMP_FILE);
+  Context.RetAddr := Core.Ret(0);
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_DumpErmVars
+
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+begin
+  DumpErmMemory(ERM_MEMORY_DUMP_FILE);
+end; // .procedure OnGenerateDebugInfo
+
 procedure OnBeforeWoG (Event: PEvent); stdcall;
 begin
   (*Core.p.WriteLoHook($74B6B2, @HookFindErm_NewReceivers);*)
+  (* Custom ERM memory dump *)
+  Core.ApiHook(@Hook_DumpErmVars, Core.HOOKTYPE_BRIDGE, @Erm.ZvsDumpErmVars);
 end; // .procedure OnBeforeWoG
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
@@ -1174,9 +1536,10 @@ begin
   Hints    := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   InitHints;
   
-  (*GameExt.RegisterHandler(OnBeforeWoG, 'OnBeforeWoG');*)
+  GameExt.RegisterHandler(OnBeforeWoG,             'OnBeforeWoG');
   GameExt.RegisterHandler(OnAfterWoG,              'OnAfterWoG');
   GameExt.RegisterHandler(OnBeforeErmInstructions, 'OnBeforeErmInstructions');
   GameExt.RegisterHandler(OnSavegameWrite,         'OnSavegameWrite');
   GameExt.RegisterHandler(OnSavegameRead,          'OnSavegameRead');
+  GameExt.RegisterHandler(OnGenerateDebugInfo,     'OnGenerateDebugInfo');
 end.

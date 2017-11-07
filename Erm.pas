@@ -15,8 +15,9 @@ type
   TDict    = DataLib.TDict;
 
 const
-  SCRIPT_NAMES_SECTION = 'Era.ScriptNames';
-  ERM_SCRIPTS_PATH     = 'Data\s';
+  SCRIPT_NAMES_SECTION   = 'Era.ScriptNames';
+  ERM_SCRIPTS_PATH       = 'Data\s';
+  EXTRACTED_SCRIPTS_PATH = GameExt.DEBUG_DIR + '\Scripts';
 
   (* Erm command conditions *)
   LEFT_COND   = 0;
@@ -33,8 +34,6 @@ const
   SCRIPT_NOT_USED = 0;
   SCRIPT_IS_USED  = 1;
   SCRIPT_IN_MAP   = 2;
-
-  EXTRACTED_SCRIPTS_PATH  = 'Data\ExtractedScripts';
 
   AltScriptsPath: pchar     = Ptr($2730F68);
   CurrErmEventID: PINTEGER  = Ptr($27C1950);
@@ -265,6 +264,7 @@ type
   TZvsShowMessage   = function (Mes: pchar; MesType: integer; DummyZero: integer): integer; cdecl;
   TZvsCheckFlags    = function (Flags: PErmCmdConditions): longbool; cdecl;
   TFireErmEvent     = function (EventId: integer): integer; cdecl;
+  TZvsDumpErmVars   = procedure (Error, {n} ErmCmdPtr: pchar); cdecl;
   
   POnBeforeTriggerArgs  = ^TOnBeforeTriggerArgs;
   TOnBeforeTriggerArgs  = packed record
@@ -332,6 +332,7 @@ const
   ErmScripts:         PScriptsPointers  = Ptr($A468A0);
   IsWoG:              plongbool         = Ptr($803288);
   WoGOptions:         ^TWoGOptions      = Ptr($2771920);
+  ErmErrCmdPtr:       PPCHAR            = Ptr($840E0C);
   ErmDlgCmd:          PINTEGER          = Ptr($887658);
   MrMonPtr:           PPOINTER          = Ptr($2846884); // MB_Mon
   HeroSpecsTable:     PHeroSpecsTable   = Ptr($7B4C40);
@@ -348,14 +349,30 @@ const
   ZvsShowMessage:     TZvsShowMessage   = Ptr($70FB63);
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
+  ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
 
 
 procedure ZvsProcessCmd (Cmd: PErmCmd);
+procedure PrintChatMsg (const Msg: string);
+function  Msg
+(
+  const Mes:          string;
+        MesType:      TMesType  = MES_MES;
+        Pic1Type:     integer   = NO_PIC_TYPE;
+        Pic1SubType:  integer   = 0;
+        Pic2Type:     integer   = NO_PIC_TYPE;
+        Pic2SubType:  integer   = 0;
+        Pic3Type:     integer   = NO_PIC_TYPE;
+        Pic3SubType:  integer   = 0
+): integer;
 procedure ShowMessage (const Mes: string);
+function  Ask (const Question: string): boolean;
 procedure ExecErmCmd (const CmdStr: string);
 procedure ReloadErm; stdcall;
 procedure ExtractErm; stdcall;
-procedure FireErmEventEx (EventId: integer; Params: array of integer);  
+function  AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
+procedure FireErmEventEx (EventId: integer; Params: array of integer);
+function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 
 
 (***) implementation (***)
@@ -374,13 +391,89 @@ var
     ErmTriggerDepth:  integer = 0;
 
 
-procedure ShowMessage (const Mes: string);
-const
-  MSG_OK  = 1;
+procedure PrintChatMsg (const Msg: string);
+var
+  PtrMsg: pchar;
 
 begin
-  ZvsShowMessage(pchar(Mes), MSG_OK, 0);
+  PtrMsg := pchar(Msg);
+  // * * * * * //
+  asm
+    PUSH PtrMsg
+    PUSH $69D800
+    MOV EAX, $553C40
+    CALL EAX
+    ADD ESP, $8
+  end; // .asm
+end; // .procedure PrintChatMsg
+
+function Msg
+(
+  const Mes:          string;
+        MesType:      TMesType  = MES_MES;
+        Pic1Type:     integer   = NO_PIC_TYPE;
+        Pic1SubType:  integer   = 0;
+        Pic2Type:     integer   = NO_PIC_TYPE;
+        Pic2SubType:  integer   = 0;
+        Pic3Type:     integer   = NO_PIC_TYPE;
+        Pic3SubType:  integer   = 0
+): integer;
+
+var
+  MesStr:     pchar;
+  MesTypeInt: integer;
+  Res:        integer;
+  
+begin
+  MesStr     := pchar(Mes);
+  MesTypeInt := ORD(MesType);
+
+  asm
+    MOV ECX, MesStr
+    PUSH Pic3SubType
+    PUSH Pic3Type
+    PUSH -1
+    PUSH -1
+    PUSH Pic2SubType
+    PUSH Pic2Type
+    PUSH Pic1SubType
+    PUSH Pic1Type
+    PUSH -1
+    PUSH -1 
+    MOV EAX, $4F6C00
+    MOV EDX, MesTypeInt
+    CALL EAX
+    MOV EAX, [Heroes.HERO_WND_MANAGER]
+    MOV EAX, [EAX + $38]
+    MOV Res, EAX
+  end; // .asm
+  
+  result := MSG_RES_OK;
+  
+  if MesType = MES_QUESTION then begin
+    if Res = 30726 then begin
+      result := MSG_RES_CANCEL;
+    end // .if
+  end // .if
+  else if MesType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
+    case Res of 
+      30729: result := MSG_RES_LEFTPIC;
+      30730: result := MSG_RES_RIGHTPIC;
+    else
+      result := MSG_RES_CANCEL;
+    end; // .SWITCH Res
+  end; // .ELSEIF
+end; // .function Msg  
+  
+procedure ShowMessage (const Mes: string);
+begin
+  Msg(Mes);
 end; // .procedure ShowMessage
+
+function Ask (const Question: string): boolean;
+begin
+  result := Msg(Question, MES_QUESTION) = MSG_RES_OK;
+end; // .function Ask
     
 function GetErmValType (c: char; out ValType: TErmValType): boolean;
 begin
@@ -1204,9 +1297,50 @@ begin
     Mes :=  '{~white}Scripts were successfully extracted{~}';
   end; // .if
   
-  Utils.CopyMem(Length(Mes) + 1, pointer(Mes), @z[1]);
-  ExecErmCmd('IF:Lz1;');
+  if not Res then begin
+    PrintChatMsg(Mes);
+  end; // .if
 end; // .procedure ExtractErm
+
+(*
+  Scans all loaded ERM scripts and detects script name, line and position by errorous character address.
+  Returns success flag.
+  @return bool
+*)
+function AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
+var
+  Pos: integer;
+  i:   integer;
+
+begin
+  result := false;
+  i      := 0;
+
+  while ((i < MAX_ERM_SCRIPTS_NUM) and not result) do begin
+    if (ErmScriptsInfo[i].State = SCRIPT_IS_USED) and (cardinal(CharPos) >= cardinal(ErmScripts[i])) and
+                                                      (cardinal(CharPos) < cardinal(ErmScripts[i]) + cardinal(ErmScriptsInfo[i].Size))
+    then begin
+      result     := true;
+      ScriptName := ScriptNames[i];
+      LineN      := 1;
+      LinePos    := 1;
+      
+      for Pos := 0 to integer(cardinal(CharPos) - cardinal(ErmScripts[i])) do begin
+        if pchar(integer(ErmScripts[i]) + Pos)^ = #10 then begin
+          Inc(LineN);
+          LinePos := 1;
+        end;
+
+        Inc(LinePos);
+      end; // .for
+
+      Dec(LinePos);
+    end; // .if
+
+    Inc(i);
+  end; // .while
+end; // .function AddrToScriptNameAndLine
+
 
 procedure FireErmEventEx (EventId: integer; Params: array of integer);
 var
@@ -1606,6 +1740,11 @@ begin
   result    := Core.EXEC_DEF_CODE;
 end; // .function Hook_FU_P_RetValue
 
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+begin
+  ExtractErm;
+end; // .procedure OnGenerateDebugInfo
+
 procedure OnBeforeErm (Event: GameExt.PEvent); stdcall;
 var
   ResetEra: Utils.TProcedure;
@@ -1660,7 +1799,8 @@ begin
   Core.ApiHook(@Hook_CmdElse, Core.HOOKTYPE_BRIDGE, Ptr($74CC0D));
 
   (* UN:J3 does not reset commanders or load scripts. New: it can be used to reset wog options *)
-  Core.ApiHook(@Hook_UN_J3_End, Core.HOOKTYPE_BRIDGE, Ptr($733A85));
+  // Turned off because of side effects of NPC reset and not displaying wogification message some authors could rely on.
+  //Core.ApiHook(@Hook_UN_J3_End, Core.HOOKTYPE_BRIDGE, Ptr($733A85));
 
   (* Fix MR:N in !?MR1 !?MR2 *)
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
@@ -1684,9 +1824,10 @@ begin
   ScriptNames :=  Lists.NewSimpleStrList;
   SavedYVars  :=  Lists.NewStrictList(TYVars);
   
-  GameExt.RegisterHandler(OnBeforeWoG,     'OnBeforeWoG');
-  GameExt.RegisterHandler(OnAfterWoG,      'OnAfterWoG');
-  GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
-  GameExt.RegisterHandler(OnSavegameRead,  'OnSavegameRead');
-  GameExt.RegisterHandler(OnBeforeErm,     'OnBeforeErm');
+  GameExt.RegisterHandler(OnBeforeWoG,         'OnBeforeWoG');
+  GameExt.RegisterHandler(OnAfterWoG,          'OnAfterWoG');
+  GameExt.RegisterHandler(OnSavegameWrite,     'OnSavegameWrite');
+  GameExt.RegisterHandler(OnSavegameRead,      'OnSavegameRead');
+  GameExt.RegisterHandler(OnBeforeErm,         'OnBeforeErm');
+  GameExt.RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end.

@@ -240,15 +240,15 @@ begin
   if Msg = WM_KEYDOWN then begin
     Heroes.GetGameState(GameState);
     
-    if
-      (GameState.RootDlgId = Heroes.ADVMAP_DLGID) and
-      (wParam in [KEY_F11, KEY_F12])
-    then begin
-      case wParam of
-        KEY_F12:  Erm.ReloadErm;
-        KEY_F11:  Erm.ExtractErm;
-      end; // .switch
-    end // .if
+    if wParam = KEY_F11 then begin
+      GameExt.GenerateDebugInfo;
+
+      if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
+        Erm.PrintChatMsg('{~white}Debug information was dumped to ' + GameExt.DEBUG_DIR +'{~}');
+      end; // .if
+    end else if (wParam = KEY_F12) and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
+      Erm.ReloadErm;
+    end // .else
     else begin
       GameExt.EraSaveEventParams;
       
