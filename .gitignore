@@ -5,3 +5,6 @@ Backups/
 *.map
 __history/
 Era.identcache
+*.dproj
+*.local
+Era.res
