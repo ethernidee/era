@@ -1804,8 +1804,14 @@ begin
 
   (* Fix MR:N in !?MR1 !?MR2 *)
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
-  Core.p.WriteDataPatch($439840, ['8B4D08909090']);
-  Core.p.WriteDataPatch($439857, ['8B4D08909090']);
+
+  // MR:N is detected by stack position, taken from local structure. Sometimes position is invalid (dummy)
+  // but disabling structure copy from battleman to local leaded to bug, because local structure is
+  // changed during AI calculations, especially if AI has dispell
+  if false then begin
+    Core.p.WriteDataPatch($439840, ['8B4D08909090']);
+    Core.p.WriteDataPatch($439857, ['8B4D08909090']);
+  end;  
 
   (* Allow !!FU:P?x[n] syntax. *)
   Core.ApiHook(@Hook_FU_P_RetValue, Core.HOOKTYPE_BRIDGE, Ptr($72D04A));
