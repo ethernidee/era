@@ -482,7 +482,7 @@ const
 begin
   GameExt.EraSaveEventParams;
   
-  GameExt.EraEventParams[EVENT_SUBTYPE] :=  ON_LEAVE_CHAT;
+  GameExt.EraEventParams[EVENT_SUBTYPE] := ON_LEAVE_CHAT;
   Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
   
   GameExt.EraRestoreEventParams;
@@ -536,7 +536,7 @@ begin
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
   
   (* MainGameCycle: OnEnterGame, OnLeaveGame and MapFolder settings*)
-  Core.p.WriteHiHook($4B0BA0, PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,
+  Core.p.WriteHiHook(Ptr($4B0BA0), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,
                      @Hook_MainGameLoop);
 end; // .procedure OnAfterWoG
 

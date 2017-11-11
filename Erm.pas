@@ -1758,7 +1758,7 @@ end; // .procedure OnBeforeErm
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* Remove WoG CM3 trigger *)
-  Core.p.WriteDword($78C210, $887668);
+  Core.p.WriteDword(Ptr($78C210), $887668);
 end; // .procedure OnBeforeWoG
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -1789,11 +1789,11 @@ begin
   Core.Hook(@Hook_LoadErtFile, Core.HOOKTYPE_BRIDGE, 5, Ptr($72C660));
   
   (* Disable connection between script number and option state in WoG options *)
-  Core.p.WriteDataPatch($777E48, ['E9180100009090909090']);
+  Core.p.WriteDataPatch(Ptr($777E48), ['E9180100009090909090']);
   
   (* Fix CM3 trigger allowing to handle all clicks *)
   Core.ApiHook(@Hook_CM3, Core.HOOKTYPE_BRIDGE, Ptr($5B0255));
-  Core.p.WriteDataPatch($5B02DD, ['8B47088D70FF']);
+  Core.p.WriteDataPatch(Ptr($5B02DD), ['8B47088D70FF']);
 
   (* !!el&[condition] support *)
   Core.ApiHook(@Hook_CmdElse, Core.HOOKTYPE_BRIDGE, Ptr($74CC0D));
@@ -1809,14 +1809,14 @@ begin
   // but disabling structure copy from battleman to local leaded to bug, because local structure is
   // changed during AI calculations, especially if AI has dispell
   if false then begin
-    Core.p.WriteDataPatch($439840, ['8B4D08909090']);
-    Core.p.WriteDataPatch($439857, ['8B4D08909090']);
+    Core.p.WriteDataPatch(Ptr($439840), ['8B4D08909090']);
+    Core.p.WriteDataPatch(Ptr($439857), ['8B4D08909090']);
   end;  
 
   (* Allow !!FU:P?x[n] syntax. *)
   Core.ApiHook(@Hook_FU_P_RetValue, Core.HOOKTYPE_BRIDGE, Ptr($72D04A));
-  Core.p.WriteDataPatch($72D0A0, ['8D849520EAFFFF']);
-  Core.p.WriteDataPatch($72D0B2, ['E9E70000009090909090']);
+  Core.p.WriteDataPatch(Ptr($72D0A0), ['8D849520EAFFFF']);
+  Core.p.WriteDataPatch(Ptr($72D0B2), ['E9E70000009090909090']);
 end; // .procedure OnAfterWoG
 
 begin

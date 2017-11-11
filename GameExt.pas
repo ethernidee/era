@@ -21,6 +21,7 @@ const
   PLUGINS_PATH          = 'EraPlugins';
   PATCHES_PATH          = 'EraPlugins';
   DEBUG_DIR             = 'Debug\Era';
+  DEBUG_MAPS_DIR        = 'DebugMaps';
   DEBUG_EVENT_LIST_PATH = DEBUG_DIR + '\event list.txt';
   DEBUG_PATCH_LIST_PATH = DEBUG_DIR + '\patch list.txt';
   
@@ -504,4 +505,5 @@ begin
   PluginsList     := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   Events          := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   MemRedirections := DataLib.NewList(not Utils.OWNS_ITEMS);
+  Core.SetDebugMapsDir(DEBUG_MAPS_DIR);
 end.

@@ -6,9 +6,10 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 uses
   VFS, GameExt, Erm, Tweaks,
+  DebugMaps,
   Rainbow, Triggers, Stores, Lodman,
   AdvErm, PoTweak, SndVid, EraButtons,
-  EraSettings,Extern;
+  EraSettings, Extern;
 
 begin
   // set callback to GameExt unit

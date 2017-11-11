@@ -435,7 +435,7 @@ begin
   Core.Hook(@Hook_SaveGameRead, Core.HOOKTYPE_BRIDGE, 6, Ptr($7051B8));
   
   (* Remove Erm trigger "BeforeSaveGame" call *)
-  Core.p.WriteDataPatch($7051F5, ['9090909090']);
+  Core.p.WriteDataPatch(Ptr($7051F5), ['9090909090']);
 end; // .procedure OnAfterWoG
 
 begin

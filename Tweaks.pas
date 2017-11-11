@@ -759,7 +759,7 @@ begin
     
     Core.p.WriteHiHook
     (
-      integer(Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA')),
+      Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -794,7 +794,7 @@ begin
   if FixGetHostByNameOpt then begin
     Core.p.WriteHiHook
     (
-      integer(Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname')),
+      Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname'),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -845,7 +845,7 @@ begin
   // Core.p.WriteHexPatch($59AC51, 'BF F4 33 6A 00');
 
   (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
-  Core.p.WriteDataPatch($4DC358, ['A0']);
+  Core.p.WriteDataPatch(Ptr($4DC358), ['A0']);
 
   (* Install global top-level exception filter *)
   Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
