@@ -1198,7 +1198,7 @@ begin
     ErmScriptsInfo[i].State :=  SCRIPT_NOT_USED;
   end; // .for
   
-  if Files.ReadFileContents(SCRIPTS_LIST_FILEPATH, FileContents) then begin
+  if SysUtils.FileExists(SCRIPTS_LIST_FILEPATH) and Files.ReadFileContents(SCRIPTS_LIST_FILEPATH, FileContents) then begin
     ForcedScripts :=  StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
     
     for i := 0 to Math.Min(High(ForcedScripts), MAX_ERM_SCRIPTS_NUM - 2) do begin
