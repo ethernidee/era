@@ -24,6 +24,7 @@ const
   DEBUG_MAPS_DIR        = 'DebugMaps';
   DEBUG_EVENT_LIST_PATH = DEBUG_DIR + '\event list.txt';
   DEBUG_PATCH_LIST_PATH = DEBUG_DIR + '\patch list.txt';
+  DEBUG_MOD_LIST_PATH   = DEBUG_DIR + '\mod list.txt';
   
   CONST_STR = -1;
   
@@ -462,8 +463,14 @@ begin
   end; // .with
 end; // .procedure DumpPatchList
 
+procedure DumpModList;
+begin
+  Files.WriteFileContents(VFS.ModList.ToText(#13#10), DEBUG_MOD_LIST_PATH);
+end;
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
+  DumpModList;
   DumpEventList;
   DumpPatchList;
 end; // .procedure OnGenerateDebugInfo
