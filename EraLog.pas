@@ -49,23 +49,23 @@ type
 
 
 const
-  BR                      = #13#10;
-  RECORD_BEGIN_SEPARATOR  = '>> ';
-  RECORD_END_SEPARATOR    = BR + BR;
-  OPERATION_SEPARATOR     = ': ';
-  DESCRIPTION_SEPARATOR   = BR;
-  DESCR_LINES_PREFIX      = '   ';
-  DESCR_LINES_GLUE        = BR + DESCR_LINES_PREFIX;
+  BR                     = #13#10;
+  RECORD_BEGIN_SEPARATOR = '>> ';
+  RECORD_END_SEPARATOR   = BR + BR;
+  OPERATION_SEPARATOR    = ': ';
+  DESCRIPTION_SEPARATOR  = BR;
+  DESCR_LINES_PREFIX     = '   ';
+  DESCR_LINES_GLUE       = BR + DESCR_LINES_PREFIX;
 
 
 function TLogger.Read (out LogRec: TLogRec): boolean;
 begin
-  result  :=  false;
+  result := false;
 end; // .function TLogger.Read
 
 function TLogger.IsLocked: boolean;
 begin
-  result  :=  false;
+  result := false;
 end; // .function TLogger.IsLocked
 
 procedure TLogger.Lock;
@@ -78,29 +78,29 @@ end; // .procedure TLogger.Unlock
 
 function TLogger.GetPos (out Pos: integer): boolean;
 begin
-  Pos     :=  -1;
-  result  :=  false;
+  Pos    := -1;
+  result := false;
 end; // .function TLogger.GetPos
 
 function TLogger.Seek (NewPos: integer): boolean;
 begin
-  result  :=  false;
+  result := false;
 end; // .function TLogger.Seek
 
 function TLogger.GetCount (out Count: integer): boolean;
 begin
-  Count   :=  -1;
-  result  :=  false;
+  Count  := -1;
+  result := false;
 end; // .function TLogger.GetCount
 
 function TMemoryLogger.Write (const EventSource, Operation, Description: string): boolean;
 begin
-  result  :=  true;
+  result := true;
 end; // .function TMemoryLogger.Write
 
 constructor TConsoleLogger.Create (const Title: string);
 begin
-  Self.fCon :=  ConsoleAPI.TConsole.Create(Title, 80, 50, 80, 1000);
+  Self.fCon := ConsoleAPI.TConsole.Create(Title, 80, 50, 80, 1000);
 end; // .constructor TConsoleLogger.Create
 
 destructor TConsoleLogger.Destroy;
@@ -122,12 +122,12 @@ begin
     RECORD_END_SEPARATOR
   );
   
-  result  :=  true;
+  result := true;
 end; // .function TConsoleLogger.Write
 
 constructor TFileLogger.Create (const FilePath: string);
 begin
-  Self.fFile  :=  Files.TFile.Create;
+  Self.fFile := Files.TFile.Create;
   {!} Assert(Self.fFile.CreateNew(FilePath));
 end; // .constructor TFileLogger.Create
 
@@ -138,7 +138,7 @@ end; // .destructor TFileLogger.Destroy
 
 function TFileLogger.Write (const EventSource, Operation, Description: string): boolean;
 begin
-  result  :=  Self.fFile.WriteStr(StrLib.Concat([
+  result := Self.fFile.WriteStr(StrLib.Concat([
     RECORD_BEGIN_SEPARATOR,
     EventSource,
     OPERATION_SEPARATOR,
