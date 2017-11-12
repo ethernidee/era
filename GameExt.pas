@@ -30,10 +30,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.47.2';
-  ERA_VERSION_INT = 2472;
-
-
+  ERA_VERSION_STR = '2.47.8';
+  ERA_VERSION_INT = 2478;
 
 type
   PEvent  = ^TEvent;
@@ -479,6 +477,7 @@ procedure Init (hDll: integer);
 begin
   hEra := hDll;
   Windows.DisableThreadLibraryCalls(hEra);
+  Files.ForcePath(DEBUG_DIR);
   
   FireEvent('OnEraStart', NO_EVENT_DATA, 0);
   VFS.Init;
