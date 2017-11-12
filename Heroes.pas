@@ -7,6 +7,10 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses Utils;
 
+type
+  PGameType = ^TGameType;
+  TGameType = (GAMETYPE_SINGLE, GAMETYPE_IPX, GAMETYPE_TCP, GAMETYPE_HOTSEAT, GAMETYPE_DIRECT_CONNECT, GAMETYPE_MODEM);
+
 const
   (* Game settings *)
   GAME_SETTINGS_FILE    = 'heroes3.ini';
@@ -32,43 +36,43 @@ const
   SOD         = 2;
   SOD_AND_AB  = AB + SOD;
   
-  SHOW_INTRO_OPT:             PINTEGER  = Ptr($699410);
-  MUSIC_VOLUME_OPT:           PINTEGER  = Ptr($6987B0);
-  SOUND_VOLUME_OPT:           PINTEGER  = Ptr($6987B4);
-  LAST_MUSIC_VOLUME_OPT:      PINTEGER  = Ptr($6987B8);
-  LAST_SOUND_VOLUME_OPT:      PINTEGER  = Ptr($6987BC);
-  WALK_SPEED_OPT:             PINTEGER  = Ptr($6987AC);
-  COMP_WALK_SPEED_OPT:        PINTEGER  = Ptr($6987A8);
-  SHOW_ROUTE_OPT:             PINTEGER  = Ptr($6987C4);
-  MOVE_REMINDER_OPT:          PINTEGER  = Ptr($6987C8);
-  QUICK_COMBAT_OPT:           PINTEGER  = Ptr($6987CC);
-  VIDEO_SUBTITLES_OPT:        PINTEGER  = Ptr($6987D0);
-  TOWN_OUTLINES_OPT:          PINTEGER  = Ptr($6987D4);
-  ANIMATE_SPELLBOOK_OPT:      PINTEGER  = Ptr($6987D8);
-  WINDOW_SCROLL_SPEED_OPT:    PINTEGER  = Ptr($6987DC);
-  BLACKOUT_COMPUTER_OPT:      PINTEGER  = Ptr($6987E0);
-  FIRST_TIME_OPT:             PINTEGER  = Ptr($699574);
-  TEST_DECOMP_OPT:            PINTEGER  = Ptr($699578);
-  TEST_READ_OPT:              PINTEGER  = Ptr($69957C);
-  TEST_BLIT_OPT:              PINTEGER  = Ptr($699580);
-  BINK_VIDEO_OPT:             PINTEGER  = Ptr($6987F8);
+  SHOW_INTRO_OPT:             pinteger  = Ptr($699410);
+  MUSIC_VOLUME_OPT:           pinteger  = Ptr($6987B0);
+  SOUND_VOLUME_OPT:           pinteger  = Ptr($6987B4);
+  LAST_MUSIC_VOLUME_OPT:      pinteger  = Ptr($6987B8);
+  LAST_SOUND_VOLUME_OPT:      pinteger  = Ptr($6987BC);
+  WALK_SPEED_OPT:             pinteger  = Ptr($6987AC);
+  COMP_WALK_SPEED_OPT:        pinteger  = Ptr($6987A8);
+  SHOW_ROUTE_OPT:             pinteger  = Ptr($6987C4);
+  MOVE_REMINDER_OPT:          pinteger  = Ptr($6987C8);
+  QUICK_COMBAT_OPT:           pinteger  = Ptr($6987CC);
+  VIDEO_SUBTITLES_OPT:        pinteger  = Ptr($6987D0);
+  TOWN_OUTLINES_OPT:          pinteger  = Ptr($6987D4);
+  ANIMATE_SPELLBOOK_OPT:      pinteger  = Ptr($6987D8);
+  WINDOW_SCROLL_SPEED_OPT:    pinteger  = Ptr($6987DC);
+  BLACKOUT_COMPUTER_OPT:      pinteger  = Ptr($6987E0);
+  FIRST_TIME_OPT:             pinteger  = Ptr($699574);
+  TEST_DECOMP_OPT:            pinteger  = Ptr($699578);
+  TEST_READ_OPT:              pinteger  = Ptr($69957C);
+  TEST_BLIT_OPT:              pinteger  = Ptr($699580);
+  BINK_VIDEO_OPT:             pinteger  = Ptr($6987F8);
   UNIQUE_SYSTEM_ID_OPT:       pchar     = Ptr($698838);
   NETWORK_DEF_NAME_OPT:       pchar     = Ptr($698867);
-  AUTOSAVE_OPT:               PINTEGER  = Ptr($6987C0);
-  SHOW_COMBAT_GRID_OPT:       PINTEGER  = Ptr($69880C);
-  SHOW_COMBAT_MOUSE_HEX_OPT:  PINTEGER  = Ptr($698810);
-  COMBAT_SHADE_LEVEL_OPT:     PINTEGER  = Ptr($698814);
-  COMBAT_ARMY_INFO_LEVEL_OPT: PINTEGER  = Ptr($698818);
-  COMBAT_AUTO_CREATURES_OPT:  PINTEGER  = Ptr($6987E4);
-  COMBAT_AUTO_SPELLS_OPT:     PINTEGER  = Ptr($6987E8);
-  COMBAT_CATAPULT_OPT:        PINTEGER  = Ptr($6987EC);
-  COMBAT_BALLISTA_OPT:        PINTEGER  = Ptr($6987F0);
-  COMBAT_FIRST_AID_TENT_OPT:  PINTEGER  = Ptr($6987F4);
-  COMBAT_SPEED_OPT:           PINTEGER  = Ptr($69883C);
-  MAIN_GAME_SHOW_MENU_OPT:    PINTEGER  = Ptr($6987FC);
-  MAIN_GAME_X_OPT:            PINTEGER  = Ptr($698800);
-  MAIN_GAME_Y_OPT:            PINTEGER  = Ptr($698804);
-  MAIN_GAME_FULL_SCREEN_OPT:  PINTEGER  = Ptr($698808);
+  AUTOSAVE_OPT:               pinteger  = Ptr($6987C0);
+  SHOW_COMBAT_GRID_OPT:       pinteger  = Ptr($69880C);
+  SHOW_COMBAT_MOUSE_HEX_OPT:  pinteger  = Ptr($698810);
+  COMBAT_SHADE_LEVEL_OPT:     pinteger  = Ptr($698814);
+  COMBAT_ARMY_INFO_LEVEL_OPT: pinteger  = Ptr($698818);
+  COMBAT_AUTO_CREATURES_OPT:  pinteger  = Ptr($6987E4);
+  COMBAT_AUTO_SPELLS_OPT:     pinteger  = Ptr($6987E8);
+  COMBAT_CATAPULT_OPT:        pinteger  = Ptr($6987EC);
+  COMBAT_BALLISTA_OPT:        pinteger  = Ptr($6987F0);
+  COMBAT_FIRST_AID_TENT_OPT:  pinteger  = Ptr($6987F4);
+  COMBAT_SPEED_OPT:           pinteger  = Ptr($69883C);
+  MAIN_GAME_SHOW_MENU_OPT:    pinteger  = Ptr($6987FC);
+  MAIN_GAME_X_OPT:            pinteger  = Ptr($698800);
+  MAIN_GAME_Y_OPT:            pinteger  = Ptr($698804);
+  MAIN_GAME_FULL_SCREEN_OPT:  pinteger  = Ptr($698808);
   APP_PATH_OPT:               pchar     = Ptr($698614);
   CD_DRIVE_OPT:               pchar     = Ptr($698888);
   
@@ -98,12 +102,12 @@ const
   SMACK_OPEN        = $63A464;  // F(FileName: pchar; BufSize, BufMask: int): HANDLE or 0; stdcall;
   BINK_OPEN         = $63A390;  // F(hFile, BufMask or $8000000: int): HANDLE or 0; stdcall;
   
-  hWnd:           PINTEGER  = Ptr($699650);
-  hHeroes3Event:  PINTEGER  = Ptr($69965C);
+  hWnd:           pinteger  = Ptr($699650);
+  hHeroes3Event:  pinteger  = Ptr($69965C);
   MarkedSavegame: pchar     = Ptr($68338C);
   Mp3Name:        pchar     = Ptr($6A33F4);
-  
-  GameVersion:  PINTEGER  = Ptr($67F554);
+  GameType:       PGameType = Ptr($698A40);
+  GameVersion:    pinteger  = Ptr($67F554);
   
   (* Managers *)
   GAME_MANAGER     = $699538;
@@ -112,7 +116,6 @@ const
   (* Colors *)
   RED_COLOR         = '0F2223E';
   HEROES_GOLD_COLOR = '0FFFE794';
-
 
 type
   PValue  = ^TValue;
@@ -141,7 +144,7 @@ type
     CurrentDlgId: integer;
   end; // .record TGameState
 
-  PPINTEGER = ^PINTEGER;
+  ppinteger = ^pinteger;
 
   PMapTile = ^TMapTile;
   TMapTile = packed record
@@ -157,8 +160,8 @@ type
   PAdvManager  = ^TAdvManager;
   TAdvManager  = packed record
     _0:              array [1..80] of byte;
-    RootDlgIdPtr:    PPINTEGER;
-    CurrentDlgIdPtr: PPINTEGER;
+    RootDlgIdPtr:    ppinteger;
+    CurrentDlgIdPtr: ppinteger;
   end; // .record TAdvManager
 
   PPGameManager = ^PGameManager;
@@ -218,6 +221,8 @@ procedure LoadLod (const LodName: string; Res: PLod);
 procedure GetGameState (out GameState: TGameState); stdcall;
 function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
+function  IsLocalGame: boolean;
+function  IsNetworkGame: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
 procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
@@ -237,12 +242,12 @@ function  GetVal (BaseAddr, Offset: integer): PValue; overload;
 
 function GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
 begin
-  result  :=  Utils.PtrOfs(BaseAddr, Offset);
+  result := Utils.PtrOfs(BaseAddr, Offset);
 end; // .function GetVal
 
 function GetVal (BaseAddr, Offset: integer): PValue; overload;
 begin
-  result  :=  Utils.PtrOfs(Ptr(BaseAddr), Offset);
+  result := Utils.PtrOfs(Ptr(BaseAddr), Offset);
 end; // .function GetVal
 
 procedure GZipWrite (Count: integer; {n} Addr: pointer);
@@ -275,7 +280,7 @@ begin
   Txt :=  LoadTxt(Name);
   // * * * * * //
   if Txt <> nil then begin
-    Txt.RefCount  :=  1;
+    Txt.RefCount := 1;
     
     asm
       MOV ECX, Txt
@@ -305,10 +310,10 @@ begin
     GameState.RootDlgId :=  0;
   end; // .else
   if AdvManagerPtr^.CurrentDlgIdPtr <> nil then begin
-    GameState.CurrentDlgId  :=  AdvManagerPtr^.CurrentDlgIdPtr^^;
+    GameState.CurrentDlgId := AdvManagerPtr^.CurrentDlgIdPtr^^;
   end // .if
   else begin
-    GameState.CurrentDlgId  :=  0;
+    GameState.CurrentDlgId := 0;
   end; // .else
 end; // .procedure GetDialogsIds
 
@@ -323,6 +328,16 @@ asm
   MOV EAX, [GAME_MANAGER]
   MOVZX EAX, byte [EAX + $1FC48]
 end; // .function IsTwoLevelMap
+
+function IsLocalGame: boolean;
+begin
+  result := (GameType^ = GAMETYPE_SINGLE) or (GameType^ = GAMETYPE_HOTSEAT);
+end;
+
+function IsNetworkGame: boolean;
+begin
+  result := (GameType^ <> GAMETYPE_SINGLE) and (GameType^ <> GAMETYPE_HOTSEAT);
+end;
 
 function GetObjectEntranceTile (MapTile: PMapTile): PMapTile; assembler; {W+}
 asm
@@ -366,13 +381,13 @@ var
   Side: byte;
 
 begin
-  Side  :=  BattleCell[SIDE_OFFSET];
+  Side := BattleCell[SIDE_OFFSET];
   
   if Side = 255 then begin
-    result  :=  -1;
+    result := -1;
   end // .if
   else begin
-    result  :=  SLOTS_PER_SIDE * Side + BattleCell[STACKID_OFFSET];
+    result := SLOTS_PER_SIDE * Side + BattleCell[STACKID_OFFSET];
   end; // .else
 end; // .function GetBattleCellStackId
 
@@ -397,8 +412,8 @@ var
   i:  integer;
   
 begin
-  result  :=  -1;
-  i       :=  0;
+  result := -1;
+  i      := 0;
   
   while (i < NUM_BATTLE_STACKS) and (result = NO_STACK) do begin
     if Stacks(i, STACK_POS).v = StackPos then begin
@@ -446,12 +461,12 @@ end; // .procedure RedrawHeroMeetingScreen
 
 function IsCampaign: boolean;
 begin
-  result := PBYTE($69779C)^ <> 0;
+  result := pbyte($69779C)^ <> 0;
 end; // .function IsCampaign
 
 function GetMapFileName: string;
 begin
-  result := pchar(PINTEGER(GAME_MANAGER)^ + $1F6D9);
+  result := pchar(pinteger(GAME_MANAGER)^ + $1F6D9);
 end; // .function GetMapFileName
 
 function GetCampaignFileName: string;
@@ -463,7 +478,7 @@ type
   end; // .record TFuncRes
 
 var
-  FuncRes: TFuncRes;
+  FuncRes:    TFuncRes;
   FuncResPtr: ^TFuncRes;
 
 begin
@@ -484,7 +499,7 @@ end; // .function GetCampaignFileName
 function GetCampaignMapInd: integer;
 begin
   {!} Assert(IsCampaign);
-  result := PBYTE(PINTEGER(GAME_MANAGER)^ + $1F45A)^;
+  result := pbyte(pinteger(GAME_MANAGER)^ + $1F45A)^;
 end; // .function GetCampaignMapInd
 
 end.
