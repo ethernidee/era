@@ -653,14 +653,14 @@ begin
     EmptyLine;
     Line('> Registers');
 
-    Line('EAX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Eax)));
-    Line('ECX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ecx)));
-    Line('EDC: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edx)));
-    Line('EBX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebx)));
-    Line('ESP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esp)));
-    Line('EBP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebp)));
-    Line('ESI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esi)));
-    Line('EDI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edi)));
+    Line('EAX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Eax), Core.ANALYZE_DATA));
+    Line('ECX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ecx), Core.ANALYZE_DATA));
+    Line('EDC: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edx), Core.ANALYZE_DATA));
+    Line('EBX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebx), Core.ANALYZE_DATA));
+    Line('ESP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esp), Core.ANALYZE_DATA));
+    Line('EBP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebp), Core.ANALYZE_DATA));
+    Line('ESI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esi), Core.ANALYZE_DATA));
+    Line('EDI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edi), Core.ANALYZE_DATA));
 
     EmptyLine;
     Line('> Callstack');
@@ -692,7 +692,7 @@ begin
           LineText := LineText + '*';
         end; // .if
 
-        LineText := LineText + ': ' + Core.ModuleContext.AddrToStr(ppointer(Esp)^);
+        LineText := LineText + ': ' + Core.ModuleContext.AddrToStr(ppointer(Esp)^, Core.ANALYZE_DATA);
         Inc(Esp, sizeof(integer));
         Line(LineText);
       end; // .for
