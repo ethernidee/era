@@ -130,9 +130,14 @@ const
   TRIGGER_ONCHAT                    = 77014;
   TRIGGER_ONGAMEENTER               = 77015;
   TRIGGER_ONGAMELEAVE               = 77016;
-  {!} LAST_ERA_TRIGGER              = TRIGGER_ONGAMELEAVE;
+  TRIGGER_ONREMOTEEVENT             = 77017;
+  {!} LAST_ERA_TRIGGER              = TRIGGER_ONREMOTEEVENT;
   
   FUNC_AUTO_ID = 95000;
+
+  (* Remote Event IDs *)
+  REMOTE_EVENT_NONE         = 0;
+  REMOTE_EVENT_PLACE_OBJECT = 1;
 
   ZvsProcessErm:  Utils.TProcedure  = Ptr($74C816);
 
@@ -311,6 +316,9 @@ type
   PHeroSpecSettingsTable = ^THeroSpecSettingsTable;
   THeroSpecSettingsTable = array [0..NUM_WOG_HEROES - 1] of THeroSpecSettings;
 
+  TFireRemoteEventProc = procedure (EventId: integer; Data: pinteger; NumInts: integer); cdecl;
+  TZvsPlaceMapObject   = function (x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; cdecl;
+
 const
   (* WoG vars *)
   QuickVars: PErmQuickVars = Ptr($27718D0);
@@ -351,9 +359,13 @@ const
   FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
   ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
 
+  FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
+  ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
+
 
 procedure ZvsProcessCmd (Cmd: PErmCmd);
 procedure PrintChatMsg (const Msg: string);
+
 function  Msg
 (
   const Mes:          string;
@@ -365,6 +377,7 @@ function  Msg
         Pic3Type:     integer   = NO_PIC_TYPE;
         Pic3SubType:  integer   = 0
 ): integer;
+
 procedure ShowMessage (const Mes: string);
 function  Ask (const Question: string): boolean;
 procedure ExecErmCmd (const CmdStr: string);
@@ -373,6 +386,9 @@ procedure ExtractErm; stdcall;
 function  AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
 procedure FireErmEventEx (EventId: integer; Params: array of integer);
 function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
+
+(*  Up to 16 arguments  *)
+procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 
 
 (***) implementation (***)
@@ -1381,6 +1397,17 @@ begin
     end; // .else
   end; // .if
 end; // .function FindErmCmdBeginning
+
+procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
+begin
+  {!} Assert(length(Args) <= 16);
+  
+  if length(Args) = 0 then begin
+    FireRemoteEventProc(EventId, nil, 0);
+  end else begin
+    FireRemoteEventProc(EventId, @Args[0], length(Args));
+  end;
+end; // .procedure TGame.FireRemoteErmEvent
 
 function GrabErmCmd ({n} CmdPtr: pchar): string;
 var
