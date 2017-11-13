@@ -35,6 +35,19 @@ const
   AB          = 1;
   SOD         = 2;
   SOD_AND_AB  = AB + SOD;
+
+  (* Player colors *)
+  PLAYER_NONE   = -1;
+  PLAYER_FIRST  = 0;
+  PLAYER_RED    = 0;
+  PLAYER_BLUE   = 1;
+  PLAYER_TAN    = 2;
+  PLAYER_GREEN  = 3;
+  PLAYER_ORANGE = 4;
+  PLAYER_PURPLE = 5;
+  PLAYER_TEAL   = 6;
+  PLAYER_PINK   = 7;
+  PLAYER_LAST   = 7;
   
   SHOW_INTRO_OPT:             pinteger  = Ptr($699410);
   MUSIC_VOLUME_OPT:           pinteger  = Ptr($6987B0);
@@ -193,7 +206,7 @@ type
   
   TGzipWrite  = procedure (Data: pointer; DataSize: integer); cdecl;
   TGzipRead   = function (Dest: pointer; DataSize: integer): integer; cdecl;
-  TWndProc    = function (hWnd, Msg, wParam, lParam: integer): LONGBOOL; stdcall;
+  TWndProc    = function (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
   
   TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
 
@@ -205,6 +218,8 @@ const
   AdvManagerPtr:  PPAdvManager  = Ptr($6992D0);
   WndManagerPtr:  ^PWndManager  = Ptr($6992D0); // CHECKME!
   GameManagerPtr: PPGameManager = Ptr(GAME_MANAGER);
+
+  CurrentPlayer: pinteger = Ptr($69CCF4);
 
   ZvsGzipWrite: TGzipWrite  = Ptr($704062);
   ZvsGzipRead:  TGzipRead   = Ptr($7040A7);
@@ -223,6 +238,8 @@ function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
 function  IsLocalGame: boolean;
 function  IsNetworkGame: boolean;
+function  GetCurrentPlayer: integer;
+function  IsThisPcTurn: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
 procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
@@ -337,6 +354,24 @@ end;
 function IsNetworkGame: boolean;
 begin
   result := (GameType^ <> GAMETYPE_SINGLE) and (GameType^ <> GAMETYPE_HOTSEAT);
+end;
+
+function GetCurrentPlayer: integer;
+begin
+  result := CurrentPlayer^;
+end;
+
+function IsThisPcTurn: boolean;
+var
+  PlayerId: integer;
+
+begin
+  PlayerId := CurrentPlayer^;
+  result   := (PlayerId >= PLAYER_FIRST) and (PlayerId <= PLAYER_LAST);
+
+  if result then begin
+    result := pbyte(pinteger(GAME_MANAGER)^ + $20AD0 + $E1 + $168 * PlayerId)^ <> 0;
+  end;
 end;
 
 function GetObjectEntranceTile (MapTile: PMapTile): PMapTile; assembler; {W+}
