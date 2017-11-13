@@ -1,7 +1,7 @@
 unit ErmTracking;
 {
-DESCRIPTION:  Provides ERM receivers and teiggers tracking support
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+DESCRIPTION: Provides ERM receivers and teiggers tracking support
+AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
@@ -9,7 +9,7 @@ uses Utils;
 
 type
   TCmdId = record
-    Is:   word;
+    Id:   word;
     Name: array [0..1] of char;
   end; // .record TCmdId
   

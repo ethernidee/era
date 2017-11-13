@@ -100,7 +100,6 @@ begin
   Tweaks.FixGetHostByNameOpt     := GetOptBoolValue('FixGetHostByName',           true);
   Tweaks.UseOnlyOneCpuCoreOpt    := GetOptBoolValue('UseOnlyOneCpuCore',          true);
   Stores.DumpSavegameSectionsOpt := GetDebugOpt(    'Debug.DumpSavegameSections', false);
-  Stores.EraSectionsSize         := GetOptIntValue( 'SavedGameExtraBlockSize',    0);
   VFS.DebugOpt                   := GetDebugOpt(    'Debug.LogVirtualFileSystem', false);
 end; // .procedure OnEraStart
 

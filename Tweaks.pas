@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
   CFiles, Files, FilesEx, Ini, DataLib,
-  PatchApi, Core, GameExt, Heroes, Lodman;
+  PatchApi, Core, GameExt, Heroes, Lodman, Erm;
 
 type
   (* Import *)
@@ -577,6 +577,25 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsLib_ExtractDef_GetGamePath
 
+function Hook_ZvsPlaceMapObject (Hook: PatchApi.THiHook; x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; stdcall;
+begin
+  if Heroes.IsThisPcTurn() then begin
+    Erm.FireRemoteErmEvent(Erm.TRIGGER_ONREMOTEEVENT, [Erm.REMOTE_EVENT_PLACE_OBJECT, x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain]);
+  end;
+
+  result := PatchApi.Call(PatchApi.CDECL_, Hook.GetOriginalFunc(), [x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain]);
+end; // .function Hook_ZvsPlaceMapObject
+
+procedure OnRemoteMapObjectPlace (Event: GameExt.PEvent); stdcall;
+begin
+  // Switch Network event
+  case Erm.x[1] of 
+    Erm.REMOTE_EVENT_PLACE_OBJECT: begin
+      Erm.ZvsPlaceMapObject(Erm.x[2], Erm.x[3], Erm.x[4], Erm.x[5], Erm.x[6], Erm.x[7], Erm.x[8], Erm.x[9]);
+    end;
+  end; // .switch Network event
+end; // .procedure OnRemoteMapObjectPlace
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -839,13 +858,30 @@ begin
     Core.HOOKTYPE_BRIDGE,
     Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS)
   );
+
+  Core.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
   
-  (* Disable MP3 trigger *)
-  // Overriden by Lodman redirection
-  // Core.p.WriteHexPatch($59AC51, 'BF F4 33 6A 00');
+  (* Syncronise object creation at local and remote PC *)
+  GameExt.RegisterHandler(OnRemoteMapObjectPlace, pchar('OnTrigger ' + IntToStr(Erm.TRIGGER_ONREMOTEEVENT)));
+
+  (* Disable MP3 trigger; Overriden by Lodman redirection *)
+  if false then Core.p.WriteHexPatch(Ptr($59AC51), 'BFF4336A00');
 
   (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
   Core.p.WriteDataPatch(Ptr($4DC358), ['A0']);
+
+  (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
+  Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
+  Core.p.WriteDataPatch(Ptr($6067E2), ['E809000000']);       // Disable WoG GZ functions hooks
+  Core.p.WriteDataPatch(Ptr($4D6FCC), ['E8AF001300']);       // ...
+  Core.p.WriteDataPatch(Ptr($4D700D), ['E8DEFE1200']);       // ...
+  Core.p.WriteDataPatch(Ptr($4CAF32), ['EB']);               // do not create orig.dat on send
+  if false then Core.p.WriteDataPatch(Ptr($4CAF37), ['01']); // save orig.dat on send compressed
+  Core.p.WriteDataPatch(Ptr($4CAD91), ['E99701000090']);     // do not perform savegame diffs
+  Core.p.WriteDataPatch(Ptr($41A0D1), ['EB']);               // do not create orig.dat on receive
+  if false then Core.p.WriteDataPatch(Ptr($41A0DC), ['01']); // save orig.dat on receive compressed
+  Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
+  Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
 
   (* Install global top-level exception filter *)
   Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);

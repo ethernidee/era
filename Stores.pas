@@ -40,7 +40,6 @@ function  NewRider (const SectionName: string): IRider;
 
 var
   DumpSavegameSectionsOpt: boolean;
-  EraSectionsSize:         integer = 0; // 0 to turn off padding to fixed size
 
 
 (***) implementation (***)
@@ -341,27 +340,7 @@ begin
     end; // .while
   end; // .with 
   
-  (* Trying to fix Heroes 3 diff problem: both images should have equal size
-     Pad the data to specified size *)
-  if EraSectionsSize <> 0 then begin
-    if TotalWritten > EraSectionsSize then begin
-      Core.FatalError('Too small SavedGameExtraBlockSize: ' + IntToStr(EraSectionsSize) + #13#10
-                      + 'Size required is at least: ' + IntToStr(TotalWritten));
-    end // .if
-    else if TotalWritten < EraSectionsSize then begin
-      PaddingSize := EraSectionsSize - TotalWritten;
-      
-      if Length(ZeroBuf) < PaddingSize then begin
-        ZeroBuf := '';
-        SetLength(ZeroBuf, PaddingSize);
-        FillChar(ZeroBuf[1], PaddingSize, 0);
-      end; // .if
-      
-      GzipWrite(PaddingSize, pointer(ZeroBuf));
-    end; // .ELSEIF
-  end; // .if
-  
-  // default code
+  // Default code
   if PINTEGER(Context.EBP - 4)^ = 0 then begin
     Context.RetAddr := Ptr($704EF2);
   end // .if
