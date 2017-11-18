@@ -41,6 +41,7 @@ var
   InetCriticalSection:  Windows.TRTLCriticalSection;
   ZvsLibImageTemplate:  string;
   ZvsLibGamePath:       string;
+  IsLocalPlaceObject:   boolean = true;
 
 
 function Hook_ReadIntIni
@@ -579,7 +580,7 @@ end; // .function Hook_ZvsLib_ExtractDef_GetGamePath
 
 function Hook_ZvsPlaceMapObject (Hook: PatchApi.THiHook; x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; stdcall;
 begin
-  if Heroes.IsThisPcTurn() then begin
+  if IsLocalPlaceObject then begin
     Erm.FireRemoteErmEvent(Erm.TRIGGER_ONREMOTEEVENT, [Erm.REMOTE_EVENT_PLACE_OBJECT, x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain]);
   end;
 
@@ -589,9 +590,11 @@ end; // .function Hook_ZvsPlaceMapObject
 procedure OnRemoteMapObjectPlace (Event: GameExt.PEvent); stdcall;
 begin
   // Switch Network event
-  case Erm.x[1] of 
+  case Erm.x[1] of
     Erm.REMOTE_EVENT_PLACE_OBJECT: begin
+      IsLocalPlaceObject := false;
       Erm.ZvsPlaceMapObject(Erm.x[2], Erm.x[3], Erm.x[4], Erm.x[5], Erm.x[6], Erm.x[7], Erm.x[8], Erm.x[9]);
+      IsLocalPlaceObject := true;
     end;
   end; // .switch Network event
 end; // .procedure OnRemoteMapObjectPlace

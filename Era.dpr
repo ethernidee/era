@@ -8,7 +8,7 @@ uses
   VFS, GameExt, Erm, Tweaks,
   DebugMaps,
   Rainbow, Triggers, Stores, Lodman,
-  AdvErm, PoTweak, SndVid, EraButtons,
+  AdvErm, ErmTracking, PoTweak, SndVid, EraButtons,
   EraSettings, Extern;
 
 begin

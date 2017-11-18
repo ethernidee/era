@@ -6,16 +6,18 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini,
+  SysUtils, Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers,
   Lists, StrLib, Math, Windows,
   Core, Heroes, GameExt;
 
 type
   TStrList = DataLib.TStrList;
   TDict    = DataLib.TDict;
+  TString  = TypeWrappers.TString;
 
 const
   SCRIPT_NAMES_SECTION   = 'Era.ScriptNames';
+  FUNC_NAMES_SECTION     = 'Era.FuncNames';
   ERM_SCRIPTS_PATH       = 'Data\s';
   EXTRACTED_SCRIPTS_PATH = GameExt.DEBUG_DIR + '\Scripts';
 
@@ -133,13 +135,19 @@ const
   TRIGGER_ONREMOTEEVENT             = 77017;
   {!} LAST_ERA_TRIGGER              = TRIGGER_ONREMOTEEVENT;
   
-  FUNC_AUTO_ID = 95000;
+  INITIAL_FUNC_AUTO_ID = 95000;
 
   (* Remote Event IDs *)
   REMOTE_EVENT_NONE         = 0;
   REMOTE_EVENT_PLACE_OBJECT = 1;
 
   ZvsProcessErm:  Utils.TProcedure  = Ptr($74C816);
+
+  (* ERM Flags *)
+  ERM_FLAG_NETWORK_BATTLE               = 997;
+  ERM_FLAG_REMOTE_BATTLE_VS_HUMAN       = 998;
+  ERM_FLAG_THIS_PC_HUMAN_PLAYER         = 999;
+  ERM_FLAG_HUMAN_VISITOR_OR_REAL_BATTLE = 1000;
 
   (* WoG Options *)
   NUM_WOG_OPTIONS           = 1000;
@@ -273,8 +281,8 @@ type
   
   POnBeforeTriggerArgs  = ^TOnBeforeTriggerArgs;
   TOnBeforeTriggerArgs  = packed record
-    TriggerID:          integer;
-    BlockErmExecution:  LONGBOOL;
+    TriggerId:          integer;
+    BlockErmExecution:  longbool;
   end; // .record TOnBeforeTriggerArgs
   
   TYVars = class
@@ -340,6 +348,7 @@ const
   ErmScripts:         PScriptsPointers  = Ptr($A468A0);
   IsWoG:              plongbool         = Ptr($803288);
   WoGOptions:         ^TWoGOptions      = Ptr($2771920);
+  ErmEnabled:         plongbool         = Ptr($27F995C);
   ErmErrCmdPtr:       PPCHAR            = Ptr($840E0C);
   ErmDlgCmd:          PINTEGER          = Ptr($887658);
   MrMonPtr:           PPOINTER          = Ptr($2846884); // MB_Mon
@@ -363,6 +372,19 @@ const
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
 
 
+var
+  ErmTriggerDepth: integer = 0;
+  
+  (* ERM tracking options *)
+  TrackingOpts: record
+    Enabled:              boolean;
+    MaxRecords:           integer;
+    DumpCommands:         boolean;
+    IgnoreEmptyTriggers:  boolean;
+    IgnoreRealTimeTimers: boolean;
+  end;
+
+
 procedure ZvsProcessCmd (Cmd: PErmCmd);
 procedure PrintChatMsg (const Msg: string);
 
@@ -380,6 +402,10 @@ function  Msg
 
 procedure ShowMessage (const Mes: string);
 function  Ask (const Question: string): boolean;
+function  GetErmFuncByName (const FuncName: string): integer;
+function  GetErmFuncName (FuncId: integer; out Name: string): boolean;
+function  AllocErmFunc (const FuncName: string; {i} out FuncId: integer): boolean;
+function  GetTriggerReadableName (EventId: integer): string;
 procedure ExecErmCmd (const CmdStr: string);
 procedure ReloadErm; stdcall;
 procedure ExtractErm; stdcall;
@@ -392,19 +418,22 @@ procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 
 
 (***) implementation (***)
-uses Stores, AdvErm;
+uses PatchApi, Stores, AdvErm, ErmTracking;
 
 
 const
-  ERM_CMD_CACH_LIMIT  = 16384;
+  ERM_CMD_CACHE_LIMIT  = 16384;
 
 
 var
-{O} ScriptNames:      Lists.TStringList;
-{O} ErmScanner:       TextScan.TTextScanner;
-{O} ErmCmdCache:      {O} TAssocArray {OF PErmCmd};
-{O} SavedYVars:       {O} Lists.TList {OF TYVars};
-    ErmTriggerDepth:  integer = 0;
+{O} FuncNames:       DataLib.TDict {OF FuncId: integer};
+{O} FuncIdToNameMap: DataLib.TObjDict {O} {OF TString};
+    FuncAutoId:      integer;
+{O} ScriptNames:     Lists.TStringList;
+{O} ErmScanner:      TextScan.TTextScanner;
+{O} ErmCmdCache:     {O} TAssocArray {OF PErmCmd};
+{O} SavedYVars:      {O} Lists.TList {OF TYVars};
+{O} EventTracker:    ErmTracking.TEventTracker;
 
 
 procedure PrintChatMsg (const Msg: string);
@@ -510,6 +539,186 @@ begin
   end; // .switch
 end; // .function GetErmValType
 
+function GetErmFuncByName (const FuncName: string): integer;
+begin
+  result := integer(FuncNames[FuncName]);
+end;
+
+function GetErmFuncName (FuncId: integer; out Name: string): boolean;
+var
+{U} SearchRes: TString;
+
+begin
+  SearchRes := TString(FuncIdToNameMap[Ptr(FuncId)]);
+  result    := SearchRes <> nil;
+
+  if result then begin
+    Name := SearchRes.Value;
+  end; // .if
+end;
+
+procedure NameTrigger (const TriggerId: integer; const FuncName: string);
+begin
+  FuncIdToNameMap[Ptr(TriggerId)]               := TString.Create(FuncName);
+  AdvErm.GetOrCreateAssocVar(FuncName).IntValue := TriggerId;
+end;
+
+function AllocErmFunc (const FuncName: string; {i} out FuncId: integer): boolean;
+begin
+  FuncId := integer(FuncNames[FuncName]);
+  result := FuncId = 0;
+
+  if result then begin
+    FuncId                       := FuncAutoId;
+    FuncNames[FuncName]          := Ptr(FuncId);
+    FuncIdToNameMap[Ptr(FuncId)] := TString.Create(FuncName);
+    AdvErm.GetOrCreateAssocVar(FuncName).IntValue := FuncId;
+    inc(FuncAutoId);
+  end;
+end; // .function AllocErmFunc
+
+function GetTriggerReadableName (EventID: integer): string;
+var
+  BaseEventName: string;
+  
+  x:             integer;
+  y:             integer;
+  z:             integer;
+  
+  ObjType:       integer;
+  ObjSubtype:    integer;
+
+begin
+  result := '';
+
+  case EventID of
+    {*} Erm.TRIGGER_FU1..Erm.TRIGGER_FU30000:
+      result := 'OnErmFunction ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_FU1 + 1); 
+    {*} Erm.TRIGGER_TM1..Erm.TRIGGER_TM100:
+      result := 'OnErmTimer ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_TM1 + 1); 
+    {*} Erm.TRIGGER_HE0..Erm.TRIGGER_HE198:
+      result := 'OnHeroInteraction ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HE0);
+    {*} Erm.TRIGGER_BA0:      result :=  'OnBeforeBattle';
+    {*} Erm.TRIGGER_BA1:      result :=  'OnAfterBattle';
+    {*} Erm.TRIGGER_BR:       result :=  'OnBattleRound';
+    {*} Erm.TRIGGER_BG0:      result :=  'OnBeforeBattleAction';
+    {*} Erm.TRIGGER_BG1:      result :=  'OnAfterBattleAction';
+    {*} Erm.TRIGGER_MW0:      result :=  'OnWanderingMonsterReach';
+    {*} Erm.TRIGGER_MW1:      result :=  'OnWanderingMonsterDeath';
+    {*} Erm.TRIGGER_MR0:      result :=  'OnMagicBasicResistance';
+    {*} Erm.TRIGGER_MR1:      result :=  'OnMagicCorrectedResistance';
+    {*} Erm.TRIGGER_MR2:      result :=  'OnDwarfMagicResistance';
+    {*} Erm.TRIGGER_CM0:      result :=  'OnAdventureMapRightMouseClick';
+    {*} Erm.TRIGGER_CM1:      result :=  'OnTownMouseClick';
+    {*} Erm.TRIGGER_CM2:      result :=  'OnHeroScreenMouseClick';
+    {*} Erm.TRIGGER_CM3:      result :=  'OnHeroesMeetScreenMouseClick';
+    {*} Erm.TRIGGER_CM4:      result :=  'OnBattleScreenMouseClick';
+    {*} Erm.TRIGGER_CM5:      result :=  'OnAdventureMapLeftMouseClick';
+    {*} Erm.TRIGGER_AE0:      result :=  'OnEquipArt';
+    {*} Erm.TRIGGER_AE1:      result :=  'OnUnequipArt';
+    {*} Erm.TRIGGER_MM0:      result :=  'OnBattleMouseHint';
+    {*} Erm.TRIGGER_MM1:      result :=  'OnTownMouseHint';
+    {*} Erm.TRIGGER_MP:       result :=  'OnMp3MusicChange';
+    {*} Erm.TRIGGER_SN:       result :=  'OnSoundPlay';
+    {*} Erm.TRIGGER_MG0:      result :=  'OnBeforeAdventureMagic';
+    {*} Erm.TRIGGER_MG1:      result :=  'OnAfterAdventureMagic';
+    {*} Erm.TRIGGER_TH0:      result :=  'OnEnterTown';
+    {*} Erm.TRIGGER_TH1:      result :=  'OnLeaveTown';
+    {*} Erm.TRIGGER_IP0:      result :=  'OnBeforeBattleBeforeDataSend';
+    {*} Erm.TRIGGER_IP1:      result :=  'OnBeforeBattleAfterDataReceived';
+    {*} Erm.TRIGGER_IP2:      result :=  'OnAfterBattleBeforeDataSend';
+    {*} Erm.TRIGGER_IP3:      result :=  'OnAfterBattleAfterDataReceived';
+    {*} Erm.TRIGGER_CO0:      result :=  'OnOpenCommanderWindow';
+    {*} Erm.TRIGGER_CO1:      result :=  'OnCloseCommanderWindow';
+    {*} Erm.TRIGGER_CO2:      result :=  'OnAfterCommanderBuy';
+    {*} Erm.TRIGGER_CO3:      result :=  'OnAfterCommanderResurrect';
+    {*} Erm.TRIGGER_BA50:     result :=  'OnBeforeBattleForThisPcDefender';
+    {*} Erm.TRIGGER_BA51:     result :=  'OnAfterBattleForThisPcDefender';
+    {*} Erm.TRIGGER_BA52:     result :=  'OnBeforeBattleUniversal';
+    {*} Erm.TRIGGER_BA53:     result :=  'OnAfterBattleUniversal';
+    {*} Erm.TRIGGER_GM0:      result :=  'OnAfterLoadGame';
+    {*} Erm.TRIGGER_GM1:      result :=  'OnBeforeSaveGame';
+    {*} Erm.TRIGGER_PI:       result :=  'OnAfterErmInstructions';
+    {*} Erm.TRIGGER_DL:       result :=  'OnCustomDialogEvent';
+    {*} Erm.TRIGGER_HM:       result :=  'OnHeroMove';
+    {*} Erm.TRIGGER_HM0..Erm.TRIGGER_HM198:
+      result := 'OnHeroMove ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HM0);
+    {*} Erm.TRIGGER_HL:   result :=  'OnHeroGainLevel';
+    {*} Erm.TRIGGER_HL0..Erm.TRIGGER_HL198:
+      result := 'OnHeroGainLevel ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HL0);
+    {*} Erm.TRIGGER_BF:       result :=  'OnSetupBattlefield';
+    {*} Erm.TRIGGER_MF1:      result :=  'OnMonsterPhysicalDamage';
+    {*} Erm.TRIGGER_TL0:      result :=  'OnEverySecond';
+    {*} Erm.TRIGGER_TL1:      result :=  'OnEvery2Seconds';
+    {*} Erm.TRIGGER_TL2:      result :=  'OnEvery5Seconds';
+    {*} Erm.TRIGGER_TL3:      result :=  'OnEvery10Seconds';
+    {*} Erm.TRIGGER_TL4:      result :=  'OnEveryMinute';
+    (* Era Triggers *)
+    {*  Erm.TRIGGER_BEFORE_SAVE_GAME:           result :=  'OnBeforeSaveGameEx';}
+    {*} Erm.TRIGGER_SAVEGAME_WRITE:             result :=  'OnSavegameWrite';
+    {*} Erm.TRIGGER_SAVEGAME_READ:              result :=  'OnSavegameRead';
+    {*} Erm.TRIGGER_KEYPRESS:                   result :=  'OnKeyPressed';
+    {*} Erm.TRIGGER_OPEN_HEROSCREEN:            result :=  'OnOpenHeroScreen';
+    {*} Erm.TRIGGER_CLOSE_HEROSCREEN:           result :=  'OnCloseHeroScreen';
+    {*} Erm.TRIGGER_STACK_OBTAINS_TURN:         result :=  'OnBattleStackObtainsTurn';
+    {*} Erm.TRIGGER_REGENERATE_PHASE:           result :=  'OnBattleRegeneratePhase';
+    {*} Erm.TRIGGER_AFTER_SAVE_GAME:            result :=  'OnAfterSaveGame';
+    {*  Erm.TRIGGER_SKEY_SAVEDIALOG:            result :=  'OnSKeySaveDialog';}
+    {*} Erm.TRIGGER_BEFOREHEROINTERACT:         result :=  'OnBeforeHeroInteraction';
+    {*} Erm.TRIGGER_AFTERHEROINTERACT:          result :=  'OnAfterHeroInteraction';
+    {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:       result :=  'OnStackToStackDamage';
+    {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT:  result :=  'OnAICalcStackAttackEffect';
+    {*} Erm.TRIGGER_ONCHAT:                     result :=  'OnChat';
+    {*} Erm.TRIGGER_ONGAMEENTER:                result :=  'OnGameEnter';
+    {*} Erm.TRIGGER_ONGAMELEAVE:                result :=  'OnGameLeave';
+    (* end Era Triggers *)
+  else
+    if EventID >= Erm.TRIGGER_OB_POS then begin
+      if ((EventID and Erm.TRIGGER_OB_POS) or (EventID and Erm.TRIGGER_LE_POS)) <> 0 then begin
+        x := EventID and 1023;
+        y := (EventID shr 16) and 1023;
+        z := (EventID shr 26) and 1;
+        
+        if (EventID and Erm.TRIGGER_LE_POS) <> 0 then begin
+          BaseEventName := 'OnLocalEvent ';
+        end // .if
+        else begin
+          if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
+            BaseEventName := 'OnAfterVisitObject ';
+          end // .if
+          else begin
+            BaseEventName := 'OnBeforeVisitObject ';
+          end; // .else
+        end; // .else
+        
+        result :=
+          BaseEventName + SysUtils.IntToStr(x) + '/' +
+          SysUtils.IntToStr(y) + '/' + SysUtils.IntToStr(z);
+      end // .if
+      else begin
+        ObjType    := (EventID shr 12) and 255;
+        ObjSubtype := (EventID and 255) - 1;
+        
+        if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
+          BaseEventName := 'OnAfterVisitObject ';
+        end // .if
+        else begin
+          BaseEventName := 'OnBeforeVisitObject ';
+        end; // .else
+        
+        result :=
+          BaseEventName + SysUtils.IntToStr(ObjType) + '/' + SysUtils.IntToStr(ObjSubtype);
+      end; // .else
+    end else begin
+      if GetErmFuncName(EventID, result) then begin
+        // Ok
+      end else begin
+        result := 'OnErmFunction ' + SysUtils.IntToStr(EventID);
+      end; // .else
+    end; // .else
+  end; // .switch
+end; // .function GetTriggerReadableName
+
 procedure ZvsProcessCmd (Cmd: PErmCmd); ASSEMBLER;
 asm
   // Push parameters
@@ -590,7 +799,7 @@ var
       result := SysUtils.TryStrToInt(Token, Num) and ErmScanner.GetCurrChar(c) and (c in DELIMS);
     end; // .if
   end; // .function ReadNum
-  
+
   function ReadArg (out Arg: TErmCmdParam): boolean;
   var
     ValType: TErmValType;
@@ -660,7 +869,7 @@ begin
       Cmd.CmdHeader.Len := ErmScanner.Pos - 1;
       Cmd.CmdBody.Len   := Length(CmdStr) - ErmScanner.Pos + 1;
       
-      if ErmCmdCache.ItemCount = ERM_CMD_CACH_LIMIT then begin
+      if ErmCmdCache.ItemCount = ERM_CMD_CACHE_LIMIT then begin
         ClearErmCmdCache;
       end; // .if
       
@@ -753,7 +962,6 @@ var
 {O} Buf:                TStrList {of integer};
 {O} Scanner:            TextScan.TTextScanner;
 {O} Labels:             TDict {of CmdN + 1};
-{U} FuncAutoId:         AdvErm.TAssocVar;
     UnresolvedLabelInd: integer; // index of last unresolved label or NO_LABEL
     CmdN:               integer; // index of next command
     MarkedPos:          integer;
@@ -792,27 +1000,19 @@ var
 
   procedure ParseFuncName;
   var
-  {U} FuncVar:  AdvErm.TAssocVar;
-      FuncName: string;
-      c:        char;
+    FuncId:   integer;
+    FuncName: string;
+    c:        char;
 
   begin
-    FuncVar := nil;
-    // * * * * * //
     FlushMarked;
     Scanner.GotoNextChar;
 
     if Scanner.ReadToken(FUNCNAME_CHARS, FuncName) and Scanner.GetCurrChar(c) then begin
       if c = ')' then begin
         Scanner.GotoNextChar;
-        FuncVar := AdvErm.GetOrCreateAssocVar(FuncName);
-
-        if FuncVar.IntValue = 0 then begin
-          FuncVar.IntValue := FuncAutoId.IntValue;
-          Inc(FuncAutoId.IntValue);
-        end; // .if
-
-        Buf.Add(IntToStr(FuncVar.IntValue));
+        AllocErmFunc(FuncName, FuncId);
+        Buf.Add(IntToStr(FuncId));
       end else begin
         ShowError(Scanner.Pos, 'Unexpected line end in function name');
         Buf.Add('999999');
@@ -958,7 +1158,6 @@ begin
   Buf        := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   Scanner    := TextScan.TTextScanner.Create;
   Labels     := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-  FuncAutoId := AdvErm.GetOrCreateAssocVar('Era.FuncAutoId');
   // * * * * * //
   Scanner.Connect(Script, #10);
   MarkedPos          := 1;
@@ -1027,7 +1226,7 @@ var
   ScriptContents: string;
 
 begin
-  result  :=  Files.ReadFileContents(ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents);
+  result := Files.ReadFileContents(ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents);
   
   if result then begin
     LoadScriptFromMemory(ScriptName, PreprocessErm(ScriptName, ScriptContents));
@@ -1113,72 +1312,72 @@ end; // .function GetFileList
 
 procedure RegisterErmEventNames;
 begin
-  AdvErm.GetOrCreateAssocVar('OnBeforeBattle').IntValue                  := Erm.TRIGGER_BA0;
-  AdvErm.GetOrCreateAssocVar('OnAfterBattle').IntValue                   := Erm.TRIGGER_BA1;
-  AdvErm.GetOrCreateAssocVar('OnBattleRound').IntValue                   := Erm.TRIGGER_BR;
-  AdvErm.GetOrCreateAssocVar('OnBeforeBattleAction').IntValue            := Erm.TRIGGER_BG0;
-  AdvErm.GetOrCreateAssocVar('OnAfterBattleAction').IntValue             := Erm.TRIGGER_BG1;
-  AdvErm.GetOrCreateAssocVar('OnWanderingMonsterReach').IntValue         := Erm.TRIGGER_MW0;
-  AdvErm.GetOrCreateAssocVar('OnWanderingMonsterDeath').IntValue         := Erm.TRIGGER_MW1;
-  AdvErm.GetOrCreateAssocVar('OnMagicBasicResistance').IntValue          := Erm.TRIGGER_MR0;
-  AdvErm.GetOrCreateAssocVar('OnMagicCorrectedResistance').IntValue      := Erm.TRIGGER_MR1;
-  AdvErm.GetOrCreateAssocVar('OnDwarfMagicResistance').IntValue          := Erm.TRIGGER_MR2;
-  AdvErm.GetOrCreateAssocVar('OnAdventureMapRightMouseClick').IntValue   := Erm.TRIGGER_CM0;
-  AdvErm.GetOrCreateAssocVar('OnTownMouseClick').IntValue                := Erm.TRIGGER_CM1;
-  AdvErm.GetOrCreateAssocVar('OnHeroScreenMouseClick').IntValue          := Erm.TRIGGER_CM2;
-  AdvErm.GetOrCreateAssocVar('OnHeroesMeetScreenMouseClick').IntValue    := Erm.TRIGGER_CM3;
-  AdvErm.GetOrCreateAssocVar('OnBattleScreenMouseClick').IntValue        := Erm.TRIGGER_CM4;
-  AdvErm.GetOrCreateAssocVar('OnAdventureMapLeftMouseClick').IntValue    := Erm.TRIGGER_CM5;
-  AdvErm.GetOrCreateAssocVar('OnEquipArt').IntValue                      := Erm.TRIGGER_AE0;
-  AdvErm.GetOrCreateAssocVar('OnUnequipArt').IntValue                    := Erm.TRIGGER_AE1;
-  AdvErm.GetOrCreateAssocVar('OnBattleMouseHint').IntValue               := Erm.TRIGGER_MM0;
-  AdvErm.GetOrCreateAssocVar('OnTownMouseHint').IntValue                 := Erm.TRIGGER_MM1;
-  AdvErm.GetOrCreateAssocVar('OnMp3MusicChange').IntValue                := Erm.TRIGGER_MP;
-  AdvErm.GetOrCreateAssocVar('OnSoundPlay').IntValue                     := Erm.TRIGGER_SN;
-  AdvErm.GetOrCreateAssocVar('OnBeforeAdventureMagic').IntValue          := Erm.TRIGGER_MG0;
-  AdvErm.GetOrCreateAssocVar('OnAfterAdventureMagic').IntValue           := Erm.TRIGGER_MG1;
-  AdvErm.GetOrCreateAssocVar('OnEnterTown').IntValue                     := Erm.TRIGGER_TH0;
-  AdvErm.GetOrCreateAssocVar('OnLeaveTown').IntValue                     := Erm.TRIGGER_TH1;
-  AdvErm.GetOrCreateAssocVar('OnBeforeBattleBeforeDataSend').IntValue    := Erm.TRIGGER_IP0;
-  AdvErm.GetOrCreateAssocVar('OnBeforeBattleAfterDataReceived').IntValue := Erm.TRIGGER_IP1;
-  AdvErm.GetOrCreateAssocVar('OnAfterBattleBeforeDataSend').IntValue     := Erm.TRIGGER_IP2;
-  AdvErm.GetOrCreateAssocVar('OnAfterBattleAfterDataReceived').IntValue  := Erm.TRIGGER_IP3;
-  AdvErm.GetOrCreateAssocVar('OnOpenCommanderWindow').IntValue           := Erm.TRIGGER_CO0;
-  AdvErm.GetOrCreateAssocVar('OnCloseCommanderWindow').IntValue          := Erm.TRIGGER_CO1;
-  AdvErm.GetOrCreateAssocVar('OnAfterCommanderBuy').IntValue             := Erm.TRIGGER_CO2;
-  AdvErm.GetOrCreateAssocVar('OnAfterCommanderResurrect').IntValue       := Erm.TRIGGER_CO3;
-  AdvErm.GetOrCreateAssocVar('OnBeforeBattleForThisPcDefender').IntValue := Erm.TRIGGER_BA50;
-  AdvErm.GetOrCreateAssocVar('OnAfterBattleForThisPcDefender').IntValue  := Erm.TRIGGER_BA51;
-  AdvErm.GetOrCreateAssocVar('OnBeforeBattleUniversal').IntValue         := Erm.TRIGGER_BA52;
-  AdvErm.GetOrCreateAssocVar('OnAfterBattleUniversal').IntValue          := Erm.TRIGGER_BA53;
-  AdvErm.GetOrCreateAssocVar('OnAfterLoadGame').IntValue                 := Erm.TRIGGER_GM0;
-  AdvErm.GetOrCreateAssocVar('OnBeforeSaveGame').IntValue                := Erm.TRIGGER_GM1;
-  AdvErm.GetOrCreateAssocVar('OnAfterErmInstructions').IntValue          := Erm.TRIGGER_PI;
-  AdvErm.GetOrCreateAssocVar('OnCustomDialogEvent').IntValue             := Erm.TRIGGER_DL;
-  AdvErm.GetOrCreateAssocVar('OnHeroMove').IntValue                      := Erm.TRIGGER_HM;
-  AdvErm.GetOrCreateAssocVar('OnHeroGainLevel').IntValue                 := Erm.TRIGGER_HL;
-  AdvErm.GetOrCreateAssocVar('OnSetupBattlefield').IntValue              := Erm.TRIGGER_BF;
-  AdvErm.GetOrCreateAssocVar('OnMonsterPhysicalDamage').IntValue         := Erm.TRIGGER_MF1;
-  AdvErm.GetOrCreateAssocVar('OnEverySecond').IntValue                   := Erm.TRIGGER_TL0;
-  AdvErm.GetOrCreateAssocVar('OnEvery2Seconds').IntValue                 := Erm.TRIGGER_TL1;
-  AdvErm.GetOrCreateAssocVar('OnEvery5Seconds').IntValue                 := Erm.TRIGGER_TL2;
-  AdvErm.GetOrCreateAssocVar('OnEvery10Seconds').IntValue                := Erm.TRIGGER_TL3;
-  AdvErm.GetOrCreateAssocVar('OnEveryMinute').IntValue                   := Erm.TRIGGER_TL4;
-  AdvErm.GetOrCreateAssocVar('OnSavegameWrite').IntValue                 := Erm.TRIGGER_SAVEGAME_WRITE;
-  AdvErm.GetOrCreateAssocVar('OnSavegameRead').IntValue                  := Erm.TRIGGER_SAVEGAME_READ;
-  AdvErm.GetOrCreateAssocVar('OnKeyPressed').IntValue                    := Erm.TRIGGER_KEYPRESS;
-  AdvErm.GetOrCreateAssocVar('OnOpenHeroScreen').IntValue                := Erm.TRIGGER_OPEN_HEROSCREEN;
-  AdvErm.GetOrCreateAssocVar('OnCloseHeroScreen').IntValue               := Erm.TRIGGER_CLOSE_HEROSCREEN;
-  AdvErm.GetOrCreateAssocVar('OnBattleStackObtainsTurn').IntValue        := Erm.TRIGGER_STACK_OBTAINS_TURN;
-  AdvErm.GetOrCreateAssocVar('OnBattleRegeneratePhase').IntValue         := Erm.TRIGGER_REGENERATE_PHASE;
-  AdvErm.GetOrCreateAssocVar('OnAfterSaveGame').IntValue                 := Erm.TRIGGER_AFTER_SAVE_GAME;
-  AdvErm.GetOrCreateAssocVar('OnBeforeHeroInteraction').IntValue         := Erm.TRIGGER_BEFOREHEROINTERACT;
-  AdvErm.GetOrCreateAssocVar('OnAfterHeroInteraction').IntValue          := Erm.TRIGGER_AFTERHEROINTERACT;
-  AdvErm.GetOrCreateAssocVar('OnStackToStackDamage').IntValue            := Erm.TRIGGER_ONSTACKTOSTACKDAMAGE;
-  AdvErm.GetOrCreateAssocVar('OnAICalcStackAttackEffect').IntValue       := Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT;
-  AdvErm.GetOrCreateAssocVar('OnChat').IntValue                          := Erm.TRIGGER_ONCHAT;
-  AdvErm.GetOrCreateAssocVar('OnGameEnter').IntValue                     := Erm.TRIGGER_ONGAMEENTER;
-  AdvErm.GetOrCreateAssocVar('OnGameLeave').IntValue                     := Erm.TRIGGER_ONGAMELEAVE;
+  NameTrigger(Erm.TRIGGER_BA0, 'OnBeforeBattle');
+  NameTrigger(Erm.TRIGGER_BA1, 'OnAfterBattle');
+  NameTrigger(Erm.TRIGGER_BR, 'OnBattleRound');
+  NameTrigger(Erm.TRIGGER_BG0, 'OnBeforeBattleAction');
+  NameTrigger(Erm.TRIGGER_BG1, 'OnAfterBattleAction');
+  NameTrigger(Erm.TRIGGER_MW0, 'OnWanderingMonsterReach');
+  NameTrigger(Erm.TRIGGER_MW1, 'OnWanderingMonsterDeath');
+  NameTrigger(Erm.TRIGGER_MR0, 'OnMagicBasicResistance');
+  NameTrigger(Erm.TRIGGER_MR1, 'OnMagicCorrectedResistance');
+  NameTrigger(Erm.TRIGGER_MR2, 'OnDwarfMagicResistance');
+  NameTrigger(Erm.TRIGGER_CM0, 'OnAdventureMapRightMouseClick');
+  NameTrigger(Erm.TRIGGER_CM1, 'OnTownMouseClick');
+  NameTrigger(Erm.TRIGGER_CM2, 'OnHeroScreenMouseClick');
+  NameTrigger(Erm.TRIGGER_CM3, 'OnHeroesMeetScreenMouseClick');
+  NameTrigger(Erm.TRIGGER_CM4, 'OnBattleScreenMouseClick');
+  NameTrigger(Erm.TRIGGER_CM5, 'OnAdventureMapLeftMouseClick');
+  NameTrigger(Erm.TRIGGER_AE0, 'OnEquipArt');
+  NameTrigger(Erm.TRIGGER_AE1, 'OnUnequipArt');
+  NameTrigger(Erm.TRIGGER_MM0, 'OnBattleMouseHint');
+  NameTrigger(Erm.TRIGGER_MM1, 'OnTownMouseHint');
+  NameTrigger(Erm.TRIGGER_MP, 'OnMp3MusicChange');
+  NameTrigger(Erm.TRIGGER_SN, 'OnSoundPlay');
+  NameTrigger(Erm.TRIGGER_MG0, 'OnBeforeAdventureMagic');
+  NameTrigger(Erm.TRIGGER_MG1, 'OnAfterAdventureMagic');
+  NameTrigger(Erm.TRIGGER_TH0, 'OnEnterTown');
+  NameTrigger(Erm.TRIGGER_TH1, 'OnLeaveTown');
+  NameTrigger(Erm.TRIGGER_IP0, 'OnBeforeBattleBeforeDataSend');
+  NameTrigger(Erm.TRIGGER_IP1, 'OnBeforeBattleAfterDataReceived');
+  NameTrigger(Erm.TRIGGER_IP2, 'OnAfterBattleBeforeDataSend');
+  NameTrigger(Erm.TRIGGER_IP3, 'OnAfterBattleAfterDataReceived');
+  NameTrigger(Erm.TRIGGER_CO0, 'OnOpenCommanderWindow');
+  NameTrigger(Erm.TRIGGER_CO1, 'OnCloseCommanderWindow');
+  NameTrigger(Erm.TRIGGER_CO2, 'OnAfterCommanderBuy');
+  NameTrigger(Erm.TRIGGER_CO3, 'OnAfterCommanderResurrect');
+  NameTrigger(Erm.TRIGGER_BA50, 'OnBeforeBattleForThisPcDefender');
+  NameTrigger(Erm.TRIGGER_BA51, 'OnAfterBattleForThisPcDefender');
+  NameTrigger(Erm.TRIGGER_BA52, 'OnBeforeBattleUniversal');
+  NameTrigger(Erm.TRIGGER_BA53, 'OnAfterBattleUniversal');
+  NameTrigger(Erm.TRIGGER_GM0, 'OnAfterLoadGame');
+  NameTrigger(Erm.TRIGGER_GM1, 'OnBeforeSaveGame');
+  NameTrigger(Erm.TRIGGER_PI, 'OnAfterErmInstructions');
+  NameTrigger(Erm.TRIGGER_DL, 'OnCustomDialogEvent');
+  NameTrigger(Erm.TRIGGER_HM, 'OnHeroMove');
+  NameTrigger(Erm.TRIGGER_HL, 'OnHeroGainLevel');
+  NameTrigger(Erm.TRIGGER_BF, 'OnSetupBattlefield');
+  NameTrigger(Erm.TRIGGER_MF1, 'OnMonsterPhysicalDamage');
+  NameTrigger(Erm.TRIGGER_TL0, 'OnEverySecond');
+  NameTrigger(Erm.TRIGGER_TL1, 'OnEvery2Seconds');
+  NameTrigger(Erm.TRIGGER_TL2, 'OnEvery5Seconds');
+  NameTrigger(Erm.TRIGGER_TL3, 'OnEvery10Seconds');
+  NameTrigger(Erm.TRIGGER_TL4, 'OnEveryMinute');
+  NameTrigger(Erm.TRIGGER_SAVEGAME_WRITE, 'OnSavegameWrite');
+  NameTrigger(Erm.TRIGGER_SAVEGAME_READ, 'OnSavegameRead');
+  NameTrigger(Erm.TRIGGER_KEYPRESS, 'OnKeyPressed');
+  NameTrigger(Erm.TRIGGER_OPEN_HEROSCREEN, 'OnOpenHeroScreen');
+  NameTrigger(Erm.TRIGGER_CLOSE_HEROSCREEN, 'OnCloseHeroScreen');
+  NameTrigger(Erm.TRIGGER_STACK_OBTAINS_TURN, 'OnBattleStackObtainsTurn');
+  NameTrigger(Erm.TRIGGER_REGENERATE_PHASE, 'OnBattleRegeneratePhase');
+  NameTrigger(Erm.TRIGGER_AFTER_SAVE_GAME, 'OnAfterSaveGame');
+  NameTrigger(Erm.TRIGGER_BEFOREHEROINTERACT, 'OnBeforeHeroInteraction');
+  NameTrigger(Erm.TRIGGER_AFTERHEROINTERACT, 'OnAfterHeroInteraction');
+  NameTrigger(Erm.TRIGGER_ONSTACKTOSTACKDAMAGE, 'OnStackToStackDamage');
+  NameTrigger(Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT, 'OnAICalcStackAttackEffect');
+  NameTrigger(Erm.TRIGGER_ONCHAT, 'OnChat');
+  NameTrigger(Erm.TRIGGER_ONGAMEENTER, 'OnGameEnter');
+  NameTrigger(Erm.TRIGGER_ONGAMELEAVE, 'OnGameLeave');
 end; // .procedure RegisterErmEventNames
 
 procedure LoadErmScripts;
@@ -1204,10 +1403,10 @@ begin
      memory here *)
   if not Erm.ZvsIsGameLoading^ then begin
     AdvErm.ResetMemory;
-    AdvErm.GetOrCreateAssocVar('Era.FuncAutoId').IntValue := FUNC_AUTO_ID;
+    FuncAutoId := INITIAL_FUNC_AUTO_ID;
   end; // .if
 
-  RegisterErmEventNames;  
+  RegisterErmEventNames;
   ScriptNames.Clear;
   
   for i := 0 to MAX_ERM_SCRIPTS_NUM - 1 do begin
@@ -1325,10 +1524,12 @@ end; // .procedure ExtractErm
 *)
 function AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
 var
-  Pos: integer;
-  i:   integer;
+{U} CharPtr: pchar;
+    i:       integer;
 
 begin
+  CharPtr := nil;
+  // * * * * * //
   result := false;
   i      := 0;
 
@@ -1340,17 +1541,18 @@ begin
       ScriptName := ScriptNames[i];
       LineN      := 1;
       LinePos    := 1;
-      
-      for Pos := 0 to integer(cardinal(CharPos) - cardinal(ErmScripts[i])) do begin
-        if pchar(integer(ErmScripts[i]) + Pos)^ = #10 then begin
-          Inc(LineN);
+      CharPtr    := ErmScripts[i];
+
+      while (CharPtr <> CharPos) and (CharPtr^ <> #0) do begin
+        if CharPtr^ = #10 then begin
+          inc(LineN);
           LinePos := 1;
+        end else begin
+          inc(LinePos);
         end;
-
-        Inc(LinePos);
-      end; // .for
-
-      Dec(LinePos);
+        
+        inc(CharPtr);
+      end;
     end; // .if
 
     Inc(i);
@@ -1446,87 +1648,109 @@ begin
   end; // .else
 end; // .function 
 
-function Hook_ProcessErm (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ProcessErm (Context: Core.PHookContext): longbool; stdcall;
 var
 {O} YVars:     TYVars;
     EventArgs: TOnBeforeTriggerArgs;
 
 begin
-  YVars := TYVars.Create;
-  // * * * * * //
-  if CurrErmEventID^ >= Erm.TRIGGER_FU30000 then begin
-    SetLength(YVars.Value, Length(y^));
-    Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
-  end; // .if
-  
-  SavedYVars.Add(YVars); YVars := nil;
-  
-  (* ProcessErm - initializing v996..v1000 variables *)
-  asm
-    CMP DWORD [$793C80], 0
-    JL @L005
-    MOV CL, byte [$793C80]
-    MOV byte [$91F6C7], CL
-    JMP @L013
-  @L005:
-    MOV EAX, $710FD3
-    CALL EAX
-    PUSH EAX
-    MOV EAX, $711828
-    CALL EAX
-    ADD ESP, 4
-    NEG EAX
-    SBB AL, AL
-    Inc AL
-    MOV byte [$91F6C7], AL
-  @L013:
-    MOV EAX, $710FD3
-    CALL EAX
-    PUSH EAX
-    MOV EAX, $7118A3
-    CALL EAX
-    ADD ESP,4
-    MOV byte [$91F6C6], AL
-    MOV EDX, DWORD [$27F9964]
-    MOV DWORD [$8885FC], EDX
-    MOV EAX, DWORD [$27F9968]
-    MOV DWORD [$888600], EAX
-    MOV ECX, DWORD [$27F996C]
-    MOV DWORD [$888604], ECX
-  end; // .asm
-  
-  Inc(ErmTriggerDepth);
-  EventArgs.TriggerID         := CurrErmEventID^;
-  EventArgs.BlockErmExecution := false;
-  GameExt.FireEvent('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
-  
-  if EventArgs.BlockErmExecution then begin
-    CurrErmEventID^ := TRIGGER_INVALID;
+  if ErmEnabled^ then begin
+    YVars := TYVars.Create;
+    // * * * * * //
+    if CurrErmEventID^ >= Erm.TRIGGER_FU30000 then begin
+      SetLength(YVars.Value, Length(y^));
+      Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
+    end; // .if
+    
+    SavedYVars.Add(YVars); YVars := nil;
+    
+    (* ProcessErm - initializing v996..v1000 variables *)
+    asm
+      CMP DWORD [$793C80], 0
+      JL @L005
+      MOV CL, byte [$793C80]
+      MOV byte [$91F6C7], CL
+      JMP @L013
+    @L005:
+      MOV EAX, $710FD3
+      CALL EAX
+      PUSH EAX
+      MOV EAX, $711828
+      CALL EAX
+      ADD ESP, 4
+      NEG EAX
+      SBB AL, AL
+      Inc AL
+      MOV byte [$91F6C7], AL
+    @L013:
+      MOV EAX, $710FD3
+      CALL EAX
+      PUSH EAX
+      MOV EAX, $7118A3
+      CALL EAX
+      ADD ESP,4
+      MOV byte [$91F6C6], AL
+      MOV EDX, DWORD [$27F9964]
+      MOV DWORD [$8885FC], EDX
+      MOV EAX, DWORD [$27F9968]
+      MOV DWORD [$888600], EAX
+      MOV ECX, DWORD [$27F996C]
+      MOV DWORD [$888604], ECX
+    end; // .asm
+    
+    if TrackingOpts.Enabled then begin
+      EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, CurrErmEventID^);
+    end;
+    
+    Inc(ErmTriggerDepth);
+
+    EventArgs.TriggerId         := CurrErmEventID^;
+    EventArgs.BlockErmExecution := false;
+    GameExt.FireEvent('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
+    
+    if EventArgs.BlockErmExecution then begin
+      CurrErmEventID^ := TRIGGER_INVALID;
+    end;
+    // * * * * * //
+    SysUtils.FreeAndNil(YVars);
   end; // .if
   
   result := Core.EXEC_DEF_CODE;
-  // * * * * * //
-  SysUtils.FreeAndNil(YVars);
 end; // .function Hook_ProcessErm
 
-function Hook_ProcessErm_End (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ProcessErm_End (Context: Core.PHookContext): longbool; stdcall;
 var
-{O} YVars: TYVars;
+{O} YVars:     TYVars;
+    TriggerId: integer;
 
 begin
-  YVars := SavedYVars.Pop;
-  // * * * * * //
-  GameExt.FireEvent('OnAfterTrigger', CurrErmEventID, sizeof(CurrErmEventID^));
-  
-  if YVars.Value <> nil then begin
-    Utils.CopyMem(sizeof(y^), @YVars.Value[0], @y[1]);
+  if ErmEnabled^ then begin
+    YVars := SavedYVars.Pop;
+    // * * * * * //
+    TriggerId := pinteger(Context.EBP - $1A0)^;
+    GameExt.FireEvent('OnAfterTrigger', @TriggerId, sizeof(TriggerId));
+    
+    if YVars.Value <> nil then begin
+      Utils.CopyMem(sizeof(y^), @YVars.Value[0], @y[1]);
+    end; // .if
+    
+    Dec(ErmTriggerDepth);
+
+    if TrackingOpts.Enabled then begin
+      EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_END_TRIGGER, TriggerId);
+    end;
+    // * * * * * //
+    SysUtils.FreeAndNil(YVars);
   end; // .if
-  
-  Dec(ErmTriggerDepth);
+
   result := Core.EXEC_DEF_CODE;
-  // * * * * * //
-  SysUtils.FreeAndNil(YVars);
 end; // .function Hook_ProcessErm_End
+
+function Hook_ProcessCmd (Hook: PatchApi.TLoHook; Context: PatchApi.PHookContext): longbool; stdcall;
+begin
+  EventTracker.TrackCmd(PErmCmd(ppointer(Context.EBP + 8)^).CmdHeader.Value);
+  result := EXEC_DEFAULT;
+end;
 
 function LoadWoGOptions (FilePath: pchar): boolean; ASSEMBLER;
 asm
@@ -1546,7 +1770,7 @@ asm
 @Done:
 end; // .function LoadWoGOptions
 
-function Hook_UN_J3_End (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_UN_J3_End (Context: Core.PHookContext): longbool; stdcall;
 const
   RESET_OPTIONS_COMMAND = ':clear:';
   WOG_OPTION_MAP_RULES  = 101;
@@ -1584,7 +1808,7 @@ asm
 end; // .procedure Hook_ErmCastleBuilding
 {$W+}
 
-function Hook_ErmHeroArt (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ErmHeroArt (Context: Core.PHookContext): longbool; stdcall;
 begin
   result := ((PINTEGER(Context.EBP - $E8)^ shr 8) and 7) = 0;
   
@@ -1593,19 +1817,19 @@ begin
   end; // .if
 end; // .function Hook_ErmHeroArt
 
-function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookContext): longbool; stdcall;
 begin
   f[1]   := false;
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_FindFreeSlot
 
-function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookContext): longbool; stdcall;
 begin
   f[1]   := true;
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_FoundFreeSlot
 
-function Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookContext): longbool; stdcall;
 const
   NUM_BAG_ARTS_OFFSET = +$3D4;
   HERO_PTR_OFFSET     = -$380;
@@ -1619,7 +1843,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_DeleteFromBag
 
-function Hook_DlgCallback (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_DlgCallback (Context: Core.PHookContext): longbool; stdcall;
 const
   NO_CMD = 0;
 
@@ -1628,7 +1852,7 @@ begin
   result     := Core.EXEC_DEF_CODE;
 end; // .function Hook_DlgCallback
 
-function Hook_CM3 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_CM3 (Context: Core.PHookContext): longbool; stdcall;
 const
   MOUSE_STRUCT_ITEM_OFS = +$8;
   CM3_RES_ADDR          = $A6929C;
@@ -1658,18 +1882,27 @@ end; // .function Hook_CM3
 
 procedure OnSavegameWrite (Event: GameExt.PEvent); stdcall;
 var
-  NumScripts:     integer;
-  ScriptName:     string;
-  ScriptNameLen:  integer;
-  i:              integer;
+  SerializedFuncNames: string;
+  NumScripts:          integer;
+  ScriptName:          string;
+  ScriptNameLen:       integer;
+  i:                   integer;
    
 begin
-  NumScripts  :=  ScriptNames.Count;
+  (* Save function names and auto ID *)
+  SerializedFuncNames := DataLib.SerializeDict(FuncNames);
+  Stores.WriteSavegameSection(sizeof(FuncAutoId), @FuncAutoId, FUNC_NAMES_SECTION);
+  i                   := length(SerializedFuncNames);
+  Stores.WriteSavegameSection(sizeof(i), @i, FUNC_NAMES_SECTION);
+  Stores.WriteSavegameSection(length(SerializedFuncNames), pointer(SerializedFuncNames), FUNC_NAMES_SECTION);
+
+  (* Save script file names *)
+  NumScripts := ScriptNames.Count;
   Stores.WriteSavegameSection(sizeof(NumScripts), @NumScripts, SCRIPT_NAMES_SECTION);
   
   for i := 0 to NumScripts - 1 do begin
-    ScriptName    :=  ScriptNames[i];
-    ScriptNameLen :=  Length(ScriptName);
+    ScriptName    := ScriptNames[i];
+    ScriptNameLen := Length(ScriptName);
     Stores.WriteSavegameSection(sizeof(ScriptNameLen), @ScriptNameLen, SCRIPT_NAMES_SECTION);
     
     if ScriptNameLen > 0 then begin
@@ -1680,14 +1913,32 @@ end; // .procedure OnSavegameWrite
 
 procedure OnSavegameRead (Event: GameExt.PEvent); stdcall;
 var
-  NumScripts:     integer;
-  ScriptName:     string;
-  ScriptNameLen:  integer;
-  i:              integer;
+  SerializedFuncNamesLen: integer;
+  SerializedFuncNames:    string;
+  NumScripts:             integer;
+  ScriptName:             string;
+  ScriptNameLen:          integer;
+  i:                      integer;
    
 begin
+  (* Read function names and auto ID *)
+  Stores.ReadSavegameSection(sizeof(FuncAutoId), @FuncAutoId, FUNC_NAMES_SECTION);
+  
+  FreeAndNil(FuncNames);
+  SerializedFuncNamesLen := 0;
+  Stores.ReadSavegameSection(sizeof(SerializedFuncNamesLen), @SerializedFuncNamesLen, FUNC_NAMES_SECTION);
+  {!} Assert(SerializedFuncNamesLen > 0);
+  
+  SetLength(SerializedFuncNames, SerializedFuncNamesLen);
+  Stores.ReadSavegameSection(SerializedFuncNamesLen, @SerializedFuncNames[1], FUNC_NAMES_SECTION);
+  FuncNames := DataLib.UnserializeDict(SerializedFuncNames, not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  
+  FreeAndNil(FuncIdToNameMap);
+  FuncIdToNameMap := DataLib.FlipDict(FuncNames);
+
+  (* Read script file names *)
   ScriptNames.Clear;
-  NumScripts  :=  0;
+  NumScripts :=  0;
   Stores.ReadSavegameSection(sizeof(NumScripts), @NumScripts, SCRIPT_NAMES_SECTION);
   
   for i := 0 to NumScripts - 1 do begin
@@ -1702,7 +1953,7 @@ begin
   end; // .for
 end; // .procedure OnSavegameRead
 
-function Hook_LoadErmScripts (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_LoadErmScripts (Context: Core.PHookContext): longbool; stdcall;
 begin
   LoadErmScripts;
   
@@ -1710,7 +1961,7 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadErmScripts
 
-function Hook_LoadErtFile (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_LoadErtFile (Context: Core.PHookContext): longbool; stdcall;
 const
   ARG_FILENAME = 2;
 
@@ -1770,6 +2021,10 @@ end; // .function Hook_FU_P_RetValue
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
+
+  if TrackingOpts.Enabled then begin
+    EventTracker.GenerateReport('Debug\Era\erm tracking.erm');
+  end;
 end; // .procedure OnGenerateDebugInfo
 
 procedure OnBeforeErm (Event: GameExt.PEvent); stdcall;
@@ -1793,7 +2048,7 @@ begin
   (* ERM OnAnyTrigger *)
   Core.Hook(@Hook_ProcessErm, Core.HOOKTYPE_BRIDGE, 6, Ptr($74C819));
   Core.Hook(@Hook_ProcessErm_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($74CE2A));
-  
+
   (* Fix ERM CA:B3 bug *)
   Core.Hook(@Hook_ErmCastleBuilding, Core.HOOKTYPE_JUMP, 7, Ptr($70E8A2));
   
@@ -1844,9 +2099,20 @@ begin
   Core.ApiHook(@Hook_FU_P_RetValue, Core.HOOKTYPE_BRIDGE, Ptr($72D04A));
   Core.p.WriteDataPatch(Ptr($72D0A0), ['8D849520EAFFFF']);
   Core.p.WriteDataPatch(Ptr($72D0B2), ['E9E70000009090909090']);
+
+  (* Enable ERM tracking *)
+  with TrackingOpts do begin
+    if Enabled then begin
+      EventTracker := ErmTracking.TEventTracker.Create(MaxRecords).SetDumpCommands(DumpCommands).SetIgnoreEmptyTriggers(IgnoreEmptyTriggers).SetIgnoreRealTimeTimers(IgnoreRealTimeTimers);
+      Core.p.WriteLoHook(Ptr($741E3F), @Hook_ProcessCmd);
+    end;
+  end;
 end; // .procedure OnAfterWoG
 
 begin
+  FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  FuncIdToNameMap := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  
   ErmScanner  := TextScan.TTextScanner.Create;
   ErmCmdCache := AssocArrays.NewSimpleAssocArr
   (

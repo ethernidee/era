@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, StrUtils, Utils, Log, Ini, Core,
+  SysUtils, Math, Utils, Log, Ini, Core,
   VFS, Heroes, GameExt, EraLog, SndVid, Tweaks, Stores, Erm;
   
 const
@@ -101,6 +101,17 @@ begin
   Tweaks.UseOnlyOneCpuCoreOpt    := GetOptBoolValue('UseOnlyOneCpuCore',          true);
   Stores.DumpSavegameSectionsOpt := GetDebugOpt(    'Debug.DumpSavegameSections', false);
   VFS.DebugOpt                   := GetDebugOpt(    'Debug.LogVirtualFileSystem', false);
+
+  with Erm.TrackingOpts do begin
+    Enabled := GetDebugOpt('Debug.TrackErm');
+
+    if Enabled then begin
+      MaxRecords           := Max(1, GetOptIntValue('Debug.TrackErm.MaxRecords',     10000));
+      DumpCommands         := GetOptBoolValue('Debug.TrackErm.DumpCommands',         true);
+      IgnoreEmptyTriggers  := GetOptBoolValue('Debug.TrackErm.IgnoreEmptyTriggers',  true);
+      IgnoreRealTimeTimers := GetOptBoolValue('Debug.TrackErm.IgnoreRealTimeTimers', true);
+    end;
+  end;
 end; // .procedure OnEraStart
 
 begin
