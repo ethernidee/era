@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Windows, Math, SysUtils,
+  Windows, Math, SysUtils, PatchApi,
   Utils, DataLib, CFiles, Files, FilesEx, Crypto, StrLib, Core,
   VFS, BinPatching;
 
@@ -17,21 +17,22 @@ type
 
 const
   (* Paths *)
-  ERA_DLL_NAME          = 'era.dll';
-  PLUGINS_PATH          = 'EraPlugins';
-  PATCHES_PATH          = 'EraPlugins';
-  DEBUG_DIR             = 'Debug\Era';
-  DEBUG_MAPS_DIR        = 'DebugMaps';
-  DEBUG_EVENT_LIST_PATH = DEBUG_DIR + '\event list.txt';
-  DEBUG_PATCH_LIST_PATH = DEBUG_DIR + '\patch list.txt';
-  DEBUG_MOD_LIST_PATH   = DEBUG_DIR + '\mod list.txt';
+  ERA_DLL_NAME              = 'era.dll';
+  PLUGINS_PATH              = 'EraPlugins';
+  PATCHES_PATH              = 'EraPlugins';
+  DEBUG_DIR                 = 'Debug\Era';
+  DEBUG_MAPS_DIR            = 'DebugMaps';
+  DEBUG_EVENT_LIST_PATH     = DEBUG_DIR + '\event list.txt';
+  DEBUG_PATCH_LIST_PATH     = DEBUG_DIR + '\patch list.txt';
+  DEBUG_MOD_LIST_PATH       = DEBUG_DIR + '\mod list.txt';
+  DEBUG_X86_PATCH_LIST_PATH = DEBUG_DIR + '\x86 patches.txt';
   
   CONST_STR = -1;
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.47.8';
-  ERA_VERSION_INT = 2478;
+  ERA_VERSION_STR = '2.47.9';
+  ERA_VERSION_INT = 2479;
 
 type
   PEvent  = ^TEvent;
@@ -471,6 +472,7 @@ begin
   DumpModList;
   DumpEventList;
   DumpPatchList;
+  PatchApi.GetPatcher().SaveDump(DEBUG_X86_PATCH_LIST_PATH);
 end; // .procedure OnGenerateDebugInfo
 
 procedure Init (hDll: integer);
