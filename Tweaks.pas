@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, FilesEx, Ini, DataLib,
+  CFiles, Files, FilesEx, Ini, DataLib, Concur,
   PatchApi, Core, GameExt, Heroes, Lodman, Erm;
 
 type
@@ -37,11 +37,14 @@ var
 
 
 var
-  hTimerEvent:          THandle;
-  InetCriticalSection:  Windows.TRTLCriticalSection;
-  ZvsLibImageTemplate:  string;
-  ZvsLibGamePath:       string;
-  IsLocalPlaceObject:   boolean = true;
+{O} TopLevelExceptionHandlers: DataLib.TList {OF Handler: pointer};
+
+  hTimerEvent:           THandle;
+  InetCriticalSection:   Windows.TRTLCriticalSection;
+  ExceptionsCritSection: Concur.TCritSection;
+  ZvsLibImageTemplate:   string;
+  ZvsLibGamePath:        string;
+  IsLocalPlaceObject:    boolean = true;
 
 
 function Hook_ReadIntIni
@@ -736,6 +739,50 @@ begin
   result := EXCEPTION_CONTINUE_SEARCH;
 end; // .function TopLevelExceptionHandler
 
+function OnUnhandledException (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
+type
+  THandler = function (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
+
+const
+  EXCEPTION_CONTINUE_SEARCH = 0;
+
+var
+  i: integer;
+
+begin
+  {!} ExceptionsCritSection.Enter;
+
+  for i := 0 to TopLevelExceptionHandlers.Count - 1 do begin
+    THandler(TopLevelExceptionHandlers[i])(ExceptionPtrs);
+  end;
+
+  {!} ExceptionsCritSection.Leave;
+  
+  result := EXCEPTION_CONTINUE_SEARCH;
+end; // .function OnUnhandledException
+
+function Hook_SetUnhandledExceptionFilter (Context: Core.PHookContext): longbool; stdcall;
+var
+{Un} NewHandler: pointer;
+
+begin
+  NewHandler := ppointer(Context.ESP + 8)^;
+  // * * * * * //
+  if NewHandler <> nil then begin
+    {!} ExceptionsCritSection.Enter;
+    TopLevelExceptionHandlers.Add(NewHandler);
+    {!} ExceptionsCritSection.Leave;
+  end;
+
+  (* result = nil *)
+  pinteger(Context.EAX)^ := 0;
+
+  (* return to calling routing *)
+  Context.RetAddr := Core.Ret(1);
+  
+  result := Core.IGNORE_DEF_CODE;
+end; // .function Hook_SetUnhandledExceptionFilter
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   DumpWinPeModuleList;
@@ -888,11 +935,15 @@ begin
 
   (* Install global top-level exception filter *)
   Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
+  Windows.SetUnhandledExceptionFilter(@OnUnhandledException);
+  Core.ApiHook(@Hook_SetUnhandledExceptionFilter, Core.HOOKTYPE_BRIDGE, @Windows.SetUnhandledExceptionFilter);
   Windows.SetUnhandledExceptionFilter(@TopLevelExceptionHandler);
 end; // .procedure OnAfterWoG
 
 begin
   Windows.InitializeCriticalSection(InetCriticalSection);
+  ExceptionsCritSection.Init;
+  TopLevelExceptionHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
   GameExt.RegisterHandler(OnAfterWoG,  'OnAfterWoG');
   RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end.
