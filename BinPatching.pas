@@ -5,7 +5,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 interface
-uses SysUtils, Utils, Core, DataLib, Files;
+uses SysUtils, Utils, PatchApi, Core, DataLib, Files;
 
 type
   (* Import *)
@@ -51,6 +51,7 @@ const
   CODE_PATCH = true;
 
 var
+{O} Patcher:    PatchApi.TPatcherInstance; // unmanaged
 {U} Patch:      PBinPatch;
     NumPatches: integer;
     i:          integer;  
@@ -62,8 +63,10 @@ begin
   NumPatches := BinPatchFile.NumPatches;
 
   try
+    Patcher := Core.GlobalPatcher.CreateInstance(pchar(BinPatchSource));
+
     for i := 1 to NumPatches do begin
-      if not Core.WriteAtCode(Patch.NumBytes, @Patch.Bytes, Patch.Addr) then begin
+      if not Patcher.Write(Patch.Addr, @Patch.Bytes, Patch.NumBytes, true).IsApplied() then begin
         Core.FatalError('Failed to write binary patch data at address '
                         + IntToHex(integer(Patch.Addr), 8));
       end; // .if
