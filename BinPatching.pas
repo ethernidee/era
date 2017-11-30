@@ -48,11 +48,12 @@ end; // .function GetUniquePatchName
 
 procedure ApplyBinPatch (const BinPatchSource: string; BinPatchFile: PBinPatchFile);
 const
-  CODE_PATCH = true;
+  IS_CODE_PATCH = true;
 
 var
 {O} Patcher:    PatchApi.TPatcherInstance; // unmanaged
 {U} Patch:      PBinPatch;
+    PatchName:  string;
     NumPatches: integer;
     i:          integer;  
   
@@ -61,12 +62,13 @@ begin
   Patch := @BinPatchFile.Patches;
   // * * * * * //
   NumPatches := BinPatchFile.NumPatches;
+  PatchName  := GetUniquePatchName(BinPatchSource);
 
   try
-    Patcher := Core.GlobalPatcher.CreateInstance(pchar(BinPatchSource));
+    Patcher := Core.GlobalPatcher.CreateInstance(pchar(PatchName));
 
     for i := 1 to NumPatches do begin
-      if not Patcher.Write(Patch.Addr, @Patch.Bytes, Patch.NumBytes, true).IsApplied() then begin
+      if not Patcher.Write(Patch.Addr, @Patch.Bytes, Patch.NumBytes, IS_CODE_PATCH).IsApplied() then begin
         Core.FatalError('Failed to write binary patch data at address '
                         + IntToHex(integer(Patch.Addr), 8));
       end; // .if
@@ -74,7 +76,7 @@ begin
       Patch := Utils.PtrOfs(Patch, sizeof(Patch^) + Patch.NumBytes);
     end; // .for
   except
-    Core.FatalError('Failed to apply binary patch "' + BinPatchSource + '"');
+    Core.FatalError('Failed to apply binary patch "' + PatchName + '"');
   end; // .try
 end; // .procedure ApplyBinPatch
 
