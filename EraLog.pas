@@ -128,7 +128,7 @@ end; // .function TConsoleLogger.Write
 constructor TFileLogger.Create (const FilePath: string);
 begin
   Self.fFile := Files.TFile.Create;
-  {!} Assert(Self.fFile.CreateNew(FilePath));
+  {!} Assert(Self.fFile.CreateNew(FilePath), 'Failed to create log file at "' + FilePath + '". Probably another Heroes 3 instance is running');
 end; // .constructor TFileLogger.Create
 
 destructor TFileLogger.Destroy;

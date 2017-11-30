@@ -87,7 +87,7 @@ var
     i:            integer;
    
 begin
-  {!} Assert(Math.InRange(LodInd, 0, NumLods - 1));
+  {!} Assert(Math.InRange(LodInd, 0, NumLods - 1), 'Lod index is out of allowed range: ' + IntToStr(LodInd));
   Table   :=  nil;
   Indexes :=  nil;
   // * * * * * //

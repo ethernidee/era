@@ -31,8 +31,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.47.9';
-  ERA_VERSION_INT = 2479;
+  ERA_VERSION_STR = '2.6.1';
+  ERA_VERSION_INT = 2601;
 
 type
   PEvent  = ^TEvent;
@@ -157,7 +157,7 @@ begin
       (ItemInfo.FileSize > 0)
     then begin
       DllHandle := Windows.LoadLibrary(pchar(PLUGINS_PATH + '\' + DllName));
-      {!} Assert(DllHandle <> 0);
+      {!} Assert(DllHandle <> 0, 'Failed to load DLL at "' + PLUGINS_PATH + '\' + DllName + '"');
       Windows.DisableThreadLibraryCalls(DllHandle);
       PluginsList.AddObj(DllName, Ptr(DllHandle));
     end; // .if
@@ -486,15 +486,15 @@ begin
   
   (* Era 1.8x integration *)
   hAngel                :=  Windows.LoadLibrary('angel.dll');
-  {!} Assert(hAngel <> 0);
+  {!} Assert(hAngel <> 0, 'Failed to load angel.dll');
   EraInit               :=  Windows.GetProcAddress(hAngel, 'InitEra');
-  {!} Assert(@EraInit <> nil);
+  {!} Assert(@EraInit <> nil, 'Missing angel.dll:EraInit function');
   EraSaveEventParams    :=  Windows.GetProcAddress(hAngel, 'SaveEventParams');
-  {!} Assert(@EraSaveEventParams <> nil);
+  {!} Assert(@EraSaveEventParams <> nil, 'Missing angel.dll:SaveEventParams function');
   EraRestoreEventParams :=  Windows.GetProcAddress(hAngel, 'RestoreEventParams');
-  {!} Assert(@EraRestoreEventParams <> nil);
+  {!} Assert(@EraRestoreEventParams <> nil, 'Missing angel.dll:RestoreEventParams function');
   EraEventParams        :=  Windows.GetProcAddress(hAngel, 'EventParams');
-  {!} Assert(EraEventParams <> nil);
+  {!} Assert(EraEventParams <> nil, 'Missing angel.dll:EventParams variable');
   
   LoadPlugins;
   FireEvent('OnBeforeWoG', NO_EVENT_DATA, 0);

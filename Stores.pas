@@ -374,7 +374,7 @@ begin
   ReadingStorage.Clear;
   NumSections := 0;
   BytesRead   := Heroes.GzipRead(sizeof(NumSections), @NumSections);
-  {!} Assert((BytesRead = sizeof(NumSections)) or (BytesRead = 0));
+  {!} Assert((BytesRead = sizeof(NumSections)) or (BytesRead = 0), 'Failed to read NumSections:integer from saved game');
   
   for i:=1 to NumSections do begin
     ForceGzipRead(sizeof(SectionNameLen), @SectionNameLen);

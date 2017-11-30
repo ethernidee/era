@@ -16,10 +16,11 @@ type
   TString  = TypeWrappers.TString;
 
 const
-  SCRIPT_NAMES_SECTION   = 'Era.ScriptNames';
-  FUNC_NAMES_SECTION     = 'Era.FuncNames';
-  ERM_SCRIPTS_PATH       = 'Data\s';
-  EXTRACTED_SCRIPTS_PATH = GameExt.DEBUG_DIR + '\Scripts';
+  SCRIPT_NAMES_SECTION     = 'Era.ScriptNames';
+  FUNC_NAMES_SECTION       = 'Era.FuncNames';
+  ERM_SCRIPTS_PATH         = 'Data\s';
+  EXTRACTED_SCRIPTS_PATH   = GameExt.DEBUG_DIR + '\Scripts';
+  ERM_TRACKING_REPORT_PATH = DEBUG_DIR + '\erm tracking.erm';
 
   (* Erm command conditions *)
   LEFT_COND   = 0;
@@ -911,7 +912,7 @@ var
 
 begin
   ScriptInd   :=  ScriptNames.Count;
-  {!} Assert(ScriptInd < MAX_ERM_SCRIPTS_NUM);
+  {!} Assert(ScriptInd < MAX_ERM_SCRIPTS_NUM, 'Cannot load ERM script. Limit is reached');
   ScriptSize  :=  Length(ScriptContents);
   
   if ScriptSize > MIN_ERM_SCRIPT_SIZE then begin
@@ -1565,7 +1566,7 @@ var
   i: integer;
 
 begin
-  {!} Assert(Length(Params) <= Length(GameExt.EraEventParams^));
+  {!} Assert(Length(Params) <= Length(GameExt.EraEventParams^), 'Cannot fire ERM event with so many arguments: ' + SysUtils.IntToStr(length(Params)));
   GameExt.EraSaveEventParams;
   
   for i := 0 to High(Params) do begin
@@ -1602,7 +1603,7 @@ end; // .function FindErmCmdBeginning
 
 procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 begin
-  {!} Assert(length(Args) <= 16);
+  {!} Assert(length(Args) <= 16, 'Cannot fire remote ERM event with more than 16 arguments');
   
   if length(Args) = 0 then begin
     FireRemoteEventProc(EventId, nil, 0);
@@ -2023,7 +2024,7 @@ begin
   ExtractErm;
 
   if TrackingOpts.Enabled then begin
-    EventTracker.GenerateReport('Debug\Era\erm tracking.erm');
+    EventTracker.GenerateReport(ERM_TRACKING_REPORT_PATH);
   end;
 end; // .procedure OnGenerateDebugInfo
 
