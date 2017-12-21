@@ -48,6 +48,13 @@ const
   PLAYER_TEAL   = 6;
   PLAYER_PINK   = 7;
   PLAYER_LAST   = 7;
+
+  (* Secondary Skills *)
+  MAX_SECONDARY_SKILLS = 28;
+  SKILL_LEVEL_NONE     = 0;
+  SKILL_LEVEL_BASIC    = 1;
+  SKILL_LEVEL_ADVANCED = 2;
+  SKILL_LEVEL_EXPERT   = 3;
   
   SHOW_INTRO_OPT:             pinteger  = Ptr($699410);
   MUSIC_VOLUME_OPT:           pinteger  = Ptr($6987B0);
@@ -201,6 +208,44 @@ type
     (* Dummy *)
   end; // .record TWndManager
 
+  PSecSkillNames = ^TSecSkillNames;
+  TSecSkillNames = array [0..MAX_SECONDARY_SKILLS - 1] of pchar;
+
+  PSecSkillDesc = ^TSecSkillDesc;
+  TSecSkillDesc = packed record
+    case boolean of
+      false: (
+        Basic:    pchar;
+        Advanced: pchar;
+        Expert:   pchar;
+      );
+
+      true: (
+        Descs: array [0..SKILL_LEVEL_EXPERT - 1] of pchar;
+      );
+  end; // .record TSecSkillDesc
+
+  PSecSkillText = ^TSecSkillText;
+  TSecSkillText = packed record
+    case boolean of
+      false: (
+        _0:       pchar; // use Name instead
+        Basic:    pchar;
+        Advanced: pchar;
+        Expert:   pchar;
+      );
+
+      true: (
+        Texts: array [0..SKILL_LEVEL_EXPERT] of pchar;
+      );
+  end; // .record TSecSkillText
+
+  PSecSkillDescs = ^TSecSkillDescs;
+  TSecSkillDescs = array [0..MAX_SECONDARY_SKILLS - 1] of TSecSkillDesc;
+
+  PSecSkillTexts = ^TSecSkillTexts;
+  TSecSkillTexts = array [0..MAX_SECONDARY_SKILLS - 1] of TSecSkillText;
+
   TMAlloc = function (Size: integer): pointer; cdecl;
   TMFree  = procedure (Addr: pointer); cdecl;
   
@@ -226,6 +271,10 @@ const
   WndProc:      TWndProc    = Ptr($4F8290);
   
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
+
+  SecSkillNames: PSecSkillNames = Ptr($698BC4);
+  SecSkillDescs: PSecSkillDescs = Ptr($698C30);
+  SecSkillTexts: PSecSkillTexts = Ptr($698D88);
 
 
 procedure GZipWrite (Count: integer; {n} Addr: pointer);

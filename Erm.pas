@@ -322,6 +322,29 @@ type
   PHeroSpecSettingsTable = ^THeroSpecSettingsTable;
   THeroSpecSettingsTable = array [0..NUM_WOG_HEROES - 1] of THeroSpecSettings;
 
+  PSecSkillSettings = ^TSecSkillSettings;
+  TSecSkillSettings = packed record
+    case byte of
+      0: (
+        _0:       integer; // use Name instead
+        Basic:    integer; // z-index, description
+        Advanced: integer;
+        Expert:   integer;
+      );
+
+      1: (
+        Name:  integer;
+        Descs: array [0..SKILL_LEVEL_EXPERT - 1] of integer;
+      );
+
+      2: (
+        Texts: array [0..SKILL_LEVEL_EXPERT] of integer;
+      );
+  end; // .record TSecSkillSettings
+
+  PSecSkillSettingsTable = ^TSecSkillSettingsTable;
+  TSecSkillSettingsTable = array [0..Heroes.MAX_SECONDARY_SKILLS - 1] of TSecSkillSettings;
+
   TFireRemoteEventProc = procedure (EventId: integer; Data: pinteger; NumInts: integer); cdecl;
   TZvsPlaceMapObject   = function (x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; cdecl;
 
@@ -353,6 +376,10 @@ const
   HeroSpecsTable:     PHeroSpecsTable   = Ptr($7B4C40);
   HeroSpecsTableBack: PHeroSpecsTable   = Ptr($91DA78);
   HeroSpecSettingsTable: PHeroSpecSettingsTable = Ptr($A49BC0);
+  SecSkillSettingsTable: PSecSkillSettingsTable = Ptr($899410);
+  SecSkillNamesBack:     Heroes.PSecSkillNames  = Ptr($A89190);
+  SecSkillDescsBack:     Heroes.PSecSkillDescs  = Ptr($A46BC4);
+  SecSkillTextsBack:     Heroes.PSecSkillTexts  = Ptr($A490A8);
 
   (* WoG funcs *)
   ZvsFindErm:         Utils.TProcedure  = Ptr($749955);
@@ -383,6 +410,7 @@ var
   end;
 
 
+procedure SetZVar (Str: pchar; const Value: string);
 procedure ZvsProcessCmd (Cmd: PErmCmd);
 procedure PrintChatMsg (const Msg: string);
 
@@ -715,6 +743,20 @@ begin
     end; // .else
   end; // .switch
 end; // .function GetTriggerReadableName
+
+procedure SetZVar (Str: pchar; const Value: string);
+var
+  StrBufSize: integer;
+
+begin
+  if (cardinal(Str) >= cardinal(@z[1])) and (cardinal(Str) <= cardinal(@z[high(z^)])) then begin
+    StrBufSize := integer(@z[high(z^)]) - integer(Str) + sizeof(z[1]);
+  end else begin
+    StrBufSize := sizeof(z[1]);
+  end;
+
+  Utils.SetPcharValue(Str, Value, StrBufSize);
+end;
 
 procedure ZvsProcessCmd (Cmd: PErmCmd); ASSEMBLER;
 asm
@@ -1434,7 +1476,7 @@ begin
     end; // .for
   end // .if
   else begin
-    ScriptList  :=  GetFileList(ERM_SCRIPTS_PATH, '.erm');
+    ScriptList := GetFileList(ERM_SCRIPTS_PATH, '.erm');
     
     for i := 0 to Math.Min(ScriptList.Count - 1, MAX_ERM_SCRIPTS_NUM - 2) do begin
       LoadScript(SysUtils.AnsiLowerCase(ScriptList[i]));
@@ -1453,7 +1495,7 @@ begin
   end; // .else
   
   ScriptBuilder.Append(#10#13);
-  FileContents  :=  ScriptBuilder.BuildStr;
+  FileContents := ScriptBuilder.BuildStr;
   
   if Length(FileContents) > MIN_ERM_SCRIPT_SIZE then begin
     LoadScriptFromMemory(JOINT_SCRIPT_NAME, FileContents);
@@ -1469,11 +1511,13 @@ const
 
 begin
   if ErmTriggerDepth = 0 then begin
+    GameExt.FireEvent('OnBeforeScriptsReload', nil, 0);
     ZvsClearErtStrings;
     ZvsClearErmScripts;
     ZvsIsGameLoading^ := true;
     LoadErmScripts;
     ZvsFindErm;
+    GameExt.FireEvent('OnAfterScriptsReload', nil, 0);
     Utils.CopyMem(Length(SUCCESS_MES) + 1, pointer(SUCCESS_MES), @z[1]);
     ExecErmCmd('IF:Lz1;');
   end; // .if

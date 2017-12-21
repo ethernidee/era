@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files,
-  PatchApi, Core, GameExt, Erm, Stores, Heroes;
+  PatchApi, Core, GameExt, Erm, Stores, Heroes, Trans;
 
 const
   SPEC_SLOT = -1;
@@ -17,7 +17,9 @@ const
   NOT_TEMP  = 1;
   
   IS_STR    = true;
+  IS_INT    = false;
   OPER_GET  = true;
+  OPER_SET  = false;
   
   SLOTS_SAVE_SECTION  = 'Era.DynArrays_SN_M';
   ASSOC_SAVE_SECTION  = 'Era.AssocArray_SN_W';
@@ -61,13 +63,20 @@ type
     IntValue: integer;
     StrValue: string;
   end; // .class TAssocVar
+
+  TParamValue = packed record
+    case byte of
+      0: (v:  integer);
+      1: (p:  pointer);
+      2: (pc: pchar);
+  end;
   
   TServiceParam = packed record
     IsStr:          boolean;
     OperGet:        boolean;
     Dummy:          word;
-    Value:          integer;
-    StrValue:       pchar;
+    Value:          TParamValue;
+    _Private_:      array [0..3] of byte;
     ParamModifier:  integer;
   end; // .record TServiceParam
 
@@ -122,11 +131,11 @@ end; // .procedure RegisterReceiver
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
 begin
   case Param.ParamModifier of 
-    NO_MODIFIER:  Dest := Param.Value;
-    MODIFIER_ADD: Dest := Dest + Param.Value;
-    MODIFIER_SUB: Dest := Dest - Param.Value;
-    MODIFIER_MUL: Dest := Dest * Param.Value;
-    MODIFIER_DIV: Dest := Dest div Param.Value;
+    NO_MODIFIER:  Dest := Param.Value.v;
+    MODIFIER_ADD: Dest := Dest + Param.Value.v;
+    MODIFIER_SUB: Dest := Dest - Param.Value.v;
+    MODIFIER_MUL: Dest := Dest * Param.Value.v;
+    MODIFIER_DIV: Dest := Dest div Param.Value.v;
   end; // .switch Paramo.ParamModifier
 end; // .procedure ModifyWithParam
     
@@ -241,15 +250,16 @@ var
 
     Hero:     integer;
     NameType: integer;
+    Skill:    integer;
 
   (* Returns new hint address or nil if hint was deleted *)
-  function UpdateHint: {n} pchar;
+  function UpdateHint (HintParamN: integer): {n} pchar;
   begin
     if DeleteHint then begin
       Section.DeleteItem(Ptr(Code));
       result := nil;
     end else begin
-      Hint     := Params[3].StrValue;
+      Hint     := Params[HintParamN].Value.pc;
       StrValue := TString(Section[Ptr(Code)]);
 
       if StrValue = nil then begin
@@ -272,7 +282,7 @@ begin
     result := not Params[0].OperGet and Params[0].IsStr;
 
     if result then begin
-      SectionName := Params[0].StrValue;
+      SectionName := Params[0].Value.pc;
       DeleteHint  := (SectionName <> '') and (SectionName[1] = '-');
 
       if DeleteHint then begin
@@ -286,12 +296,12 @@ begin
         if SectionName = 'object' then begin
           // SN:H^object^/type/subtype or -1/hint
           if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and not Params[3].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and Params[3].IsStr;
+            result := not Params[1].OperGet and not Params[2].OperGet and
+                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
             
             if result then begin
-              ObjType    := Params[1].Value;
-              ObjSubtype := Params[2].Value;
+              ObjType    := Params[1].Value.v;
+              ObjSubtype := Params[2].Value.v;
               result     := Math.InRange(ObjType, -1, 254) and Math.InRange(ObjSubtype, -1, 254);
 
               if result then begin
@@ -304,50 +314,109 @@ begin
                 end; // .if
 
                 Code := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
-                UpdateHint;
+
+                if Params[3].OperGet then begin
+                  StrValue := Section[Ptr(Code)];                 
+                  Erm.SetZVar(Ptr(Params[3].Value.v), Utils.IfThen(StrValue <> nil, StrValue.Value, ''));
+                end else begin
+                  UpdateHint(3);
+                end;
               end; // .if
             end; // .if
           // SN:H^object^/x/y/z/hint
           end else if NumParams = 5 then begin
             result := not Params[1].OperGet and not Params[2].OperGet and not Params[3].OperGet and
-                      not Params[4].OperGet and not Params[1].IsStr   and not Params[2].IsStr
-                      and not Params[3].IsStr and Params[4].IsStr;
+                      not Params[1].IsStr   and not Params[2].IsStr
+                      and not Params[3].IsStr and (Params[4].OperGet or Params[4].IsStr);
 
             if result then begin
-              x      := Params[1].Value;
-              y      := Params[2].Value;
-              z      := Params[3].Value;
+              x      := Params[1].Value.v;
+              y      := Params[2].Value.v;
+              z      := Params[3].Value.v;
               result := Math.InRange(x, 0, 255) and Math.InRange(y, 0, 255) and Math.InRange(z, 0, 255);
 
               if result then begin
                 Code := x or (y shl 8) or (z shl 16);
-                UpdateHint;
+
+                if Params[4].OperGet then begin
+                  StrValue := Section[Ptr(Code)];                 
+                  Erm.SetZVar(Ptr(Params[4].Value.v), Utils.IfThen(StrValue <> nil, StrValue.Value, ''));
+                end else begin
+                  UpdateHint(4);
+                end;
               end; // .if
             end; // .if
           end else begin
             result := false;
             Error  := 'Invalid number of command parameters';
           end; // .else
+        // SN:H^spec^/hero/short (0), full (1) or descr (2)/hint
         end else if SectionName = 'spec' then begin
-          // SN:H^spec^/hero/short (0), full (1) or descr (2)/hint
           if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and not Params[3].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and Params[3].IsStr;
+            result := not Params[1].OperGet and not Params[2].OperGet and
+                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
 
             if result then begin
-              Hero     := Params[1].Value;
-              NameType := Params[2].Value;
+              Hero     := Params[1].Value.v;
+              NameType := Params[2].Value.v;
               result   := Math.InRange(Hero, 0, Erm.NUM_WOG_HEROES - 1) and Math.InRange(NameType, 0, 2);
               
               if result then begin
-                Code    := Hero or (NameType shl 8);
-                HintRaw := UpdateHint;
-                Erm.HeroSpecSettingsTable[Hero].ZVarDescr[NameType] := 0;
-
-                if DeleteHint then begin
-                  Erm.HeroSpecsTable[Hero].Descr[NameType] := Erm.HeroSpecsTableBack[Hero].Descr[NameType];
+                if Params[3].OperGet then begin
+                  Windows.LStrCpy(pchar(Params[3].Value.v), Erm.HeroSpecsTable[Hero].Descr[NameType]);
                 end else begin
-                  Erm.HeroSpecsTable[Hero].Descr[NameType] := HintRaw;
+                  Code    := Hero or (NameType shl 8);
+                  HintRaw := UpdateHint(3);
+                  Erm.HeroSpecSettingsTable[Hero].ZVarDescr[NameType] := 0;
+
+                  if DeleteHint then begin
+                    Erm.HeroSpecsTable[Hero].Descr[NameType] := Erm.HeroSpecsTableBack[Hero].Descr[NameType];
+                  end else begin
+                    Erm.HeroSpecsTable[Hero].Descr[NameType] := HintRaw;
+                  end;
+                end; // .else
+              end; // .if
+            end; // .if
+          end else begin
+            result := false;
+            Error  := 'Invalid number of command parameters';
+          end; // .else
+        // SN:H^secskill^/skill/name (0), basic (1), advanced (2) or expert (3)/text
+        end else if SectionName = 'secskill' then begin
+          if NumParams = 4 then begin
+            result := not Params[1].OperGet and not Params[2].OperGet and
+                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
+
+            if result then begin
+              Skill    := Params[1].Value.v;
+              NameType := Params[2].Value.v;
+              result   := Math.InRange(Skill, 0, Heroes.MAX_SECONDARY_SKILLS - 1) and Math.InRange(NameType, 0, Heroes.SKILL_LEVEL_EXPERT);
+              
+              if result then begin
+                if Params[3].OperGet then begin
+                  Windows.LStrCpy(pchar(Params[3].Value.v), Heroes.SecSkillTexts[Skill].Texts[NameType]);
+                end else begin
+                  Code    := Skill or (NameType shl 8);
+                  HintRaw := UpdateHint(3);
+                  Erm.SecSkillSettingsTable[Skill].Texts[NameType] := 0;
+
+                  if DeleteHint then begin
+                    Heroes.SecSkillTexts[Skill].Texts[NameType] := Erm.SecSkillTextsBack[Skill].Texts[NameType];
+
+                    if NameType = Heroes.SKILL_LEVEL_NONE then begin
+                      Heroes.SecSkillNames[Skill] := Erm.SecSkillNamesBack[Skill];
+                    end else begin
+                      Heroes.SecSkillDescs[Skill].Descs[NameType - 1] := Erm.SecSkillDescsBack[Skill].Descs[NameType - 1];
+                    end;
+                  end else begin
+                    Heroes.SecSkillTexts[Skill].Texts[NameType] := HintRaw;
+
+                    if NameType = Heroes.SKILL_LEVEL_NONE then begin
+                      Heroes.SecSkillNames[Skill] := HintRaw;
+                    end else begin
+                      Heroes.SecSkillDescs[Skill].Descs[NameType - 1] := HintRaw;
+                    end;
+                  end; // .else
                 end; // .else
               end; // .if
             end; // .if
@@ -363,6 +432,63 @@ begin
     Error  := 'Invalid number of command parameters';
   end; // .else
 end; // .function SN_H
+
+function SN_T (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+const
+  NUM_OBLIG_PARAMS  = 2;
+  NUM_DEF_TR_PARAMS = 1;
+
+var
+{U} ResPtr:      pchar;
+    TrParams:    StrLib.TArrayOfStr;
+    Translation: string;
+    NumTrParams: integer;
+    i:           integer;
+
+begin
+  ResPtr := nil;
+  result := false;
+  // * * * * * //
+  if NumParams < NUM_OBLIG_PARAMS then begin
+    Error := 'Invalid number of command parameters';
+    exit;
+  end;
+
+  if Params[0].OperGet or not Params[1].OperGet then begin
+    Error := 'Valid syntax is !!SN:T^key^ or quantity/?(str result)';
+    exit;
+  end;
+
+  // SN:T^key^/?(translation)/...parameters...
+  if Params[0].IsStr then begin
+    NumTrParams                  := (NumParams - NUM_OBLIG_PARAMS) div 2;
+    SetLength(TrParams, (NumTrParams + NUM_DEF_TR_PARAMS) * 2);
+    TrParams[high(TrParams) - 1] := '';
+    TrParams[high(TrParams)]     := Trans.TEMPL_CHAR;
+
+    for i := NUM_OBLIG_PARAMS to NUM_OBLIG_PARAMS + NumTrParams * 2 - 1 do begin
+      if Params[i].OperGet then begin
+        Error := 'Arguments for translation must use set syntax';
+        exit;
+      end;
+
+      if Params[i].IsStr then begin
+        TrParams[i - NUM_OBLIG_PARAMS] := Params[i].Value.pc;
+      end else begin
+        TrParams[i - NUM_OBLIG_PARAMS] := SysUtils.IntToStr(Params[i].Value.v);
+      end; // .else
+    end;
+
+    Translation := Trans.tr(Params[0].Value.pc, TrParams);
+    Erm.SetZVar(pchar(Params[1].Value.v), Translation);
+  end
+  // SN:T(item quantity)/?(key suffix)
+  else begin
+    
+  end; // .else
+
+  result := true;
+end; // .function SN_T
 
 function ExtendedEraService
 (
@@ -406,10 +532,10 @@ begin
             begin
               result  :=
                 CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
-                (Params[0].Value <> SPEC_SLOT);
+                (Params[0].Value.v <> SPEC_SLOT);
               
               if result then begin
-                Slots.DeleteItem(Ptr(Params[0].Value));
+                Slots.DeleteItem(Ptr(Params[0].Value.v));
               end; // .if
             end; // .case 1
           // M(Slot)/[?]ItemsCount; analog of SetLength/Length
@@ -418,21 +544,21 @@ begin
               result  :=
                 CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
                 (not Params[1].IsStr)                               and
-                (Params[1].OperGet or (Params[1].Value >= 0));
+                (Params[1].OperGet or (Params[1].Value.v >= 0));
 
               if result then begin          
                 if Params[1].OperGet then begin
-                  Slot  :=  Slots[Ptr(Params[0].Value)];
+                  Slot  :=  Slots[Ptr(Params[0].Value.v)];
                   
                   if Slot <> nil then begin
-                    PINTEGER(Params[1].Value)^  :=  GetSlotItemsCount(Slot);
+                    PINTEGER(Params[1].Value.v)^  :=  GetSlotItemsCount(Slot);
                   end // .if
                   else begin
-                    PINTEGER(Params[1].Value)^  :=  NO_SLOT;
+                    PINTEGER(Params[1].Value.v)^  :=  NO_SLOT;
                   end; // .else
                   end // .if
                 else begin
-                  result  :=  GetSlot(Params[0].Value, Slot, Error);
+                  result  :=  GetSlot(Params[0].Value.v, Slot, Error);
                   
                   if result then begin
                     NewSlotItemsCount := GetSlotItemsCount(Slot);
@@ -447,7 +573,7 @@ begin
             begin
               result  :=
                 CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
-                GetSlot(Params[0].Value, Slot, Error)               and
+                GetSlot(Params[0].Value.v, Slot, Error)               and
                 (not Params[1].IsStr);
               
               if result then begin
@@ -455,14 +581,14 @@ begin
                   result  :=
                     (not Params[2].OperGet) and
                     (not Params[2].IsStr)   and
-                    Math.InRange(Params[2].Value, 0, GetSlotItemsCount(Slot) - 1);
+                    Math.InRange(Params[2].Value.v, 0, GetSlotItemsCount(Slot) - 1);
                   
                   if result then begin
                     if Slot.ItemsType = INT_VAR then begin
-                      PPOINTER(Params[1].Value)^  :=  @Slot.IntItems[Params[2].Value];
+                      PPOINTER(Params[1].Value.v)^  :=  @Slot.IntItems[Params[2].Value.v];
                     end // .if
                     else begin
-                      PPOINTER(Params[1].Value)^  :=  pointer(Slot.StrItems[Params[2].Value]);
+                      PPOINTER(Params[1].Value.v)^  :=  pointer(Slot.StrItems[Params[2].Value.v]);
                     end; // .else
                   end; // .if
                 end // .if
@@ -470,7 +596,7 @@ begin
                   result  :=
                     (not Params[1].OperGet) and
                     (not Params[1].IsStr)   and
-                    Math.InRange(Params[1].Value, 0, GetSlotItemsCount(Slot) - 1);
+                    Math.InRange(Params[1].Value.v, 0, GetSlotItemsCount(Slot) - 1);
                   
                   if result then begin
                     if Params[2].OperGet then begin
@@ -478,19 +604,19 @@ begin
                         if Params[2].IsStr then begin
                           Windows.LStrCpy
                           (
-                            Ptr(Params[2].Value),
-                            Ptr(Slot.IntItems[Params[1].Value])
+                            Ptr(Params[2].Value.v),
+                            Ptr(Slot.IntItems[Params[1].Value.v])
                           );
                         end // .if
                         else begin
-                          PINTEGER(Params[2].Value)^  :=  Slot.IntItems[Params[1].Value];
+                          PINTEGER(Params[2].Value.v)^  :=  Slot.IntItems[Params[1].Value.v];
                         end; // .else
                       end // .if
                       else begin
                         Windows.LStrCpy
                         (
-                          Ptr(Params[2].Value),
-                          pchar(Slot.StrItems[Params[1].Value])
+                          Ptr(Params[2].Value.v),
+                          pchar(Slot.StrItems[Params[1].Value.v])
                         );
                       end; // .else
                     end // .if
@@ -498,37 +624,37 @@ begin
                       if Slot.ItemsType = INT_VAR then begin
                         if Params[2].IsStr then begin
                           if Params[2].ParamModifier = MODIFIER_CONCAT then begin
-                            StrLen := SysUtils.StrLen(pchar(Slot.IntItems[Params[1].Value]));
+                            StrLen := SysUtils.StrLen(pchar(Slot.IntItems[Params[1].Value.v]));
                             
                             Windows.LStrCpy
                             (
-                              Utils.PtrOfs(Ptr(Slot.IntItems[Params[1].Value]), StrLen),
-                              Ptr(Params[2].Value)
+                              Utils.PtrOfs(Ptr(Slot.IntItems[Params[1].Value.v]), StrLen),
+                              Ptr(Params[2].Value.v)
                             );
                           end // .if
                           else begin
                             Windows.LStrCpy
                             (
-                              Ptr(Slot.IntItems[Params[1].Value]),
-                              Ptr(Params[2].Value)
+                              Ptr(Slot.IntItems[Params[1].Value.v]),
+                              Ptr(Params[2].Value.v)
                             );
                           end; // .else
                         end // .if
                         else begin
-                          Slot.IntItems[Params[1].Value]  :=  Params[2].Value;
+                          Slot.IntItems[Params[1].Value.v]  :=  Params[2].Value.v;
                         end; // .else
                       end // .if
                       else begin
-                        if Params[2].Value = 0 then begin
-                          Params[2].Value := integer(pchar(''));
+                        if Params[2].Value.v = 0 then begin
+                          Params[2].Value.v := integer(pchar(''));
                         end; // .if
                         
                         if Params[2].ParamModifier = MODIFIER_CONCAT then begin
-                          Slot.StrItems[Params[1].Value] := Slot.StrItems[Params[1].Value] +
-                                                            pchar(Params[2].Value);
+                          Slot.StrItems[Params[1].Value.v] := Slot.StrItems[Params[1].Value.v] +
+                                                            pchar(Params[2].Value.v);
                         end // .if
                         else begin
-                          Slot.StrItems[Params[1].Value] := pchar(Params[2].Value);
+                          Slot.StrItems[Params[1].Value.v] := pchar(Params[2].Value.v);
                         end; // .else
                       end; // .else
                     end; // .else
@@ -552,22 +678,22 @@ begin
                   not OPER_GET
                 ]
               ) and
-              (Params[0].Value >= SPEC_SLOT)                        and
-              (Params[1].Value >= 0)                                and
-              Math.InRange(Params[2].Value, 0, ORD(High(TVarType))) and
-              ((Params[3].Value = IS_TEMP) or (Params[3].Value = NOT_TEMP));
+              (Params[0].Value.v >= SPEC_SLOT)                        and
+              (Params[1].Value.v >= 0)                                and
+              Math.InRange(Params[2].Value.v, 0, ORD(High(TVarType))) and
+              ((Params[3].Value.v = IS_TEMP) or (Params[3].Value.v = NOT_TEMP));
               
               if result then begin
-                if Params[0].Value = SPEC_SLOT then begin
+                if Params[0].Value.v = SPEC_SLOT then begin
                   Erm.v[1]  :=  AllocSlot
                   (
-                    Params[1].Value, TVarType(Params[2].Value), Params[3].Value = IS_TEMP
+                    Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP
                   );
                 end // .if
                 else begin
-                  Slots[Ptr(Params[0].Value)] :=  NewSlot
+                  Slots[Ptr(Params[0].Value.v)] :=  NewSlot
                   (
-                    Params[1].Value, TVarType(Params[2].Value), Params[3].Value = IS_TEMP
+                    Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP
                   );
                 end; // .else
               end; // .if
@@ -586,7 +712,7 @@ begin
               result  :=  (not Params[0].OperGet) and (not Params[1].IsStr) and (Params[1].OperGet);
               
               if result then begin
-                PINTEGER(Params[1].Value)^  :=  SysUtils.StrLen(pointer(Params[0].Value));
+                PINTEGER(Params[1].Value.v)^  :=  SysUtils.StrLen(pointer(Params[0].Value.v));
               end; // .if
             end; // .case 2
           // C(str)/(ind)/[?](strchar)
@@ -596,16 +722,16 @@ begin
                 (not Params[0].OperGet) and
                 (not Params[1].IsStr)   and
                 (not Params[1].OperGet) and
-                (Params[1].Value >= 0)  and
+                (Params[1].Value.v >= 0)  and
                 (Params[2].IsStr);
               
               if result then begin
                 if Params[2].OperGet then begin
-                  pchar(Params[2].Value)^     :=  PEndlessCharArr(Params[0].Value)[Params[1].Value];
-                  pchar(Params[2].Value + 1)^ :=  #0;
+                  pchar(Params[2].Value.v)^     :=  PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v];
+                  pchar(Params[2].Value.v + 1)^ :=  #0;
                 end // .if
                 else begin
-                  PEndlessCharArr(Params[0].Value)[Params[1].Value] :=  pchar(Params[2].Value)^;
+                  PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v] :=  pchar(Params[2].Value.v)^;
                 end; // .else
               end; // .if
             end; // .case 3
@@ -614,10 +740,10 @@ begin
               result  :=
                 (not Params[0].IsStr)   and
                 (not Params[0].OperGet) and
-                (Params[0].Value >= 0);
+                (Params[0].Value.v >= 0);
               
-              if result and (Params[0].Value > 0) then begin
-                Utils.CopyMem(Params[0].Value, pointer(Params[1].Value), pointer(Params[2].Value));
+              if result and (Params[0].Value.v > 0) then begin
+                Utils.CopyMem(Params[0].Value.v, pointer(Params[1].Value.v), pointer(Params[2].Value.v));
               end; // .if
             end; // .case 4
         else
@@ -640,10 +766,10 @@ begin
               
               if result then begin
                 if Params[0].IsStr then begin
-                  AssocVarName  :=  pchar(Params[0].Value);
+                  AssocVarName  :=  pchar(Params[0].Value.v);
                 end // .if
                 else begin
-                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value);
+                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value.v);
                 end; // .else
                 
                 AssocMem.DeleteItem(AssocVarName);
@@ -656,10 +782,10 @@ begin
               
               if result then begin
                 if Params[0].IsStr then begin
-                  AssocVarName  :=  pchar(Params[0].Value);
+                  AssocVarName  :=  pchar(Params[0].Value.v);
                 end // .if
                 else begin
-                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value);
+                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value.v);
                 end; // .else
                 
                 AssocVarValue :=  AssocMem[AssocVarName];
@@ -667,23 +793,23 @@ begin
                 if Params[1].OperGet then begin
                   if Params[1].IsStr then begin
                     if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
-                      pchar(Params[1].Value)^ :=  #0;
+                      pchar(Params[1].Value.v)^ :=  #0;
                     end // .if
                     else begin
                       Utils.CopyMem
                       (
                         Length(AssocVarValue.StrValue) + 1,
                         pointer(AssocVarValue.StrValue),
-                        pointer(Params[1].Value)
+                        pointer(Params[1].Value.v)
                       );
                     end; // .else
                   end // .if
                   else begin
                     if AssocVarValue = nil then begin
-                      PINTEGER(Params[1].Value)^  :=  0;
+                      PINTEGER(Params[1].Value.v)^  :=  0;
                     end // .if
                     else begin
-                      PINTEGER(Params[1].Value)^  :=  AssocVarValue.IntValue;
+                      PINTEGER(Params[1].Value.v)^  :=  AssocVarValue.IntValue;
                     end; // .else
                   end; // .else
                 end // .if
@@ -695,10 +821,10 @@ begin
                   
                   if Params[1].IsStr then begin
                     if Params[1].ParamModifier <> MODIFIER_CONCAT then begin
-                      AssocVarValue.StrValue  :=  pchar(Params[1].Value);
+                      AssocVarValue.StrValue  :=  pchar(Params[1].Value.v);
                     end // .if
                     else begin
-                      AssocVarValue.StrValue := AssocVarValue.StrValue + pchar(Params[1].Value);
+                      AssocVarValue.StrValue := AssocVarValue.StrValue + pchar(Params[1].Value.v);
                     end; // .else
                   end // .if
                   else begin
@@ -737,9 +863,9 @@ begin
                     not Params[0].IsStr and not Params[1].IsStr and not Params[2].IsStr;
 
           if result then begin
-            Coords[0] := pinteger(Params[0].Value)^;
-            Coords[1] := pinteger(Params[1].Value)^;
-            Coords[2] := pinteger(Params[2].Value)^;
+            Coords[0] := pinteger(Params[0].Value.v)^;
+            Coords[1] := pinteger(Params[1].Value.v)^;
+            Coords[2] := pinteger(Params[2].Value.v)^;
             MapSize   := GameManagerPtr^.MapSize;
 
             if (Coords[0] < 0) or (Coords[0] >= MapSize) or (Coords[1] < 0) or
@@ -752,9 +878,9 @@ begin
               Tile := @GameManagerPtr^.MapTiles[(Coords[2] * MapSize + Coords[1]) * MapSize + Coords[0]];
               Tile := Heroes.GetObjectEntranceTile(Tile);
               Heroes.MapTileToCoords(Tile, Coords);
-              pinteger(Params[0].Value)^ := Coords[0];
-              pinteger(Params[1].Value)^ := Coords[1];
-              pinteger(Params[2].Value)^ := Coords[2];
+              pinteger(Params[0].Value.v)^ := Coords[0];
+              pinteger(Params[1].Value.v)^ := Coords[1];
+              pinteger(Params[2].Value.v)^ := Coords[2];
             end; // .else
           end; // .if
         end else begin
@@ -763,6 +889,7 @@ begin
         end; // .else
       end; // .case "O"
 
+    'T': result := SN_T(NumParams, Params, Error);
     'H': result := SN_H(NumParams, Params, Error);
   else
     result := false;
@@ -1020,11 +1147,14 @@ var
     ItemCode:        integer;
     i, k:            integer;
 
+{U} Name:     pchar;
     Hero:     integer;
+    Skill:    integer;
     NameType: integer;
 
 begin
   HintSection := nil;
+  Name        := nil;
   // * * * * * //
   ResetHints;
   
@@ -1054,10 +1184,32 @@ begin
   if HintSection <> nil then begin
     with DataLib.IterateObjDict(HintSection) do begin
       while IterNext do begin
-        Hero                                            := integer(IterKey) and $FF;
-        NameType                                        := integer(IterKey) shr 8;
-        HeroSpecsTable[Hero].Descr[NameType]            := pchar(TString(IterValue).Value);
-        HeroSpecSettingsTable[Hero].ZVarDescr[NameType] := 0;
+        Hero                                                := integer(IterKey) and $FF;
+        NameType                                            := integer(IterKey) shr 8;
+        Erm.HeroSpecsTable[Hero].Descr[NameType]            := pchar(TString(IterValue).Value);
+        Erm.HeroSpecSettingsTable[Hero].ZVarDescr[NameType] := 0;
+      end; // .while
+    end; // .with
+  end; // .if
+
+  (* Apply secondary skill texts *)
+  HintSection := TObjDict(Hints['secskill']);
+
+  if HintSection <> nil then begin
+    with DataLib.IterateObjDict(HintSection) do begin
+      while IterNext do begin
+        Skill    := integer(IterKey) and $FF;
+        NameType := integer(IterKey) shr 8;
+        Name     := pchar(TString(IterValue).Value);
+
+        Erm.SecSkillSettingsTable[Skill].Texts[NameType] := 0;
+        Heroes.SecSkillTexts[Skill].Texts[NameType]      := Name;
+
+        if NameType = Heroes.SKILL_LEVEL_NONE then begin
+          Heroes.SecSkillNames[Skill] := Name;
+        end else begin
+          Heroes.SecSkillDescs[Skill].Descs[NameType - 1] := Name;
+        end;
       end; // .while
     end; // .with
   end; // .if
@@ -1106,7 +1258,7 @@ begin
   end; // .if
 
   if StrValue <> nil then begin
-    Utils.SetPcharValue(ppointer(C.EBP + 12)^, StrValue.Value, 512);
+    Utils.SetPcharValue(ppointer(C.EBP + 12)^, StrValue.Value, sizeof(Erm.z[1]));
     C.RetAddr := Ptr($74DFFB);
     result    := not Core.EXEC_DEF_CODE;
   end else begin
@@ -1524,8 +1676,9 @@ end; // .procedure OnBeforeErmInstructions
 
 procedure InitHints;
 begin
-  Hints['object'] := DataLib.NewObjDict(Utils.OWNS_ITEMS);
-  Hints['spec']   := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  Hints['object']   := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  Hints['spec']     := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  Hints['secskill'] := DataLib.NewObjDict(Utils.OWNS_ITEMS);
 end; // .procedure InitHints
 
 begin

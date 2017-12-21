@@ -15,7 +15,7 @@ const
 type
   (* IMPORT *)
   TAssocArray = AssocArrays.TAssocArray;
-  
+
   // Cached I/O for sections
   IRider = interface
     procedure Write (Size: integer; {n} Addr: PBYTE);

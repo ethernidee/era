@@ -201,12 +201,10 @@ begin
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_SetHotseatHeroName
 
-function Hook_PeekMessageA (Hook: PatchApi.THiHook; var lpMsg: TMsg; hWnd: Windows.HWND;
-                            wMsgFilterMin, wMsgFilterMax, wRemoveMsg: UINT): BOOL; stdcall;
+function Hook_PeekMessageA (Context: Core.PHookContext): longbool; stdcall;
 begin
   Windows.WaitForSingleObject(hTimerEvent, 1);
-  result := BOOL(PatchApi.Call(PatchApi.STDCALL_, Hook.GetDefaultFunc,
-                               [@lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax, wRemoveMsg]));
+  result := Core.EXEC_DEF_CODE;
 end; // .function Hook_PeekMessageA
 
 function New_Zvslib_GetPrivateProfileStringA
@@ -825,15 +823,7 @@ begin
   (* Universal CPU patch *)
   if CPUPatchOpt then begin
     hTimerEvent := Windows.CreateEvent(nil, true, false, 'CPUPatch');
-    
-    Core.p.WriteHiHook
-    (
-      Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'),
-      PatchApi.SPLICE_,
-      PatchApi.EXTENDED_,
-      PatchApi.STDCALL_,
-      @Hook_PeekMessageA
-    );
+    Core.ApiHook(@Hook_PeekMessageA, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'));
   end; // .if
   
   (* Remove duplicate ResetAll call *)

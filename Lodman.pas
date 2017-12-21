@@ -223,7 +223,7 @@ end; // .function FindRedirection
 (* Loads global redirection rules from json configs *)
 procedure LoadGlobalRedirectionConfig (const ConfigDir: string; RedirectOnlyMissing: boolean);
 var
-{U} Config:             TlkJsonObject;
+{O} Config:             TlkJsonObject;
     ResourceName:       string;
     WillBeRedirected:   boolean;
     ConfigFileContents: string;
@@ -439,7 +439,7 @@ begin
   
   (* Lods files redirection mechanism *)
   Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FB106));
-  Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FACA6));
+  Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FACA6)); // A0_Lod_FindResource_sub_4FACA0
 end; // .procedure OnBeforeWoG
 
 procedure OnAfterWoG (Event: PEvent); stdcall;

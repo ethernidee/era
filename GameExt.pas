@@ -17,7 +17,6 @@ type
 
 const
   (* Paths *)
-  ERA_DLL_NAME              = 'era.dll';
   PLUGINS_PATH              = 'EraPlugins';
   PATCHES_PATH              = 'EraPlugins';
   DEBUG_DIR                 = 'Debug\Era';
@@ -31,8 +30,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.6.1';
-  ERA_VERSION_INT = 2601;
+  ERA_VERSION_STR = '2.6.6';
+  ERA_VERSION_INT = 2606;
 
 type
   PEvent  = ^TEvent;

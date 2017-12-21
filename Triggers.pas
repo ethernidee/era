@@ -103,7 +103,9 @@ const
   ENABLE_DEF_REACTION = 0;
 
 var
-  GameState:  Heroes.TGameState;
+  GameState: Heroes.TGameState;
+  SavedV:    array [1..10] of integer;
+  SavedZ:    Erm.TErmZVar;
   
 begin
   result := false;
@@ -119,21 +121,25 @@ begin
       end; // .if
     end else if (wParam = KEY_F12) and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
       Erm.ReloadErm;
-    end // .else
-    else begin
+    end else begin
       GameExt.EraSaveEventParams;
       
       GameExt.EraEventParams[0] := wParam;
       GameExt.EraEventParams[1] := ENABLE_DEF_REACTION;
       
       if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
+        Utils.CopyMem(sizeof(SavedV), @Erm.v[1], @SavedV);
+        Utils.CopyMem(sizeof(SavedZ), @Erm.z[1], @SavedZ);
+        
         Erm.FireErmEvent(Erm.TRIGGER_KEYPRESS);
-      end // .if
-      else begin
+
+        Utils.CopyMem(sizeof(SavedV), @SavedV, @Erm.v[1]);
+        Utils.CopyMem(sizeof(SavedZ), @SavedZ, @Erm.z[1]);
+      end else begin
         GameExt.FireEvent('OnKeyPressed', GameExt.NO_EVENT_DATA, 0);
       end; // .else
       
-      result  :=  GameExt.EraEventParams[1] = ENABLE_DEF_REACTION;
+      result := GameExt.EraEventParams[1] = ENABLE_DEF_REACTION;
       
       GameExt.EraRestoreEventParams;
       
@@ -141,8 +147,7 @@ begin
         PrevWndProc(hWnd, Msg, wParam, lParam);
       end; // .if
     end; // .else
-  end // .if
-  else begin
+  end else begin
     result := PrevWndProc(hWnd, Msg, wParam, lParam);
   end; // .else
 end; // .function MainWndProc
