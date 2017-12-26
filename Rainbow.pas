@@ -36,7 +36,7 @@ var
 procedure NameColor (Color32: integer; const Name: string); stdcall;
 
 (* Chinese only: temporal *)
-function ChineseGetCharColor: integer; stdcall;
+function  ChineseGetCharColor: integer; stdcall;
 procedure ChineseGotoNextChar; stdcall;
 
 
@@ -249,7 +249,7 @@ begin
   end; // .if
 end; // .function IsChineseLoaderPresent
 
-function Hook_BeginParseText (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
 const
   ERR_COLOR       = $000000;
   LINE_END_MARKER = #10;
@@ -427,7 +427,7 @@ begin
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_BeginParseText
 
-function Hook_GetCharColor (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_GetCharColor (Context: Core.PHookContext): longbool; stdcall;
 begin
   result  :=  TextBlocks[TextBlockInd].Color16 = DEF_COLOR;
   
@@ -436,7 +436,7 @@ begin
   end; // .if
 end; // .function Hook_GetCharColor
 
-function Hook_HandleTags (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_HandleTags (Context: Core.PHookContext): longbool; stdcall;
 var
   c:  char;
 
@@ -477,26 +477,25 @@ begin
   end; // .while
 end; // .procedure ChineseGotoNextChar
 
-function Hook_SetupColorMode (Context: Core.PHookContext): LONGBOOL; stdcall;
+procedure SetupColorMode;
 begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
-    Color32To16 :=  Color32To15Func;
-    {!} Assert(false);// !FIXME
-  end // .if
-  else if TextColorMode^ = TEXTMODE_16BITS then begin
-    Color32To16 :=  Color32To16Func;
-  end // .ELSEIF
-  else begin
-    {!} Assert(false);
-  end; // .else
+    Color32To16 := Color32To15Func;
+  end else if TextColorMode^ = TEXTMODE_16BITS then begin
+    Color32To16 := Color32To16Func;
+  end else begin
+    {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
+  end;
   
   NameStdColors;
-  GameExt.FireEvent('OnAfterCreateWindow', GameExt.NO_EVENT_DATA, 0);
-  
-  result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_SetupColorMode
 
-function Hook_DrawPic (Context: PHookContext): LONGBOOL; stdcall;
+procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
+begin
+  SetupColorMode;
+end;
+
+function Hook_DrawPic (Context: PHookContext): longbool; stdcall;
 const
   Name: string = 'smalres.def';
   
@@ -556,7 +555,7 @@ begin
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_DrawPic
 
-function Hook_RegisterDefFrame (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_RegisterDefFrame (Context: Core.PHookContext): longbool; stdcall;
 begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
     Color32To16 :=  Color32To15Func;
@@ -591,12 +590,11 @@ begin
 
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
-  Core.Hook(@Hook_SetupColorMode, Core.HOOKTYPE_BRIDGE, 5, Ptr($4F8226));
 end; // .procedure OnAfterWoG
 
 begin
-  NamedColors :=  AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
-  ColorStack  :=  Lists.NewSimpleList;
-  TextScanner :=  TextScan.TTextScanner.Create;
+  NamedColors := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
+  ColorStack  := Lists.NewSimpleList;
+  TextScanner := TextScan.TTextScanner.Create;
   GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
 end.

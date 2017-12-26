@@ -5,13 +5,24 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
-uses Utils;
+uses Windows, SysUtils, Utils, PatchApi, DataLib, TypeWrappers, Alg, Core;
 
 type
+  (* Import *)
+  TDict   = DataLib.TDict;
+  TString = TypeWrappers.TString;
+
   PGameType = ^TGameType;
   TGameType = (GAMETYPE_SINGLE, GAMETYPE_IPX, GAMETYPE_TCP, GAMETYPE_HOTSEAT, GAMETYPE_DIRECT_CONNECT, GAMETYPE_MODEM);
 
 const
+  (* Graphics *)
+  PCX16_COLOR_DEPTH = 16;
+
+  (* Resource types in resource tree *)
+  RES_TYPE_PCX_8  = $10;
+  RES_TYPE_PCX_16 = $12;
+
   (* Game settings *)
   GAME_SETTINGS_FILE    = 'heroes3.ini';
   GAME_SETTINGS_SECTION = 'Settings';
@@ -254,6 +265,98 @@ type
   TWndProc    = function (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
   
   TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
+  TMemAllocFunc       = function (Size: integer): pointer; cdecl;
+  TMemFreeFunc        = procedure (Buf: pointer); cdecl;
+
+  (* Overcomes 12-char unique name restriction for all in-game resources. Maps any name to unique 12-char name. Names with ':' character are reserved. *)
+  TResourceNamer = class
+   protected
+    {O} fNamesMap: {O} TDict {OF TString};
+        fAutoId:   integer;
+
+   public
+    constructor Create;
+
+    (* Returns unique string for given name, not bigger then 12 characters in length. If name is already max 12 chars in length, it's returned untouched *)
+    function  GetResourceName (const OrigResourceName: string): string;
+
+    (* Returns new globally unique resource name. *)
+    function  GenerateUniqueResourceName: string;
+  end; // .class TResourceNamer
+
+  PChars12 = ^TChars12;
+  TChars12 = packed array [0..11] of char;
+
+  {$ALIGN OFF}
+  PBinaryTreeItem = ^TBinaryTreeItem;
+  TBinaryTreeItem = object
+   public
+    VTable:   Utils.PEndlessPtrArr;
+    Name:     TChars12;
+    NameEnd:  integer;
+    ItemType: integer;
+    RefCount: integer;
+
+    procedure SetName (const aName: string);
+    procedure IncRef;
+    procedure DecRef;
+    procedure Destruct (IsHeapObject: boolean = true);
+
+    function  IsPcx8: boolean;
+    function  IsPcx16: boolean;
+  end; // .object TBinaryTreeItem
+  {$ALIGN ON}
+
+  {$ALIGN OFF}
+  PBinaryTreeNode = ^TBinaryTreeNode;
+  TBinaryTreeNode = object
+   public
+    Left:    PBinaryTreeNode;
+    Parent:  PBinaryTreeNode;
+    Right:   PBinaryTreeNode;
+    Name:    TChars12;
+    NameEnd: integer;
+    Item:    PBinaryTreeItem;
+    Field20: integer;
+
+    function  FindItem (const aName: string; var {out} aItem: PBinaryTreeItem): boolean;
+    function  FindNode (const aName: string; var {out} aNode: PBinaryTreeNode): boolean;
+    procedure RemoveNode (Node: PBinaryTreeNode);
+    procedure AddItem (aItem: PBinaryTreeItem);
+  end; // .object TBinaryTreeNode
+  {$ALIGN ON}
+
+  PBinaryTree = ^TBinaryTree;
+  TBinaryTree = TBinaryTreeNode;
+
+  {$ALIGN OFF}
+  PPcxItem = ^TPcxItem;
+  TPcxItem = object (TBinaryTreeItem)
+   public
+    BufSize:      integer;
+    PicSize:      integer;
+    Width:        integer;
+    Height:       integer;
+    ScanlineSize: integer;
+    Buffer:       Utils.PEndlessByteArr;
+  end; // .object TPcxItem
+  {$ALIGN ON}
+
+  {$ALIGN OFF}
+  PPcx16Item = ^TPcx16Item;
+  TPcx16Item = object (TPcxItem)
+   public
+    HasDdSurfaceBuffer: boolean;
+  end; // .object TPcx16Item
+  {$ALIGN ON}
+
+  TPcx16ItemStatic = class
+    (* Create new Pcx16 image with RefCount = 0 and not assigned to any binary tree *)
+    class function Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item; static;
+    
+    (* Uses default pcx loading mechanism to load item, RefCount is increased by one *)
+    class function Load (const aName: string): {U} PPcx16Item; static;
+  end;
 
 
 const
@@ -271,12 +374,21 @@ const
   WndProc:      TWndProc    = Ptr($4F8290);
   
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
+  MemAllocFunc:       TMemAllocFunc       = Ptr($617492);
+  MemFree:            TMemFreeFunc        = Ptr($60B0F0);
 
   SecSkillNames: PSecSkillNames = Ptr($698BC4);
   SecSkillDescs: PSecSkillDescs = Ptr($698C30);
   SecSkillTexts: PSecSkillTexts = Ptr($698D88);
 
 
+var
+{O} ResourceNamer: TResourceNamer;
+{U} ResourceTree:  PBinaryTree = Ptr($69E560);
+
+
+function  MemAlloc (Size: integer): {On} pointer;
+procedure MemFreeAndNil (var p);
 procedure GZipWrite (Count: integer; {n} Addr: pointer);
 function  GzipRead (Count: integer; {n} Addr: pointer): integer;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
@@ -305,6 +417,192 @@ function  GetVal (BaseAddr, Offset: integer): PValue; overload;
 
 (***) implementation (***)
 
+
+constructor TResourceNamer.Create;
+begin
+  fNamesMap := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+end;
+
+function TResourceNamer.GetResourceName (const OrigResourceName: string): string;
+var
+{U} MapItem: TString;
+
+begin
+  if length(OrigResourceName) <= sizeof(TChars12) then begin
+    result := OrigResourceName;
+  end else begin
+    MapItem := fNamesMap[OrigResourceName];
+
+    if MapItem = nil then begin
+      inc(fAutoId);
+      {!} Assert(fAutoId <> 0, 'Resource Namer IDs are exhausted');
+      MapItem                     := TString.Create(':' + SysUtils.IntToStr(fAutoId));
+      fNamesMap[OrigResourceName] := MapItem;
+    end;
+
+    result := MapItem.Value;
+  end; // .else
+end; // .function TResourceNamer.GetResourceName
+
+function TResourceNamer.GenerateUniqueResourceName: string;
+begin
+  inc(fAutoId);
+  {!} Assert(fAutoId <> 0, 'Resource Namer IDs are exhausted');
+  result := ':' + SysUtils.IntToStr(fAutoId);
+end;
+
+procedure TBinaryTreeItem.SetName (const aName: string);
+begin
+  Utils.SetPcharValue(@Self.Name, aName, sizeof(Self.Name) + 1);
+end;
+
+procedure TBinaryTreeItem.IncRef;
+begin
+  inc(Self.RefCount);
+end;
+
+procedure TBinaryTreeItem.DecRef;
+begin
+  PatchApi.Call(PatchApi.THISCALL_, Self.VTable[1], [@Self]);
+end;
+
+procedure TBinaryTreeItem.Destruct (IsHeapObject: boolean = true);
+begin
+  PatchApi.Call(PatchApi.THISCALL_, Self.VTable[0], [@Self, ord(IsHeapObject)]);
+end;
+
+function TBinaryTreeItem.IsPcx8: boolean;
+begin
+  result := Self.VTable = Ptr($63BA14);
+end;
+
+function TBinaryTreeItem.IsPcx16: boolean;
+begin
+  result := Self.VTable = Ptr($63B9C8);
+end;
+
+function TBinaryTreeNode.FindItem (const aName: string; var {out} aItem: PBinaryTreeItem): boolean;
+var
+{U} Node: PBinaryTreeNode;
+
+begin
+  Node   := nil;
+  result := false;
+  // * * * * * //
+  if aName <> '' then begin
+    Node := PBinaryTreeNode(PatchApi.Call(PatchApi.THISCALL_, Ptr($55EE00), [@Self, pchar(aName)]));
+
+    if (Node <> Self.Parent) and (SysUtils.AnsiCompareText(aName, Node.Name) = 0) then begin
+      aItem  := Node.Item;
+      result := true;
+    end;
+  end;
+end; // .function TBinaryTreeNode.FindItem
+
+function TBinaryTreeNode.FindNode (const aName: string; var {out} aNode: PBinaryTreeNode): boolean;
+var
+{U} Node: PBinaryTreeNode;
+
+begin
+  Node   := nil;
+  result := false;
+  // * * * * * //
+  if aName <> '' then begin
+    Node := PBinaryTreeNode(PatchApi.Call(PatchApi.THISCALL_, Ptr($55EE00), [@Self, pchar(aName)]));
+
+    if (Node <> Self.Parent) and (SysUtils.AnsiCompareText(aName, Node.Name) = 0) then begin
+      aNode  := Node;
+      result := true;
+    end;
+  end;
+end; // .function TBinaryTreeNode.FindNode
+
+procedure TBinaryTreeNode.RemoveNode (Node: PBinaryTreeNode);
+var
+  Temp: pointer;
+
+begin
+  {!} Assert(Node <> nil);
+  // * * * * * //
+  PatchApi.Call(PatchApi.THISCALL_, Ptr($55DF20), [@Self, @Temp, Node]);
+end; // .procedure TBinaryTreeNode.RemoveNode
+
+procedure TBinaryTreeNode.AddItem (aItem: PBinaryTreeItem);
+var
+  ResPtrs: packed array [0..1] of pointer;
+
+  NewItem: packed record
+    Name:    TChars12;
+    NameEnd: integer;
+    Item:    PBinaryTreeItem;
+  end;
+
+begin
+  NewItem.Name    := aItem.Name;
+  NewItem.NameEnd := 0;
+  NewItem.Item    := aItem;
+  
+  PatchApi.Call(PatchApi.THISCALL_, Ptr($55DDF0), [@Self, @ResPtrs, @NewItem]);
+end; // .procedure TBinaryTreeNode.AddItem
+
+class function TPcx16ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;
+begin
+  result := nil;
+
+  if (aWidth <= 0) or (aHeight <= 0) then begin
+    Core.NotifyError(Format('Cannot create pcx16 image of size %dx%d', [aWidth, aHeight]));
+
+    aWidth  := Utils.IfThen(aWidth > 0, aWidth, 1);
+    aHeight := Utils.IfThen(aHeight > 0, aHeight, 1);
+  end;
+
+  if (aWidth > 0) and (aHeight > 0) then begin
+    result := MemAlloc(Alg.IntRoundToBoundary(sizeof(result^), sizeof(integer)));
+
+    FillChar(result^, sizeof(result^), 0);
+    result.VTable             := Ptr($63B9C8);
+    result.SetName(aName);
+    result.ItemType           := RES_TYPE_PCX_16;
+    result.Width              := aWidth;
+    result.Height             := aHeight;
+    result.ScanlineSize       := Alg.IntRoundToBoundary(aWidth * 2, sizeof(integer));
+    result.BufSize            := result.ScanlineSize * aHeight;
+    result.PicSize            := result.BufSize;
+    result.HasDdSurfaceBuffer := false;
+    result.Buffer             := MemAlloc(result.BufSize);
+  end; // .if
+end; // .function TPcx16ItemStatic.Create
+
+class function TPcx16ItemStatic.Load (const aName: string): {U} PPcx16Item;
+begin
+  result := PPcx16Item(PatchApi.Call(PatchApi.FASTCALL_, Ptr($55B1E0), [pchar(aName)]));
+  {!} Assert(result <> nil, Format('Failed to load pcx16 image "%s". "dfault24.pcx" is also missing', [aName]));
+  {!} Assert(result.IsPcx16(), Format('Loaded image "%s" is not requested pcx16', [aName]));
+end;
+
+function MemAlloc (Size: integer): {On} pointer;
+begin
+  {!} Assert(cardinal(Size) >= 0, Format('Cannot allocate memory block of %u size', [cardinal(Size)]));
+  result := nil;
+  // * * * * * //
+  if cardinal(Size) > 0 then begin
+    result := MemAllocFunc(Size);
+    {!} Assert(result <> nil, Format('Failed to allocate memory block of %u size', [cardinal(Size)]));
+  end;
+end;
+
+procedure MemFreeAndNil (var p);
+var
+  Temp: pointer;
+
+begin
+  Temp       := pointer(p);
+  pointer(p) := nil;
+  
+  if Temp <> nil then begin
+    MemFree(Temp);
+  end;
+end; // .procedure MemFreeAndNil
 
 function GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
 begin
@@ -586,4 +884,6 @@ begin
   result := pbyte(pinteger(GAME_MANAGER)^ + $1F45A)^;
 end; // .function GetCampaignMapInd
 
+begin
+  ResourceNamer := TResourceNamer.Create;
 end.

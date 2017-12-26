@@ -13,6 +13,6 @@ uses
 
 begin
   // set callback to GameExt unit
-  Erm.v[1]  :=  integer(@GameExt.Init);
+  Erm.v[1] := integer(@GameExt.Init);
 end.
 

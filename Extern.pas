@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 
-uses Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman;
+uses Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman, Graph;
 
 
 procedure FatalError (Err: pchar); stdcall;
@@ -33,6 +33,7 @@ function  PatchExists (PatchName: pchar): boolean; stdcall;
 function  PluginExists (PluginName: pchar): boolean; stdcall;
 procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
 procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall;
+function  LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height: integer): {OU} Heroes.PPcx16Item; stdcall;
 
 
 exports
@@ -63,6 +64,7 @@ exports
   PluginExists,
   RedirectFile,
   GlobalRedirectFile,
+  LoadImageAsPcx16,
   GameExt.RedirectMemoryBlock,
   GameExt.GetRealAddr,
   GameExt.GenerateDebugInfo;
@@ -86,18 +88,18 @@ var
   ResStr: string;
 
 begin
-  result  :=  Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr);
+  result := Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr);
   Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
 end; // .function ReadStrFromIni
 
 function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean;
 begin
-  result  :=  Ini.WriteStrToIni(Key, Value, SectionName, FilePath);
+  result := Ini.WriteStrToIni(Key, Value, SectionName, FilePath);
 end; // .function WriteStrToIni
 
 function SaveIni (FilePath: pchar): boolean;
 begin
-  result  :=  Ini.SaveIni(FilePath);
+  result := Ini.SaveIni(FilePath);
 end; // .function SaveIni
 
 procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar);
@@ -107,7 +109,7 @@ end; // .procedure WriteSavegameSection
 
 function ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar): integer;
 begin
-  result  :=  Stores.ReadSavegameSection(DataSize, Dest, SectionName);
+  result := Stores.ReadSavegameSection(DataSize, Dest, SectionName);
 end; // .function ReadSavegameSection
 
 procedure ExecErmCmd (CmdStr: pchar);
@@ -137,17 +139,17 @@ end; // .procedure FatalError
 
 function GetButtonID (ButtonName: pchar): integer; stdcall;
 begin
-  result  :=  EraButtons.GetButtonID(ButtonName);
+  result := EraButtons.GetButtonID(ButtonName);
 end; // .function GetButtonID
 
 function PatchExists (PatchName: pchar): boolean;
 begin
-  result  :=  GameExt.PatchExists(PatchName);
+  result := GameExt.PatchExists(PatchName);
 end; // .function PatchExists
 
 function PluginExists (PluginName: pchar): boolean;
 begin
-  result  :=  GameExt.PluginExists(PluginName);
+  result := GameExt.PluginExists(PluginName);
 end; // .function PluginExists
 
 procedure RedirectFile (OldFileName, NewFileName: pchar);
@@ -159,5 +161,34 @@ procedure GlobalRedirectFile (OldFileName, NewFileName: pchar);
 begin
   Lodman.GlobalRedirectFile(OldFileName, NewFileName);
 end; // .procedure GlobalRedirectFile
+
+{function tr (const Key: pchar; const Params: array of pchar): pchar; stdcall;
+var
+  ParamsList: StrLib.TArrayOfStr;
+
+begin
+  Translation := LangMap[Key];
+  // * * * * * //
+  SetLength(ParamsList, length(Params));
+  
+  if Translation <> nil then begin
+    result := StrLib.BuildStr(Translation.Value, Params, TEMPL_CHAR);
+  end else begin
+    result := Key;
+  end;
+end; // .function tr}
+
+function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height: integer): {OU} Heroes.PPcx16Item;
+begin
+  if FilePath = nil then begin
+    FilePath := pchar('');
+  end;
+
+  if PcxName = nil then begin
+    PcxName := pchar('');
+  end;
+
+  result := Graph.LoadImageAsPcx16(FilePath, PcxName, Width, Height);
+end;
 
 end.

@@ -152,15 +152,17 @@ begin
   end; // .else
 end; // .function MainWndProc
 
-function Hook_CreateWindow (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_AfterCreateWindow (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PrevWndProc := Ptr
   (
     Windows.SetWindowLong(Heroes.hWnd^, Windows.GWL_WNDPROC, integer(@MainWndProc))
   );
+
+  GameExt.FireEvent('OnAfterCreateWindow', GameExt.NO_EVENT_DATA, 0);
   
   result := Core.EXEC_DEF_CODE;
-end; // .function Hook_CreateWindow
+end; // .function Hook_AfterCreateWindow
 
 function Hook_BeforeErmInstructions (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -391,7 +393,7 @@ begin
   Core.Hook(@Hook_MMTrigger, Core.HOOKTYPE_BRIDGE, 5, Ptr($74FD3B));
   
   (* Key handling trigger *)
-  Core.Hook(@Hook_CreateWindow, Core.HOOKTYPE_BRIDGE, 6, Ptr($4F8239));
+  Core.Hook(@Hook_AfterCreateWindow, Core.HOOKTYPE_BRIDGE, 6, Ptr($4F8226));
   
   (* Erm before instructions trigger *)
   Core.Hook(@Hook_BeforeErmInstructions, Core.HOOKTYPE_BRIDGE, 6, Ptr($749BBA));
