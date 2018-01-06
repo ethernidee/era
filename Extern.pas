@@ -34,6 +34,8 @@ function  PluginExists (PluginName: pchar): boolean; stdcall;
 procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
 procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall;
 function  LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height: integer): {OU} Heroes.PPcx16Item; stdcall;
+procedure ShowMessage (Mes: pchar);
+function  Ask (Question: pchar): boolean;
 
 
 exports
@@ -67,7 +69,9 @@ exports
   LoadImageAsPcx16,
   GameExt.RedirectMemoryBlock,
   GameExt.GetRealAddr,
-  GameExt.GenerateDebugInfo;
+  GameExt.GenerateDebugInfo,
+  ShowMessage,
+  Ask;
 
 
 (***) implementation (***)
@@ -189,6 +193,16 @@ begin
   end;
 
   result := Graph.LoadImageAsPcx16(FilePath, PcxName, Width, Height);
+end;
+
+procedure ShowMessage (Mes: pchar);
+begin
+  Erm.ShowMessage(Mes);
+end;
+
+function Ask (Question: pchar): boolean;
+begin
+  result := Erm.Ask(Question);
 end;
 
 end.

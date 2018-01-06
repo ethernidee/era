@@ -596,5 +596,6 @@ begin
   NamedColors := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
   ColorStack  := Lists.NewSimpleList;
   TextScanner := TextScan.TTextScanner.Create;
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  GameExt.RegisterHandler(OnAfterWoG,          'OnAfterWoG');
+  GameExt.RegisterHandler(OnAfterCreateWindow, 'OnAfterCreateWindow');
 end.

@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, FilesEx, Ini, DataLib, Concur,
+  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes,
   PatchApi, Core, GameExt, Heroes, Lodman, Erm;
 
 type
@@ -734,6 +734,8 @@ const
 begin
   DumpExceptionContext(ExceptionPtrs.ExceptionRecord, ExceptionPtrs.ContextRecord);
   GameExt.FireEvent('OnGenerateDebugInfo', nil, 0);
+  DlgMes.Msg('Game crashed. All debug information is inside ' + DEBUG_DIR + ' subfolder');
+  
   result := EXCEPTION_CONTINUE_SEARCH;
 end; // .function TopLevelExceptionHandler
 
@@ -766,16 +768,16 @@ var
 begin
   NewHandler := ppointer(Context.ESP + 8)^;
   // * * * * * //
-  if NewHandler <> nil then begin
+  if (NewHandler <> nil) and ((cardinal(NewHandler) < $401000) or (cardinal(NewHandler) > $7845FA)) then begin
     {!} ExceptionsCritSection.Enter;
     TopLevelExceptionHandlers.Add(NewHandler);
     {!} ExceptionsCritSection.Leave;
   end;
 
   (* result = nil *)
-  pinteger(Context.EAX)^ := 0;
+  Context.EAX := 0;
 
-  (* return to calling routing *)
+  (* return to calling routine *)
   Context.RetAddr := Core.Ret(1);
   
   result := Core.IGNORE_DEF_CODE;
@@ -922,18 +924,22 @@ begin
   if false then Core.p.WriteDataPatch(Ptr($41A0DC), ['01']); // save orig.dat on receive compressed
   Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
+end; // .procedure OnAfterWoG
 
+procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
+begin
   (* Install global top-level exception filter *)
   Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
   Windows.SetUnhandledExceptionFilter(@OnUnhandledException);
-  Core.ApiHook(@Hook_SetUnhandledExceptionFilter, Core.HOOKTYPE_BRIDGE, @Windows.SetUnhandledExceptionFilter);
+  Core.ApiHook(@Hook_SetUnhandledExceptionFilter, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(Windows.LoadLibrary('kernel32.dll'), 'SetUnhandledExceptionFilter'));
   Windows.SetUnhandledExceptionFilter(@TopLevelExceptionHandler);
-end; // .procedure OnAfterWoG
+end; // .procedure OnAfterVfsInit
 
 begin
   Windows.InitializeCriticalSection(InetCriticalSection);
   ExceptionsCritSection.Init;
   TopLevelExceptionHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
+  GameExt.RegisterHandler(OnAfterVfsInit, 'OnAfterVfsInit');
   GameExt.RegisterHandler(OnAfterWoG,  'OnAfterWoG');
   RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end.

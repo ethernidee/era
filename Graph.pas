@@ -506,8 +506,12 @@ begin
 end; // .function LoadImageAsPcx16
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
+var
+  pic: PPcx16Item;
+
 begin
   (* testing *)
+  pic := LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
 end;
 
 begin

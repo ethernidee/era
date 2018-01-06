@@ -30,8 +30,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.6.6';
-  ERA_VERSION_INT = 2606;
+  ERA_VERSION_STR = '2.7.1';
+  ERA_VERSION_INT = 2701;
 
 type
   PEvent  = ^TEvent;
@@ -482,6 +482,7 @@ begin
   
   FireEvent('OnEraStart', NO_EVENT_DATA, 0);
   VFS.Init;
+  FireEvent('OnAfterVfsInit', NO_EVENT_DATA, 0);
   
   (* Era 1.8x integration *)
   hAngel                :=  Windows.LoadLibrary('angel.dll');

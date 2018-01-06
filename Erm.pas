@@ -11,9 +11,11 @@ uses
   Core, Heroes, GameExt;
 
 type
-  TStrList = DataLib.TStrList;
-  TDict    = DataLib.TDict;
-  TString  = TypeWrappers.TString;
+  (* Import *)
+  TAssocArray = AssocArrays.TAssocArray;
+  TStrList    = DataLib.TStrList;
+  TDict       = DataLib.TDict;
+  TString     = TypeWrappers.TString;
 
 const
   SCRIPT_NAMES_SECTION     = 'Era.ScriptNames';
@@ -169,9 +171,6 @@ const
 
 
 type
-  (* IMPORT *)
-  TAssocArray = AssocArrays.TAssocArray;
-
   TErmValType   = (ValNum, ValF, ValQuick, ValV, ValW, ValX, ValY, ValZ);
   TErmCheckType =
   (
@@ -448,7 +447,7 @@ uses PatchApi, Stores, AdvErm, ErmTracking;
 
 
 const
-  ERM_CMD_CACHE_LIMIT  = 16384;
+  ERM_CMD_CACHE_LIMIT = 30000;
 
 
 var
@@ -539,12 +538,12 @@ end; // .function Msg
 procedure ShowMessage (const Mes: string);
 begin
   Msg(Mes);
-end; // .procedure ShowMessage
+end;
 
 function Ask (const Question: string): boolean;
 begin
   result := Msg(Question, MES_QUESTION) = MSG_RES_OK;
-end; // .function Ask
+end;
     
 function GetErmValType (c: char; out ValType: TErmValType): boolean;
 begin

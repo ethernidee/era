@@ -414,8 +414,7 @@ begin
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
   
   (* MainGameCycle: OnEnterGame, OnLeaveGame and MapFolder settings*)
-  Core.p.WriteHiHook(Ptr($4B0BA0), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,
-                     @Hook_MainGameLoop);
+  Core.p.WriteHiHook(Ptr($4B0BA0), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,  @Hook_MainGameLoop);
 end; // .procedure OnAfterWoG
 
 begin
