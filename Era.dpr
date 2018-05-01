@@ -4,7 +4,7 @@ DESCRIPTION:  HMM 3.5 WogEra
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
-uses
+uses  Math,
   VFS, GameExt, Erm, Tweaks,
   DebugMaps,
   Lua in 'Lua\Lua.pas',

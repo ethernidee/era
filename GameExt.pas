@@ -30,8 +30,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.7.1';
-  ERA_VERSION_INT = 2701;
+  ERA_VERSION_STR = '2.7.5';
+  ERA_VERSION_INT = 2705;
 
 type
   PEvent  = ^TEvent;

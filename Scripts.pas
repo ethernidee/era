@@ -73,7 +73,7 @@ begin
 
   // Setup package search paths
   lua_getglobal(L, 'package');
-  lua_pushstring(L, '.\' + SCRIPTS_DIR + '\?.lua;' + '.\' + SCRIPTS_DIR + '\lib\?.lua');
+  lua_pushstring(L, SysUtils.GetCurrentDir() + '\' + SCRIPTS_DIR + '\?.lua;' + SysUtils.GetCurrentDir() + '\' + SCRIPTS_DIR + '\lib\?.lua');
   lua_setfield(L, -2, 'path');
   lua_pop(L, 1);
 end; // .procedure InitLua
