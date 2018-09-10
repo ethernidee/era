@@ -600,6 +600,59 @@ begin
   end; // .switch Network event
 end; // .procedure OnRemoteMapObjectPlace
 
+function Hook_ZvsEnter2Monster (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
+  ARG_MAP_ITEM  = 8;
+  ARG_MIXED_POS = 16;
+
+var
+  x, y, z:  integer;
+  MixedPos: integer;
+  MapItem:  pointer;
+
+begin
+  MapItem  := ppointer(Context.EBP + ARG_MAP_ITEM)^;
+  MapItemToCoords(MapItem, x, y, z);
+  MixedPos := CoordsToMixedPos(x, y, z);
+  pinteger(Context.EBP + ARG_MIXED_POS)^ := MixedPos;
+
+  Context.RetAddr := Ptr($7577B2);
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_ZvsEnter2Monster
+
+function Hook_ZvsEnter2Monster2 (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
+  ARG_MAP_ITEM  = 8;
+  ARG_MIXED_POS = 16;
+
+var
+  x, y, z:  integer;
+  MixedPos: integer;
+  MapItem:  pointer;
+
+begin
+  MapItem  := ppointer(Context.EBP + ARG_MAP_ITEM)^;
+  MapItemToCoords(MapItem, x, y, z);
+  MixedPos := CoordsToMixedPos(x, y, z);
+  pinteger(Context.EBP + ARG_MIXED_POS)^ := MixedPos;
+
+  Context.RetAddr := Ptr($757A87);
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_ZvsEnter2Monster2
+
+function Hook_ZvsEnter2Object (Hook: PatchApi.THiHook; Ecx, Edx, Hero: pointer; MapItem: pointer; MixedPos: integer; IsAI: integer): integer; stdcall;
+const
+  MAP_ITEM_TYPE_OFFSET = $1E;
+  OBJ_MON              = 54;
+
+begin
+  if pword(Utils.PtrOfs(MapItem, MAP_ITEM_TYPE_OFFSET))^ <> OBJ_MON then begin
+    result := PatchApi.Call(PatchApi.FASTCALL_, Hook.GetOriginalFunc(), [Ecx, Edx, Hero, MapItem, MixedPos, IsAi]);
+  end else begin
+    result := PatchApi.Call(PatchApi.FASTCALL_, Ptr($4A8160), [Ecx, Edx, Hero, MapItem, MixedPos, IsAi]);
+  end;
+end; // .function Hook_ZvsEnter2Object
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -911,6 +964,19 @@ begin
 
   (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
   Core.p.WriteDataPatch(Ptr($4DC358), ['A0']);
+
+  (* Fix WoG bug: do not rely on MixedPos argument for Enter2Monster(2), get coords from map object instead
+     EDIT: no need anymore, fixed MixedPos *)
+  if FALSE then begin
+    Core.Hook(@Hook_ZvsEnter2Monster,  Core.HOOKTYPE_BRIDGE, 19, Ptr($75779F));
+    Core.Hook(@Hook_ZvsEnter2Monster2, Core.HOOKTYPE_BRIDGE, 19, Ptr($757A74));
+  end;
+
+  (* Fix MixedPos to not drop higher order bits and not treat them as underground flag *)
+  Core.p.WriteDataPatch(Ptr($711F4F), ['8B451425FFFFFF048945149090909090909090']);
+  
+  (* Fix WoG bug: double !?OB54 event generation when attacking without moving due to Enter2Object + Enter2Monster2 calling *)
+  Core.p.WriteHiHook(Ptr($705979), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.FASTCALL_, @Hook_ZvsEnter2Object);
 
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
   Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook

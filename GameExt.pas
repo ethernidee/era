@@ -8,7 +8,8 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   Windows, Math, SysUtils, PatchApi,
   Utils, DataLib, CFiles, Files, FilesEx, Crypto, StrLib, Core,
-  VFS, BinPatching;
+  Lists, CmdApp, Log,
+  VFS, BinPatching, (**) DlgMes;
 
 type
   (* Import *)
@@ -16,7 +17,12 @@ type
   TStringList = DataLib.TStrList;
 
 const
+  (* Command line arguments *)
+  CMDLINE_ARG_MODLIST = 'modlist';
+
   (* Paths *)
+  MODS_DIR                  = 'Mods';
+  DEFAULT_MOD_LIST_FILE     = MODS_DIR + '\list.txt';
   PLUGINS_PATH              = 'EraPlugins';
   PATCHES_PATH              = 'EraPlugins';
   DEBUG_DIR                 = 'Debug\Era';
@@ -30,8 +36,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.7.5';
-  ERA_VERSION_INT = 2705;
+  ERA_VERSION_STR = '2.7.6';
+  ERA_VERSION_INT = 2706;
 
 type
   PEvent  = ^TEvent;
@@ -98,6 +104,8 @@ var
 
 {O} MemRedirections:        {O} DataLib.TList {OF PMemRedirection};
 
+  GameDir:   string;
+  ModsDir:   string;
   MapFolder: string = '';
 
 
@@ -474,15 +482,76 @@ begin
   PatchApi.GetPatcher().SaveDump(DEBUG_X86_PATCH_LIST_PATH);
 end; // .procedure OnGenerateDebugInfo
 
-procedure Init (hDll: integer);
+(*
+  Loads and returns list of mods from the highest priority mod to the lowest one. Each mod is described
+  by existing absolute path to some directory.
+  Pass CMDLINE_ARG_MODLIST command line argument to set custom path to file with mods list.
+*)
+function LoadModsList: {O} Lists.TStringList;
+var
+{O} FileLines:       Lists.TStringList;
+    ModListFilePath: string;
+    ModListText:     string;
+    ModName:         string;
+    ModPath:         string;
+    ModInd:          integer;
+    i:               integer;
+   
 begin
+  FileLines := Lists.NewSimpleStrList();;
+  result    := Lists.NewSimpleStrList();
+  // * * * * * //
+  result.CaseInsensitive := true;
+  ModListFilePath        := CmdApp.GetArg(CMDLINE_ARG_MODLIST);
+
+  if ModListFilePath = '' then begin
+    ModListFilePath := DEFAULT_MOD_LIST_FILE;
+  end;
+  
+  if Files.ReadFileContents(ModListFilePath, ModListText) then begin
+    FileLines.LoadFromText(ModListText, #13#10);
+    
+    for i := FileLines.Count - 1 downto 0 do begin
+      ModName := SysUtils.ExcludeTrailingBackslash( SysUtils.ExtractFileName( SysUtils.Trim(FileLines[i]) ) );
+
+      if ModName <> '' then begin
+        ModPath := SysUtils.ExpandFileName(ModsDir + '\' + ModName);
+
+        if not result.Find(ModPath, ModInd) and Files.DirExists(ModPath) then begin
+          result.Add(ModPath);
+        end;
+      end;
+    end; // .for
+  end; // .if
+  // * * * * * //
+  SysUtils.FreeAndNil(FileLines);
+end; // .function LoadModsList
+
+procedure Init (hDll: integer);
+var
+{O} ModList: Lists.TStringList;
+
+begin
+  ModList := nil;
+  // * * * * * //
   hEra := hDll;
   Windows.DisableThreadLibraryCalls(hEra);
-  Files.ForcePath(DEBUG_DIR);
-  
+
+  // GameDir := SysUtils.ExtractFileDir(ParamStr(0));
+  // Msg(GameDir);
+  // ModsDir := GameDir + '\' + MODS_DIR;
+  // SysUtils.SetCurrentDir(GameDir);
+  // Files.ForcePath(DEBUG_DIR);
+
+  // Era started, load settings, initialize logging subsystem
   FireEvent('OnEraStart', NO_EVENT_DATA, 0);
+
+  //ModList := LoadModsList();
+  //ModList.Add('D:\Soft\Programming\Delphi\source\SRC\Era\Png\');
+  //VFS.Init(ModList);
   VFS.Init;
   FireEvent('OnAfterVfsInit', NO_EVENT_DATA, 0);
+
   
   (* Era 1.8x integration *)
   hAngel                :=  Windows.LoadLibrary('angel.dll');
@@ -507,6 +576,9 @@ begin
   BinPatching.ApplyPatches(PATCHES_PATH + '\AfterWoG');
 
   RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
+  // * * * * * //
+  
+  //SysUtils.FreeAndNil(ModList); !!! FIXME
 end; // .procedure Init
 
 begin

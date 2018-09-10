@@ -268,6 +268,9 @@ type
   TMemAllocFunc       = function (Size: integer): pointer; cdecl;
   TMemFreeFunc        = procedure (Buf: pointer); cdecl;
 
+  TMapItemToCoords  = procedure (MapItem: pointer; var x, y, z: integer); cdecl;
+  TCoordsToMixedPos = function (x, y, z: integer): integer; cdecl;
+
   (* Overcomes 12-char unique name restriction for all in-game resources. Maps any name to unique 12-char name. Names with ':' character are reserved. *)
   TResourceNamer = class
    protected
@@ -376,6 +379,9 @@ const
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
   MemAllocFunc:       TMemAllocFunc       = Ptr($617492);
   MemFree:            TMemFreeFunc        = Ptr($60B0F0);
+  
+  MapItemToCoords:  TMapItemToCoords  = Ptr($711EC6);
+  CoordsToMixedPos: TCoordsToMixedPos = Ptr($711E7F);
 
   SecSkillNames: PSecSkillNames = Ptr($698BC4);
   SecSkillDescs: PSecSkillDescs = Ptr($698C30);
