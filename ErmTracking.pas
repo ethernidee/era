@@ -84,7 +84,7 @@ begin
 
   if fNumTrackedEvents < fBufSize then begin
     inc(fNumTrackedEvents);
-  end; // .if
+  end;
 
   if fBufPos >= fBufSize - 1 then begin
     fBufPos := 0;
@@ -186,20 +186,20 @@ var
       for j := low(Event.v) to high(Event.v) do begin
         if j > low(Event.v) then begin
           Write(', ');
-        end; // .if
+        end;
 
         Write(SysUtils.IntToStr(Event.v[j]));
-      end; // .for
+      end;
 
       Write('], flags = [');
 
       for j := low(Event.f) to high(Event.f) do begin
         if j > low(Event.f) then begin
           Write(', ');
-        end; // .if
+        end;
 
         Write(FlagNames[j, integer(Event.f[j] <> 0)]);
-      end; // .for
+      end;
 
       Write(']');
 
@@ -215,10 +215,10 @@ var
         for j := 0 to LastNonZeroSnxInd do begin
           if j > low(Event.SnX) then begin
             Write(', ');
-          end; // .if
+          end;
 
           Write(SysUtils.IntToStr(integer(Event.SnX[j])));
-        end; // .for
+        end;
 
         Write(']');
       end; // .if
@@ -228,7 +228,7 @@ var
 
       if Event.TriggerLevel < BaseTriggerLevel then begin
         BaseTriggerLevel := Event.TriggerLevel;
-      end; // .if
+      end;
     end; // .with
   end; // .procedure ReportTrigger
 

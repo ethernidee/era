@@ -1,8 +1,8 @@
 unit Extern;
-{
-DESCRIPTION:  API Wrappers for plugins
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  DESCRIPTION: API Wrappers for plugins
+  AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+*)
 
 (***)  interface  (***)
 
@@ -80,12 +80,12 @@ exports
 procedure NameColor (Color32: integer; Name: pchar);
 begin
   Rainbow.NameColor(Color32, Name);
-end; // .procedure NameColor
+end;
 
 procedure ClearIniCache (FileName: pchar);
 begin
   Ini.ClearIniCache(FileName);
-end; // .procedure ClearIniCache
+end;
 
 function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean;
 var
@@ -94,77 +94,77 @@ var
 begin
   result := Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr);
   Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
-end; // .function ReadStrFromIni
+end;
 
 function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean;
 begin
   result := Ini.WriteStrToIni(Key, Value, SectionName, FilePath);
-end; // .function WriteStrToIni
+end;
 
 function SaveIni (FilePath: pchar): boolean;
 begin
   result := Ini.SaveIni(FilePath);
-end; // .function SaveIni
+end;
 
 procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar);
 begin
   Stores.WriteSavegameSection(DataSize, Data, SectionName);
-end; // .procedure WriteSavegameSection
+end;
 
 function ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar): integer;
 begin
   result := Stores.ReadSavegameSection(DataSize, Dest, SectionName);
-end; // .function ReadSavegameSection
+end;
 
 procedure ExecErmCmd (CmdStr: pchar);
 begin
   Erm.ExecErmCmd(CmdStr);
-end; // .procedure ExecErmCmd
+end;
 
 procedure FireErmEvent (EventID: integer);
 begin
   Erm.FireErmEvent(EventID);
-end; // .procedure FireErmEvent
+end;
 
 procedure RegisterHandler (Handler: TEventHandler; EventName: pchar);
 begin
   GameExt.RegisterHandler(Handler, EventName);
-end; // .procedure RegisterHandler
+end;
 
 procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer);
 begin
   GameExt.FireEvent(EventName, EventData, DataSize);
-end; // .procedure FireEvent
+end;
 
 procedure FatalError (Err: pchar);
 begin
   Core.FatalError(Err);
-end; // .procedure FatalError
+end;
 
 function GetButtonID (ButtonName: pchar): integer; stdcall;
 begin
   result := EraButtons.GetButtonID(ButtonName);
-end; // .function GetButtonID
+end;
 
 function PatchExists (PatchName: pchar): boolean;
 begin
   result := GameExt.PatchExists(PatchName);
-end; // .function PatchExists
+end;
 
 function PluginExists (PluginName: pchar): boolean;
 begin
   result := GameExt.PluginExists(PluginName);
-end; // .function PluginExists
+end;
 
 procedure RedirectFile (OldFileName, NewFileName: pchar);
 begin
   Lodman.RedirectFile(OldFileName, NewFileName);
-end; // .procedure RedirectFile
+end;
 
 procedure GlobalRedirectFile (OldFileName, NewFileName: pchar);
 begin
   Lodman.GlobalRedirectFile(OldFileName, NewFileName);
-end; // .procedure GlobalRedirectFile
+end;
 
 {function tr (const Key: pchar; const Params: array of pchar): pchar; stdcall;
 var

@@ -9,12 +9,14 @@ uses
   Windows, Math, SysUtils, PatchApi,
   Utils, DataLib, CFiles, Files, FilesEx, Crypto, StrLib, Core,
   Lists, CmdApp, Log,
-  VFS, BinPatching, (**) DlgMes;
+  VFS, BinPatching, EventMan, DlgMes;
 
 type
   (* Import *)
   TList       = DataLib.TList;
   TStringList = DataLib.TStrList;
+  TEvent      = EventMan.TEvent;
+  PEvent      = EventMan.PEvent;
 
 const
   (* Command line arguments *)
@@ -36,35 +38,10 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.7.6';
-  ERA_VERSION_INT = 2706;
+  ERA_VERSION_STR = '2.7.7';
+  ERA_VERSION_INT = 2707;
 
-type
-  PEvent  = ^TEvent;
-  TEvent  = packed record
-      Name:     string;
-  {n} Data:     pointer;
-      DataSize: integer;
-  end; // .record TEvent
-
-  TEventHandler = procedure (Event: PEvent); stdcall;
-
-  TEventInfo = class
-   protected
-    {On} fHandlers:      TList {of TEventHandler};
-         fNumTimesFired: integer;
-
-    function GetNumHandlers: integer;
-   public
-    destructor Destroy; override;
-
-    procedure AddHandler (Handler: pointer);
-
-    property Handlers:      {n} TList {of TEventHandler} read fHandlers;
-    property NumHandlers:   integer                      read GetNumHandlers;
-    property NumTimesFired: integer                      read fNumTimesFired write fNumTimesFired;
-  end; // .class TEventInfo
-  
+type 
   PEraEventParams = ^TEraEventParams;
   TEraEventParams = array [0..15] of integer;
   
@@ -76,8 +53,6 @@ type
   end; // .record TMemRedirection
 
 
-procedure RegisterHandler (Handler: TEventHandler; const EventName: string); stdcall;
-procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer); stdcall;
 function  PatchExists (const PatchName: string): boolean; stdcall;
 function  PluginExists (const PluginName: string): boolean; stdcall;
 procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall;
@@ -93,7 +68,6 @@ procedure Init (hDll: integer);
 
 var
 {O} PluginsList:            DataLib.TStrList {OF TDllHandle};
-{O} Events:                 {O} DataLib.TDict {OF TEventInfo};
     hAngel:                 integer;  // Era 1.8x DLL
     hEra:                   integer;  // Era 1.9+ DLL
     (* Compability with Era 1.8x *)
@@ -111,30 +85,6 @@ var
 
 (***) implementation (***)
 uses Heroes;
-
-destructor TEventInfo.Destroy;
-begin
-  FreeAndNil(fHandlers);
-end; // .destructor TEventInfo.Destroy
-
-procedure TEventInfo.AddHandler (Handler: pointer);
-begin
-  {!} Assert(Handler <> nil);
-  if fHandlers = nil then begin
-    fHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
-  end; // .if
-
-  fHandlers.Add(Handler);
-end; // .procedure TEventInfo.AddHandler
-
-function TEventInfo.GetNumHandlers: integer;
-begin
-  if fHandlers = nil then begin
-    result := 0;
-  end else begin
-    result := fHandlers.Count;
-  end; // .else
-end; // .function TEventInfo.GetNumHandlers
 
 procedure LoadPlugins;
 const
@@ -165,7 +115,6 @@ begin
     then begin
       DllHandle := Windows.LoadLibrary(pchar(PLUGINS_PATH + '\' + DllName));
       {!} Assert(DllHandle <> 0, 'Failed to load DLL at "' + PLUGINS_PATH + '\' + DllName + '"');
-      Windows.DisableThreadLibraryCalls(DllHandle);
       PluginsList.AddObj(DllName, Ptr(DllHandle));
     end; // .if
     
@@ -189,50 +138,6 @@ asm
   MOV EAX, $701215
   CALL EAX
 end; // .procedure InitWoG
-
-procedure RegisterHandler (Handler: TEventHandler; const EventName: string);
-var
-{U} EventInfo: TEventInfo;
-  
-begin
-  {!} Assert(@Handler <> nil);
-  EventInfo := Events[EventName];
-  // * * * * * //
-  if EventInfo = nil then begin
-    EventInfo         := TEventInfo.Create;
-    Events[EventName] := EventInfo;
-  end; // .if
-
-  EventInfo.AddHandler(@Handler);
-end; // .procedure RegisterHandler
-
-procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer);
-var
-    Event:     TEvent;
-{U} EventInfo: TEventInfo;
-    i:         integer;
-
-begin
-  {!} Assert(Utils.IsValidBuf(EventData, DataSize));
-  EventInfo := Events[EventName];
-  // * * * * * //
-  Event.Name     := EventName;
-  Event.Data     := EventData;
-  Event.DataSize := DataSize;
-
-  if EventInfo = nil then begin
-    EventInfo         := TEventInfo.Create;
-    Events[EventName] := EventInfo;
-  end; // .if
-  
-  EventInfo.NumTimesFired := EventInfo.NumTimesFired + 1;
-
-  if EventInfo.Handlers <> nil then begin
-    for i := 0 to EventInfo.Handlers.Count - 1 do begin
-      TEventHandler(EventInfo.Handlers[i])(@Event);
-    end; // .for
-  end; // .if
-end; // .procedure FireEvent
 
 function PatchExists (const PatchName: string): boolean;
 var
@@ -399,7 +304,7 @@ end; // .function GetMapResourcePath
 
 procedure GenerateDebugInfo;
 begin
-  FireEvent('OnGenerateDebugInfo', nil, 0);
+  EventMan.GetInstance.Fire('OnGenerateDebugInfo', nil, 0);
 end; // .procedure GenerateDebugInfo
 
 procedure DumpEventList;
@@ -535,22 +440,24 @@ begin
   ModList := nil;
   // * * * * * //
   hEra := hDll;
-  Windows.DisableThreadLibraryCalls(hEra);
 
-  // GameDir := SysUtils.ExtractFileDir(ParamStr(0));
+  // Ensure, that Memory manager is thread safe. Hooks and API can be called from multiple threads.
+  System.IsMultiThread := true;
+
+  GameDir := SysUtils.ExtractFileDir(ParamStr(0));
   // Msg(GameDir);
-  // ModsDir := GameDir + '\' + MODS_DIR;
-  // SysUtils.SetCurrentDir(GameDir);
-  // Files.ForcePath(DEBUG_DIR);
+  ModsDir := GameDir + '\' + MODS_DIR;
+  SysUtils.SetCurrentDir(GameDir);
+  Files.ForcePath(DEBUG_DIR);
 
   // Era started, load settings, initialize logging subsystem
-  FireEvent('OnEraStart', NO_EVENT_DATA, 0);
+  EventMan.GetInstance.Fire('OnEraStart', NO_EVENT_DATA, 0);
 
-  //ModList := LoadModsList();
+  ModList := LoadModsList();
   //ModList.Add('D:\Soft\Programming\Delphi\source\SRC\Era\Png\');
-  //VFS.Init(ModList);
-  VFS.Init;
-  FireEvent('OnAfterVfsInit', NO_EVENT_DATA, 0);
+  VFS.Init(ModList);
+  //VFS.Init;
+  EventMan.GetInstance.Fire('OnAfterVfsInit', NO_EVENT_DATA, 0);
 
   
   (* Era 1.8x integration *)
@@ -566,13 +473,13 @@ begin
   {!} Assert(EraEventParams <> nil, 'Missing angel.dll:EventParams variable');
   
   LoadPlugins;
-  FireEvent('OnBeforeWoG', NO_EVENT_DATA, 0);
+  EventMan.GetInstance.Fire('OnBeforeWoG', NO_EVENT_DATA, 0);
   BinPatching.ApplyPatches(PATCHES_PATH + '\BeforeWoG');
   
   InitWoG;
   EraInit;
   
-  FireEvent('OnAfterWoG', NO_EVENT_DATA, 0);
+  EventMan.GetInstance.Fire('OnAfterWoG', NO_EVENT_DATA, 0);
   BinPatching.ApplyPatches(PATCHES_PATH + '\AfterWoG');
 
   RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
@@ -583,7 +490,6 @@ end; // .procedure Init
 
 begin
   PluginsList     := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
-  Events          := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   MemRedirections := DataLib.NewList(not Utils.OWNS_ITEMS);
   Core.SetDebugMapsDir(DEBUG_MAPS_DIR);
 end.
