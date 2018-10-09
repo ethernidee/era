@@ -319,7 +319,7 @@ begin
       result.LoadFromFile(FilePath);
     except
       SysUtils.FreeAndNil(result);
-    end; // .try
+    end;
   end;
 end; // .function LoadImage
 
@@ -385,7 +385,7 @@ begin
       PcxPixels^ := (BmpPixels.Blue shr 3) or ((BmpPixels.Green shr 2) shl 5) or ((BmpPixels.Red shr 3) shl 11);
       inc(PcxPixels);
       inc(BmpPixels);
-    end; // .for
+    end;
 
     BmpPixels := Utils.PtrOfs(BmpPixels, BmpScanlinePadding - BmpScanlineSize * 2);
     PcxPixels := Utils.PtrOfs(PcxPixels, PcxScanlinePadding);

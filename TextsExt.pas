@@ -31,10 +31,9 @@ begin
   // * * * * * //
   if AddText = nil then begin
     AddText[FileName] :=  TString.Create(Lines);
-  end // .if
-  else begin
+  end else begin
     AddText.Value :=  AddText.Value + Lines;
-  end; // .else
+  end;
 end; // .procedure AddLinesToText
 
 function ExtendText (const TextName: string; var TxtSize: integer): pointer;
@@ -49,10 +48,9 @@ begin
     TxtSize :=  TxtSize + Length(AddText.Value);
     result  :=  Heroes.MAlloc(TxtSize);
     Utils.CopyMem(Length(AddText.Value), pointer(AddText.Value), Utils.PtrOfs(result, TxtSize));
-  end // .if
-  else begin
+  end else begin
     result  :=  Heroes.MAlloc(TxtSize);
-  end; // .else
+  end;
 end; // .function ExtendText
 
 function Hook_LoadTextFromFile_BeforeLoad (Context: Core.PHookContext): LONGBOOL; stdcall;
@@ -61,7 +59,7 @@ begin
   Context.EAX     :=  ExtendText(Ptr(Context.EBX), TxtSize);
   Context.RetAddr :=  Ptr($55C110);
   result          :=  not Core.EXEC_DEF_CODE;
-end; // .function Hook_LoadTextFromFile_BeforeLoad
+end;
 
 function Hook_LoadTextFromFile_AfterLoad (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -69,12 +67,12 @@ begin
   Context.EAX     :=  ExtendText(Ptr(Context.EBX), TxtSize);
   Context.RetAddr :=  Ptr($55C110);
   result          :=  not Core.EXEC_DEF_CODE;
-end; // .function Hook_LoadTextFromFile_AfterLoad
+end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent);
 begin
   Core.ApiHook(@Hook_LoadTextFromFile, Core.HOOKTYPE_BRIDGE, Ptr($55C106));
-end; // .procedure OnAfterWoG
+end;
 
 begin
   AddTexts  :=  AssocArrays.NewStrictAssocArr(TString);

@@ -133,7 +133,7 @@ begin
         (SysUtils.TryStrToInt(ScriptNameTokens[PRIORITY_TOKEN], TestPriority))
       then begin
         ScriptPriority  :=  TestPriority;
-      end; // .if
+      end;
 
       ScriptList.AddObj(ScriptName, Ptr(ScriptPriority));
     end; // .if
@@ -154,10 +154,10 @@ begin
 
     while (j >= 0) and (ScriptPriority > integer(ScriptList.Values[j])) do begin
       Dec(j);
-    end; // .while
+    end;
 
     ScriptList.Move(i, j + 1);
-  end; // .for
+  end;
 
   SetLength(ScriptContents, ScriptList.Count);
   FirstScriptSize :=  0;
@@ -169,17 +169,15 @@ begin
       (Length(ScriptContents[i]) <= Length(SCRIPT_POSTFIX))
     then begin
       ScriptContents[i] :=  nil;
-    end // .if
-    else begin
+    end else begin
       Priority  :=  integer(ScriptList.Values[i]);
       
       if Priority < 0 then begin
         FirstScriptSize  :=  FirstScriptSize + Length(ScriptContents[i]) - Length(SCRIPT_POSTFIX);
         FirstScriptBuilder.AppendBuf(pointer(ScriptContents), ScriptEndMarkerPos - 1);
-      end // .if
-      else begin
+      end else begin
         LastScriptBuilder.AppendBuf(pointer(ScriptContents), ScriptEndMarkerPos - 1);
-      end; // .else
+      end;
     end; // .else
   end; // .for
   
@@ -236,10 +234,10 @@ var
     while CharMatch do begin
       Inc(p);
       Inc(s);
-    end; // .while
+    end;
     
     result  :=  ( <= StrLen;
-  end; // .function StrictMatch
+  end;
   
   function SkipWildcards: boolean;
   var
@@ -251,16 +249,16 @@ var
     while (p <= PatternLen) and (Pattern[p] in WILDCARDS) do begin
       if Pattern[p] = ONE_SYM_WILDCARD then begin
         Inc(NumOneSymWildcards);
-      end; // .if
+      end;
       
       Inc(p);
-    end; // .while
+    end;
     
     result  :=  (p <= PatternLen) and ((s + NumOneSymWildcards - 1) <= StrLen);
     
     if result then begin
       s :=  s + NumOneSymWildcards;
-    end; // .if
+    end;
   end; // .function SkipWildcards
   
   function FindNextStr;
@@ -277,14 +275,14 @@ var
       
       while (s <= StrLen) and (Str[s] <> c) do begin
         Inc(s);
-      end; // .while
+      end;
       
       result  :=  s <= StrLen;
       
       if result then begin
         Inc(p);
         Inc(s);
-      end; // .if
+      end;
     end; // .function FindFirstChar
   
   begin
@@ -296,8 +294,8 @@ var
       while CharMatch do begin
         Inc(p);
         Inc(s);
-      end; // .while
-    end; // .while
+      end;
+    end;
     
     result  :=  s <= StrLen;
   end; // .function FindNextStr
@@ -312,5 +310,5 @@ begin
   
   if StrictMatch then begin
     while SkipWillcards and FindNextStr do begin end;
-  end; // .if
+  end;
 end; // .function Match

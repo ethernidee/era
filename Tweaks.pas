@@ -67,7 +67,7 @@ begin
     not SysUtils.TryStrToInt(Value, Res^)
   then begin
     Res^  :=  DefValue;
-  end; // .if
+  end;
 end; // .function Hook_ReadIntIni
 
 function Hook_ReadStrIni
@@ -91,14 +91,13 @@ begin
     (Length(Value) > MaxResLen)
   then begin
     Value :=  DefValue;
-  end; // .if
+  end;
   
   if Value <> '' then begin
     Utils.CopyMem(Length(Value) + 1, pointer(Value), Res);
-  end // .if
-  else begin
+  end else begin
     Res^  :=  #0;
-  end; // .else
+  end;
 end; // .function Hook_ReadStrIni
 
 function Hook_WriteStrIni (Value, Key, SectionName, FileName: pchar): integer; cdecl;
@@ -107,8 +106,8 @@ begin
   
   if Ini.WriteStrToIni(Key, Value, SectionName, FileName) then begin
     Ini.SaveIni(FileName);
-  end; // .if
-end; // .function Hook_WriteStrIni
+  end;
+end;
 
 function Hook_WriteIntIni (Value: integer; Key, SectionName, FileName: pchar): integer; cdecl;
 begin
@@ -116,20 +115,20 @@ begin
   
   if Ini.WriteStrToIni(Key, SysUtils.IntToStr(Value), SectionName, FileName) then begin
     Ini.SaveIni(FileName);
-  end; // .if
-end; // .function Hook_ReadIntIni
+  end;
+end;
 
 function Hook_ZvsGetWindowWidth (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ECX :=  WndManagerPtr^.ScreenPcx16.Width;
   result      :=  not Core.EXEC_DEF_CODE;
-end; // .function Hook_ZvsGetWindowWidth
+end;
 
 function Hook_ZvsGetWindowHeight (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EDX :=  WndManagerPtr^.ScreenPcx16.Height;
   result      :=  not Core.EXEC_DEF_CODE;
-end; // .function Hook_ZvsGetWindowHeight
+end;
 
 procedure MarkFreshestSavegame;
 var
@@ -158,7 +157,7 @@ begin
     then begin
       FreshestFileName  :=  FileName;
       FreshestTime      :=  INT64(FileInfo.Data.ftLastWriteTime);
-    end; // .if
+    end;
     SysUtils.FreeAndNil(FileInfo);
   end; // .while
   
@@ -205,7 +204,7 @@ function Hook_PeekMessageA (Context: Core.PHookContext): longbool; stdcall;
 begin
   Windows.WaitForSingleObject(hTimerEvent, 1);
   result := Core.EXEC_DEF_CODE;
-end; // .function Hook_PeekMessageA
+end;
 
 function New_Zvslib_GetPrivateProfileStringA
 (
@@ -225,11 +224,11 @@ begin
 
   if not Ini.ReadStrFromIni(Key, Section, FileName, Res) then begin
     Res :=  DefValue;
-  end; // .if
+  end;
   
   if BufSize <= Length(Res) then begin
     SetLength(Res, BufSize - 1);
-  end; // .if
+  end;
   
   Utils.CopyMem(Length(Res) + 1, pchar(Res), Buf);
   
@@ -266,7 +265,7 @@ procedure ReadGameSettings;
       Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, Heroes.GAME_SETTINGS_FILE, StrValue)
     then begin
       Utils.CopyMem(Length(StrValue) + 1, pchar(StrValue), Res);
-    end; // .if
+    end;
   end; // .procedure ReadStr
   
 const
@@ -314,7 +313,7 @@ begin
     for i:=1 to UNIQUE_ID_LEN do begin
       RandomStr[i]  :=  UPCASE(StrLib.ByteToHexChar(RandomValue and $F));
       RandomValue   :=  RandomValue shr 4;
-    end; // .for
+    end;
     
     Utils.CopyMem(Length(RandomStr) + 1, pointer(RandomStr), Heroes.UNIQUE_SYSTEM_ID_OPT);
     
@@ -359,7 +358,7 @@ procedure WriteGameSettings;
       Heroes.GAME_SETTINGS_SECTION,
       Heroes.GAME_SETTINGS_FILE
     );
-  end; // .procedure WriteInt
+  end;
   
   procedure WriteStr (const Key: string; Value: pchar);
   begin
@@ -370,7 +369,7 @@ procedure WriteGameSettings;
       Heroes.GAME_SETTINGS_SECTION,
       Heroes.GAME_SETTINGS_FILE
     );
-  end; // .procedure WriteStr
+  end;
    
 begin
   WriteInt('Show Intro',             Heroes.SHOW_INTRO_OPT);
@@ -434,7 +433,7 @@ var
     result := (TInt32(Addr)[0] = 10) or ((TInt32(Addr)[0] = 172) and Math.InRange(TInt32(Addr)[1],
                                                                                   16, 31)) or
                                         ((TInt32(Addr)[0] = 192) and (TInt32(Addr)[1] = 168));
-  end; // .function IsLocalAddr
+  end;
     
 begin
   {!} Windows.EnterCriticalSection(InetCriticalSection);
@@ -450,11 +449,11 @@ begin
 
       while (Addrs[i] <> nil) and IsLocalAddr(Addrs[i]^) do begin
         Inc(i);
-      end; // .while
+      end;
 
       if Addrs[i] <> nil then begin
         Utils.Exchange(Addrs[0]^, Addrs[i]^);
-      end; // .if
+      end;
     end; // .if
   end; // .if
   
@@ -465,63 +464,63 @@ function Hook_UN_C (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PPOINTER(Context.EBP - $0C)^  :=  GameExt.GetRealAddr(PPOINTER(Context.EBP - $0C)^);
   result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_UN_C
+end;
 
 function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX :=  ZvsAppliedDamage^;
   result      :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_Ebx
+end;
 
 function Hook_ApplyDamage_Esi (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ESI :=  ZvsAppliedDamage^;
   result      :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_Esi
+end;
 
 function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ESI                 :=  ZvsAppliedDamage^;
   PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_Esi
+end;
 
 function Hook_ApplyDamage_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_Arg1
+end;
 
 function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX                    := ZvsAppliedDamage^;
   PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_Ebx_Local7
+end;
 
 function Hook_ApplyDamage_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_ocal7
+end;
 
 function Hook_ApplyDamage_Local4 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_Local4
+end;
 
 function Hook_ApplyDamage_Local8 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_Local8
+end;
 
 function Hook_ApplyDamage_Local13 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
   result                          := Core.EXEC_DEF_CODE;
-end; // .function Hook_ApplyDamage_Local13
+end;
 
 function Hook_GetWoGAndErmVersions (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -531,7 +530,7 @@ begin
   PINTEGER(Context.EBP - $0C)^  :=  NEW_WOG_VERSION;
   PINTEGER(Context.EBP - $24)^  :=  GameExt.ERA_VERSION_INT;
   result                        :=  not Core.EXEC_DEF_CODE;
-end; // .function Hook_GetWoGAndErmVersions
+end;
 
 function Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -557,7 +556,7 @@ begin
     Tokens[TOKEN_LODNAME] :=  SysUtils.ExtractFileName(LodName);
     ZvsLibImageTemplate   :=  StrLib.Join(Tokens, ';');
     PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^ :=  pchar(ZvsLibImageTemplate);
-  end; // .if
+  end;
   
   //fatalerror(PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^);
   
@@ -586,7 +585,7 @@ begin
   end;
 
   result := PatchApi.Call(PatchApi.CDECL_, Hook.GetOriginalFunc(), [x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain]);
-end; // .function Hook_ZvsPlaceMapObject
+end;
 
 procedure OnRemoteMapObjectPlace (Event: GameExt.PEvent); stdcall;
 begin
@@ -597,7 +596,7 @@ begin
       Erm.ZvsPlaceMapObject(Erm.x[2], Erm.x[3], Erm.x[4], Erm.x[5], Erm.x[6], Erm.x[7], Erm.x[8], Erm.x[9]);
       IsLocalPlaceObject := true;
     end;
-  end; // .switch Network event
+  end;
 end; // .procedure OnRemoteMapObjectPlace
 
 function Hook_ZvsEnter2Monster (Context: Core.PHookContext): LONGBOOL; stdcall;
@@ -670,8 +669,8 @@ begin
 
     for i := 0 to Core.ModuleContext.ModuleList.Count - 1 do begin
       Line(Core.ModuleContext.ModuleInfo[i].ToStr);
-    end; // .for
-  end; // .with
+    end;
+  end;
 
   {!} Core.ModuleContext.Unlock;
 end; // .procedure DumpWinPeModuleList
@@ -699,7 +698,7 @@ begin
           ExceptionText := 'Failed to write data at ' + Format('%x', [integer(ExcRec.ExceptionInformation[1])]);
         end else begin
           ExceptionText := 'Failed to read data at ' + Format('%x', [integer(ExcRec.ExceptionInformation[1])]);
-        end; // .else
+        end;
       end; // .case $C0000005
 
       $C000008C: ExceptionText := 'Array index is out of bounds';
@@ -750,8 +749,8 @@ begin
         if RetAddr <> 0 then begin
           Line(Core.ModuleContext.AddrToStr(Ptr(RetAddr)));
           Ebp := pinteger(Ebp)^;
-        end; // .if
-      end; // .while
+        end;
+      end;
     except
       // Stop processing callstack
     end; // .try
@@ -766,7 +765,7 @@ begin
 
         if Esp = integer(Context.Esp) then begin
           LineText := LineText + '*';
-        end; // .if
+        end;
 
         LineText := LineText + ': ' + Core.ModuleContext.AddrToStr(ppointer(Esp)^, Core.ANALYZE_DATA);
         Inc(Esp, sizeof(integer));
@@ -839,7 +838,7 @@ end; // .function Hook_SetUnhandledExceptionFilter
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   DumpWinPeModuleList;
-end; // .procedure OnGenerateDebugInfo
+end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 const
@@ -869,7 +868,7 @@ begin
   (* Fix multi-thread CPU problem *)
   if UseOnlyOneCpuCoreOpt then begin
     Windows.SetProcessAffinityMask(Windows.GetCurrentProcess, 1);
-  end; // .if
+  end;
   
   (* Fix HotSeat second hero name *)
   Core.Hook(@Hook_SetHotseatHeroName, Core.HOOKTYPE_BRIDGE, 6, Ptr($5125B0));
@@ -879,7 +878,7 @@ begin
   if CPUPatchOpt then begin
     hTimerEvent := Windows.CreateEvent(nil, true, false, 'CPUPatch');
     Core.ApiHook(@Hook_PeekMessageA, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'));
-  end; // .if
+  end;
   
   (* Remove duplicate ResetAll call *)
   PINTEGER($7055BF)^ :=  integer($90909090);
@@ -914,7 +913,7 @@ begin
       PatchApi.STDCALL_,
       @Hook_GetHostByName
     );
-  end; // .if
+  end;
   
   (* Fix UN:C to work with redirected addresses also *)
   Core.ApiHook(@Hook_UN_C, Core.HOOKTYPE_BRIDGE, Ptr($732086));
@@ -999,7 +998,7 @@ begin
   Windows.SetUnhandledExceptionFilter(@OnUnhandledException);
   Core.ApiHook(@Hook_SetUnhandledExceptionFilter, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(Windows.LoadLibrary('kernel32.dll'), 'SetUnhandledExceptionFilter'));
   Windows.SetUnhandledExceptionFilter(@TopLevelExceptionHandler);
-end; // .procedure OnAfterVfsInit
+end;
 
 begin
   Windows.InitializeCriticalSection(InetCriticalSection);

@@ -1652,11 +1652,11 @@ var
 
       while xe(idx) and (txt[idx] <> #10) do begin
         Inc(idx);
-      end; // .while
+      end;
 
       if xe(idx) then begin
         Inc(idx);
-      end; // .if
+      end;
     end; // .if
   end;
 

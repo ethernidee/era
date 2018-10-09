@@ -113,35 +113,28 @@ begin
             ' in file "' + FileName + '".'#13#10 +
             'Expected ' + SysUtils.IntToStr(NUM_BUTTON_COLUMNS) + ' columns'
           );
-        end // .if
-        else begin
+        end else begin
           Line[COL_TYPE]  :=  SysUtils.AnsiLowerCase(Line[COL_TYPE]);
         
           for y := 0 to NUM_BUTTON_COLUMNS - 1 do begin
             if Line[y] = '' then begin
               Line[y] :=  #0;
-            end; // .if
-          end; // .for
+            end;
+          end;
           
           if Line[COL_TYPE] = TYPENAME_ADVMAP then begin
             Line[COL_TYPE]  :=  TYPE_ADVMAP;
-          end // .if
-          else if Line[COL_TYPE] = TYPENAME_TOWN then begin
+          end else if Line[COL_TYPE] = TYPENAME_TOWN then begin
             Line[COL_TYPE]  :=  TYPE_TOWN;
-          end // .ELSEIF
-          else if Line[COL_TYPE] = TYPENAME_HERO then begin
+          end else if Line[COL_TYPE] = TYPENAME_HERO then begin
             Line[COL_TYPE]  :=  TYPE_HERO;
-          end // .ELSEIF
-          else if Line[COL_TYPE] = TYPENAME_HEROES then begin
+          end else if Line[COL_TYPE] = TYPENAME_HEROES then begin
             Line[COL_TYPE]  :=  TYPE_HEROES;
-          end // .ELSEIF
-          else if Line[COL_TYPE] = TYPENAME_BATTLE then begin
+          end else if Line[COL_TYPE] = TYPENAME_BATTLE then begin
             Line[COL_TYPE]  :=  TYPE_BATTLE;
-          end // .ELSEIF
-          else if Line[COL_TYPE] = TYPENAME_DUMMY then begin
+          end else if Line[COL_TYPE] = TYPENAME_DUMMY then begin
             Line[COL_TYPE]  :=  TYPE_DUMMY;
-          end // .ELSEIF
-          else begin
+          end else begin
             {!} Assert(false);
           end; // .else
           
@@ -153,8 +146,7 @@ begin
               'Duplicate button name ("' + ButtonName + '") on line ' + SysUtils.IntToStr(i + 1) +
               ' in file "' + FileName + '"'
             );
-          end // .if
-          else begin
+          end else begin
             ButtonNames[ButtonName] :=  Ptr(ButtonID);
             Line[COL_NAME]          :=  SysUtils.IntToStr(ButtonID);
             Inc(ButtonID);
@@ -184,8 +176,8 @@ begin
   
   if result = 0 then begin
     result  :=  -1;
-  end; // .if
-end; // .function GetButtonID
+  end;
+end;
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin

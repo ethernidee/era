@@ -83,19 +83,19 @@ begin
   fCmdRecsPos         := 0;
   fEventRecsIsCircBuf := false;
   fCmdRecsIsCircBuf   := false;
-end; // .procedure TTracker.Reset
+end;
 
 procedure TrackEvent (EventId: integer);
 var
    
 begin
   
-end; // .procedure TrackEvent
+end;
 
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
 begin
   Tracker := TTracker.Create(NumTracedEventsOpt, NumTracedCmdsOpt);
-end; // .procedure OnBeforeWoG
+end;
 
 begin
   GameExt.RegisterHandler('OnBeforeWoG', OnBeforeWoG);

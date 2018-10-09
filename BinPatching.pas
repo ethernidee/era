@@ -44,7 +44,7 @@ function GetUniquePatchName (const BasePatchName: string): string;
 begin
   result := IntToStr(PatchAutoId) + ':' + BasePatchName;
   Inc(PatchAutoId);
-end; // .function GetUniquePatchName
+end;
 
 procedure ApplyBinPatch (const BinPatchSource: string; BinPatchFile: PBinPatchFile);
 const
@@ -71,10 +71,10 @@ begin
       if not Patcher.Write(Patch.Addr, @Patch.Bytes, Patch.NumBytes, IS_CODE_PATCH).IsApplied() then begin
         Core.FatalError('Failed to write binary patch data at address '
                         + IntToHex(integer(Patch.Addr), 8));
-      end; // .if
+      end;
 
       Patch := Utils.PtrOfs(Patch, sizeof(Patch^) + Patch.NumBytes);
-    end; // .for
+    end;
   except
     Core.FatalError('Failed to apply binary patch "' + PatchName + '"');
   end; // .try
@@ -90,7 +90,7 @@ begin
 
   if result then begin
     PatchContents := FileContents;
-  end; // .if
+  end;
 end; // .function LoadBinPatch
 
 procedure ApplyPatches (const DirPath: string);
@@ -103,9 +103,9 @@ begin
       if LoadBinPatch(DirPath + '\' + FoundName, FileContents) then begin
         PatchList.AddObj(FoundName, Ptr(Length(FileContents)));
         ApplyBinPatch(FoundName, pointer(FileContents));
-      end; // .if
-    end; // .while
-  end; // .with
+      end;
+    end;
+  end;
 end; // .procedure ApplyPatches
 
 begin

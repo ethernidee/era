@@ -55,13 +55,13 @@ begin
   GameExt.EraEventParams[MAX_DAMAGE_PARAM]        :=  -1;
   
   result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_BattleHint_GetAttacker
+end;
 
 function Hook_BattleHint_GetDefender (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraEventParams[DEFENDER_STACK_N_PARAM]  :=  Context.EAX;
   result                                          :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_BattleHint_GetDefender
+end;
 
 function Hook_BattleHint_CalcMinMaxDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -69,13 +69,13 @@ begin
   GameExt.EraEventParams[MAX_DAMAGE_PARAM]  :=  Context.EAX;
   
   result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_BattleHint_CalcMinMaxDamage
+end;
 
 function Hook_MMTrigger (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraRestoreEventParams;
   result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_MMTrigger
+end;
 
 procedure OnBeforeTrigger (Event: GameExt.PEvent); stdcall;
 var
@@ -118,7 +118,7 @@ begin
 
       if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
         Erm.PrintChatMsg('{~white}Debug information was dumped to ' + GameExt.DEBUG_DIR +'{~}');
-      end; // .if
+      end;
     end else if (wParam = KEY_F12) and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
       Erm.ReloadErm;
     end else begin
@@ -145,7 +145,7 @@ begin
       
       if result then begin
         PrevWndProc(hWnd, Msg, wParam, lParam);
-      end; // .if
+      end;
     end; // .else
   end else begin
     result := PrevWndProc(hWnd, Msg, wParam, lParam);
@@ -174,7 +174,7 @@ begin
     GameExt.EraSaveEventParams;
     GameExt.FireEvent('OnBeforeErmInstructions', GameExt.NO_EVENT_DATA, 0);
     GameExt.EraRestoreEventParams;
-  end; // .if
+  end;
   
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_BeforeErmInstructions
@@ -196,7 +196,7 @@ function Hook_CalcDamage_GetDamageBonus (Context: Core.PHookContext): LONGBOOL; 
 begin
   DamageBonus :=  Context.EAX;
   result      :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_CalcDamage_GetDamageBonus
+end;
 
 function Hook_EndCalcDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -239,7 +239,7 @@ begin
     (Heroes.GetBattleCellByPos(PINTEGER(PINTEGER(Context.ESP + 16)^ + STACK_POS_OFS)^));
   
   result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_AI_CalcStackAttackEffect_Start
+end;
 
 function Hook_AI_CalcStackAttackEffect_End (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -287,7 +287,7 @@ begin
   
   if not result then begin
     Context.RetAddr :=  Core.Ret(NUM_ARGS);
-  end; // .if
+  end;
 end; // .function Hook_EnterChat
 
 procedure ClearChatBox; ASSEMBLER;
@@ -297,7 +297,7 @@ asm
   MOV EAX, [ESI + $38]
   PUSH $5547A0
   // RET
-end; // .procedure ClearChatBox
+end;
 
 function Hook_ChatInput (Context: Core.PHookContext): LONGBOOL; stdcall;
 const 
@@ -372,7 +372,7 @@ procedure Hook_MainGameLoop (h: PatchApi.THiHook; This: pointer); stdcall;
 begin
   if MainGameLoopDepth = 0 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);
-  end; // .if
+  end;
   
   Inc(MainGameLoopDepth);
   PatchApi.Call(PatchApi.THISCALL_, h.GetDefaultFunc(), [This]);
@@ -381,7 +381,7 @@ begin
   if MainGameLoopDepth = 0 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMELEAVE, []);
     GameExt.SetMapFolder('');
-  end; // .if
+  end;
 end; // .procedure Hook_MainGameLoop
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;

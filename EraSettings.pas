@@ -30,7 +30,7 @@ begin
     result := SysUtils.Trim(result);
   end else begin
     result := DefVal;
-  end; // .else
+  end;
 end; // .function GetOptValue
 
 function GetOptBoolValue (const OptionName: string; DefValue: boolean = false): boolean;
@@ -40,12 +40,12 @@ var
 begin
   OptVal := GetOptValue(OptionName, IfThen(DefValue, '1', '0'));
   result := OptVal = '1';
-end; // .function GetOptBoolValue
+end;
 
 function GetDebugOpt (const OptionName: string; DefValue: boolean = false): boolean;
 begin
   result := DebugOpt and (DebugEverythingOpt or GetOptBoolValue(OptionName, DefValue)); 
-end; // .function GetDebugOpt
+end;
 
 function GetOptIntValue (const OptionName: string; DefValue: integer = 0): integer;
 var
@@ -58,7 +58,7 @@ begin
     Log.Write('Settings', 'GetOptIntValue', 'Error. Invalid option "' + OptionName
                                             + '" value: "' + OptVal + '". Assumed ' + IntToStr(DefValue));
     result := DefValue;
-  end; // .if
+  end;
 end; // .function GetOptIntValue
 
 procedure InstallLogger (Logger: Log.TLogger);
@@ -71,7 +71,7 @@ begin
 
   while Log.Read(LogRec) do begin
     Logger.Write(LogRec.EventSource, LogRec.Operation, LogRec.Description);
-  end; // .while
+  end;
   
   Log.InstallLogger(Logger, Log.FREE_OLD_LOGGER);
 end; // .procedure InstallLogger
@@ -86,11 +86,10 @@ begin
       InstallLogger(EraLog.TFileLogger.Create(GameExt.DEBUG_DIR + '\' + LOG_FILE_NAME));
     end else begin     
       InstallLogger(EraLog.TConsoleLogger.Create('Era Log'));
-    end; // .else
-  end // .if
-  else begin
+    end;
+  end else begin
     InstallLogger(EraLog.TMemoryLogger.Create);
-  end; // .else
+  end;
 
   Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
 

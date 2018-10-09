@@ -66,7 +66,7 @@ begin
     ((Color32 and $0000F8) shr 3) or
     ((Color32 and $00F800) shr 6) or
     ((Color32 and $F80000) shr 9);
-end; // .function Color32To15Func
+end;
 
 function Color32To16Func (Color32: integer): integer;
 begin
@@ -74,7 +74,7 @@ begin
     ((Color32 and $0000F8) shr 3) or
     ((Color32 and $00FC00) shr 5) or
     ((Color32 and $F80000) shr 8);
-end; // .function Color32To16
+end;
 
 procedure NameStdColors;
 begin
@@ -238,7 +238,7 @@ end; // .procedure NameStdColors
 procedure NameColor (Color32: integer; const Name: string);
 begin
   NamedColors[Name] :=  Ptr(Color32To16(Color32));
-end; // .procedure NameColor
+end;
 
 function IsChineseLoaderPresent (out ChineseHandler: pointer): boolean;
 begin
@@ -246,8 +246,8 @@ begin
   
   if result then begin
     ChineseHandler  :=  Ptr(PINTEGER($4B5203)^ + integer($4B5207));
-  end; // .if
-end; // .function IsChineseLoaderPresent
+  end;
+end;
 
 function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
 const
@@ -280,7 +280,7 @@ var
         Buf^  :=  Txt[i];
         Inc(Buf);
         Inc(i);
-      end; // .while
+      end;
       
       if i <= TxtLen then begin
         Inc(i);
@@ -292,19 +292,17 @@ var
             Buf^  :=  '}';
             Inc(Buf);
             Inc(i);
-          end // .if
-          else begin
+          end else begin
             Buf^  :=  '{';
             Inc(Buf);
             
             while (i <= TxtLen) and (Txt[i] <> '}') do begin
               Inc(i);
-            end; // .while
+            end;
             
             Inc(i);
           end; // .else
-        end // .if
-        else begin
+        end else begin
           Buf^  :=  '{';
           Inc(Buf);
         end; // .else
@@ -338,18 +336,16 @@ begin
       while not IsBlockEnd and TextScanner.GetCurrChar(c) do begin
         if c = '{' then begin
           IsBlockEnd  :=  TextScanner.GetCharAtRelPos(+1, c) and (c = '~');
-        end // .if
-        else if ORD(c) <= 32 then begin
+        end else if ORD(c) <= 32 then begin
           Inc(NumSpaceChars);
-        end // .ELSEIF
-        else if ChineseLoaderOpt and (ORD(c) > 160) then begin
+        end else if ChineseLoaderOpt and (ORD(c) > 160) then begin
           Inc(NumSpaceChars);
           TextScanner.GotoNextChar;
-        end; // .ELSEIF
+        end;
         
         if not IsBlockEnd then begin
           TextScanner.GotoNextChar;
-        end; // .if
+        end;
       end; // .while
       
       BlockLen := TextScanner.Pos - StartPos;
@@ -375,21 +371,18 @@ begin
           else
             ColorStack.Pop;
             TextBlocks[TextBlockInd].Color16  :=  integer(ColorStack.Top);
-          end; // .switch
-        end // .if
-        else begin
+          end;
+        end else begin
           Color16 :=  0;
           
           if NamedColors.GetExistingValue(ColorName, pointer(Color16)) then begin
             TextBlocks[TextBlockInd].Color16  :=  Color16;
-          end // .if
-          else if SysUtils.TryStrToInt('$' + ColorName, Color16) then begin
+          end else if SysUtils.TryStrToInt('$' + ColorName, Color16) then begin
             Color16                           :=  Color32To16(Color16);
             TextBlocks[TextBlockInd].Color16  :=  Color16;
-          end // .ELSEIF
-          else begin
+          end else begin
             TextBlocks[TextBlockInd].Color16  :=  ERR_COLOR;
-          end; // .else
+          end;
           
           ColorStack.Add(Ptr(Color16));
         end; // .else
@@ -413,15 +406,13 @@ begin
     PINTEGER(Context.EBP + $8)^   :=  integer(@TextBuffer[0]);
     Context.ECX                   :=  Context.EBX;
     Context.RetAddr               :=  ChineseHandler;
-  end // .if
-  else begin
+  end else begin
     // Overwritten Code
     if (PINTEGER(Context.EBP + $24)^ and 4) = 0 then begin
       Context.RetAddr :=  Ptr($4B52B2);
-    end // .if
-    else begin
+    end else begin
       Context.RetAddr :=  Ptr($4B525B);
-    end; // .else
+    end;
   end; // .else
   
   result  :=  not Core.EXEC_DEF_CODE;
@@ -433,8 +424,8 @@ begin
   
   if not result then begin
     Context.EAX :=  TextBlocks[TextBlockInd].Color16;
-  end; // .if
-end; // .function Hook_GetCharColor
+  end;
+end;
 
 function Hook_HandleTags (Context: Core.PHookContext): longbool; stdcall;
 var
@@ -447,17 +438,17 @@ begin
   
   if ORD(c) > 32 then begin
     Inc(CurrBlockPos);
-  end; // .if
+  end;
   
   while CurrBlockPos = TextBlocks[TextBlockInd].BlockLen do begin
     CurrBlockPos  :=  0;
     Inc(TextBlockInd);
-  end; // .while
+  end;
   
   if (TextBlocks[TextBlockInd].Color16 = DEF_COLOR) and (c in ['{', '}']) then begin
     PBOOLEAN(Context.EBP + $24)^  :=  c = '{';
     Context.RetAddr               :=  Ptr($4B5190);
-  end; // .if
+  end;
   
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_HandleTags
@@ -465,7 +456,7 @@ end; // .function Hook_HandleTags
 function ChineseGetCharColor: integer; stdcall;
 begin
   result := TextBlocks[TextBlockInd].Color16;
-end; // .function ChineseGetCharColor
+end;
 
 procedure ChineseGotoNextChar; stdcall;
 begin
@@ -474,8 +465,8 @@ begin
   while CurrBlockPos = TextBlocks[TextBlockInd].BlockLen do begin
     CurrBlockPos  :=  0;
     Inc(TextBlockInd);
-  end; // .while
-end; // .procedure ChineseGotoNextChar
+  end;
+end;
 
 procedure SetupColorMode;
 begin
@@ -560,13 +551,11 @@ begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
     Color32To16 :=  Color32To15Func;
     {!} Assert(false);// !FIXME
-  end // .if
-  else if TextColorMode^ = TEXTMODE_16BITS then begin
+  end else if TextColorMode^ = TEXTMODE_16BITS then begin
     Color32To16 :=  Color32To16Func;
-  end // .ELSEIF
-  else begin
+  end else begin
     {!} Assert(false);
-  end; // .else
+  end;
   
   NameStdColors;
   GameExt.FireEvent('OnAfterCreateWindow', GameExt.NO_EVENT_DATA, 0);
@@ -582,11 +571,10 @@ begin
     (* Remove Chinese loader hook *)
     PWORD($4B5202)^     :=  word($840F);  // JE
     PINTEGER($4B5204)^  :=  $02E7;        // 4B54EF
-  end // .if
-  else begin
+  end else begin
     Core.Hook(@Hook_HandleTags, Core.HOOKTYPE_BRIDGE, 7, Ptr($4B509B));
     //Core.ApiHook(@Hook_DrawPic, Core.HOOKTYPE_BRIDGE, Ptr($4B4F03));
-  end; // .else 
+  end; 
 
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));

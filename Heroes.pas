@@ -531,7 +531,7 @@ begin
   {!} Assert(Node <> nil);
   // * * * * * //
   PatchApi.Call(PatchApi.THISCALL_, Ptr($55DF20), [@Self, @Temp, Node]);
-end; // .procedure TBinaryTreeNode.RemoveNode
+end;
 
 procedure TBinaryTreeNode.AddItem (aItem: PBinaryTreeItem);
 var
@@ -613,24 +613,24 @@ end; // .procedure MemFreeAndNil
 function GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
 begin
   result := Utils.PtrOfs(BaseAddr, Offset);
-end; // .function GetVal
+end;
 
 function GetVal (BaseAddr, Offset: integer): PValue; overload;
 begin
   result := Utils.PtrOfs(Ptr(BaseAddr), Offset);
-end; // .function GetVal
+end;
 
 procedure GZipWrite (Count: integer; {n} Addr: pointer);
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Count));
   ZvsGzipWrite(Addr, Count);
-end; // .procedure GZipWrite
+end;
 
 function GzipRead (Count: integer; {n} Addr: pointer): integer;
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Count));
   result := ZvsGzipRead(Addr, Count) + Count;
-end; // .function 
+end; 
 
 function LoadTxt (Name: pchar): {n} PTxtFile;
 begin
@@ -640,7 +640,7 @@ begin
     CALL EAX
     MOV @result, EAX
   end; // .asm
-end; // .function LoadTxt
+end;
 
 procedure ForceTxtUnload (Name: pchar);
 var
@@ -657,7 +657,7 @@ begin
       MOV EAX, UNLOAD_TXT_FUNC
       CALL EAX
     end; // .asm
-  end; // .if
+  end;
 end; // .procedure ForceTxtUnload
 
 procedure LoadLod (const LodName: string; Res: PLod);
@@ -669,35 +669,33 @@ begin
     MOV EAX, LOAD_LOD
     CALL EAX
   end; // .asm
-end; // .procedure LoadLod
+end;
 
 procedure GetGameState (out GameState: TGameState);
 begin
   if AdvManagerPtr^.RootDlgIdPtr <> nil then begin
     GameState.RootDlgId :=  AdvManagerPtr^.RootDlgIdPtr^^;
-  end // .if
-  else begin
+  end else begin
     GameState.RootDlgId :=  0;
-  end; // .else
+  end;
   if AdvManagerPtr^.CurrentDlgIdPtr <> nil then begin
     GameState.CurrentDlgId := AdvManagerPtr^.CurrentDlgIdPtr^^;
-  end // .if
-  else begin
+  end else begin
     GameState.CurrentDlgId := 0;
-  end; // .else
+  end;
 end; // .procedure GetDialogsIds
 
 function GetMapSize: integer; ASSEMBLER; {$W+}
 asm
   MOV EAX, [GAME_MANAGER]
   MOV EAX, [EAX + $1FC44]
-end; // .function GetMapSize
+end;
 
 function IsTwoLevelMap: boolean; ASSEMBLER; {$W+}
 asm
   MOV EAX, [GAME_MANAGER]
   MOVZX EAX, byte [EAX + $1FC48]
-end; // .function IsTwoLevelMap
+end;
 
 function IsLocalGame: boolean;
 begin
@@ -773,10 +771,9 @@ begin
   
   if Side = 255 then begin
     result := -1;
-  end // .if
-  else begin
+  end else begin
     result := SLOTS_PER_SIDE * Side + BattleCell[STACKID_OFFSET];
-  end; // .else
+  end;
 end; // .function GetBattleCellStackId
 
 function GetStackIdByPos (StackPos: integer): integer;
@@ -794,7 +791,7 @@ const
   function Stacks (Ind: integer; FieldOfs: integer): PStackField; inline;
   begin
     result  :=  Utils.PtrOfs(PPOINTER($699420)^, 21708 + 1352 * Ind + FieldOfs);
-  end; // .function Stacks
+  end;
 
 var
   i:  integer;
@@ -806,11 +803,10 @@ begin
   while (i < NUM_BATTLE_STACKS) and (result = NO_STACK) do begin
     if Stacks(i, STACK_POS).v = StackPos then begin
       result  :=  i;
-    end // .if
-    else begin
+    end else begin
       Inc(i);
-    end; // .else
-  end; // .while
+    end;
+  end;
 end; // .function GetStackIdByPos
 
 procedure RedrawHeroMeetingScreen; ASSEMBLER;
@@ -850,12 +846,12 @@ end; // .procedure RedrawHeroMeetingScreen
 function IsCampaign: boolean;
 begin
   result := pbyte($69779C)^ <> 0;
-end; // .function IsCampaign
+end;
 
 function GetMapFileName: string;
 begin
   result := pchar(pinteger(GAME_MANAGER)^ + $1F6D9);
-end; // .function GetMapFileName
+end;
 
 function GetCampaignFileName: string;
 type
@@ -888,7 +884,7 @@ function GetCampaignMapInd: integer;
 begin
   {!} Assert(IsCampaign);
   result := pbyte(pinteger(GAME_MANAGER)^ + $1F45A)^;
-end; // .function GetCampaignMapInd
+end;
 
 begin
   ResourceNamer := TResourceNamer.Create;

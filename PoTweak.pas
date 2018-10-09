@@ -98,25 +98,25 @@ function Hook_BeforeResetErmFunc (Context: Core.PHookContext): LONGBOOL; stdcall
 begin
   GameExt.FireEvent('$OnBeforeResetErmFunc', nil, 0);
   result := Core.EXEC_DEF_CODE;
-end; // .function Hook_BeforeResetErmFunc
+end;
 
 procedure OnSavegameWrite (Event: GameExt.PEvent); stdcall;
 begin
   Stores.WriteSavegameSection(SquaresSize, @Squares[0], FILE_SECTION_NAME);
   Stores.WriteSavegameSection(Squares2Size, @Squares2[0], FILE_SECTION_NAME);
-end; // .procedure OnSavegameWrite
+end;
 
 procedure OnSavegameRead (Event: GameExt.PEvent); stdcall;
 begin
   PatchSquaresRefs;
   Stores.ReadSavegameSection(SquaresSize, @Squares[0], FILE_SECTION_NAME);
   Stores.ReadSavegameSection(Squares2Size, @Squares2[0], FILE_SECTION_NAME);
-end; // .procedure OnSavegameRead
+end;
 
 procedure OnBeforeResetErmFunc (Event: GameExt.PEvent); stdcall;
 begin
   PatchSquaresRefs;
-end; // .procedure OnBeforeResetErmFunc
+end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin

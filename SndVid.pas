@@ -85,12 +85,12 @@ begin
     if (Drives and (1 shl i)) <> 0 then begin
       if Windows.GetDriveType(pchar(GameCDPath)) = Windows.DRIVE_CDROM then begin
         GameCDFound :=  SysUtils.DirectoryExists(GameCDPath + CD_GAME_FOLDER);
-      end; // .if
-    end; // .if
+      end;
+    end;
     
     if not GameCDFound then begin
       GameCDPath[1] :=  CHR(ORD(GameCDPath[1]) + 1);
-    end; // .if
+    end;
     Inc(i);
   end; // .while
   
@@ -151,7 +151,7 @@ begin
           
           if ArcType = ARC_SND then begin
             ItemInfo.Size :=  PSndArcItem(CurrItem).Size;
-          end; // .if
+          end;
           
           ArcFiles[ItemName]  :=  ItemInfo; ItemInfo :=  nil;
         end; // .if
@@ -166,13 +166,12 @@ function IsOrigArc (const FileName: string; ArcType: TArcType): boolean;
 begin
   if ArcType = ARC_SND then begin
     result  :=  (FileName = 'h3ab_ahd.snd') or (FileName = 'heroes3.snd');
-  end // .if
-  else begin
+  end else begin
     result  :=
       (FileName = 'h3ab_ahd.vid') or
       (FileName = 'video.vid')    or
       (FileName = 'heroes3.vid');
-  end; // .else
+  end;
 end; // .function IsOrigArc
 
 procedure LoadArcs (ArcType: TArcType);
@@ -188,14 +187,12 @@ begin
   // * * * * * //
   if ArcType = ARC_VID then begin
     ArcExt  :=  '.vid';
-  end // .if
-  else if ArcType = ARC_SND then begin
+  end else if ArcType = ARC_SND then begin
     ArcExt  :=  '.snd';
-  end // .ELSEIF
-  else begin
+  end else begin
     ArcExt  :=  '';
     {!} Assert(false);
-  end; // .else
+  end;
   
   Locator.DirPath :=  'Data';
   Locator.InitSearch('*' + ArcExt);
@@ -211,8 +208,8 @@ begin
     then begin
       if not IsOrigArc(FileName, ArcType) then begin
         LoadArc('Data\' + FileName, ArcType);
-      end; // .if
-    end; // .if
+      end;
+    end;
     
     SysUtils.FreeAndNil(FileInfo);
   end; // .while
@@ -233,10 +230,9 @@ begin
   (* Load CD resources *)
   if SysUtils.FileExists(CD_VIDEO_PATH) then begin
     LoadArc(CD_VIDEO_PATH, ARC_VID);
-  end // .if
-  else if LoadCDOpt and GameCDFound then begin
+  end else if LoadCDOpt and GameCDFound then begin
     LoadArc(GameCDPath + CD_VIDEO_PATH, ARC_VID);
-  end; // .ELSEIF
+  end;
   
   (* Load original rsources *)
   LoadArc('Data\video.vid', ARC_VID);
@@ -288,8 +284,7 @@ begin
       MOV Res, EAX
     end; // .asm
     Context.EAX :=  Res;
-  end // .if
-  else begin
+  end else begin
     Context.EAX :=  0;
   end; // .else
   
@@ -333,8 +328,7 @@ begin
       MOV Res, EAX
     end; // .asm
     Context.EAX :=  Res;
-  end // .if
-  else begin
+  end else begin
     Context.EAX :=  0;
   end; // .else
   
@@ -353,10 +347,9 @@ begin
   (* Load CD resources *)
   if SysUtils.FileExists(CD_AUDIO_PATH) then begin
     LoadArc(CD_AUDIO_PATH, ARC_SND);
-  end // .if
-  else if LoadCDOpt and GameCDFound then begin
+  end else if LoadCDOpt and GameCDFound then begin
     LoadArc(GameCDPath + CD_AUDIO_PATH, ARC_SND);
-  end; // .ELSEIF
+  end;
   
   (* Load original rsources *)
   LoadArc('Data\heroes3.snd', ARC_SND);
@@ -390,13 +383,13 @@ begin
   
   if StrLib.ReverseFindChar('.', BaseFileName, RightMostDotPos) then begin
     BaseFileName  :=  System.Copy(BaseFileName, 1, RightMostDotPos - 1);
-  end; // .if
+  end;
   
   ItemInfo  :=  SndFiles[BaseFileName];
   
   if ItemInfo = nil then begin
     ItemInfo  :=  SndFiles[BaseFileName];
-  end; // .if
+  end;
   
   if (ItemInfo <> nil) and (ItemInfo.Size > 0) then begin
     ResourceBuf :=  pointer(Context.EDX);
@@ -404,7 +397,7 @@ begin
   
     if ResourceBuf.IsLoaded then begin
       Heroes.MFree(ResourceBuf.Addr);
-    end; // .if
+    end;
     
     ResourceBuf.Addr  :=  Heroes.MAlloc(ItemInfo.Size);
     FileSizePtr^      :=  ItemInfo.Size;
@@ -413,8 +406,7 @@ begin
     SysUtils.FileRead(ItemInfo.hFile, ResourceBuf.Addr^, ItemInfo.Size);
 
     Context.EAX :=  byte(true);
-  end // .if
-  else begin
+  end else begin
     Context.EAX :=  byte(false);
   end; // .else
   
@@ -441,7 +433,7 @@ begin
   (* Find game CD *)
   if LoadCDOpt then begin
     FindGameCD;
-  end; // .if
+  end;
   
   (* Disable default CD scanning *)
   PINTEGER($50C409)^  :=  $0000B4E9;

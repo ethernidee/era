@@ -29,10 +29,9 @@ begin
 
   if byte(HZ[1]) > 160 then begin
     W := byte(HZ[1]) - 160;
-  end // .if
-  else begin
+  end else begin
     W := 1;
-  end; // .else
+  end;
 end;
 procedure MakeChar12(StartY,StartX,Surface:integer;HZ:pAnsiChar;Color:word);stdcall;
 var
@@ -256,21 +255,19 @@ begin
   while (i < CharLength) and not (Str[i] in [#0, #10]) do begin
     if Str[i] > ' ' then begin
       ChineseGotoNextChar;
-    end; // .if
+    end;
   
     if Str[i] = '{' then begin
       ColorSel := 1;
-    end // .if
-    else if Str[i] = '}' then begin
+    end else if Str[i] = '}' then begin
       ColorSel := 0;
-    end // .elseif
-    else begin
+    end else begin
       if (byte(str[i]) > 160) then begin
         Color := ChineseGetCharColor;
       
         if Color = kDefaultColor then begin
           Color := pWord(hfont+(colorB+colorSel)*2+$1058)^;
-        end; // .if
+        end;
       
         if FontWidth=Font12Width then MakeChar12(cy,cx,Surface,@str[i],Color);
         if FontWidth=FontTinyWidth then MakeChar10(cy,cx,Surface,@str[i],Color);

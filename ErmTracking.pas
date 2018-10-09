@@ -97,7 +97,7 @@ procedure TEventTracker.Reset ();
 begin
   fBufPos           := 0;
   fNumTrackedEvents := 0; 
-end; // .procedure TEventTracker.Reset
+end;
 
 function TEventTracker.SetDumpCommands (ShouldDumpCommands: boolean): {SELF} TEventTracker;
 begin

@@ -524,15 +524,14 @@ begin
     if Res = 30726 then begin
       result := MSG_RES_CANCEL;
     end // .if
-  end // .if
-  else if MesType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
+  end else if MesType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
     case Res of 
       30729: result := MSG_RES_LEFTPIC;
       30730: result := MSG_RES_RIGHTPIC;
     else
       result := MSG_RES_CANCEL;
     end; // .SWITCH Res
-  end; // .ELSEIF
+  end; // .elseif
 end; // .function Msg  
   
 procedure ShowMessage (const Mes: string);
@@ -579,7 +578,7 @@ begin
 
   if result then begin
     Name := SearchRes.Value;
-  end; // .if
+  end;
 end;
 
 procedure NameTrigger (const TriggerId: integer; const FuncName: string);
@@ -705,30 +704,26 @@ begin
         
         if (EventID and Erm.TRIGGER_LE_POS) <> 0 then begin
           BaseEventName := 'OnLocalEvent ';
-        end // .if
-        else begin
+        end else begin
           if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
             BaseEventName := 'OnAfterVisitObject ';
-          end // .if
-          else begin
+          end else begin
             BaseEventName := 'OnBeforeVisitObject ';
-          end; // .else
-        end; // .else
+          end;
+        end;
         
         result :=
           BaseEventName + SysUtils.IntToStr(x) + '/' +
           SysUtils.IntToStr(y) + '/' + SysUtils.IntToStr(z);
-      end // .if
-      else begin
+      end else begin
         ObjType    := (EventID shr 12) and 255;
         ObjSubtype := (EventID and 255) - 1;
         
         if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
           BaseEventName := 'OnAfterVisitObject ';
-        end // .if
-        else begin
+        end else begin
           BaseEventName := 'OnBeforeVisitObject ';
-        end; // .else
+        end;
         
         result :=
           BaseEventName + SysUtils.IntToStr(ObjType) + '/' + SysUtils.IntToStr(ObjSubtype);
@@ -738,7 +733,7 @@ begin
         // Ok
       end else begin
         result := 'OnErmFunction ' + SysUtils.IntToStr(EventID);
-      end; // .else
+      end;
     end; // .else
   end; // .switch
 end; // .function GetTriggerReadableName
@@ -793,8 +788,8 @@ begin
     while IterNext do begin
       FreeMem(PErmCmd(IterValue).CmdHeader.Value);
       Dispose(PErmCmd(IterValue));
-    end; // .while
-  end; // .with 
+    end;
+  end; 
 
   ErmCmdCache.Clear;
 end; // .procedure ClearErmCmdCache
@@ -829,10 +824,9 @@ var
         ErmScanner.GotoNextChar;
         ErmScanner.SkipCharset(DIGITS);
         Token := ErmScanner.GetSubstrAtPos(StartPos, ErmScanner.Pos - StartPos);
-      end // .if
-      else begin
+      end else begin
         ErmScanner.ReadToken(DIGITS, Token);
-      end; // .else
+      end;
       
       result := SysUtils.TryStrToInt(Token, Num) and ErmScanner.GetCurrChar(c) and (c in DELIMS);
     end; // .if
@@ -855,16 +849,16 @@ var
 
         if result and (IndType <> ValNum) then begin
           ErmScanner.GotoNextChar;
-        end; // .if
-      end; // .if
+        end;
+      end;
       
       if result then begin
         result := ReadNum(Arg.Value);
         
         if result then begin
           Arg.ValType := ORD(IndType) shl 4 + ORD(ValType);
-        end; // .if
-      end; // .if
+        end;
+      end;
     end; // .if
   end; // .function ReadArg
   
@@ -889,8 +883,8 @@ begin
 
         if c = '/' then begin
           ErmScanner.GotoNextChar;
-        end; // .if
-      end; // .if
+        end;
+      end;
     end; // .while
 
     Res := Res and ErmScanner.GotoNextChar;
@@ -909,7 +903,7 @@ begin
       
       if ErmCmdCache.ItemCount = ERM_CMD_CACHE_LIMIT then begin
         ClearErmCmdCache;
-      end; // .if
+      end;
       
       ErmCmdCache[CmdStr] := Cmd;
     end; // .if
@@ -917,10 +911,9 @@ begin
   
   if not Res then begin
     ShowMessage('ExecErmCmd: Invalid command "' + CmdStr + '"');
-  end // .if
-  else begin
+  end else begin
     ZvsProcessCmd(Cmd);
-  end; // .else
+  end;
 end; // .procedure ExecSingleErmCmd
 
 procedure ExecErmCmd (const CmdStr: string);
@@ -938,10 +931,10 @@ begin
     if Command <> '' then begin
       if (i = High(Commands)) and (Command[Length(Command)] <> ';') then begin
         Command := Command + ';';
-      end; // .if
+      end;
 
       ExecSingleErmCmd(Command);
-    end; // .if
+    end;
   end; // .for
 end; // .procedure ExecErmCmd
 
@@ -964,7 +957,7 @@ begin
     Utils.CopyMem(ScriptSize - 2, pointer(ScriptContents), ScriptBuf);
     PBYTE(Utils.PtrOfs(ScriptBuf, ScriptSize - 2))^ :=  0;
     ScriptNames.Add(ScriptName);
-  end; // .if
+  end;
 end; // .procedure LoadScriptFromMemory
 
 procedure LoadErtFile (const ErmScriptName: string);
@@ -976,7 +969,7 @@ begin
     
   if SysUtils.FileExists(ErtFilePath) then begin
     ZvsLoadErtFile('', pchar('..\' + ErtFilePath));
-  end; // .if
+  end;
 end; // .procedure LoadErtFile
 
 function PreprocessErm (const ScriptName, Script: string): string;
@@ -1014,7 +1007,7 @@ var
     if not Scanner.PosToLine(ErrPos, LineN, LinePos) then begin
       LineN   := -1;
       LinePos := -1;
-    end; // .if
+    end;
     
     ShowMessage(Format('{~gold}Error in "%s".'#10'Line: %d. Position: %d.{~}'#10 +
                        '%s.'#10#10'Context:'#10#10'%s',
@@ -1026,15 +1019,15 @@ var
   procedure MarkPos;
   begin
     MarkedPos := Scanner.Pos;
-  end; // .procedure MarkPos
+  end;
 
   procedure FlushMarked;
   begin
     if Scanner.Pos > MarkedPos then begin
       Buf.Add(Scanner.GetSubstrAtPos(MarkedPos, Scanner.Pos - MarkedPos));
       MarkedPos := Scanner.Pos;
-    end; // .if
-  end; // .procedure FlushMarked
+    end;
+  end;
 
   procedure ParseFuncName;
   var
@@ -1054,7 +1047,7 @@ var
       end else begin
         ShowError(Scanner.Pos, 'Unexpected line end in function name');
         Buf.Add('999999');
-      end; // .else
+      end;
     end else begin
       ShowError(Scanner.Pos, 'Missing closing ")"');
       Buf.Add('999999');
@@ -1069,8 +1062,8 @@ var
       Labels[LabelName] := Ptr(CmdN + 1);
     end else begin
       ShowError(Scanner.Pos, 'Duplicate label "' + LabelName + '"');
-    end; // .else
-  end; // .procedure DeclareLabel
+    end;
+  end;
 
   procedure ParseLabel (Scope: TScope);
   var
@@ -1087,7 +1080,7 @@ var
 
     if IsDeclaration then begin
       Scanner.GotoNextChar;
-    end; // .if
+    end;
     
     if Scanner.ReadToken(LABEL_CHARS, LabelName) and Scanner.GetCurrChar(c) then begin
       if c = ']' then begin
@@ -1098,7 +1091,7 @@ var
             DeclareLabel(LabelName);
           end else begin
             ShowError(Scanner.Pos, 'Label declaration inside command is prohibited');
-          end; // .else
+          end;
         end else begin
           if Scope = CMD_SCOPE then begin
             LabelValue := integer(Labels[LabelName]);
@@ -1107,7 +1100,7 @@ var
               UnresolvedLabelInd := Buf.AddObj(LabelName, Ptr(UnresolvedLabelInd));
             end else begin
               Buf.Add(IntToStr(LabelValue - 1));
-            end; // .else
+            end;
           end else begin
             FlushMarked;
           end; // .else
@@ -1117,14 +1110,14 @@ var
 
         if not IsDeclaration then begin
           Buf.Add('999999');
-        end; // .if
+        end;
       end; // .else
     end else begin
       ShowError(Scanner.Pos, 'Missing closing "]"');
 
       if not IsDeclaration then begin
         Buf.Add('999999');
-      end; // .if
+      end;
     end; // .else
 
     MarkPos;
@@ -1148,7 +1141,7 @@ var
         Buf[i] := '999999';
       end else begin
         Buf[i] := IntToStr(LabelValue - 1);
-      end; // .else
+      end;
 
       i := integer(Buf.Values[i]);
     end; // .while
@@ -1171,7 +1164,7 @@ var
             ParseLabel(CMD_SCOPE);
           end else begin
             Scanner.GotoNextChar;
-          end; // .else
+          end;
         end; // .case '['
 
         '(': begin
@@ -1189,7 +1182,7 @@ var
     if c = ';' then begin
       Scanner.GotoNextChar;
       Inc(CmdN);
-    end; // .if
+    end;
   end; // .procedure ParseCmd
 
 begin
@@ -1218,7 +1211,7 @@ begin
                 MarkPos;
               end else begin
                 ParseCmd;
-              end; // .else
+              end;
             end; // .case '!'
 
             '?': begin
@@ -1240,19 +1233,18 @@ begin
           ParseLabel(GLOBAL_SCOPE);
         end else begin
           Scanner.GotoNextChar;
-        end; // .else
+        end;
       end; // .case '['
     end; // .switch c
   end; // .while
 
   if MarkedPos = 1 then begin
     result := Script;
-  end // .if
-  else begin
+  end else begin
     FlushMarked;
     ResolveLabels;
     result := Buf.ToText('');
-  end; // .else
+  end;
   // * * * * * //
   SysUtils.FreeAndNil(Buf);
   SysUtils.FreeAndNil(Scanner);
@@ -1269,7 +1261,7 @@ begin
   if result then begin
     LoadScriptFromMemory(ScriptName, PreprocessErm(ScriptName, ScriptContents));
     LoadErtFile(ScriptName);
-  end; // .if
+  end;
 end; // .function LoadScript
 
 function GetFileList (const Dir, FileExt: string): {O} Lists.TStringList;
@@ -1323,7 +1315,7 @@ begin
         (SysUtils.TryStrToInt(FileNameTokens[PRIORITY_TOKEN], TestPriority))
       then begin
         Priority  :=  TestPriority;
-      end; // .if
+      end;
 
       result.AddObj(FileName, Ptr(Priority));
     end; // .if
@@ -1340,10 +1332,10 @@ begin
 
     while (j >= 0) and (Priority > integer(result.Values[j])) do begin
       Dec(j);
-    end; // .while
+    end;
 
     result.Move(i, j + 1);
-  end; // .for
+  end;
   // * * * * * //
   SysUtils.FreeAndNil(Locator);
 end; // .function GetFileList
@@ -1442,7 +1434,7 @@ begin
   if not Erm.ZvsIsGameLoading^ then begin
     AdvErm.ResetMemory;
     FuncAutoId := INITIAL_FUNC_AUTO_ID;
-  end; // .if
+  end;
 
   if TrackingOpts.Enabled then begin
     EventTracker.Reset;
@@ -1453,14 +1445,14 @@ begin
   
   for i := 0 to MAX_ERM_SCRIPTS_NUM - 1 do begin
     ErmScriptsInfo[i].State :=  SCRIPT_NOT_USED;
-  end; // .for
+  end;
   
   if SysUtils.FileExists(SCRIPTS_LIST_FILEPATH) and Files.ReadFileContents(SCRIPTS_LIST_FILEPATH, FileContents) then begin
     ForcedScripts :=  StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
     
     for i := 0 to Math.Min(High(ForcedScripts), MAX_ERM_SCRIPTS_NUM - 2) do begin
       LoadScript(SysUtils.AnsiLowerCase(ForcedScripts[i]));
-    end; // .for
+    end;
     
     for i := MAX_ERM_SCRIPTS_NUM - 1 to High(ForcedScripts) do begin
       if Files.ReadFileContents(ERM_SCRIPTS_PATH + '\' + ForcedScripts[i], FileContents) then begin
@@ -1470,16 +1462,15 @@ begin
           FileContents  :=  PreprocessErm(ForcedScripts[i], FileContents);
           ScriptBuilder.AppendBuf(Length(FileContents) - 2, pointer(FileContents));
           ScriptBuilder.Append(#10);
-        end; // .if
-      end; // .if
+        end;
+      end;
     end; // .for
-  end // .if
-  else begin
+  end else begin
     ScriptList := GetFileList(ERM_SCRIPTS_PATH, '.erm');
     
     for i := 0 to Math.Min(ScriptList.Count - 1, MAX_ERM_SCRIPTS_NUM - 2) do begin
       LoadScript(SysUtils.AnsiLowerCase(ScriptList[i]));
-    end; // .for
+    end;
     
     for i := MAX_ERM_SCRIPTS_NUM - 1 to ScriptList.Count - 1 do begin
       if Files.ReadFileContents(ERM_SCRIPTS_PATH + '\' + ScriptList[i], FileContents) then begin
@@ -1488,9 +1479,9 @@ begin
         if Length(FileContents) > MIN_ERM_SCRIPT_SIZE then begin
           ScriptBuilder.AppendBuf(Length(FileContents) - 2, pointer(FileContents));
           ScriptBuilder.Append(#10);
-        end; // .if
-      end; // .if
-    end; // .for
+        end;
+      end;
+    end;
   end; // .else
   
   ScriptBuilder.Append(#10#13);
@@ -1498,7 +1489,7 @@ begin
   
   if Length(FileContents) > MIN_ERM_SCRIPT_SIZE then begin
     LoadScriptFromMemory(JOINT_SCRIPT_NAME, FileContents);
-  end; // .if
+  end;
   // * * * * * //
   SysUtils.FreeAndNil(ScriptBuilder);
   SysUtils.FreeAndNil(ScriptList);
@@ -1535,8 +1526,7 @@ begin
   
   if not Res then begin
     Mes :=  '{~red}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
-  end // .if
-  else begin
+  end else begin
     i :=  0;
     
     while Res and (i < MAX_ERM_SCRIPTS_NUM) do begin
@@ -1545,8 +1535,8 @@ begin
         Res         :=  Files.WriteFileContents(ErmScripts[i] + #10#13, ScriptPath);
         if not Res then begin
           Mes :=  '{~red}Error writing to file "' + ScriptPath + '"{~}';
-        end; // .if
-      end; // .if
+        end;
+      end;
       
       Inc(i);
     end; // .while
@@ -1554,11 +1544,11 @@ begin
   
   if Res then begin
     Mes :=  '{~white}Scripts were successfully extracted{~}';
-  end; // .if
+  end;
   
   if not Res then begin
     PrintChatMsg(Mes);
-  end; // .if
+  end;
 end; // .procedure ExtractErm
 
 (*
@@ -1614,7 +1604,7 @@ begin
   
   for i := 0 to High(Params) do begin
     EraEventParams[i] := Params[i];
-  end; // .for
+  end;
   
   Erm.FireErmEvent(EventId);
   GameExt.EraRestoreEventParams;
@@ -1629,18 +1619,17 @@ begin
     
     while result^ <> '!' do begin
       Dec(result);
-    end; // .while
+    end;
     
     Inc(result);
     
     if result^ = '#' then begin
       // [!]#
       Dec(result);
-    end // .if
-    else begin
+    end else begin
       // ![!]
       Dec(result, 2);
-    end; // .else
+    end;
   end; // .if
 end; // .function FindErmCmdBeginning
 
@@ -1653,7 +1642,7 @@ begin
   end else begin
     FireRemoteEventProc(EventId, @Args[0], length(Args));
   end;
-end; // .procedure TGame.FireRemoteErmEvent
+end;
 
 function GrabErmCmd ({n} CmdPtr: pchar): string;
 var
@@ -1671,7 +1660,7 @@ begin
     
     if EndPos^ = ';' then begin
       Inc(EndPos);
-    end; // .if
+    end;
     
     result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
   end; // .if
@@ -1680,17 +1669,16 @@ end; // .function GrabErmCmd
 function ErmCurrHero: {n} pointer;
 begin
   result := PPOINTER($27F9970)^;
-end; // .function ErmCurrHero
+end;
 
 function ErmCurrHeroInd: integer; // or -1
 begin
   if ErmCurrHero <> nil then begin
     result := PINTEGER(Utils.PtrOfs(ErmCurrHero, $1A))^;
-  end // .if
-  else begin
+  end else begin
     result := -1;
-  end; // .else
-end; // .function 
+  end;
+end; 
 
 function Hook_ProcessErm (Context: Core.PHookContext): longbool; stdcall;
 var
@@ -1704,7 +1692,7 @@ begin
     if CurrErmEventID^ >= Erm.TRIGGER_FU30000 then begin
       SetLength(YVars.Value, Length(y^));
       Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
-    end; // .if
+    end;
     
     SavedYVars.Add(YVars); YVars := nil;
     
@@ -1776,7 +1764,7 @@ begin
     
     if YVars.Value <> nil then begin
       Utils.CopyMem(sizeof(y^), @YVars.Value[0], @y[1]);
-    end; // .if
+    end;
     
     Dec(ErmTriggerDepth);
 
@@ -1830,13 +1818,12 @@ begin
   if WoGOptionsFile = RESET_OPTIONS_COMMAND then begin
     for i := 0 to High(WoGOptions[CURRENT_WOG_OPTIONS]) do begin
       WoGOptions[CURRENT_WOG_OPTIONS][i] := 0;
-    end; // .for
+    end;
     
     WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_MAP_RULES] := USE_SELECTED_RULES;
-  end // .if
-  else if not LoadWoGOptions(pchar(WoGOptionsFile)) then begin
+  end else if not LoadWoGOptions(pchar(WoGOptionsFile)) then begin
     ShowMessage('Cannot load file with WoG options: ' + WoGOptionsFile);
-  end; // .ELSEIF
+  end;
   
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_UN_J3_End
@@ -1849,7 +1836,7 @@ asm
   or EDX, EAX
   PUSH $70E8A9
   // RET
-end; // .procedure Hook_ErmCastleBuilding
+end;
 {$W+}
 
 function Hook_ErmHeroArt (Context: Core.PHookContext): longbool; stdcall;
@@ -1858,20 +1845,20 @@ begin
   
   if not result then begin
     Context.RetAddr := Ptr($744B85);
-  end; // .if
-end; // .function Hook_ErmHeroArt
+  end;
+end;
 
 function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookContext): longbool; stdcall;
 begin
   f[1]   := false;
   result := Core.EXEC_DEF_CODE;
-end; // .function Hook_ErmHeroArt_FindFreeSlot
+end;
 
 function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookContext): longbool; stdcall;
 begin
   f[1]   := true;
   result := Core.EXEC_DEF_CODE;
-end; // .function Hook_ErmHeroArt_FoundFreeSlot
+end;
 
 function Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookContext): longbool; stdcall;
 const
@@ -1894,7 +1881,7 @@ const
 begin
   ErmDlgCmd^ := NO_CMD;
   result     := Core.EXEC_DEF_CODE;
-end; // .function Hook_DlgCallback
+end;
 
 function Hook_CM3 (Context: Core.PHookContext): longbool; stdcall;
 const
@@ -1951,8 +1938,8 @@ begin
     
     if ScriptNameLen > 0 then begin
       Stores.WriteSavegameSection(ScriptNameLen, pointer(ScriptName), SCRIPT_NAMES_SECTION);
-    end; // .if
-  end; // .for
+    end;
+  end;
 end; // .procedure OnSavegameWrite
 
 procedure OnSavegameRead (Event: GameExt.PEvent); stdcall;
@@ -1991,10 +1978,10 @@ begin
     
     if ScriptNameLen > 0 then begin
       Stores.ReadSavegameSection(ScriptNameLen, pointer(ScriptName), SCRIPT_NAMES_SECTION);
-    end; // .if
+    end;
     
     ScriptNames.Add(ScriptName);
-  end; // .for
+  end;
 end; // .procedure OnSavegameRead
 
 function Hook_LoadErmScripts (Context: Core.PHookContext): longbool; stdcall;
@@ -2003,7 +1990,7 @@ begin
   
   Context.RetAddr :=  Ptr($72CA82);
   result          :=  not Core.EXEC_DEF_CODE;
-end; // .function Hook_LoadErmScripts
+end;
 
 function Hook_LoadErtFile (Context: Core.PHookContext): longbool; stdcall;
 const
@@ -2025,7 +2012,7 @@ begin
   c.eax     := Heroes.GetStackIdByPos(Heroes.GetVal(MrMonPtr^, STACK_POS).v);
   c.RetAddr := Ptr($75DC76);
   result    := not Core.EXEC_DEF_CODE;
-end; // .function Hook_MR_N
+end;
 
 function Hook_CmdElse (Context: Core.PHookContext): longbool; stdcall;
 var
@@ -2037,7 +2024,7 @@ begin
   end else if ZvsTriggerIfs[ZvsTriggerIfsDepth^] = ZVS_TRIGGER_IF_FALSE then begin
     CmdFlags := Ptr(pinteger(Context.EBP - $19C)^ * $29C + $212 + pinteger(Context.EBP - 4)^);
     ZvsTriggerIfs[ZvsTriggerIfsDepth^] := 1 - integer(ZvsCheckFlags(CmdFlags));
-  end; // .elseif
+  end;
   
   Context.RetAddr := Ptr($74CA64);
   result          := not Core.EXEC_DEF_CODE;
@@ -2056,7 +2043,7 @@ begin
     Transfer    := x[i];
     x[i]        := OldXVars[i];
     OldXVars[i] := Transfer;
-  end; // .for
+  end;
 
   C.RetAddr := Ptr($74CA64);
   result    := Core.EXEC_DEF_CODE;
@@ -2069,7 +2056,7 @@ begin
   if TrackingOpts.Enabled then begin
     EventTracker.GenerateReport(ERM_TRACKING_REPORT_PATH);
   end;
-end; // .procedure OnGenerateDebugInfo
+end;
 
 procedure OnBeforeErm (Event: GameExt.PEvent); stdcall;
 var
@@ -2079,13 +2066,13 @@ begin
   ResetEra := Windows.GetProcAddress(GameExt.hAngel, 'ResetEra');
   {!} Assert(@ResetEra <> nil);
   ResetEra;
-end; // .procedure OnBeforeErm
+end;
 
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* Remove WoG CM3 trigger *)
   Core.p.WriteDword(Ptr($78C210), $887668);
-end; // .procedure OnBeforeWoG
+end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin

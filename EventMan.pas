@@ -176,7 +176,7 @@ begin
     for i := 0 to EventList.Count - 1 do begin
       EventInfo := TEventInfo(EventList.Values[i]);
       Line(Format('%s (%d, %d)', [EventList[i], EventInfo.NumHandlers, EventInfo.NumTimesFired]));
-    end; // .for
+    end;
 
     EmptyLine; EmptyLine;
     Line('> Event handlers');
@@ -187,13 +187,13 @@ begin
       
       if EventInfo.NumHandlers > 0 then begin
         Line(EventList[i] + ':');
-      end; // .if
+      end;
       
       Indent;
 
       for j := 0 to EventInfo.NumHandlers - 1 do begin
         Line(Core.ModuleContext.AddrToStr(EventInfo.Handlers[j]));
-      end; // .for
+      end;
 
       Unindent;
     end; // .for

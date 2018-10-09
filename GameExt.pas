@@ -116,7 +116,7 @@ begin
       DllHandle := Windows.LoadLibrary(pchar(PLUGINS_PATH + '\' + DllName));
       {!} Assert(DllHandle <> 0, 'Failed to load DLL at "' + PLUGINS_PATH + '\' + DllName + '"');
       PluginsList.AddObj(DllName, Ptr(DllHandle));
-    end; // .if
+    end;
     
     SysUtils.FreeAndNil(ItemInfo);
   end; // .while
@@ -145,7 +145,7 @@ var
 
 begin
   result := BinPatching.PatchList.Find(PatchName, PatchInd);
-end; // .function PatchExists
+end;
 
 function PluginExists (const PluginName: string): boolean;
 var
@@ -155,7 +155,7 @@ begin
   result  :=
     (Files.GetFileSize(PLUGINS_PATH + '\' + PluginName + '.dll', FileSize) and (FileSize > 0))  or
     (Files.GetFileSize(PLUGINS_PATH + '\' + PluginName + '.era', FileSize) and (FileSize > 0));
-end; // .function PluginExists
+end;
 
 function CompareMemoryBlocks
 (
@@ -175,11 +175,9 @@ begin
     ) < (cardinal(Size1) + cardinal(Size2))
   then begin
     result := 0;
-  end // .if
-  else if cardinal(Addr1) < cardinal(Addr2) then begin
+  end else if cardinal(Addr1) < cardinal(Addr2) then begin
     result := -1;
-  end // .ELSEIF
-  else begin
+  end else begin
     result := +1;
   end; // .else
 end; // .function CompareMemoryBlocks
@@ -208,15 +206,14 @@ begin
     
     if ComparisonRes < 0 then begin
       RightInd := BlockInd - 1;
-    end // .if
-    else if ComparisonRes > 0 then begin
+    end else if ComparisonRes > 0 then begin
       LeftInd  := BlockInd + 1;
-    end; // .ELSEIF
+    end;
   end; // .while
 
   if not result then begin
     BlockInd := LeftInd;
-  end; // .if
+  end;
 end; // .function FindMemoryRedirection
 
 procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer);
@@ -238,8 +235,7 @@ begin
     NewRedirection.BlockSize := BlockSize;
     NewRedirection.NewAddr   := NewAddr;
     MemRedirections.Insert(NewRedirection, BlockInd); NewRedirection := nil;
-  end // .if
-  else begin
+  end else begin
     OldRedirection := MemRedirections[BlockInd];
     Core.FatalError
     (
@@ -270,7 +266,7 @@ begin
   if FindMemoryRedirection(Addr, sizeof(byte), BlockInd) then begin
     Redirection := MemRedirections[BlockInd];
     result      := Utils.PtrOfs(Redirection.NewAddr, integer(Addr) - integer(Redirection.OldAddr));
-  end; // .if
+  end;
 end; // .function GetRealAddr
 
 function GetMapFolder: string;
@@ -279,11 +275,10 @@ begin
     if Heroes.IsCampaign then begin
       MapFolder := 'Maps\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '')
                    + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd);
-    end // .if
-    else begin
+    end else begin
       MapFolder := 'Maps\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
-    end; // .else
-  end; // .if
+    end;
+  end;
   
   result := MapFolder;
 end; // .function GetMapFolder
@@ -291,7 +286,7 @@ end; // .function GetMapFolder
 procedure SetMapFolder (const NewMapFolder: string);
 begin
   MapFolder := NewMapFolder;
-end; // .procedure SetMapFolder
+end;
 
 function GetMapResourcePath (const OrigResourcePath: string): string;
 begin
@@ -299,13 +294,13 @@ begin
   
   if not SysUtils.FileExists(result) then begin
     result := OrigResourcePath;
-  end; // .if
-end; // .function GetMapResourcePath
+  end;
+end;
 
 procedure GenerateDebugInfo;
 begin
   EventMan.GetInstance.Fire('OnGenerateDebugInfo', nil, 0);
-end; // .procedure GenerateDebugInfo
+end;
 
 procedure DumpEventList;
 var
@@ -329,7 +324,7 @@ begin
     for i := 0 to EventList.Count - 1 do begin
       EventInfo := TEventInfo(EventList.Values[i]);
       Line(Format('%s (%d, %d)', [EventList[i], EventInfo.NumHandlers, EventInfo.NumTimesFired]));
-    end; // .for
+    end;
 
     EmptyLine; EmptyLine;
     Line('> Event handlers');
@@ -340,13 +335,13 @@ begin
       
       if EventInfo.NumHandlers > 0 then begin
         Line(EventList[i] + ':');
-      end; // .if
+      end;
       
       Indent;
 
       for j := 0 to EventInfo.NumHandlers - 1 do begin
         Line(Core.ModuleContext.AddrToStr(EventInfo.Handlers[j]));
-      end; // .for
+      end;
 
       Unindent;
     end; // .for
@@ -370,8 +365,8 @@ begin
 
     for i := 0 to BinPatching.PatchList.Count - 1 do begin
       Line(Format('%s (%d)', [BinPatching.PatchList[i], integer(BinPatching.PatchList.Values[i])]));
-    end; // .for
-  end; // .with
+    end;
+  end;
 end; // .procedure DumpPatchList
 
 procedure DumpModList;
@@ -385,7 +380,7 @@ begin
   DumpEventList;
   DumpPatchList;
   PatchApi.GetPatcher().SaveDump(DEBUG_X86_PATCH_LIST_PATH);
-end; // .procedure OnGenerateDebugInfo
+end;
 
 (*
   Loads and returns list of mods from the highest priority mod to the lowest one. Each mod is described

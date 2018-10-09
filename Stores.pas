@@ -96,7 +96,7 @@ begin
     if Section = nil then begin
       Section                     := StrLib.TStrBuilder.Create;
       WritingStorage[SectionName] := Section;
-    end; // .if
+    end;
     
     Section.AppendBuf(DataSize, Data);
 
@@ -104,7 +104,7 @@ begin
       
       Files.AppendFileContents(StrLib.BufToStr(Data, DataSize),
                                DUMP_SAVEGAME_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
-    end; // .if
+    end;
   end; // .if
 end; // .procedure WriteSavegameSection
 
@@ -126,8 +126,8 @@ begin
       result := Math.Min(DataSize, Length(Section.Data) - Section.ReadingPos);
       Utils.CopyMem(result, pointer(@Section.Data[1 + Section.ReadingPos]), Dest);
       Inc(Section.ReadingPos, result);
-    end; // .if
-  end; // .if
+    end;
+  end;
 end; // .function ReadSavegameSection
 
 constructor TRider.Create (const aSectionName: string);
@@ -150,7 +150,7 @@ begin
     // if no more space in cache - flush the cache
     if sizeof(fWritingBuf) - fWritingBufPos < Size then begin
       Flush;
-    end; // .if
+    end;
     
     // if it's enough space in cache to hold passed data then write data to cache
     if sizeof(fWritingBuf) - fWritingBufPos > Size then begin
@@ -160,14 +160,14 @@ begin
     // else cache is too small, write directly to section
     else begin
       WriteSavegameSection(Size, Addr, fSectionName);
-    end; // .else
+    end;
   end; // .if
 end; // .procedure TRider.Write
 
 procedure TRider.WriteInt (Value: integer);
 begin
   Write(sizeof(Value), @Value);
-end; // .procedure TRider.WriteInt
+end;
 
 procedure TRider.WriteStr (const Str: string);
 var
@@ -179,14 +179,14 @@ begin
   
   if StrLen > 0 then begin
     Write(StrLen, pointer(Str));
-  end; // .if
+  end;
 end; // .procedure TRider.WriteStr
 
 procedure TRider.Flush;
 begin
   WriteSaveGameSection(fWritingBufPos, @fWritingBuf[0], fSectionName);
   fWritingBufPos := 0;
-end; // .procedure TRider.Flush
+end;
 
 function TRider.Read (Size: integer; {n} Addr: PBYTE): integer;
 var
@@ -205,7 +205,7 @@ begin
       Dec(fNumBytesRead,  result);
       Inc(Addr,           result);
       Inc(fReadingBufPos, result);
-    end; // .if
+    end;
 
     // if client expects more data to be read than it's in cache. Cache is empty
     if Size > 0 then begin
@@ -223,7 +223,7 @@ begin
           fReadingBufPos := NumBytesToCopy;
           Dec(fNumBytesRead, NumBytesToCopy);
           Inc(result, NumBytesToCopy);
-        end; // .if
+        end;
       end; // .else
     end; // .if
   end; // .if
@@ -237,7 +237,7 @@ begin
   result       := 0;
   NumBytesRead := Read(sizeof(result), @result);
   {!} Assert((NumBytesRead = sizeof(result)) or (NumBytesRead = 0));
-end; // .function TRider.ReadInt
+end;
 
 function TRider.ReadStr: string;
 var
@@ -252,13 +252,13 @@ begin
   if StrLen > 0 then begin
     NumBytesRead := Read(StrLen, pointer(result));
     {!} Assert(NumBytesRead = StrLen);
-  end; // .if
+  end;
 end; // .function TRider.ReadStr
 
 function NewRider (const SectionName: string): IRider;
 begin
   result := TRider.Create(SectionName);
-end; // .function NewRider
+end;
 
 function Hook_SaveGame (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -283,7 +283,7 @@ begin
   if SavegameName <> OldSavegameName then begin
     Utils.CopyMem(SavegameNameLen + 1, SavegameName, OldSavegameName);
     PINTEGER(Context.EBP + 12)^ := -1;
-  end; // .if
+  end;
   
   GameExt.EraRestoreEventParams;
   
@@ -304,7 +304,7 @@ var
   begin
     Inc(TotalWritten, Count);
     Heroes.GzipWrite(Count, Addr);
-  end; // .procedure GzipWrite
+  end;
 
 begin
   StrBuilder := nil;
@@ -312,7 +312,7 @@ begin
   if DumpSavegameSectionsOpt then begin
     Files.DeleteDir(DUMP_SAVEGAME_SECTIONS_DIR);
     SysUtils.CreateDir(DUMP_SAVEGAME_SECTIONS_DIR);
-  end; // .if
+  end;
 
   WritingStorage.Clear;
   Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_WRITE, []);
@@ -336,17 +336,16 @@ begin
       if DumpSavegameSectionsOpt then begin
         Files.WriteFileContents(BuiltData, DUMP_SAVEGAME_SECTIONS_DIR
                                            + '\' + IterKey + '.joined.txt');
-      end; // .if
+      end;
     end; // .while
   end; // .with 
   
   // Default code
   if PINTEGER(Context.EBP - 4)^ = 0 then begin
     Context.RetAddr := Ptr($704EF2);
-  end // .if
-  else begin
+  end else begin
     Context.RetAddr := Ptr($704F10);
-  end; // .else
+  end;
   
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SaveGameWrite
@@ -366,7 +365,7 @@ var
   begin
     BytesRead := Heroes.GzipRead(Count, Addr);
     {!} Assert(BytesRead = Count);
-  end; // .procedure ForceGzipRead
+  end;
 
 begin
   StoredData := nil;
@@ -399,10 +398,9 @@ begin
   // default code
   if PINTEGER(Context.EBP - $14)^ = 0 then begin
     Context.RetAddr := Ptr($7051BE);
-  end // .if
-  else begin
+  end else begin
     Context.RetAddr := Ptr($7051DC);
-  end; // .else
+  end;
   
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SaveGameRead
@@ -415,7 +413,7 @@ begin
   
   (* Remove Erm trigger "BeforeSaveGame" call *)
   Core.p.WriteDataPatch(Ptr($7051F5), ['9090909090']);
-end; // .procedure OnAfterWoG
+end;
 
 begin
   WritingStorage := AssocArrays.NewStrictAssocArr(StrLib.TStrBuilder);
