@@ -7,7 +7,7 @@ unit EventMan;
 (***)  interface  (***)
 
 uses
-  SysUtils, Utils, DataLib;
+  Core, SysUtils, Utils, DataLib, FilesEx;
 
 type
   (* Import *)
@@ -43,6 +43,7 @@ type
     property NumTimesFired: integer                      read fNumTimesFired write fNumTimesFired;
   end; // .class TEventInfo
 
+  // TODO/FIXME Decide, to use it in Dumping method or not
   THandlerNameDetector = function (Handler: TEventHandler): string;
 
   TEventManager = class sealed
@@ -60,7 +61,7 @@ type
 
     procedure On (const EventName: string; Handler: TEventHandler);
     procedure Fire (const EventName: string; {n} EventData: pointer; DataSize: integer);
-    procedure DumpEventList (const FilePath: string; )
+    procedure DumpEventList (const FilePath: string);
   end; // .class TEventManager
 
 
@@ -154,7 +155,7 @@ begin
   end;
 end; // .procedure TEventManager.Fire
 
-procedure TEventManager.DumpEventList (const FilePath: string; const HandlerNameDetector: THandlerNameDetector); DumpAnsiEventList?
+procedure TEventManager.DumpEventList (const FilePath: string);
 var
 {O} EventList: TStrList {of TEventInfo};
 {U} EventInfo: TEventInfo;
@@ -170,7 +171,7 @@ begin
     Line('> Format: [Event name] ([Number of handlers], [Fired N times])');
     EmptyLine;
 
-    EventList := DataLib.DictToStrList(Events, DataLib.CASE_INSENSITIVE);
+    EventList := DataLib.DictToStrList(Self.fEvents, DataLib.CASE_INSENSITIVE);
     EventList.Sort;
 
     for i := 0 to EventList.Count - 1 do begin

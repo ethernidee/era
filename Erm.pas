@@ -874,8 +874,7 @@ begin
     Res     := ErmScanner.ReadToken(LETTERS, CmdName) and (Length(CmdName) = 2);
     NumArgs := 0;
     
-    while Res and ErmScanner.GetCurrChar(c) and (c <> ':') and (NumArgs < ERM_CMD_MAX_PARAMS_NUM)
-    do begin
+    while Res and ErmScanner.GetCurrChar(c) and (c <> ':') and (NumArgs < ERM_CMD_MAX_PARAMS_NUM) do begin
       Res := ReadArg(Cmd.Params[NumArgs]) and ErmScanner.GetCurrChar(c);
 
       if Res then begin

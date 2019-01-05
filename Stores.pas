@@ -136,12 +136,12 @@ begin
   fReadingBufPos  := 0;
   fWritingBufPos  := 0;
   fNumBytesRead   := 0;
-end; // .constructor TRider.Create
+end;
 
 destructor TRider.Destroy;
 begin
   Flush;
-end; // .destructor TRider.Destroy
+end;
 
 procedure TRider.Write (Size: integer; {n} Addr: PBYTE);
 begin
@@ -156,7 +156,7 @@ begin
     if sizeof(fWritingBuf) - fWritingBufPos > Size then begin
       Utils.CopyMem(Size, Addr, @fWritingBuf[fWritingBufPos]);
       Inc(fWritingBufPos, Size);
-    end // .if
+    end
     // else cache is too small, write directly to section
     else begin
       WriteSavegameSection(Size, Addr, fSectionName);

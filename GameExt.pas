@@ -62,6 +62,10 @@ procedure SetMapFolder (const NewMapFolder: string);
 function  GetMapResourcePath (const OrigResourcePath: string): string; stdcall;
 procedure GenerateDebugInfo;
 
+// DEPRECATED
+procedure RegisterHandler (Handler: EventMan.TEventHandler; const EventName: string);
+// DEPRECATED
+procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer);
 
 procedure Init (hDll: integer);
 
@@ -269,6 +273,18 @@ begin
   end;
 end; // .function GetRealAddr
 
+// DEPRECATED
+procedure RegisterHandler (Handler: EventMan.TEventHandler; const EventName: string);
+begin
+  EventMan.GetInstance.On(EventName, Handler);
+end;
+
+// DEPRECATED
+procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer);
+begin
+  EventMan.GetInstance.Fire(EventName, EventData, DataSize);
+end;
+
 function GetMapFolder: string;
 begin
   if MapFolder = '' then begin
@@ -303,54 +319,9 @@ begin
 end;
 
 procedure DumpEventList;
-var
-{O} EventList: TStrList {of TEventInfo};
-{U} EventInfo: TEventInfo;
-    i, j:      integer;
-
 begin
-  EventList := nil;
-  EventInfo := nil;
-  // * * * * * //
-  {!} Core.ModuleContext.Lock;
-
-  with FilesEx.WriteFormattedOutput(DEBUG_EVENT_LIST_PATH) do begin
-    Line('> Format: [Event name] ([Number of handlers], [Fired N times])');
-    EmptyLine;
-
-    EventList := DataLib.DictToStrList(Events, DataLib.CASE_INSENSITIVE);
-    EventList.Sort;
-
-    for i := 0 to EventList.Count - 1 do begin
-      EventInfo := TEventInfo(EventList.Values[i]);
-      Line(Format('%s (%d, %d)', [EventList[i], EventInfo.NumHandlers, EventInfo.NumTimesFired]));
-    end;
-
-    EmptyLine; EmptyLine;
-    Line('> Event handlers');
-    EmptyLine;
-    
-    for i := 0 to EventList.Count - 1 do begin
-      EventInfo := TEventInfo(EventList.Values[i]);
-      
-      if EventInfo.NumHandlers > 0 then begin
-        Line(EventList[i] + ':');
-      end;
-      
-      Indent;
-
-      for j := 0 to EventInfo.NumHandlers - 1 do begin
-        Line(Core.ModuleContext.AddrToStr(EventInfo.Handlers[j]));
-      end;
-
-      Unindent;
-    end; // .for
-  end; // .with
-
-  {!} Core.ModuleContext.Unlock;
-  // * * * * * //
-  FreeAndNil(EventList);
-end; // .procedure DumpEventList
+  EventMan.GetInstance.DumpEventList(DEBUG_EVENT_LIST_PATH);
+end;
 
 procedure DumpPatchList;
 var

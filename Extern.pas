@@ -6,8 +6,11 @@ unit Extern;
 
 (***)  interface  (***)
 
-uses Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman, Graph;
+uses Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman, Graph, EventMan;
 
+type
+  (* Import *)
+  TEventHandler = EventMan.TEventHandler;
 
 procedure FatalError (Err: pchar); stdcall;
 procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
