@@ -1432,6 +1432,7 @@ begin
      memory here *)
   if not Erm.ZvsIsGameLoading^ then begin
     AdvErm.ResetMemory;
+    FuncNames.Clear;
     FuncAutoId := INITIAL_FUNC_AUTO_ID;
   end;
 
@@ -1952,8 +1953,9 @@ var
    
 begin
   (* Read function names and auto ID *)
+  FuncAutoId := INITIAL_FUNC_AUTO_ID;
   Stores.ReadSavegameSection(sizeof(FuncAutoId), @FuncAutoId, FUNC_NAMES_SECTION);
-  
+
   FreeAndNil(FuncNames);
   SerializedFuncNamesLen := 0;
   Stores.ReadSavegameSection(sizeof(SerializedFuncNamesLen), @SerializedFuncNamesLen, FUNC_NAMES_SECTION);
