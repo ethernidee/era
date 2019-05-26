@@ -8,7 +8,7 @@ BASED ON:     "Lods" plugin by Sav, WoG Sources by ZVS
 (***)  interface  (***)
 uses
   Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib, Log, Json,
-  StrUtils, GameExt, Heroes, Stores;
+  StrUtils, GameExt, Heroes, Stores, EventMan;
 
 const
   MAX_NUM_LODS  = 100;
@@ -450,9 +450,9 @@ begin
   LodRedirs       := AssocArrays.NewStrictAssocArr(TString);
   LodList         := Lists.NewSimpleStrList;
 
-  GameExt.RegisterHandler(OnBeforeWoG,              'OnBeforeWoG');
-  GameExt.RegisterHandler(OnAfterWoG,               'OnAfterWoG');
-  GameExt.RegisterHandler(OnBeforeErmInstructions,  'OnBeforeErmInstructions');
-  GameExt.RegisterHandler(OnSavegameWrite,          'OnSavegameWrite');
-  GameExt.RegisterHandler(OnSavegameRead,           'OnSavegameRead');
+  EventMan.GetInstance.On('OnBeforeWoG',             OnBeforeWoG);
+  EventMan.GetInstance.On('OnAfterWoG',              OnAfterWoG);
+  EventMan.GetInstance.On('OnBeforeErmInstructions', OnBeforeErmInstructions);
+  EventMan.GetInstance.On('OnSavegameWrite',         OnSavegameWrite);
+  EventMan.GetInstance.On('OnSavegameRead',          OnSavegameRead);
 end.

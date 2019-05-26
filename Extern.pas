@@ -131,7 +131,7 @@ end;
 
 procedure RegisterHandler (Handler: TEventHandler; EventName: pchar);
 begin
-  GameExt.RegisterHandler(Handler, EventName);
+  EventMan.GetInstance.On(EventName, Handler);
 end;
 
 procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer);

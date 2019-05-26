@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Crypto, StrLib, Files, AssocArrays, DlgMes,
-  Core, GameExt;
+  Core, GameExt, EventMan;
 
 const
   BUTTONS_PATH  = 'Data\Buttons';
@@ -42,7 +42,7 @@ const
   TYPE_DUMMY  = '9';
   
 
-function  GetButtonID (const ButtonName: string): integer; stdcall;
+function GetButtonID (const ButtonName: string): integer; stdcall;
   
   
 (***) implementation (***)
@@ -138,7 +138,7 @@ begin
             {!} Assert(false);
           end; // .else
           
-          ButtonName  :=  Line[COL_NAME];
+          ButtonName := Line[COL_NAME];
           
           if ButtonNames[ButtonName] <> nil then begin
             DlgMes.Msg
@@ -182,10 +182,10 @@ end;
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* Connect to Buttons.dll *)
-  hButtons  :=  Windows.LoadLibrary(BUTTONS_DLL_NAME);
-  {!} Assert(hButtons <> 0);
-  ExtButtonsTable :=  GetProcAddress(hButtons, 'ButtonsTable');
-  ExtNumButtons   :=  GetProcAddress(hButtons, 'NumButtons');
+  hButtons := Windows.LoadLibrary(BUTTONS_DLL_NAME);
+  {!} Assert(hButtons <> 0, 'Failed to access Buttons.dll plugin. Not loaded?');
+  ExtButtonsTable := GetProcAddress(hButtons, 'ButtonsTable');
+  ExtNumButtons   := GetProcAddress(hButtons, 'NumButtons');
   {!} Assert(ExtButtonsTable <> nil);
   {!} Assert(ExtNumButtons <> nil);
   
@@ -193,8 +193,8 @@ begin
 end; // .procedure OnAfterWoG
 
 begin
-  NumButtons  :=  0;
-  ButtonNames :=  AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
+  NumButtons  := 0;
+  ButtonNames := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
 
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

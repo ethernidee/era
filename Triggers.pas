@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils,
-  Core, PatchApi, GameExt, Heroes, Erm;
+  Core, PatchApi, GameExt, Heroes, Erm, EventMan;
 
 const
   NO_STACK  = -1;
@@ -326,17 +326,17 @@ begin
   GameExt.EraEventParams[ARG_ACTION]        :=  ACTION_DEFAULT;
   
   Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
-  Action  :=  GameExt.EraEventParams[ARG_ACTION];
-  Obj     :=  Context.ECX;
+  Action := GameExt.EraEventParams[ARG_ACTION];
+  Obj    := Context.ECX;
   
   GameExt.EraRestoreEventParams;
   
-  result  :=  not Core.EXEC_DEF_CODE;
+  result := not Core.EXEC_DEF_CODE;
   
   case Action of 
-    ACTION_CLEAR_BOX: Context.RetAddr :=  @ClearChatBox;
+    ACTION_CLEAR_BOX: Context.RetAddr := @ClearChatBox;
     ACTION_CLOSE_BOX: begin
-      Context.RetAddr :=  @ClearChatBox;
+      Context.RetAddr := @ClearChatBox;
     
       asm
         MOV ECX, Obj
@@ -365,7 +365,7 @@ begin
   
   GameExt.EraRestoreEventParams;
   
-  result  :=  Core.EXEC_DEF_CODE;
+  result := Core.EXEC_DEF_CODE;
 end; // .function Hook_LeaveChat
 
 procedure Hook_MainGameLoop (h: PatchApi.THiHook; This: pointer); stdcall;
@@ -418,6 +418,6 @@ begin
 end; // .procedure OnAfterWoG
 
 begin
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
-  GameExt.RegisterHandler(OnBeforeTrigger, 'OnBeforeTrigger');
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  EventMan.GetInstance.On('OnBeforeTrigger', OnBeforeTrigger);
 end.

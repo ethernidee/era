@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files,
-  PatchApi, Core, GameExt, Erm, Stores, Heroes, Trans;
+  PatchApi, Core, GameExt, Erm, Stores, Heroes, Trans, EventMan;
 
 const
   SPEC_SLOT = -1;
@@ -1657,10 +1657,10 @@ begin
   Hints    := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   InitHints;
   
-  GameExt.RegisterHandler(OnBeforeWoG,             'OnBeforeWoG');
-  GameExt.RegisterHandler(OnAfterWoG,              'OnAfterWoG');
-  GameExt.RegisterHandler(OnBeforeErmInstructions, 'OnBeforeErmInstructions');
-  GameExt.RegisterHandler(OnSavegameWrite,         'OnSavegameWrite');
-  GameExt.RegisterHandler(OnSavegameRead,          'OnSavegameRead');
-  GameExt.RegisterHandler(OnGenerateDebugInfo,     'OnGenerateDebugInfo');
+  EventMan.GetInstance.On('OnBeforeWoG',             OnBeforeWoG);
+  EventMan.GetInstance.On('OnAfterWoG',              OnAfterWoG);
+  EventMan.GetInstance.On('OnBeforeErmInstructions', OnBeforeErmInstructions);
+  EventMan.GetInstance.On('OnSavegameWrite',         OnSavegameWrite);
+  EventMan.GetInstance.On('OnSavegameRead',          OnSavegameRead);
+  EventMan.GetInstance.On('OnGenerateDebugInfo',     OnGenerateDebugInfo);
 end.

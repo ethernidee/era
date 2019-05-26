@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Utils, AssocArrays, TypeWrappers,
-  Core, Heroes, GameExt;
+  Core, Heroes, GameExt, EventMan;
 
 type
   (* IMPORT *)
@@ -75,6 +75,6 @@ begin
 end;
 
 begin
-  AddTexts  :=  AssocArrays.NewStrictAssocArr(TString);
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  AddTexts := AssocArrays.NewStrictAssocArr(TString);
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

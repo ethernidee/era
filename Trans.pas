@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils, DataLib, TypeWrappers,
-  Files, StrLib, Json, Core, GameExt;
+  Files, StrLib, Json, Core, GameExt, EventMan;
 
 
 type
@@ -102,9 +102,8 @@ begin
   ReloadLangFiles;
 end;
 
-
 begin
   LangMap := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-  GameExt.RegisterHandler(OnReloadLangData, 'OnAfterWoG');
-  GameExt.RegisterHandler(OnReloadLangData, 'OnBeforeScriptsReload');
+  EventMan.GetInstance.On('OnAfterWoG', OnReloadLangData);
+  EventMan.GetInstance.On('OnBeforeScriptsReload', OnReloadLangData);
 end.

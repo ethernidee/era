@@ -588,7 +588,7 @@ end;
 
 function MemAlloc (Size: integer): {On} pointer;
 begin
-  {!} Assert(cardinal(Size) >= 0, Format('Cannot allocate memory block of %u size', [cardinal(Size)]));
+  {!} Assert(Size >= 0, Format('Cannot allocate memory block of %u size', [cardinal(Size)]));
   result := nil;
   // * * * * * //
   if cardinal(Size) > 0 then begin

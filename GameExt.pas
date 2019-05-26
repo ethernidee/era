@@ -8,8 +8,8 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   Windows, Math, SysUtils, PatchApi,
   Utils, DataLib, CFiles, Files, FilesEx, Crypto, StrLib, Core,
-  Lists, CmdApp, Log,
-  VFS, BinPatching, EventMan, DlgMes;
+  Lists, CmdApp, Log, WinUtils,
+  VfsImport, BinPatching, EventMan, DlgMes;
 
 type
   (* Import *)
@@ -38,10 +38,12 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.7.7';
-  ERA_VERSION_INT = 2707;
+  ERA_VERSION_STR = '2.8.0';
+  ERA_VERSION_INT = 2800;
 
-type 
+type
+  EAssertFailure = class (Exception) end;
+
   PEraEventParams = ^TEraEventParams;
   TEraEventParams = array [0..15] of integer;
   
@@ -74,13 +76,16 @@ var
 {O} PluginsList:            DataLib.TStrList {OF TDllHandle};
     hAngel:                 integer;  // Era 1.8x DLL
     hEra:                   integer;  // Era 1.9+ DLL
+    
     (* Compability with Era 1.8x *)
     EraInit:                Utils.TProcedure;
     EraSaveEventParams:     Utils.TProcedure;
     EraRestoreEventParams:  Utils.TProcedure;
 {U} EraEventParams:         PEraEventParams;
 
-{O} MemRedirections:        {O} DataLib.TList {OF PMemRedirection};
+(* Means for exe structures relocation (enlarging). It's possible to find relocated address by old
+   structure address in a speed of binary search (log2(N)) *)
+{O} MemRedirections: {O} DataLib.TList {OF PMemRedirection};
 
   GameDir:   string;
   ModsDir:   string;
@@ -90,44 +95,30 @@ var
 (***) implementation (***)
 uses Heroes;
 
+
 procedure LoadPlugins;
 const
   ERM_V_1 = $887668;
 
 var
-{O} Locator:    Files.TFileLocator;
-{O} ItemInfo:   Files.TFileItemInfo;
-    DllName:    string;
-    DllHandle:  integer;
+  DllName:   string;
+  DllHandle: integer;
   
 begin
-  Locator  := Files.TFileLocator.Create;
-  ItemInfo := nil;
-  // * * * * * //
-  Locator.DirPath := PLUGINS_PATH;
-  Locator.InitSearch('*.era');
-  
-  while Locator.NotEnd do begin
-    // Providing Era Handle in v1
-    PINTEGER(ERM_V_1)^ := hEra;
-    DllName            := SysUtils.AnsiLowerCase(Locator.GetNextItem(Files.TItemInfo(ItemInfo)));
-    if
-      not ItemInfo.IsDir                          and
-      (SysUtils.ExtractFileExt(DllName) = '.era') and
-      ItemInfo.HasKnownSize                       and
-      (ItemInfo.FileSize > 0)
-    then begin
-      DllHandle := Windows.LoadLibrary(pchar(PLUGINS_PATH + '\' + DllName));
-      {!} Assert(DllHandle <> 0, 'Failed to load DLL at "' + PLUGINS_PATH + '\' + DllName + '"');
-      PluginsList.AddObj(DllName, Ptr(DllHandle));
-    end;
-    
-    SysUtils.FreeAndNil(ItemInfo);
-  end; // .while
-  
-  Locator.FinitSearch;
-  // * * * * * //
-  SysUtils.FreeAndNil(Locator);
+  with Files.Locate(GameDir + '\' + PLUGINS_PATH + '\*.era', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      if FoundRec.Rec.Size > 0 then begin
+        DllName := SysUtils.AnsiLowerCase(FoundName);
+
+        // Providing Era Handle in v1
+        PINTEGER(ERM_V_1)^ := hEra;
+
+        DllHandle := Windows.LoadLibrary(pchar(FoundPath));
+        {!} Assert(DllHandle <> 0, 'Failed to load DLL at "' + FoundPath + '"');
+        PluginsList.AddObj(DllName, Ptr(DllHandle));
+      end;
+    end; // .while
+  end; // .with
 end; // .procedure LoadPlugins
 
 procedure InitWoG; ASSEMBLER;
@@ -161,29 +152,18 @@ begin
     (Files.GetFileSize(PLUGINS_PATH + '\' + PluginName + '.era', FileSize) and (FileSize > 0));
 end;
 
-function CompareMemoryBlocks
-(
-  Addr1:  pointer;
-  Size1:  integer;
-  Addr2:  pointer;
-  Size2:  integer
-): integer;
-
+function CompareMemoryBlocks (Addr1: pointer; Size1: integer; Addr2: pointer; Size2: integer): integer;
 begin
   {!} Assert(Size1 > 0);
   {!} Assert(Size2 > 0);
-  if
-    (
-      Math.Max(cardinal(Addr1) + cardinal(Size1), cardinal(Addr2) + cardinal(Size2)) -
-      Math.Min(cardinal(Addr1), cardinal(Addr2))
-    ) < (cardinal(Size1) + cardinal(Size2))
-  then begin
+  
+  if (Math.Max(cardinal(Addr1) + cardinal(Size1), cardinal(Addr2) + cardinal(Size2)) - Math.Min(cardinal(Addr1), cardinal(Addr2))) < (cardinal(Size1) + cardinal(Size2)) then begin
     result := 0;
   end else if cardinal(Addr1) < cardinal(Addr2) then begin
     result := -1;
   end else begin
     result := +1;
-  end; // .else
+  end;
 end; // .function CompareMemoryBlocks
 
 function FindMemoryRedirection (Addr: pointer; Size: integer; out {i} BlockInd: integer): boolean;
@@ -259,8 +239,8 @@ end; // .procedure RedirectMemoryBlock
 
 function GetRealAddr (Addr: pointer): pointer;
 var
-{U} Redirection:  PMemRedirection;
-    BlockInd:     integer;
+{U} Redirection: PMemRedirection;
+    BlockInd:    integer;
 
 begin
   Redirection := nil;
@@ -320,7 +300,7 @@ end;
 
 procedure DumpEventList;
 begin
-  EventMan.GetInstance.DumpEventList(DEBUG_EVENT_LIST_PATH);
+  EventMan.GetInstance.DumpEventList(GameDir + '\' + DEBUG_EVENT_LIST_PATH);
 end;
 
 procedure DumpPatchList;
@@ -330,7 +310,7 @@ var
 begin
   BinPatching.PatchList.Sort;
 
-  with FilesEx.WriteFormattedOutput(DEBUG_PATCH_LIST_PATH) do begin
+  with FilesEx.WriteFormattedOutput(GameDir + '\' + DEBUG_PATCH_LIST_PATH) do begin
     Line('> Format: [Patch name] (Patch size)');
     EmptyLine;
 
@@ -341,8 +321,14 @@ begin
 end; // .procedure DumpPatchList
 
 procedure DumpModList;
+var
+{O} MappingsReport: pchar;
+
 begin
-  Files.WriteFileContents(VFS.ModList.ToText(#13#10), DEBUG_MOD_LIST_PATH);
+  MappingsReport := VfsImport.GetMappingsReportA;
+  Files.WriteFileContents(MappingsReport, GameDir + '\' + DEBUG_MOD_LIST_PATH);
+  // * * * * * //
+  VfsImport.MemFree(MappingsReport);
 end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
@@ -350,7 +336,7 @@ begin
   DumpModList;
   DumpEventList;
   DumpPatchList;
-  PatchApi.GetPatcher().SaveDump(DEBUG_X86_PATCH_LIST_PATH);
+  PatchApi.GetPatcher().SaveDump(pchar(GameDir + '\' + DEBUG_X86_PATCH_LIST_PATH));
 end;
 
 (*
@@ -400,29 +386,31 @@ end; // .function LoadModsList
 
 procedure Init (hDll: integer);
 var
-{O} ModList: Lists.TStringList;
+  ModListFilePath: string;
 
 begin
-  ModList := nil;
-  // * * * * * //
   hEra := hDll;
 
   // Ensure, that Memory manager is thread safe. Hooks and API can be called from multiple threads.
   System.IsMultiThread := true;
 
-  GameDir := SysUtils.ExtractFileDir(ParamStr(0));
-  // Msg(GameDir);
   ModsDir := GameDir + '\' + MODS_DIR;
-  SysUtils.SetCurrentDir(GameDir);
-  Files.ForcePath(DEBUG_DIR);
+  Files.ForcePath(GameDir + '\' + DEBUG_DIR);
 
   // Era started, load settings, initialize logging subsystem
   EventMan.GetInstance.Fire('OnEraStart', NO_EVENT_DATA, 0);
 
-  ModList := LoadModsList();
-  //ModList.Add('D:\Soft\Programming\Delphi\source\SRC\Era\Png\');
-  VFS.Init(ModList);
-  //VFS.Init;
+  // Run VFS
+  ModListFilePath := CmdApp.GetArg(CMDLINE_ARG_MODLIST);
+
+  if ModListFilePath = '' then begin
+    ModListFilePath := GameDir + '\' + DEFAULT_MOD_LIST_FILE;
+  end;
+  
+  VfsImport.MapModsFromListA(pchar(GameDir), pchar(ModsDir), pchar(ModListFilePath));
+  VfsImport.RunVfs(VfsImport.SORT_FIFO);
+  VfsImport.RunWatcherA(pchar(GameDir + '\Mods'), 250);
+
   EventMan.GetInstance.Fire('OnAfterVfsInit', NO_EVENT_DATA, 0);
 
   
@@ -444,18 +432,45 @@ begin
   
   InitWoG;
   EraInit;
-  
+
   EventMan.GetInstance.Fire('OnAfterWoG', NO_EVENT_DATA, 0);
   BinPatching.ApplyPatches(PATCHES_PATH + '\AfterWoG');
 
-  RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
-  // * * * * * //
-  
-  //SysUtils.FreeAndNil(ModList); !!! FIXME
+  EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 end; // .procedure Init
 
+procedure AssertHandler (const Mes, FileName: string; LineNumber: integer; Address: pointer);
+var
+  CrashMes: string;
+
 begin
+  CrashMes := StrLib.BuildStr
+  (
+    'Assert violation in file "~FileName~" on line ~Line~.'#13#10'Error at address: $~Address~.'#13#10'Message: "~Message~"',
+    [
+      'FileName', FileName,
+      'Line',     SysUtils.IntToStr(LineNumber),
+      'Address',  SysUtils.Format('%x', [integer(Address)]),
+      'Message',  Mes
+    ],
+    '~'
+  );
+  
+  Log.Write('Core', 'AssertHandler', CrashMes);
+  DlgMes.MsgError(CrashMes);
+
+  raise EAssertFailure.Create(CrashMes) at Address;
+end; // .procedure AssertHandler
+
+begin
+  AssertErrorProc := AssertHandler;
   PluginsList     := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   MemRedirections := DataLib.NewList(not Utils.OWNS_ITEMS);
-  Core.SetDebugMapsDir(DEBUG_MAPS_DIR);
+  
+  // Find out path to game directory and force it as current directory
+  GameDir := StrLib.ExtractDirPathW(WinUtils.GetExePath());
+  {!} Assert(GameDir <> '', 'Failed to obtain game directory path');
+  SysUtils.SetCurrentDir(GameDir);
+
+  Core.SetDebugMapsDir(GameDir + '\' + DEBUG_MAPS_DIR);
 end.

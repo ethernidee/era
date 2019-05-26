@@ -5,7 +5,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
-uses Core, GameExt, Heroes, Stores;
+uses Core, GameExt, Heroes, Stores, EventMan;
 
 const
   FILE_SECTION_NAME = 'Era.PO';
@@ -137,8 +137,8 @@ begin
 end; // .procedure OnAfterWoG
 
 begin
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
-  GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
-  GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
-  GameExt.RegisterHandler(OnBeforeResetErmFunc, '$OnBeforeResetErmFunc');
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  EventMan.GetInstance.On('OnSavegameWrite', OnSavegameWrite);
+  EventMan.GetInstance.On('OnSavegameRead', OnSavegameRead);
+  EventMan.GetInstance.On('$OnBeforeResetErmFunc', OnBeforeResetErmFunc);
 end.

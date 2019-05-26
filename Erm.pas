@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   SysUtils, Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers,
   Lists, StrLib, Math, Windows,
-  Core, Heroes, GameExt;
+  Core, Heroes, GameExt, EventMan;
 
 type
   (* Import *)
@@ -964,7 +964,7 @@ var
   ErtFilePath:  string;
    
 begin
-  ErtFilePath :=  ERM_SCRIPTS_PATH + '\' + SysUtils.ChangeFileExt(ErmScriptName, '.ert');
+  ErtFilePath := ERM_SCRIPTS_PATH + '\' + SysUtils.ChangeFileExt(ErmScriptName, '.ert');
     
   if SysUtils.FileExists(ErtFilePath) then begin
     ZvsLoadErtFile('', pchar('..\' + ErtFilePath));
@@ -1521,17 +1521,17 @@ var
   i:          integer;
   
 begin
-  Files.DeleteDir(EXTRACTED_SCRIPTS_PATH);
-  Res :=  SysUtils.CreateDir(EXTRACTED_SCRIPTS_PATH);
+  Files.DeleteDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
+  Res := SysUtils.CreateDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
   
   if not Res then begin
-    Mes :=  '{~red}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
+    Mes := '{~red}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
   end else begin
-    i :=  0;
+    i := 0;
     
     while Res and (i < MAX_ERM_SCRIPTS_NUM) do begin
       if ErmScripts[i] <> nil then begin
-        ScriptPath  :=  EXTRACTED_SCRIPTS_PATH + '\' + ScriptNames[i];
+        ScriptPath  :=  GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH + '\' + ScriptNames[i];
         Res         :=  Files.WriteFileContents(ErmScripts[i] + #10#13, ScriptPath);
         if not Res then begin
           Mes :=  '{~red}Error writing to file "' + ScriptPath + '"{~}';
@@ -2055,7 +2055,7 @@ begin
   ExtractErm;
 
   if TrackingOpts.Enabled then begin
-    EventTracker.GenerateReport(ERM_TRACKING_REPORT_PATH);
+    EventTracker.GenerateReport(GameExt.GameDir + '\' + ERM_TRACKING_REPORT_PATH);
   end;
 end;
 
@@ -2155,10 +2155,10 @@ begin
   ScriptNames :=  Lists.NewSimpleStrList;
   SavedYVars  :=  Lists.NewStrictList(TYVars);
   
-  GameExt.RegisterHandler(OnBeforeWoG,         'OnBeforeWoG');
-  GameExt.RegisterHandler(OnAfterWoG,          'OnAfterWoG');
-  GameExt.RegisterHandler(OnSavegameWrite,     'OnSavegameWrite');
-  GameExt.RegisterHandler(OnSavegameRead,      'OnSavegameRead');
-  GameExt.RegisterHandler(OnBeforeErm,         'OnBeforeErm');
-  GameExt.RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
+  EventMan.GetInstance.On('OnBeforeWoG',         OnBeforeWoG);
+  EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
+  EventMan.GetInstance.On('OnSavegameWrite',     OnSavegameWrite);
+  EventMan.GetInstance.On('OnSavegameRead',      OnSavegameRead);
+  EventMan.GetInstance.On('OnBeforeErm',         OnBeforeErm);
+  EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 end.

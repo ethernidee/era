@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 uses
   SysUtils, StrUtils, Utils, DlgMes, Core, Log, Files, FilesEx, DataLib,
-  GameExt, Lua;
+  GameExt, EventMan, Lua;
 
 
 const
@@ -137,5 +137,5 @@ begin
 end;
 
 begin
-  GameExt.RegisterHandler(OnBeforeWoG, 'OnBeforeWoG');
+  EventMan.GetInstance.On('OnBeforeWoG', OnBeforeWoG);
 end.

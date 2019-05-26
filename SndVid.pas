@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils, WinWrappers, Files, StrLib, Crypto, AssocArrays,
-  Core, GameExt, Heroes;
+  Core, GameExt, Heroes, EventMan;
 
 const  
   CD_GAME_FOLDER  = 'Heroes3';
@@ -424,8 +424,8 @@ begin
   Core.Hook(@Hook_LoadSnd, Core.HOOKTYPE_BRIDGE, 5, Ptr($55C340));
   
   (* Disable CloseSndHandles function *)
-  PBYTE($4F3DFD)^     :=  $90;
-  PINTEGER($4F3DFE)^  :=  integer($90909090);
+  PBYTE($4F3DFD)^    := $90;
+  PINTEGER($4F3DFE)^ := integer($90909090);
   
   (* Disable SavePointersToSndHandles function *)
   Core.Hook(Core.Ret(0), Core.HOOKTYPE_JUMP, 5, Ptr($5594F0));
@@ -436,12 +436,12 @@ begin
   end;
   
   (* Disable default CD scanning *)
-  PINTEGER($50C409)^  :=  $0000B4E9;
-  PWORD($50C40D)^     :=  $9000;
+  PINTEGER($50C409)^ := $0000B4E9;
+  PWORD($50C40D)^    := $9000;
 end; // .procedure OnAfterWoG
 
 begin
-  SndFiles :=  AssocArrays.NewAssocArr
+  SndFiles := AssocArrays.NewAssocArr
   (
     Crypto.AnsiCRC32,
     SysUtils.AnsiLowerCase,
@@ -451,7 +451,7 @@ begin
     Utils.ALLOW_NIL
   );
   
-  VidFiles :=  AssocArrays.NewAssocArr
+  VidFiles := AssocArrays.NewAssocArr
   (
     Crypto.AnsiCRC32,
     SysUtils.AnsiLowerCase,
@@ -461,5 +461,5 @@ begin
     Utils.ALLOW_NIL
   );
 
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

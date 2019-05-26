@@ -4,7 +4,7 @@
 
 uses
   SysUtils, Graphics, Jpeg, Types, PngImage, Utils, Core,
-  Heroes, GameExt;
+  Heroes, GameExt, EventMan;
 
 const
   (* ResizeBmp24.FreeOriginal argument *)
@@ -516,6 +516,6 @@ end;
 
 begin
   if false (* testing *) then begin
-    GameExt.RegisterHandler(OnAfterCreateWindow, 'OnAfterCreateWindow');
+    EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
   end;
 end.

@@ -1,12 +1,15 @@
 library Era;
 {
-DESCRIPTION:  HMM 3.5 WogEra
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+DESCRIPTION: HMM 3.5 WogEra
+AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
+{$R *.RES}
+
 uses  Math,
-  VFS, GameExt, Erm, Tweaks,
+  GameExt, Erm, Tweaks,
   DebugMaps,
+  VfsImport in '..\Vfs\VfsImport.pas',
   Lua in 'Lua\Lua.pas',
   Rainbow, Triggers, Stores, Lodman, Trans, Graph,
   AdvErm, Scripts, ErmTracking, PoTweak, SndVid, EraButtons,

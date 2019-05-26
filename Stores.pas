@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib, DlgMes,
-  Core, GameExt, Heroes, Erm;
+  Core, GameExt, Heroes, Erm, EventMan;
 
 const
   DUMP_SAVEGAME_SECTIONS_DIR = GameExt.DEBUG_DIR + '\Savegame Sections';
@@ -101,9 +101,7 @@ begin
     Section.AppendBuf(DataSize, Data);
 
     if DumpSavegameSectionsOpt then begin
-      
-      Files.AppendFileContents(StrLib.BufToStr(Data, DataSize),
-                               DUMP_SAVEGAME_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
+      Files.AppendFileContents(StrLib.BufToStr(Data, DataSize), GameExt.GameDir + '\' + DUMP_SAVEGAME_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
     end;
   end; // .if
 end; // .procedure WriteSavegameSection
@@ -310,8 +308,8 @@ begin
   StrBuilder := nil;
   // * * * * * //
   if DumpSavegameSectionsOpt then begin
-    Files.DeleteDir(DUMP_SAVEGAME_SECTIONS_DIR);
-    SysUtils.CreateDir(DUMP_SAVEGAME_SECTIONS_DIR);
+    Files.DeleteDir(GameExt.GameDir + '\' + DUMP_SAVEGAME_SECTIONS_DIR);
+    SysUtils.CreateDir(GameExt.GameDir + '\' + DUMP_SAVEGAME_SECTIONS_DIR);
   end;
 
   WritingStorage.Clear;
@@ -418,5 +416,5 @@ end;
 begin
   WritingStorage := AssocArrays.NewStrictAssocArr(StrLib.TStrBuilder);
   ReadingStorage := AssocArrays.NewStrictAssocArr(TStoredData);
-  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

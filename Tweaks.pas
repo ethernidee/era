@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
   CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes,
-  PatchApi, Core, GameExt, Heroes, Lodman, Erm;
+  PatchApi, Core, GameExt, Heroes, Lodman, Erm, EventMan;
 
 type
   (* Import *)
@@ -663,7 +663,7 @@ begin
   {!} Core.ModuleContext.Lock;
   Core.ModuleContext.UpdateModuleList;
 
-  with FilesEx.WriteFormattedOutput(DEBUG_WINPE_MODULE_LIST_PATH) do begin
+  with FilesEx.WriteFormattedOutput(GameExt.GameDir + '\' + DEBUG_WINPE_MODULE_LIST_PATH) do begin
     Line('> Win32 executable modules');
     EmptyLine;
 
@@ -691,7 +691,7 @@ begin
   {!} Core.ModuleContext.Lock;
   Core.ModuleContext.UpdateModuleList;
 
-  with FilesEx.WriteFormattedOutput(DEBUG_EXCEPTION_CONTEXT_PATH) do begin
+  with FilesEx.WriteFormattedOutput(GameExt.GameDir + '\' + DEBUG_EXCEPTION_CONTEXT_PATH) do begin
     case ExcRec.ExceptionCode of
       $C0000005: begin
         if ExcRec.ExceptionInformation[0] <> 0 then begin
@@ -956,7 +956,7 @@ begin
   Core.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
   
   (* Syncronise object creation at local and remote PC *)
-  GameExt.RegisterHandler(OnRemoteMapObjectPlace, pchar('OnTrigger ' + IntToStr(Erm.TRIGGER_ONREMOTEEVENT)));
+  EventMan.GetInstance.On('OnTrigger ' + IntToStr(Erm.TRIGGER_ONREMOTEEVENT), OnRemoteMapObjectPlace);
 
   (* Disable MP3 trigger; Overriden by Lodman redirection *)
   if false then Core.p.WriteHexPatch(Ptr($59AC51), 'BFF4336A00');
@@ -1004,7 +1004,7 @@ begin
   Windows.InitializeCriticalSection(InetCriticalSection);
   ExceptionsCritSection.Init;
   TopLevelExceptionHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
-  GameExt.RegisterHandler(OnAfterVfsInit, 'OnAfterVfsInit');
-  GameExt.RegisterHandler(OnAfterWoG,  'OnAfterWoG');
-  RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
+  EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 end.

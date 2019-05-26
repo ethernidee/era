@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan,
-  Core, GameExt;
+  Core, GameExt, EventMan;
 
 const
   TEXTMODE_15BITS = $3E0;
@@ -584,6 +584,7 @@ begin
   NamedColors := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
   ColorStack  := Lists.NewSimpleList;
   TextScanner := TextScan.TTextScanner.Create;
-  GameExt.RegisterHandler(OnAfterWoG,          'OnAfterWoG');
-  GameExt.RegisterHandler(OnAfterCreateWindow, 'OnAfterCreateWindow');
+  
+  EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
+  EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
 end.
