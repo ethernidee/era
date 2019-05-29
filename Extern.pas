@@ -6,7 +6,10 @@ unit Extern;
 
 (***)  interface  (***)
 
-uses Utils, Core, GameExt, Heroes, Erm, Ini, Rainbow, Stores, EraButtons, Lodman, Graph, EventMan;
+uses
+  Utils, Core,
+  GameExt, Heroes, Erm, Ini, Rainbow, Stores,
+  EraButtons, Lodman, Graph, EventMan;
 
 type
   (* Import *)
@@ -39,42 +42,6 @@ procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall;
 function  LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height: integer): {OU} Heroes.PPcx16Item; stdcall;
 procedure ShowMessage (Mes: pchar);
 function  Ask (Question: pchar): boolean;
-
-
-exports
-  Core.WriteAtCode,
-  Core.Hook,
-  Core.ApiHook,
-  Core.KillThisProcess,
-  FatalError,
-  RegisterHandler,
-  FireEvent,
-  Heroes.LoadTxt,
-  Heroes.ForceTxtUnload,
-  ExecErmCmd,
-  Erm.ReloadErm,
-  Erm.ExtractErm,
-  FireErmEvent,
-  Ini.ClearAllIniCache,
-  ClearIniCache,
-  ReadStrFromIni,
-  WriteStrToIni,
-  SaveIni,
-  NameColor,
-  WriteSavegameSection,
-  ReadSavegameSection,
-  Heroes.GetGameState,
-  GetButtonID,
-  PatchExists,
-  PluginExists,
-  RedirectFile,
-  GlobalRedirectFile,
-  LoadImageAsPcx16,
-  GameExt.RedirectMemoryBlock,
-  GameExt.GetRealAddr,
-  GameExt.GenerateDebugInfo,
-  ShowMessage,
-  Ask;
 
 
 (***) implementation (***)
@@ -207,5 +174,52 @@ function Ask (Question: pchar): boolean;
 begin
   result := Erm.Ask(Question);
 end;
+
+procedure ReportPluginVersion (const VersionLine: pchar); stdcall;
+begin
+  GameExt.ReportPluginVersion(VersionLine);
+end;
+
+function GetVersion: pchar; stdcall;
+begin
+  result := GameExt.ERA_VERSION_STR;
+end;
+
+exports
+  Core.WriteAtCode,
+  Core.Hook,
+  Core.ApiHook,
+  Core.KillThisProcess,
+  FatalError,
+  RegisterHandler,
+  FireEvent,
+  Heroes.LoadTxt,
+  Heroes.ForceTxtUnload,
+  ExecErmCmd,
+  Erm.ReloadErm,
+  Erm.ExtractErm,
+  FireErmEvent,
+  Ini.ClearAllIniCache,
+  ClearIniCache,
+  ReadStrFromIni,
+  WriteStrToIni,
+  SaveIni,
+  NameColor,
+  WriteSavegameSection,
+  ReadSavegameSection,
+  Heroes.GetGameState,
+  GetButtonID,
+  PatchExists,
+  PluginExists,
+  RedirectFile,
+  GlobalRedirectFile,
+  LoadImageAsPcx16,
+  GameExt.RedirectMemoryBlock,
+  GameExt.GetRealAddr,
+  GameExt.GenerateDebugInfo,
+  ShowMessage,
+  Ask,
+  ReportPluginVersion,
+  GetVersion;
 
 end.

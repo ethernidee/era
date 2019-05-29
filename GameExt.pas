@@ -38,8 +38,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.8.0';
-  ERA_VERSION_INT = 2800;
+  ERA_VERSION_STR = '2.8.1';
+  ERA_VERSION_INT = 2801;
 
 type
   EAssertFailure = class (Exception) end;
@@ -63,6 +63,7 @@ function  GetMapFolder: string; stdcall;
 procedure SetMapFolder (const NewMapFolder: string);
 function  GetMapResourcePath (const OrigResourcePath: string): string; stdcall;
 procedure GenerateDebugInfo;
+procedure ReportPluginVersion (const VersionLine: string);
 
 // DEPRECATED
 procedure RegisterHandler (Handler: EventMan.TEventHandler; const EventName: string);
@@ -83,6 +84,8 @@ var
     EraRestoreEventParams:  Utils.TProcedure;
 {U} EraEventParams:         PEraEventParams;
 
+    DumpVfsOpt: boolean;
+
 (* Means for exe structures relocation (enlarging). It's possible to find relocated address by old
    structure address in a speed of binary search (log2(N)) *)
 {O} MemRedirections: {O} DataLib.TList {OF PMemRedirection};
@@ -95,6 +98,27 @@ var
 (***) implementation (***)
 uses Heroes;
 
+const
+  WoGVersionStrEng: ppchar = pointer($7066E2);
+  WoGVersionStrRus: ppchar = pointer($7066CF);
+
+var
+{On} ReportedPluginVersions: TStrList;
+     VersionsInfo:           string;
+
+
+procedure InitWoG; ASSEMBLER;
+asm
+  MOV EAX, $70105A
+  CALL EAX
+  MOV EAX, $774483
+  CALL EAX
+  MOV ECX, $28AAFD0
+  MOV EAX, $706CC0
+  CALL EAX
+  MOV EAX, $701215
+  CALL EAX
+end; // .procedure InitWoG
 
 procedure LoadPlugins;
 const
@@ -121,18 +145,12 @@ begin
   end; // .with
 end; // .procedure LoadPlugins
 
-procedure InitWoG; ASSEMBLER;
-asm
-  MOV EAX, $70105A
-  CALL EAX
-  MOV EAX, $774483
-  CALL EAX
-  MOV ECX, $28AAFD0
-  MOV EAX, $706CC0
-  CALL EAX
-  MOV EAX, $701215
-  CALL EAX
-end; // .procedure InitWoG
+procedure ReportPluginVersion (const VersionLine: string);
+begin
+  if ReportedPluginVersions <> nil then begin
+    ReportedPluginVersions.Add(VersionLine);
+  end;
+end;
 
 function PatchExists (const PatchName: string): boolean;
 var
@@ -269,10 +287,9 @@ function GetMapFolder: string;
 begin
   if MapFolder = '' then begin
     if Heroes.IsCampaign then begin
-      MapFolder := 'Maps\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '')
-                   + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd);
+      MapFolder := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd);
     end else begin
-      MapFolder := 'Maps\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
+      MapFolder := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
     end;
   end;
   
@@ -384,6 +401,16 @@ begin
   SysUtils.FreeAndNil(FileLines);
 end; // .function LoadModsList
 
+procedure AssignVersionsInfoToCredits;
+begin
+  if ReportedPluginVersions <> nil then begin
+    VersionsInfo := '{ERA ' + ERA_VERSION_STR + '}'#10'WoG 3.59 (TE 2005)'#10'--------------------------------'#10 + ReportedPluginVersions.ToText(#10);
+    SysUtils.FreeAndNil(ReportedPluginVersions);
+    WoGVersionStrEng^ := pchar(VersionsInfo);
+    WoGVersionStrRus^ := pchar(VersionsInfo);
+  end;
+end;
+
 procedure Init (hDll: integer);
 var
   ModListFilePath: string;
@@ -408,6 +435,12 @@ begin
   end;
   
   VfsImport.MapModsFromListA(pchar(GameDir), pchar(ModsDir), pchar(ModListFilePath));
+  Log.Write('Core', 'ReportModList', #13#10 + VfsImport.GetMappingsReportA);
+
+  if DumpVfsOpt then begin
+    Log.Write('Core', 'DumpVFS', #13#10 + VfsImport.GetDetailedMappingsReportA);
+  end;
+  
   VfsImport.RunVfs(VfsImport.SORT_FIFO);
   VfsImport.RunWatcherA(pchar(GameDir + '\Mods'), 250);
 
@@ -437,6 +470,9 @@ begin
   BinPatching.ApplyPatches(PATCHES_PATH + '\AfterWoG');
 
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
+
+  EventMan.GetInstance.Fire('OnReportVersion');
+  AssignVersionsInfoToCredits;
 end; // .procedure Init
 
 procedure AssertHandler (const Mes, FileName: string; LineNumber: integer; Address: pointer);
@@ -463,9 +499,10 @@ begin
 end; // .procedure AssertHandler
 
 begin
-  AssertErrorProc := AssertHandler;
-  PluginsList     := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
-  MemRedirections := DataLib.NewList(not Utils.OWNS_ITEMS);
+  AssertErrorProc        := AssertHandler;
+  PluginsList            := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  MemRedirections        := DataLib.NewList(not Utils.OWNS_ITEMS);
+  ReportedPluginVersions := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   
   // Find out path to game directory and force it as current directory
   GameDir := StrLib.ExtractDirPathW(WinUtils.GetExePath());

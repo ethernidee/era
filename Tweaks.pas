@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes,
+  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes, WinNative,
   PatchApi, Core, GameExt, Heroes, Lodman, Erm, EventMan;
 
 type
@@ -16,19 +16,21 @@ type
 
 const
   // f (Value: pchar; MaxResLen: integer; DefValue, Key, SectionName, FileName: pchar): integer; cdecl;
-  ZvsReadStrIni   = Ptr($773A46);
+  ZvsReadStrIni  = Ptr($773A46);
   // f (Res: PINTEGER; DefValue: integer; Key, SectionName, FileName: pchar): integer; cdecl;
-  ZvsReadIntIni   = Ptr($7739D1);
+  ZvsReadIntIni  = Ptr($7739D1);
   // f (Value: pchar; Key, SectionName, FileName: pchar): integer; cdecl;
-  ZvsWriteStrIni  = Ptr($773B34);
+  ZvsWriteStrIni = Ptr($773B34);
   // f (Value, Key, SectionName, FileName: pchar): integer; cdecl;
-  ZvsWriteIntIni  = Ptr($773ACB);
+  ZvsWriteIntIni = Ptr($773ACB);
   
-  ZvsAppliedDamage: PINTEGER  = Ptr($2811888);
+  ZvsAppliedDamage: PINTEGER = Ptr($2811888);
 
 
 var
-  CPUPatchOpt:          boolean;
+  (* Desired level of CPU loading *)
+  CpuTargetLevel: integer;
+  
   FixGetHostByNameOpt:  boolean;
   UseOnlyOneCpuCoreOpt: boolean;
   
@@ -45,6 +47,10 @@ var
   ZvsLibImageTemplate:   string;
   ZvsLibGamePath:        string;
   IsLocalPlaceObject:    boolean = true;
+
+threadvar
+  (* Counter (0..100). When reaches 100, PeekMessageA does not call sleep before returning result *)
+  CpuPatchCounter: integer;
 
 
 function Hook_ReadIntIni
@@ -197,12 +203,19 @@ begin
     CALL [EDX + $34]
   end; // .asm
   
-  result  :=  not Core.EXEC_DEF_CODE;
+  result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SetHotseatHeroName
 
 function Hook_PeekMessageA (Context: Core.PHookContext): longbool; stdcall;
 begin
-  Windows.WaitForSingleObject(hTimerEvent, 1);
+  Inc(CpuPatchCounter, CpuTargetLevel);
+
+  if CpuPatchCounter >= 100 then begin
+    Dec(CpuPatchCounter, 100);
+  end else begin
+    Windows.WaitForSingleObject(hTimerEvent, 1);
+  end;
+
   result := Core.EXEC_DEF_CODE;
 end;
 
@@ -851,6 +864,9 @@ var
   Zvslib1Handle:  integer;
   Addr:           integer;
   NewAddr:        pointer;
+  MinTimerResol:  cardinal;
+  MaxTimerResol:  cardinal;
+  CurrTimerResol: cardinal;
 
 begin
   (* Ini handling *)
@@ -875,8 +891,13 @@ begin
   Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
   
   (* Universal CPU patch *)
-  if CPUPatchOpt then begin
-    hTimerEvent := Windows.CreateEvent(nil, true, false, 'CPUPatch');
+  if CpuTargetLevel < 100 then begin
+    // Try to set timer resolution to at least 1ms = 10000 ns
+    if (WinNative.NtQueryTimerResolution(MinTimerResol, MaxTimerResol, CurrTimerResol) = STATUS_SUCCESS) and (CurrTimerResol > 10000) and (MaxTimerResol < CurrTimerResol) then begin
+      WinNative.NtSetTimerResolution(Math.Max(10000, MaxTimerResol), true, CurrTimerResol);
+    end;
+
+    hTimerEvent := Windows.CreateEvent(nil, true, false, nil);
     Core.ApiHook(@Hook_PeekMessageA, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'));
   end;
   

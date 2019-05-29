@@ -98,12 +98,13 @@ begin
 
   Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
 
-  Core.AbortOnError              := GetDebugOpt(    'Debug.AbortOnError',         true);
-  SndVid.LoadCDOpt               := GetOptBoolValue('LoadCD',                     false);
-  Tweaks.CPUPatchOpt             := GetOptBoolValue('CPUPatch',                   true);
-  Tweaks.FixGetHostByNameOpt     := GetOptBoolValue('FixGetHostByName',           true);
-  Tweaks.UseOnlyOneCpuCoreOpt    := GetOptBoolValue('UseOnlyOneCpuCore',          true);
-  Stores.DumpSavegameSectionsOpt := GetDebugOpt(    'Debug.DumpSavegameSections', false);
+  Core.AbortOnError              := GetDebugOpt(    'Debug.AbortOnError',          true);
+  SndVid.LoadCDOpt               := GetOptBoolValue('LoadCD',                      false);
+  Tweaks.CpuTargetLevel          := GetOptIntValue( 'CpuTargetLevel',              33);
+  Tweaks.FixGetHostByNameOpt     := GetOptBoolValue('FixGetHostByName',            true);
+  Tweaks.UseOnlyOneCpuCoreOpt    := GetOptBoolValue('UseOnlyOneCpuCore',           true);
+  Stores.DumpSavegameSectionsOpt := GetDebugOpt(    'Debug.DumpSavegameSections',  false);
+  GameExt.DumpVfsOpt             := GetDebugOpt(    'Debug.DumpVirtualFileSystem', false);
   
   if GetDebugOpt('Debug.LogVirtualFileSystem', false) then begin
     VfsImport.SetLoggingProc(@VfsLogger);

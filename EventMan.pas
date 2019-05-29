@@ -60,7 +60,7 @@ type
     destructor Destroy; override;
 
     procedure On (const EventName: string; Handler: TEventHandler);
-    procedure Fire (const EventName: string; {n} EventData: pointer; DataSize: integer);
+    procedure Fire (const EventName: string; {n} EventData: pointer = nil; DataSize: integer = 0);
     procedure DumpEventList (const FilePath: string);
   end; // .class TEventManager
 
@@ -127,7 +127,7 @@ begin
   EventInfo.AddHandler(@Handler);
 end; // .procedure TEventManager.On
 
-procedure TEventManager.Fire (const EventName: string; {n} EventData: pointer; DataSize: integer);
+procedure TEventManager.Fire (const EventName: string; {n} EventData: pointer = nil; DataSize: integer = 0);
 var
     Event:     TEvent;
 {U} EventInfo: TEventInfo;
