@@ -24,7 +24,8 @@ const
   // f (Value, Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsWriteIntIni = Ptr($773ACB);
   
-  ZvsAppliedDamage: PINTEGER = Ptr($2811888);
+  ZvsAppliedDamage: pinteger = Ptr($2811888);
+  CurrentMp3Track:  pchar = pointer($6A33F4);
 
 
 var
@@ -38,6 +39,9 @@ var
 (***) implementation (***)
 
 
+type
+  TWogMp3Process = procedure; stdcall;
+
 var
 {O} TopLevelExceptionHandlers: DataLib.TList {OF Handler: pointer};
 
@@ -48,9 +52,15 @@ var
   ZvsLibGamePath:        string;
   IsLocalPlaceObject:    boolean = true;
 
+  Mp3TriggerHandledEvent: THandle;
+  IsMp3Trigger:           boolean = false;
+  WogCurrentMp3TrackPtr:  ppchar = pointer($28AB204);
+  WoGMp3Process:          TWogMp3Process = pointer($77495F);
+
 threadvar
   (* Counter (0..100). When reaches 100, PeekMessageA does not call sleep before returning result *)
   CpuPatchCounter: integer;
+  IsMainThread:    boolean;
 
 
 function Hook_ReadIntIni
@@ -206,8 +216,31 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SetHotseatHeroName
 
-function Hook_PeekMessageA (Context: Core.PHookContext): longbool; stdcall;
+function Hook_Mp3TrackChanged (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
+  IsMp3Trigger := true;
+  Windows.WaitForSingleObject(Mp3TriggerHandledEvent, Windows.INFINITE);
+  result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_PeekMessageA (Context: Core.PHookContext): LONGBOOL; stdcall;
+var
+  GameState: Heroes.TGameState;
+
+begin
+  // Handle MP3 trigger in main thread only
+  // if IsMp3Trigger and IsMainThread then begin
+  //   IsMp3Trigger := false;
+  //   Heroes.GetGameState(GameState);
+    
+  //   if Erm.ErmEnabled^ and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
+  //     WoGCurrentMp3TrackPtr^ := CurrentMp3Track;
+  //     WoGMp3Process();
+  //   end;
+    
+  //   Windows.SetEvent(Mp3TriggerHandledEvent);
+  // end;
+
   Inc(CpuPatchCounter, CpuTargetLevel);
 
   if CpuPatchCounter >= 100 then begin
@@ -217,7 +250,7 @@ begin
   end;
 
   result := Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_PeekMessageA
 
 function New_Zvslib_GetPrivateProfileStringA
 (
@@ -1010,6 +1043,10 @@ begin
   if false then Core.p.WriteDataPatch(Ptr($41A0DC), ['01']); // save orig.dat on receive compressed
   Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
+
+  (* Fix !?MP3 trigger crashes due to thread unsafe nature *)
+  //Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']); // Disable MP3Start WoG hook
+  //Core.ApiHook(@Hook_Mp3TrackChanged, Core.HOOKTYPE_BRIDGE, Ptr($59AC51));
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
@@ -1025,6 +1062,9 @@ begin
   Windows.InitializeCriticalSection(InetCriticalSection);
   ExceptionsCritSection.Init;
   TopLevelExceptionHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
+  IsMainThread              := true;
+  Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
+
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);

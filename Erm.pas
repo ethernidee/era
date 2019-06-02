@@ -1593,7 +1593,6 @@ begin
   end; // .while
 end; // .function AddrToScriptNameAndLine
 
-
 procedure FireErmEventEx (EventId: integer; Params: array of integer);
 var
   i: integer;

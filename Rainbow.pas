@@ -546,23 +546,6 @@ begin
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_DrawPic
 
-function Hook_RegisterDefFrame (Context: Core.PHookContext): longbool; stdcall;
-begin
-  if TextColorMode^ = TEXTMODE_15BITS then begin
-    Color32To16 :=  Color32To15Func;
-    {!} Assert(false);// !FIXME
-  end else if TextColorMode^ = TEXTMODE_16BITS then begin
-    Color32To16 :=  Color32To16Func;
-  end else begin
-    {!} Assert(false);
-  end;
-  
-  NameStdColors;
-  GameExt.FireEvent('OnAfterCreateWindow', GameExt.NO_EVENT_DATA, 0);
-  
-  result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_RegisterDefFrame
-
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   ChineseLoaderOpt  :=  IsChineseLoaderPresent(ChineseHandler);

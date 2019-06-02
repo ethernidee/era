@@ -38,8 +38,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.8.1';
-  ERA_VERSION_INT = 2801;
+  ERA_VERSION_STR = '2.8.2';
+  ERA_VERSION_INT = 2802;
 
 type
   EAssertFailure = class (Exception) end;
