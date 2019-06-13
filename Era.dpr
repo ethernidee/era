@@ -6,12 +6,12 @@ AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 {$R *.RES}
 
-uses  Math,
-  GameExt, Erm, Tweaks,
+uses Math,
+  Core, GameExt, Erm, Tweaks,
   DebugMaps,
   VfsImport in '..\Vfs\VfsImport.pas',
   Lua in 'Lua\Lua.pas',
-  Rainbow, Triggers, Stores, Lodman, Trans, Graph,
+  Trans, Rainbow, Triggers, Stores, Lodman, Graph,
   AdvErm, Scripts, ErmTracking, PoTweak, SndVid, EraButtons,
   EraSettings, Extern;
 

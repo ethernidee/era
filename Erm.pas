@@ -2076,6 +2076,9 @@ end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
+  // Patch WoG FindErm to allow functions with arbitrary IDs
+  Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
+
   (* ERM OnAnyTrigger *)
   Core.Hook(@Hook_ProcessErm, Core.HOOKTYPE_BRIDGE, 6, Ptr($74C819));
   Core.Hook(@Hook_ProcessErm_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($74CE2A));

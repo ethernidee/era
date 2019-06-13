@@ -72,26 +72,50 @@ procedure LoadLangFile (const FilePath: string);
 var
 {O} LangData:         TlkJsonObject;
     LangFileContents: string;
-    Key:              string;
-    i:                integer;
+    IsInvalidFile:    boolean;
+
+  procedure ProcessTree (Tree: TlkJsonObject; const KeyPrefix: string);
+  var
+    Key:   string;
+    Value: Json.TlkJsonBase;
+    i:     integer;
+
+  begin
+    for i := 0 to Tree.Count - 1 do begin
+      if KeyPrefix <> '' then begin
+        Key := KeyPrefix + Tree.NameOf[i];
+      end else begin
+        Key := Tree.NameOf[i];
+      end;
+
+      Value := Tree.FieldByIndex[i];
+
+      if Value is Json.TlkJsonObject then begin
+        ProcessTree(Json.TlkJsonObject(Value), Key + '.');
+      end else if Value is Json.TlkJsonString then begin
+        if LangMap[Key] = nil then begin
+          LangMap[Key] := TString.Create(Tree.GetString(i));
+        end;
+      end else if not IsInvalidFile then begin
+        IsInvalidFile := true;
+        Core.NotifyError('Invalid language json file: "' + FilePath + '". Erroneous key: ' + Key);
+      end;
+    end; // .for
+  end; // .procedure ProcessTree
 
 begin
   LangData := nil;
   // * * * * * //
+  IsInvalidFile := false;
+
   if Files.ReadFileContents(FilePath, LangFileContents) then begin
-    Utils.CastOrFree(TlkJson.ParseText(LangFileContents), TlkJsonObject, LangData);
+    Utils.CastOrFree(TlkJson.ParseText(LangFileContents), Json.TlkJsonObject, LangData);
     
     if LangData <> nil then begin
-      for i := 0 to LangData.Count - 1 do begin
-        Key := LangData.NameOf[i];
-
-        if LangMap[Key] = nil then begin
-          LangMap[Key] := TString.Create(LangData.GetString(i));
-        end;
-      end;
+      ProcessTree(LangData, '');
     end else begin
       Core.NotifyError('Invalid language json file: "' + FilePath + '"');
-    end; // .else
+    end;
   end; // .if
   // * * * * * //
   FreeAndNil(LangData);

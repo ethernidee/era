@@ -17,10 +17,14 @@ type
 
 const
   (* Graphics *)
-  PCX16_COLOR_DEPTH = 16;
+  PCX16_COLOR_DEPTH     = 16;
+  PCX24_COLOR_DEPTH     = 24;
+  PCX16_BYTES_PER_COLOR = PCX16_COLOR_DEPTH div 8;
+  PCX24_BYTES_PER_COLOR = PCX24_COLOR_DEPTH div 8;
 
   (* Resource types in resource tree *)
   RES_TYPE_PCX_8  = $10;
+  RES_TYPE_PCX_24 = $11;
   RES_TYPE_PCX_16 = $12;
 
   (* Game settings *)
@@ -307,6 +311,7 @@ type
 
     function  IsPcx8: boolean;
     function  IsPcx16: boolean;
+    function  IsPcx24: boolean;
   end; // .object TBinaryTreeItem
   {$ALIGN ON}
 
@@ -351,14 +356,34 @@ type
    public
     HasDdSurfaceBuffer: boolean;
   end; // .object TPcx16Item
+
+  PPcx24Item = ^TPcx24Item;
+  TPcx24Item = object (TBinaryTreeItem)
+   public
+    BufSize:    integer;
+    PicSize:    integer;
+    Width:      integer;
+    Height:     integer;
+    Buffer:     Utils.PEndlessByteArr;
+    Reserved_1: integer;
+    Reserved_2: integer;
+
+    procedure DrawToPcx16 (SrcX, SrcY, aWidth, aHeight: integer; Pcx16: PPcx16Item; DstX, DstY: integer);
+  end; // .object TPcx24Item
   {$ALIGN ON}
 
   TPcx16ItemStatic = class
     (* Create new Pcx16 image with RefCount = 0 and not assigned to any binary tree *)
     class function Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item; static;
+    class function Create_ (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item; static;
     
     (* Uses default pcx loading mechanism to load item, RefCount is increased by one *)
     class function Load (const aName: string): {U} PPcx16Item; static;
+  end;
+
+  TPcx24ItemStatic = class
+    (* Create new Pcx24 image with RefCount = 0 and not assigned to any binary tree *)
+    class function Create (const aName: string; aWidth, aHeight: integer): {On} PPcx24Item; static;
   end;
 
 
@@ -487,6 +512,11 @@ begin
   result := Self.VTable = Ptr($63B9C8);
 end;
 
+function TBinaryTreeItem.IsPcx24: boolean;
+begin
+  result := Self.VTable = Ptr($63B9F4);
+end;
+
 function TBinaryTreeNode.FindItem (const aName: string; var {out} aItem: PBinaryTreeItem): boolean;
 var
 {U} Node: PBinaryTreeNode;
@@ -553,6 +583,13 @@ end; // .procedure TBinaryTreeNode.AddItem
 
 class function TPcx16ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;
 begin
+  result := MemAlloc(Alg.IntRoundToBoundary(sizeof(result^), sizeof(integer)));
+  PatchApi.Call(PatchApi.THISCALL_, Ptr($44DD20), [result, pchar(aName), aWidth, aHeight]);
+  {!} Assert(result.RefCount = 0);
+end;
+
+class function TPcx16ItemStatic.Create_ (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;
+begin
   result := nil;
 
   if (aWidth <= 0) or (aHeight <= 0) then begin
@@ -577,13 +614,47 @@ begin
     result.HasDdSurfaceBuffer := false;
     result.Buffer             := MemAlloc(result.BufSize);
   end; // .if
-end; // .function TPcx16ItemStatic.Create
+end; // .function TPcx16ItemStatic.Create_
 
 class function TPcx16ItemStatic.Load (const aName: string): {U} PPcx16Item;
 begin
   result := PPcx16Item(PatchApi.Call(PatchApi.FASTCALL_, Ptr($55B1E0), [pchar(aName)]));
   {!} Assert(result <> nil, Format('Failed to load pcx16 image "%s". "dfault24.pcx" is also missing', [aName]));
   {!} Assert(result.IsPcx16(), Format('Loaded image "%s" is not requested pcx16', [aName]));
+end;
+
+class function TPcx24ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx24Item;
+begin
+  result := nil;
+
+  if (aWidth <= 0) or (aHeight <= 0) then begin
+    Core.NotifyError(Format('Cannot create pcx24 image of size %dx%d', [aWidth, aHeight]));
+
+    aWidth  := Utils.IfThen(aWidth > 0, aWidth, 1);
+    aHeight := Utils.IfThen(aHeight > 0, aHeight, 1);
+  end;
+
+  if (aWidth > 0) and (aHeight > 0) then begin
+    result := MemAlloc(Alg.IntRoundToBoundary(sizeof(result^), sizeof(integer)));
+
+    FillChar(result^, sizeof(result^), 0);
+    result.VTable     := Ptr($63B9F4);
+    result.ItemType   := RES_TYPE_PCX_24;
+    result.Width      := aWidth;
+    result.Height     := aHeight;
+    result.BufSize    := aWidth * aHeight * PCX24_BYTES_PER_COLOR;
+    result.PicSize    := result.BufSize;
+    result.Reserved_1 := 0;
+    result.Reserved_2 := 0;
+    result.Buffer     := MemAlloc(result.BufSize);
+    result.SetName(aName);
+  end; // .if
+end; // .function TPcx24ItemStatic.Create
+
+procedure TPcx24Item.DrawToPcx16 (SrcX, SrcY, aWidth, aHeight: integer; Pcx16: PPcx16Item; DstX, DstY: integer);
+begin
+  {!} Assert(Pcx16 <> nil);
+  PatchApi.Call(PatchApi.THISCALL_, Ptr($44ECA0), [@Self, SrcX, SrcY, Width, Height, Pcx16, DstX, DstY]);
 end;
 
 function MemAlloc (Size: integer): {On} pointer;
@@ -673,12 +744,13 @@ end;
 
 procedure GetGameState (out GameState: TGameState);
 begin
-  if AdvManagerPtr^.RootDlgIdPtr <> nil then begin
+  if (AdvManagerPtr^ <> nil) and (AdvManagerPtr^.RootDlgIdPtr <> nil) then begin
     GameState.RootDlgId :=  AdvManagerPtr^.RootDlgIdPtr^^;
   end else begin
     GameState.RootDlgId :=  0;
   end;
-  if AdvManagerPtr^.CurrentDlgIdPtr <> nil then begin
+  
+  if (AdvManagerPtr^ <> nil) and (AdvManagerPtr^.CurrentDlgIdPtr <> nil) then begin
     GameState.CurrentDlgId := AdvManagerPtr^.CurrentDlgIdPtr^^;
   end else begin
     GameState.CurrentDlgId := 0;

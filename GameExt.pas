@@ -38,8 +38,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.8.2';
-  ERA_VERSION_INT = 2802;
+  ERA_VERSION_STR = '2.8.3';
+  ERA_VERSION_INT = 2803;
 
 type
   EAssertFailure = class (Exception) end;
@@ -120,27 +120,39 @@ asm
   CALL EAX
 end; // .procedure InitWoG
 
-procedure LoadPlugins;
+procedure LoadPlugins (const Ext: string);
 const
   ERM_V_1 = $887668;
 
 var
-  DllName:   string;
-  DllHandle: integer;
+  DllName:             string;
+  DllHandle:           integer;
+  FileExt:             string;
+  ForbiddenPluginPath: string;
   
 begin
-  with Files.Locate(GameDir + '\' + PLUGINS_PATH + '\*.era', Files.ONLY_FILES) do begin
+  with Files.Locate(GameDir + '\' + PLUGINS_PATH + '\*.' + Ext, Files.ONLY_FILES) do begin
     while FindNext do begin
-      if FoundRec.Rec.Size > 0 then begin
+      if (FoundRec.Rec.Size > 0) then begin
         DllName := SysUtils.AnsiLowerCase(FoundName);
+        FileExt := StrLib.ExtractExt(FoundName);
+        
+        if (FileExt = 'dll') or (FileExt = 'era') then begin
+          ForbiddenPluginPath := SysUtils.ChangeFileExt(FoundPath, Utils.IfThen(FileExt = 'dll', '.era', '.dll'));
 
-        // Providing Era Handle in v1
-        PINTEGER(ERM_V_1)^ := hEra;
+          {!} Assert(
+            not SysUtils.FileExists(ForbiddenPluginPath),
+            Format('Failed to load plugin "%s", because "%s" is also present. Duplicate plugin files with different extensions detected.', [FoundPath, ForbiddenPluginPath])
+          );
 
-        DllHandle := Windows.LoadLibrary(pchar(FoundPath));
-        {!} Assert(DllHandle <> 0, 'Failed to load DLL at "' + FoundPath + '"');
-        PluginsList.AddObj(DllName, Ptr(DllHandle));
-      end;
+          // Providing Era handle in v1 for compatibility reasons
+          PINTEGER(ERM_V_1)^ := hEra;
+
+          DllHandle := Windows.LoadLibrary(pchar(FoundPath));
+          {!} Assert(DllHandle <> 0, 'Failed to load DLL at "' + FoundPath + '"');
+          PluginsList.AddObj(DllName, Ptr(DllHandle));
+        end;
+      end; // .if
     end; // .while
   end; // .with
 end; // .procedure LoadPlugins
@@ -459,15 +471,16 @@ begin
   EraEventParams        :=  Windows.GetProcAddress(hAngel, 'EventParams');
   {!} Assert(EraEventParams <> nil, 'Missing angel.dll:EventParams variable');
   
-  LoadPlugins;
+  LoadPlugins('era');
   EventMan.GetInstance.Fire('OnBeforeWoG', NO_EVENT_DATA, 0);
-  BinPatching.ApplyPatches(PATCHES_PATH + '\BeforeWoG');
+  BinPatching.ApplyPatches(GameDir + '\' + PATCHES_PATH + '\BeforeWoG');
   
   InitWoG;
   EraInit;
 
+  LoadPlugins('dll');
   EventMan.GetInstance.Fire('OnAfterWoG', NO_EVENT_DATA, 0);
-  BinPatching.ApplyPatches(PATCHES_PATH + '\AfterWoG');
+  BinPatching.ApplyPatches(GameDir + '\' + PATCHES_PATH + '\AfterWoG');
 
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 

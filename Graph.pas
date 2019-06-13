@@ -353,14 +353,12 @@ end; // .function LoadImageAsBmp24
 
 function Bmp24ToPcx16 (Image: TBitmap; const Name: string): {O} Heroes.PPcx16Item;
 var
-    Width:              integer;
-    Height:             integer;
-{U} BmpPixels:          PColor24;
-{U} PcxPixels:          pword;
-    BmpScanlineSize:    integer;
-    BmpScanlinePadding: integer;
-    PcxScanlinePadding: integer;
-    x, y:               integer;
+    Width:           integer;
+    Height:          integer;
+{U} BmpPixels:       PColor24;
+{U} PcxPixels:       pword;
+    PcxScanlineSize: integer;
+    x, y:            integer;
 
 begin
   ValidateBmp24(Image);
@@ -372,11 +370,9 @@ begin
   Height := Image.Height;
   result := Heroes.TPcx16ItemStatic.Create(Name, Width, Height);
   {!} Assert(result <> nil, Format('Failed to create pcx16 image of size %dx%d', [Width, Height]));
-  
-  BmpScanlineSize    := GetBmpScanlineSize(Image);
-  BmpScanlinePadding := BmpScanlineSize     - (Width * BMP_24_COLOR_DEPTH       + 7) div 8;
-  PcxScanlinePadding := result.ScanlineSize - (Width * Heroes.PCX16_COLOR_DEPTH + 7) div 8;
-  PcxPixels          := pointer(result.Buffer);
+
+  PcxPixels       := pointer(result.Buffer);
+  PcxScanlineSize := result.ScanlineSize;
 
   for y := 0 to Height - 1 do begin
     BmpPixels := Image.Scanline[y];
@@ -387,10 +383,39 @@ begin
       inc(BmpPixels);
     end;
 
-    BmpPixels := Utils.PtrOfs(BmpPixels, BmpScanlinePadding - BmpScanlineSize * 2);
-    PcxPixels := Utils.PtrOfs(PcxPixels, PcxScanlinePadding);
-  end; // .for
+    PcxPixels := Utils.PtrOfs(PcxPixels, -Width * PCX16_BYTES_PER_COLOR + PcxScanlineSize);
+  end;
 end; // .function Bmp24ToPcx16
+
+function Bmp24ToPcx24 (Image: TBitmap; const Name: string): {O} Heroes.PPcx24Item;
+var
+    Width:           integer;
+    Height:          integer;
+{U} BmpPixels:       PColor24;
+{U} PcxPixels:       pword;
+    PcxScanlineSize: integer;
+    x, y:            integer;
+
+begin
+  ValidateBmp24(Image);
+  BmpPixels := nil;
+  PcxPixels := nil;
+  result    := nil;
+  // * * * * * //
+  Width  := Image.Width;
+  Height := Image.Height;
+  result := Heroes.TPcx24ItemStatic.Create(Name, Width, Height);
+  {!} Assert(result <> nil, Format('Failed to create pcx24 image of size %dx%d', [Width, Height]));
+
+  PcxScanlineSize := Width * Heroes.PCX24_BYTES_PER_COLOR;
+  PcxPixels       := pointer(result.Buffer);
+
+  for y := 0 to Height - 1 do begin
+    BmpPixels := Image.Scanline[y];
+    Utils.CopyMem(PcxScanlineSize, BmpPixels, PcxPixels);
+    Inc(integer(PcxPixels), PcxScanlineSize);
+  end;
+end; // .function Bmp24ToPcx24
 
 (* Loads Pcx16 resource with rescaling support. Values <= 0 are considered 'auto'. If it's possible, images are scaled proportionally.
    Resource name (name in binary resource tree) can be either fixed or automatic. Pass empty PcxName for automatic name.
@@ -403,6 +428,7 @@ function LoadImageAsPcx16 (FilePath: string; PcxName: string = ''; Width: intege
 var
 {O}  Bmp:               TBitmap;
 {Un} CachedItem:        Heroes.PPcx16Item;
+{On} Pcx24:             Heroes.PPcx24Item;
      NewSize:           TImageSize;
      UseAutoNaming:     boolean;
      IsUnsizedNameFree: boolean;
@@ -419,7 +445,7 @@ begin
   IsSizedNameFree   := true;
   FilePath          := SysUtils.ExpandFileName(FilePath);
 
-  // Fixed name is used, item must be absent in resource tree or have pcx16 format.
+  // Fixed name is used, item must be absent in resource tree or have pcx24 format.
   // Cached item is used even if dimensions are different from desired.
   if not UseAutoNaming then begin
     PcxName := Heroes.ResourceNamer.GetResourceName(PcxName);
@@ -463,12 +489,12 @@ begin
     Bmp     := LoadImageAsBmp24(FilePath);
     NewSize := GetScaledBmp24Size(Bmp, Width, Height);
 
-    // Query cache for exact sized pcx16 in case of autonaming
+    // Query cache for exact sized pcx24 in case of autonaming
     if UseAutoNaming then begin
       PcxName    := Heroes.ResourceNamer.GetResourceName(Format('%s:%dx%d', [FilePath, NewSize.Width, NewSize.Height]));
       CachedItem := nil;
 
-      if Heroes.ResourceTree.FindItem(PcxName, Heroes.PBinaryTreeItem(CachedItem)) and (CachedItem.IsPcx16()) and (CachedItem.Width = NewSize.Width) and (CachedItem.Height = NewSize.Height) then begin
+      if Heroes.ResourceTree.FindItem(PcxName, Heroes.PBinaryTreeItem(CachedItem)) and (CachedItem.IsPcx24()) and (CachedItem.Width = NewSize.Width) and (CachedItem.Height = NewSize.Height) then begin
         result := CachedItem;
         result.IncRef();
       end;
@@ -496,7 +522,12 @@ begin
     end;
     
     // Perform image conversion and resource insertion
-    result := Bmp24ToPcx16(Bmp, PcxName);
+    Pcx24  := Bmp24ToPcx24(Bmp, PcxName);
+    result := Heroes.TPcx16ItemStatic.Create(PcxName, Bmp.Width, Bmp.Height);
+    Pcx24.DrawToPcx16(0, 0, Bmp.Width, Bmp.Height, result, 0, 0);
+    Pcx24.Destruct;
+    //result := pointer(Pcx24);
+
     result.IncRef();
     Heroes.ResourceTree.AddItem(result);
   end; // .if

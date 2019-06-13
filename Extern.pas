@@ -7,57 +7,61 @@ unit Extern;
 (***)  interface  (***)
 
 uses
-  Utils, Core,
+  Utils, Core, ApiJack,
   GameExt, Heroes, Erm, Ini, Rainbow, Stores,
-  EraButtons, Lodman, Graph, EventMan;
+  EraButtons, Lodman, Graph, Trans, EventMan;
 
 type
   (* Import *)
   TEventHandler = EventMan.TEventHandler;
 
-procedure FatalError (Err: pchar); stdcall;
-procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
-procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer); stdcall;
-procedure ExecErmCmd (CmdStr: pchar); stdcall;
-procedure FireErmEvent (EventID: integer); stdcall;
-procedure ClearIniCache (FileName: pchar);
-function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall;
-function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall;
-function  SaveIni (FilePath: pchar): boolean; stdcall;
-procedure NameColor (Color32: integer; Name: pchar); stdcall;
-procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
-
-function  ReadSavegameSection
-(
-      DataSize:     integer;
-  {n} Dest:         pointer;
-      SectionName:  pchar
-): integer; stdcall;
-
-function  GetButtonID (ButtonName: pchar): integer; stdcall;
-function  PatchExists (PatchName: pchar): boolean; stdcall;
-function  PluginExists (PluginName: pchar): boolean; stdcall;
-procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
-procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall;
-function  LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height: integer): {OU} Heroes.PPcx16Item; stdcall;
-procedure ShowMessage (Mes: pchar);
-function  Ask (Question: pchar): boolean;
-
 
 (***) implementation (***)
 
 
-procedure NameColor (Color32: integer; Name: pchar);
+const
+  EXTERNAL_BUF_PREFIX_SIZE = sizeof(integer);
+
+
+function AllocExternalBuf (Size: integer): {O} pointer;
+begin
+  {!} Assert(Size >= 0);
+  GetMem(result, Size + EXTERNAL_BUF_PREFIX_SIZE);
+  pinteger(result)^ := Size;
+  Inc(integer(result), EXTERNAL_BUF_PREFIX_SIZE);
+end;
+
+function Externalize (const Str: AnsiString): {O} pointer; overload;
+begin
+  result := AllocExternalBuf(Length(Str) + 1);
+  Utils.CopyMem(Length(Str) + 1, pchar(Str), result);
+end;
+
+function Externalize (const Str: WideString): {O} pointer; overload;
+begin
+  result := AllocExternalBuf((Length(Str) + 1) * sizeof(WideChar));
+  Utils.CopyMem((Length(Str) + 1) * sizeof(WideChar), PWideChar(Str), result);
+end;
+
+(* Frees buffer, that was transfered to client earlier using other VFS API *)
+procedure MemFree ({On} Buf: pointer); stdcall;
+begin
+  if Buf <> nil then begin
+    FreeMem(Utils.PtrOfs(Buf, -EXTERNAL_BUF_PREFIX_SIZE));
+  end;
+end;
+
+procedure NameColor (Color32: integer; Name: pchar); stdcall;
 begin
   Rainbow.NameColor(Color32, Name);
 end;
 
-procedure ClearIniCache (FileName: pchar);
+procedure ClearIniCache (FileName: pchar); stdcall;
 begin
   Ini.ClearIniCache(FileName);
 end;
 
-function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean;
+function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall;
 var
   ResStr: string;
 
@@ -66,49 +70,54 @@ begin
   Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
 end;
 
-function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean;
+function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall;
 begin
   result := Ini.WriteStrToIni(Key, Value, SectionName, FilePath);
 end;
 
-function SaveIni (FilePath: pchar): boolean;
+function SaveIni (FilePath: pchar): boolean; stdcall;
 begin
   result := Ini.SaveIni(FilePath);
 end;
 
-procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar);
+procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
 begin
   Stores.WriteSavegameSection(DataSize, Data, SectionName);
 end;
 
-function ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar): integer;
+function ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar): integer; stdcall;
 begin
   result := Stores.ReadSavegameSection(DataSize, Dest, SectionName);
 end;
 
-procedure ExecErmCmd (CmdStr: pchar);
+procedure ExecErmCmd (CmdStr: pchar); stdcall;
 begin
   Erm.ExecErmCmd(CmdStr);
 end;
 
-procedure FireErmEvent (EventID: integer);
+procedure FireErmEvent (EventID: integer); stdcall;
 begin
   Erm.FireErmEvent(EventID);
 end;
 
-procedure RegisterHandler (Handler: TEventHandler; EventName: pchar);
+procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall;
 begin
   EventMan.GetInstance.On(EventName, Handler);
 end;
 
-procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer);
+procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer); stdcall;
 begin
   GameExt.FireEvent(EventName, EventData, DataSize);
 end;
 
-procedure FatalError (Err: pchar);
+procedure FatalError (Err: pchar); stdcall;
 begin
   Core.FatalError(Err);
+end;
+
+procedure NotifyError (Err: pchar); stdcall;
+begin
+  Core.NotifyError(Err);
 end;
 
 function GetButtonID (ButtonName: pchar): integer; stdcall;
@@ -116,43 +125,44 @@ begin
   result := EraButtons.GetButtonID(ButtonName);
 end;
 
-function PatchExists (PatchName: pchar): boolean;
+function PatchExists (PatchName: pchar): boolean; stdcall;
 begin
   result := GameExt.PatchExists(PatchName);
 end;
 
-function PluginExists (PluginName: pchar): boolean;
+function PluginExists (PluginName: pchar): boolean; stdcall;
 begin
   result := GameExt.PluginExists(PluginName);
 end;
 
-procedure RedirectFile (OldFileName, NewFileName: pchar);
+procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
 begin
   Lodman.RedirectFile(OldFileName, NewFileName);
 end;
 
-procedure GlobalRedirectFile (OldFileName, NewFileName: pchar);
+procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall;
 begin
   Lodman.GlobalRedirectFile(OldFileName, NewFileName);
 end;
 
-{function tr (const Key: pchar; const Params: array of pchar): pchar; stdcall;
+function tr (const Key: pchar; const Params: array of pchar): pchar; stdcall;
 var
-  ParamsList: StrLib.TArrayOfStr;
+  ParamList:   Utils.TArrayOfStr;
+  Translation: string;
+  i:           integer;
 
 begin
-  Translation := LangMap[Key];
-  // * * * * * //
-  SetLength(ParamsList, length(Params));
-  
-  if Translation <> nil then begin
-    result := StrLib.BuildStr(Translation.Value, Params, TEMPL_CHAR);
-  end else begin
-    result := Key;
-  end;
-end; // .function tr}
+  SetLength(ParamList, length(Params));
 
-function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height: integer): {OU} Heroes.PPcx16Item;
+  for i := 0 to High(Params) do begin
+    ParamList[i] := Params[i];
+  end;
+
+  Translation := Trans.tr(Key, ParamList);
+  result      := Externalize(Translation);
+end; // .function tr
+
+function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height: integer): {OU} Heroes.PPcx16Item; stdcall;
 begin
   if FilePath = nil then begin
     FilePath := pchar('');
@@ -165,12 +175,12 @@ begin
   result := Graph.LoadImageAsPcx16(FilePath, PcxName, Width, Height);
 end;
 
-procedure ShowMessage (Mes: pchar);
+procedure ShowMessage (Mes: pchar); stdcall;
 begin
   Erm.ShowMessage(Mes);
 end;
 
-function Ask (Question: pchar): boolean;
+function Ask (Question: pchar): boolean; stdcall;
 begin
   result := Erm.Ask(Question);
 end;
@@ -185,41 +195,54 @@ begin
   result := GameExt.ERA_VERSION_STR;
 end;
 
+function Splice (OrigFunc, HandlerFunc: pointer): pointer; stdcall;
+begin
+  result := ApiJack.Splice(OrigFunc, HandlerFunc);
+end;
+
+function HookCode (Addr: pointer; HandlerFunc: THookHandler): pointer; stdcall;
+begin
+  result := ApiJack.HookCode(Addr, HandlerFunc);
+end;
+
 exports
-  Core.WriteAtCode,
-  Core.Hook,
-  Core.ApiHook,
-  Core.KillThisProcess,
-  FatalError,
-  RegisterHandler,
-  FireEvent,
-  Heroes.LoadTxt,
-  Heroes.ForceTxtUnload,
-  ExecErmCmd,
-  Erm.ReloadErm,
-  Erm.ExtractErm,
-  FireErmEvent,
-  Ini.ClearAllIniCache,
+  Ask,
   ClearIniCache,
-  ReadStrFromIni,
-  WriteStrToIni,
-  SaveIni,
-  NameColor,
-  WriteSavegameSection,
-  ReadSavegameSection,
-  Heroes.GetGameState,
+  Core.ApiHook,
+  Core.Hook,
+  Core.WriteAtCode,
+  Erm.ExtractErm,
+  Erm.ReloadErm,
+  ExecErmCmd,
+  FatalError,
+  FireErmEvent,
+  FireEvent,
+  GameExt.GenerateDebugInfo,
+  GameExt.GetRealAddr,
+  GameExt.RedirectMemoryBlock,
   GetButtonID,
+  GetVersion,
+  GlobalRedirectFile,
+  Heroes.GetGameState,
+  Heroes.LoadTxt,
+  HookCode,
+  Ini.ClearAllIniCache,
+  LoadImageAsPcx16,
+  MemFree,
+  NameColor,
+  NotifyError,
   PatchExists,
   PluginExists,
+  ReadSavegameSection,
+  ReadStrFromIni,
   RedirectFile,
-  GlobalRedirectFile,
-  LoadImageAsPcx16,
-  GameExt.RedirectMemoryBlock,
-  GameExt.GetRealAddr,
-  GameExt.GenerateDebugInfo,
-  ShowMessage,
-  Ask,
+  RegisterHandler,
   ReportPluginVersion,
-  GetVersion;
+  SaveIni,
+  ShowMessage,
+  Splice,
+  tr,
+  WriteSavegameSection,
+  WriteStrToIni;
 
 end.
