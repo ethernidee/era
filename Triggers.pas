@@ -164,21 +164,6 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_AfterCreateWindow
 
-function Hook_BeforeErmInstructions (Context: Core.PHookContext): LONGBOOL; stdcall;
-begin
-  GameExt.EraSaveEventParams;
-  GameExt.FireEvent('OnBeforeErm', GameExt.NO_EVENT_DATA, 0);
-  GameExt.EraRestoreEventParams;
-
-  if not Erm.ZvsIsGameLoading^ then begin
-    GameExt.EraSaveEventParams;
-    GameExt.FireEvent('OnBeforeErmInstructions', GameExt.NO_EVENT_DATA, 0);
-    GameExt.EraRestoreEventParams;
-  end;
-  
-  result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_BeforeErmInstructions
-
 function Hook_StartCalcDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   AttackerId  :=  Heroes.GetStackIdByPos(PINTEGER(Context.EBX + STACK_POS_OFS)^);
@@ -394,9 +379,6 @@ begin
   
   (* Key handling trigger *)
   Core.Hook(@Hook_AfterCreateWindow, Core.HOOKTYPE_BRIDGE, 6, Ptr($4F8226));
-  
-  (* Erm before instructions trigger *)
-  Core.Hook(@Hook_BeforeErmInstructions, Core.HOOKTYPE_BRIDGE, 6, Ptr($749BBA));
   
   (* Stack to stack damage calculation *)
   Core.Hook(@Hook_StartCalcDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($443C88));

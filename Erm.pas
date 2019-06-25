@@ -6,8 +6,9 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
-  Lists, StrLib, Math, Windows,
+  SysUtils, Math, Windows,
+  Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
+  Lists, StrLib,
   Core, Heroes, GameExt, EventMan;
 
 type
@@ -18,22 +19,21 @@ type
   TString     = TypeWrappers.TString;
 
 const
-  SCRIPT_NAMES_SECTION     = 'Era.ScriptNames';
+  ERM_SCRIPTS_SECTION      = 'Era.ErmScripts';
   FUNC_NAMES_SECTION       = 'Era.FuncNames';
   ERM_SCRIPTS_PATH         = 'Data\s';
   EXTRACTED_SCRIPTS_PATH   = GameExt.DEBUG_DIR + '\Scripts';
   ERM_TRACKING_REPORT_PATH = DEBUG_DIR + '\erm tracking.erm';
 
   (* Erm command conditions *)
-  LEFT_COND   = 0;
-  RIGHT_COND  = 1;
-  COND_AND    = 0;
-  COND_OR     = 1;
+  LEFT_COND  = 0;
+  RIGHT_COND = 1;
+  COND_AND   = 0;
+  COND_OR    = 1;
 
-  ERM_CMD_MAX_PARAMS_NUM  = 16;
-  MAX_ERM_SCRIPTS_NUM     = 100;
-  MIN_ERM_SCRIPT_SIZE     = Length('ZVSE'#13#10);
-  LINE_END_MARKER         = #10;
+  ERM_CMD_MAX_PARAMS_NUM = 16;
+  MIN_ERM_SCRIPT_SIZE    = Length('ZVSE'#13#10);
+  LINE_END_MARKER        = #10;
 
   (* Erm script state*)
   SCRIPT_NOT_USED = 0;
@@ -41,7 +41,7 @@ const
   SCRIPT_IN_MAP   = 2;
 
   AltScriptsPath: pchar     = Ptr($2730F68);
-  CurrErmEventID: PINTEGER  = Ptr($27C1950);
+  CurrErmEventID: pinteger  = Ptr($27C1950);
 
   (* Trigger if-else-then *)
   ZVS_TRIGGER_IF_TRUE     = 1;
@@ -210,18 +210,7 @@ type
     Len:    integer;
     Dummy:  integer;
   end; // .record TGameString
-  
-  TErmScriptInfo  = packed record
-    State:  integer;
-    Size:   integer;
-  end; // .record TErmScriptInfo
 
-  PErmScriptsInfo = ^TErmScriptsInfo;
-  TErmScriptsInfo = array [0..MAX_ERM_SCRIPTS_NUM - 1] of TErmScriptInfo;
-  
-  PScriptsPointers  = ^TScriptsPointers;
-  TScriptsPointers  = array [0..MAX_ERM_SCRIPTS_NUM - 1] of pchar;
-  
   PErmCmdConditions = ^TErmCmdConditions;
   TErmCmdConditions = array [COND_AND..COND_OR, 0..15, LEFT_COND..RIGHT_COND] of TErmCmdParam;
 
@@ -255,6 +244,53 @@ type
     Params:     TErmCmdParams;
     (* ... *)
   end; // .record TErmSubCmd
+
+  TErmScript = class
+     private
+       fFileName: string;
+       fContents: string;
+       fCrc32:    integer;
+
+      procedure Init (const aFileName, aScriptContents: string; aCrc32: integer);
+
+     public
+      constructor Create (const aFileName, aScriptContents: string; aCrc32: integer); overload;
+      constructor Create (const aFileName, aScriptContents: string); overload;
+      
+      function FastCompare (OtherScript: TErmScript): boolean;
+      function OwnsAddr ({n} Addr: pchar): boolean;
+      function GetPtr: pchar;
+      
+      property FileName: string read fFileName;
+      property Contents: string read fContents;
+      property Crc32:    integer read fCrc32;
+    end; // .class TErmScript
+  
+  TScriptMan = class
+     private
+      {O} fScripts:        {O} TList {OF TErmScript};
+      {O} fScriptIsLoaded: {U} TDict {OF FileName => Ptr(BOOLEAN)};
+      
+      function  GetScriptCount: integer;
+      function  GetScript (Ind: integer): TErmScript;
+     
+     public
+      constructor Create;
+      destructor  Destroy; override;
+     
+      procedure ClearScripts;
+      procedure SaveScripts;
+      function  IsScriptLoaded (const ScriptName: string): boolean;
+      function  LoadScript (const ScriptName: string): boolean;
+      procedure LoadScriptsFromSavedGame;
+      procedure LoadScriptsFromDisk;
+      procedure ReloadScriptsFromDisk;
+      procedure ExtractScripts;
+      function  AddrToScriptNameAndLine ({n} Addr: pchar; var {out} ScriptName: string; out LineN: integer; out LinePos: integer): boolean;
+
+      property NumScripts: integer read GetScriptCount;
+      property Scripts[Ind: integer]: TErmScript read GetScript;
+    end; // .class TScriptMan
 
   PZvsTriggerIfs = ^TZvsTriggerIfs;
   TZvsTriggerIfs = array [0..9] of shortint;
@@ -379,13 +415,11 @@ const
   ZvsIsGameLoading:   PBOOLEAN          = Ptr($A46BC0);
   ZvsTriggerIfs:      PZvsTriggerIfs    = Ptr($A46D18);
   ZvsTriggerIfsDepth: pbyte             = Ptr($A46D22);
-  ErmScriptsInfo:     PErmScriptsInfo   = Ptr($A49270);
-  ErmScripts:         PScriptsPointers  = Ptr($A468A0);
   IsWoG:              plongbool         = Ptr($803288);
   WoGOptions:         ^TWoGOptions      = Ptr($2771920);
   ErmEnabled:         plongbool         = Ptr($27F995C);
-  ErmErrCmdPtr:       PPCHAR            = Ptr($840E0C);
-  ErmDlgCmd:          PINTEGER          = Ptr($887658);
+  ErmErrCmdPtr:       ppchar            = Ptr($840E0C);
+  ErmDlgCmd:          pinteger          = Ptr($887658);
   MrMonPtr:           PPOINTER          = Ptr($2846884); // MB_Mon
   HeroSpecsTable:     PHeroSpecsTable   = Ptr($7B4C40);
   HeroSpecsTableBack: PHeroSpecsTable   = Ptr($91DA78);
@@ -406,13 +440,17 @@ const
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
   ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
+  ZvsResetCommanders: Utils.TProcedure  = Ptr($770B25);
 
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
 
 
 var
-  ErmTriggerDepth: integer = 0;
+{O} ScriptMan:       TScriptMan;
+    ErmTriggerDepth: integer = 0;
+
+    FreezedWogOptionWogify: integer = WOGIFY_ALL;
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -959,31 +997,83 @@ begin
   end; // .for
 end; // .procedure ExecErmCmd
 
-procedure LoadScriptFromMemory (const ScriptName, ScriptContents: string);
-var
-  ScriptInd:  integer;
-  ScriptSize: integer;
-  ScriptBuf:  pchar;
-
+procedure TErmScript.Init (const aFileName, aScriptContents: string; aCrc32: integer);
 begin
-  ScriptInd   :=  ScriptNames.Count;
-  {!} Assert(ScriptInd < MAX_ERM_SCRIPTS_NUM, 'Cannot load ERM script. Limit is reached');
-  ScriptSize  :=  Length(ScriptContents);
-  
-  if ScriptSize > MIN_ERM_SCRIPT_SIZE then begin
-    ErmScriptsInfo[ScriptInd].State :=  SCRIPT_IS_USED;
-    ErmScriptsInfo[ScriptInd].Size  :=  ScriptSize;
-    ScriptBuf                       :=  Heroes.MAlloc(ScriptSize - 1);      
-    ErmScripts[ScriptInd]           :=  ScriptBuf;
-    Utils.CopyMem(ScriptSize - 2, pointer(ScriptContents), ScriptBuf);
-    PBYTE(Utils.PtrOfs(ScriptBuf, ScriptSize - 2))^ :=  0;
-    ScriptNames.Add(ScriptName);
+  fFileName := aFileName;
+  fContents := aScriptContents;
+  fCrc32    := aCrc32;
+end;
+
+constructor TErmScript.Create (const aFileName, aScriptContents: string; aCrc32: integer);
+begin
+  Init(aFileName, aScriptContents, aCrc32);
+end;
+
+constructor TErmScript.Create (const aFileName, aScriptContents: string);
+begin
+  Init(aFileName, aScriptContents, Crypto.AnsiCrc32(aScriptContents));
+end;
+
+function TErmScript.FastCompare (OtherScript: TErmScript): boolean;
+begin
+  {!} Assert(OtherScript <> nil);
+  result := (Self.fCrc32 = OtherScript.fCrc32) and (Length(Self.fContents) = Length(OtherScript.fContents));
+end;
+
+function TErmScript.OwnsAddr ({n} Addr: pchar): boolean;
+begin
+  result := (cardinal(Addr) >= cardinal(Self.fContents)) and (cardinal(Addr) < cardinal(Self.fContents) + cardinal(Length(Self.fContents)));
+end;
+
+function TErmScript.GetPtr: pchar;
+begin
+  result := pchar(Self.fContents);
+end;
+
+procedure OnEraSaveScripts (Event: GameExt.PEvent); stdcall;
+begin
+  (* Save function names and auto ID *)
+  with Stores.NewRider(FUNC_NAMES_SECTION) do begin
+    WriteInt(FuncAutoId);
+    WriteStr(DataLib.SerializeDict(FuncNames));
   end;
-end; // .procedure LoadScriptFromMemory
+  
+  ScriptMan.SaveScripts;
+end;
+
+procedure OnEraLoadScripts (Event: GameExt.PEvent); stdcall;
+begin
+  (* Read function names and auto ID *)
+  with Stores.NewRider(FUNC_NAMES_SECTION) do begin
+    FuncAutoId := ReadInt;
+    FuncNames  := DataLib.UnserializeDict(ReadStr, not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  end;
+  
+  FreeAndNil(FuncIdToNameMap);
+  FuncIdToNameMap := DataLib.FlipDict(FuncNames);
+
+  (* Load scripts *)
+  ScriptMan.LoadScriptsFromSavedGame;
+end;
+
+function Hook_LoadErtFile (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
+  ARG_FILENAME = 2;
+
+var
+  FileName: pchar;
+  
+begin
+  FileName := pchar(pinteger(Context.EBP + 12)^);
+  Utils.CopyMem(SysUtils.StrLen(FileName) + 1, FileName, Ptr(Context.EBP - $410));
+  
+  Context.RetAddr := Ptr($72C760);
+  result          := not Core.EXEC_DEF_CODE;
+end; // .function Hook_LoadErtFile
 
 procedure LoadErtFile (const ErmScriptName: string);
 var
-  ErtFilePath:  string;
+  ErtFilePath: string;
    
 begin
   ErtFilePath := ERM_SCRIPTS_PATH + '\' + SysUtils.ChangeFileExt(ErmScriptName, '.ert');
@@ -991,175 +1081,34 @@ begin
   if SysUtils.FileExists(ErtFilePath) then begin
     ZvsLoadErtFile('', pchar('..\' + ErtFilePath));
   end;
-end; // .procedure LoadErtFile
-
-function FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
-begin
-  result := CmdPtr;
-  
-  if (result <> nil) and (result^ <> '!') then begin
-    Dec(result);
-    
-    while result^ <> '!' do begin
-      Dec(result);
-    end;
-    
-    Inc(result);
-    
-    if result^ <> '!' then begin
-      // [!]#
-      Dec(result);
-    end else begin
-      // ![!]
-      Dec(result, 2);
-    end;
-  end; // .if
-end; // .function FindErmCmdBeginning
-
-function GrabErmCmd ({n} CmdPtr: pchar): string;
-var
-  StartPos: pchar;
-  EndPos:   pchar;
-
-begin
-  if CmdPtr <> nil then begin
-    StartPos := FindErmCmdBeginning(CmdPtr);
-    EndPos   := CmdPtr;
-    
-    repeat
-      Inc(EndPos);
-    until (EndPos^ = ';') or (EndPos^ = #0);
-    
-    if EndPos^ = ';' then begin
-      Inc(EndPos);
-    end;
-    
-    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
-  end; // .if
-end; // .function GrabErmCmd
-
-function GrabErmCmdContext ({n} CmdPtr: pchar): string;
-const
-  NEW_LINE_COST        = 40;
-  MIN_CHARS_TO_ACCOUNT = 50;
-  MAX_CONTEXT_COST     = NEW_LINE_COST * 5;
-
-var
-  StartPos: pchar;
-  EndPos:   pchar;
-  Cost:     integer;
-  CurrCost: integer;
-
-
-begin
-  result := '';
-
-  if CmdPtr <> nil then begin
-    Cost     := 0;
-    CurrCost := 0;
-    StartPos := FindErmCmdBeginning(CmdPtr);
-    EndPos   := CmdPtr;
-    
-    repeat
-      Inc(EndPos);
-
-      if EndPos^ = #10 then begin
-        Inc(Cost, NEW_LINE_COST);
-        CurrCost := 0;
-      end else begin
-        Inc(CurrCost);
-
-        if CurrCost >= MIN_CHARS_TO_ACCOUNT then begin
-          Inc(Cost, CurrCost);
-          CurrCost := 0;
-        end;
-      end;
-    until (EndPos^ = #0) or (Cost >= MAX_CONTEXT_COST);
-    
-    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
-  end; // .if
-end; // .function GrabErmCmdContext
-
-procedure ReportErmError (Error: string; {n} ErrCmd: pchar);
-const
-  CONTEXT_LEN = 00;
-
-var
-  PositionLocated: boolean;
-  ScriptName:      string;
-  Line:            integer;
-  LinePos:         integer;
-  Question:        string;
-  
-begin
-  ErmErrReported  := true;
-  PositionLocated := AddrToScriptNameAndLine(ErrCmd, ScriptName, Line, LinePos);
-  
-  if Error = '' then begin
-    Error := 'Unknown error';
-  end;
-
-  Question := '{~FF3333}' + Error + '{~}';
-
-  if PositionLocated then begin
-    Question := Format('%s'#10'Location: %s:%d:%d', [Question, ScriptName, Line, LinePos]);
-  end;
-  
-  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10'Continue without saving ERM memory dump?';
-  
-  if not Ask(Question) then begin
-    ZvsDumpErmVars(pchar(Error), ErrCmd);
-  end;
-end; // .procedure ReportErmError
-
-function Hook_MError (Context: Core.PHookContext): LONGBOOL; stdcall;
-begin
-  ReportErmError(PPCHAR(Context.EBP + 16)^, ErmErrCmdPtr^);
-  Context.RetAddr := Ptr($712483);
-  result          := not Core.EXEC_DEF_CODE;
 end;
 
-procedure Hook_ErmMess (OrigFunc: pointer; SubCmd: PErmSubCmd); stdcall;
+function AddrToLineAndPos (Document: pchar; DocSize: integer; CharPos: pchar; var LineN: integer; var LinePos: integer): boolean;
 var
-  Code: pchar;
-  i:    integer;
+{Un} CharPtr: pchar;
 
 begin
-  Code := SubCmd.Code.Value;
+  CharPtr := nil;
   // * * * * * //
-  if not ErmErrReported then begin
-    ReportErmError('', Code);
+  result := (cardinal(CharPos) >= cardinal(Document)) and (cardinal(CharPos) < cardinal(Document) + cardinal(DocSize));
+  
+  if result then begin
+    LineN   := 1;
+    LinePos := 1;
+    CharPtr := Document;
+
+    while CharPtr <> CharPos do begin
+      if CharPtr^ = #10 then begin
+        inc(LineN);
+        LinePos := 1;
+      end else begin
+        inc(LinePos);
+      end;
+      
+      inc(CharPtr);
+    end;
   end; // .if
-
-  i := SubCmd.Pos;
-
-  while not (Code[i] in [#0, ';']) do begin
-    Inc(i);
-  end;
-
-  SubCmd.Pos     := i;
-  ErmErrReported := false;
-end; // .function Hook_ErmMess
-
-function Hook_FindErm_SkipUntil2 (SubCmd: PErmSubCmd): integer; cdecl;
-var
-  CurrChar: pchar;
-
-begin
-  CurrChar := @SubCmd.Code.Value[SubCmd.Pos];
-
-  while (CurrChar^ <> #0) and not ((CurrChar^ = '!') and (CurrChar[1] in ['!', '#', '?', '$', '@'])) do begin
-    Inc(CurrChar);
-  end;
-
-  if CurrChar^ <> #0 then begin
-    ErmErrCmdPtr^ := CurrChar;
-    SubCmd.Pos    := integer(CurrChar) - integer(SubCmd.Code.Value) + 1;
-    result        := 0;
-  end else begin
-    result := -1;
-  end;
-end; // .function Hook_FindErm_SkipUntil2
+end; // .function AddrToLineAndPos
 
 function PreprocessErm (const ScriptName, Script: string): string;
 const
@@ -1440,20 +1389,9 @@ begin
   SysUtils.FreeAndNil(Labels);
 end; // .function PreprocessErm
 
-function LoadScript (const ScriptName: string): boolean;
-var
-  ScriptContents: string;
-
-begin
-  result := Files.ReadFileContents(ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents);
-  
-  if result then begin
-    LoadScriptFromMemory(ScriptName, PreprocessErm(ScriptName, ScriptContents));
-    LoadErtFile(ScriptName);
-  end;
-end; // .function LoadScript
-
-function GetFileList (const Dir, FileExt: string): {O} Lists.TStringList;
+(* Returns list of files in specified directory, sorted by numeric priorities like '906 file name.erm'.
+   The higher priority is, the ealier in the list item will appear *)
+function GetOrderedPrioritizedFileList (const MaskedPath: string): {O} Lists.TStringList;
 const
   PRIORITY_SEPARATOR  = ' ';
   DEFAULT_PRIORITY    = 0;
@@ -1463,61 +1401,32 @@ const
   FILENAME_TOKEN      = 1;
 
 var
-{O} Locator:        Files.TFileLocator;
-{O} FileInfo:       Files.TFileItemInfo;
-    FileName:       string;
-    FileNameTokens: Utils.TArrayOfStr;
-    Priority:       integer;
-    TestPriority:   integer;
-    i:              integer;
-    j:              integer;
+  FileNameTokens: Utils.TArrayOfStr;
+  Priority:       integer;
+  TestPriority:   integer;
+  i:              integer;
+  j:              integer;
 
 begin
-  Locator   :=  Files.TFileLocator.Create;
-  FileInfo  :=  nil;
-  // * * * * * //
-  result  :=  Lists.NewSimpleStrList;
+  result := Lists.NewSimpleStrList;
   
-  Locator.DirPath :=  Dir;
-  Locator.InitSearch('*' + FileExt);
-  
-  while Locator.NotEnd do begin
-    FileName :=  Locator.GetNextItem(Files.TItemInfo(FileInfo));
-
-    if
-      (SysUtils.AnsiLowerCase(SysUtils.ExtractFileExt(FileName)) = FileExt) and
-      not FileInfo.IsDir
-    then begin
-      FileNameTokens :=  StrLib.ExplodeEx
-      (
-        FileName,
-        PRIORITY_SEPARATOR,
-        not StrLib.INCLUDE_DELIM,
-        StrLib.LIMIT_TOKENS,
-        FILENAME_NUM_TOKENS
-      );
-
-      Priority  :=  DEFAULT_PRIORITY;
+  with Files.Locate(MaskedPath, Files.ONLY_FILES) do begin
+    while FindNext do begin
+      FileNameTokens := StrLib.ExplodeEx(FoundName, PRIORITY_SEPARATOR, not StrLib.INCLUDE_DELIM, StrLib.LIMIT_TOKENS, FILENAME_NUM_TOKENS);
+      Priority       := DEFAULT_PRIORITY;
       
-      if
-        (Length(FileNameTokens) = FILENAME_NUM_TOKENS)  and
-        (SysUtils.TryStrToInt(FileNameTokens[PRIORITY_TOKEN], TestPriority))
-      then begin
-        Priority  :=  TestPriority;
+      if (Length(FileNameTokens) = FILENAME_NUM_TOKENS) and (SysUtils.TryStrToInt(FileNameTokens[PRIORITY_TOKEN], TestPriority)) then begin
+        Priority := TestPriority;
       end;
 
-      result.AddObj(FileName, Ptr(Priority));
-    end; // .if
-
-    SysUtils.FreeAndNil(FileInfo);
-  end; // .while
+      result.AddObj(FoundName, Ptr(Priority));
+    end;
+  end;
   
-  Locator.FinitSearch;
-
   (* Sort via insertion by Priority *)
   for i := 1 to result.Count - 1 do begin
-    Priority  :=  integer(result.Values[i]);
-    j         :=  i - 1;
+    Priority := integer(result.Values[i]);
+    j        := i - 1;
 
     while (j >= 0) and (Priority > integer(result.Values[j])) do begin
       Dec(j);
@@ -1525,9 +1434,409 @@ begin
 
     result.Move(i, j + 1);
   end;
+end; // .function GetOrderedPrioritizedFileList
+
+constructor TScriptMan.Create;
+begin
+  fScripts        := DataLib.NewList(Utils.OWNS_ITEMS);
+  fScriptIsLoaded := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+end;
+  
+destructor TScriptMan.Destroy;
+begin
+  SysUtils.FreeAndNil(fScripts);
+  SysUtils.FreeAndNil(fScriptIsLoaded);
+  inherited;
+end;
+
+procedure TScriptMan.ClearScripts;
+begin
+  EventMan.GetInstance.Fire('OnBeforeClearErmScripts');
+  fScripts.Clear;
+  fScriptIsLoaded.Clear;
+end;
+
+procedure TScriptMan.SaveScripts;
+var
+{U} Script: TErmScript;
+    i:      integer;
+  
+begin
+  Script := nil;
   // * * * * * //
-  SysUtils.FreeAndNil(Locator);
-end; // .function GetFileList
+  with Stores.NewRider(ERM_SCRIPTS_SECTION) do begin
+    WriteInt(fScripts.Count);
+
+    for i := 0 to fScripts.Count - 1 do begin
+      Script := TErmScript(fScripts[i]);
+      WriteStr(Script.FileName);
+      WriteInt(Script.Crc32);
+      WriteStr(Script.Contents);
+    end;
+  end; // .with 
+end; // .procedure TScriptMan.SaveScripts
+
+function TScriptMan.IsScriptLoaded (const ScriptName: string): boolean;
+begin
+  result := fScriptIsLoaded[ScriptName] <> nil;
+end;
+
+function TScriptMan.LoadScript (const ScriptName: string): boolean;
+var
+  ScriptContents:     string;
+  PreprocessedScript: string;
+
+begin
+  result := (fScriptIsLoaded[ScriptName] = nil) and (Files.ReadFileContents(GameExt.GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents));
+
+  if result then begin
+    fScriptIsLoaded[ScriptName] := Ptr(1);
+    PreprocessedScript          := PreprocessErm(ScriptName, ScriptContents);
+    fScripts.Add(TErmScript.Create(ScriptName, PreprocessedScript, Crypto.AnsiCrc32(ScriptContents)));
+    LoadErtFile(ScriptName);
+  end;
+end;
+
+procedure TScriptMan.LoadScriptsFromSavedGame;
+var
+{O} LoadedScripts:      {O} TList {OF TErmScript};
+    NumScripts:         integer;
+    ScriptContents:     string;
+    ScriptFileName:     string;
+    ScriptCrc32:        integer;
+    ScriptSetsAreEqual: boolean;
+    i:                  integer;
+  
+begin
+  LoadedScripts := DataLib.NewList(Utils.OWNS_ITEMS);
+  // * * * * * //
+  with Stores.NewRider(ERM_SCRIPTS_SECTION) do begin
+    NumScripts := ReadInt;
+
+    for i := 1 to NumScripts do begin
+      ScriptFileName := ReadStr;
+      ScriptCrc32    := ReadInt;
+      ScriptContents := ReadStr;
+      LoadedScripts.Add(TErmScript.Create(ScriptFileName, ScriptContents, ScriptCrc32));
+    end;
+  end;
+  
+  ScriptSetsAreEqual := fScripts.Count = LoadedScripts.Count;
+  
+  if ScriptSetsAreEqual then begin
+    i := 0;
+  
+    while (i < fScripts.Count) and TErmScript(fScripts[i]).FastCompare(TErmScript(LoadedScripts[i])) do begin
+      Inc(i);
+    end;
+    
+    ScriptSetsAreEqual := i = fScripts.Count;
+  end;
+  
+  if not ScriptSetsAreEqual then begin
+    Utils.Exchange(int(fScripts), int(LoadedScripts));
+    ZvsFindErm;
+  end;
+  // * * * * * //
+  SysUtils.FreeAndNil(LoadedScripts);
+end; // .procedure TScriptMan.LoadScriptsFromSavedGame
+
+procedure TScriptMan.LoadScriptsFromDisk;
+const
+  SCRIPTS_LIST_FILEPATH = ERM_SCRIPTS_PATH + '\load only these scripts.txt';
+  
+var
+{O} ScriptList:    TStrList;
+    ForcedScripts: Utils.TArrayOfStr;
+    FileContents:  string;
+    i:             integer;
+   
+begin
+  ForcedScripts := nil;
+  // * * * * * //
+  ClearScripts;
+  ZvsClearErtStrings;
+
+  if Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents) then begin
+    ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
+
+    for i := 0 to High(ForcedScripts) do begin
+      Self.LoadScript(ForcedScripts[i]);
+    end;
+  end else begin
+    ScriptList := GetOrderedPrioritizedFileList(GameExt.GameDir + '\' + ERM_SCRIPTS_PATH + '\*.erm');
+    
+    for i := 0 to ScriptList.Count - 1 do begin
+      Self.LoadScript(ScriptList[i]);
+    end;
+  end; // .else
+  // * * * * * //
+  SysUtils.FreeAndNil(ForcedScripts);
+end; // .procedure TScriptMan.LoadScriptsFromDisk
+
+procedure TScriptMan.ReloadScriptsFromDisk;
+begin
+  if ErmTriggerDepth = 0 then begin
+    EventMan.GetInstance.Fire('OnBeforeScriptsReload');
+    Self.LoadScriptsFromDisk;
+    ZvsIsGameLoading^ := true;
+    ZvsFindErm;
+    EventMan.GetInstance.Fire('OnAfterScriptsReload');
+    PrintChatMsg('{~white}ERM is updated{~}');
+  end;
+end;
+
+procedure TScriptMan.ExtractScripts;
+var
+  Res:        boolean;
+  Mes:        string;
+  ScriptPath: string;
+  i:          integer;
+  
+begin
+  Files.DeleteDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
+  Res := SysUtils.CreateDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
+  Mes := '{~white}Scripts were successfully extracted{~}';
+  
+  if not Res then begin
+    Mes := '{~r}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
+  end else begin
+    i := 0;
+    
+    while Res and (i < fScripts.Count) do begin
+      ScriptPath := GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH + '\' + TErmScript(fScripts[i]).FileName;
+      Res        := Files.WriteFileContents(TErmScript(fScripts[i]).Contents, ScriptPath);
+      
+      if not Res then begin
+        Mes := '{~r}Error writing to file "' + ScriptPath + '"{~}';
+      end;
+    
+      Inc(i);
+    end;
+  end; // .else
+  
+  PrintChatMsg(Mes);
+end; // .procedure TScriptMan.ExtractScripts
+
+function TScriptMan.GetScriptCount: integer;
+begin
+  result := fScripts.Count;
+end;
+
+function TScriptMan.GetScript (Ind: integer): TErmScript;
+begin
+  {!} Assert(Math.InRange(Ind, 0, fScripts.Count - 1));
+  result := fScripts[Ind];
+end;
+
+function TScriptMan.AddrToScriptNameAndLine ({n} Addr: pchar; var {out} ScriptName: string; out LineN: integer; out LinePos: integer): boolean;
+var
+{Un} Script: TErmScript;
+     i:      integer;
+
+
+begin
+  Script := nil;
+  // * * * * * //
+  result := (Addr <> nil) and (fScripts.Count > 0);
+  
+  if result then begin  
+    result := false;
+    
+    for i := 0 to Self.fScripts.Count - 1 do begin
+      Script := TErmScript(Self.fScripts[i]);
+
+      if Script.OwnsAddr(Addr) then begin
+        ScriptName := Script.FileName;
+        result     := AddrToLineAndPos(pchar(Script.fContents), Length(Script.fContents), Addr, LineN, LinePos);
+        exit;
+      end;
+    end;
+  end; // .if
+end; // .function TScriptMan.AddrToScriptNameAndLine
+
+procedure ReloadErm;
+begin
+  ScriptMan.ReloadScriptsFromDisk;
+end;
+
+procedure ExtractErm;
+begin
+  ScriptMan.ExtractScripts;
+end;
+
+function AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
+begin
+  result := ScriptMan.AddrToScriptNameAndLine(CharPos, ScriptName, LineN, LinePos);
+end;
+
+function FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
+begin
+  result := CmdPtr;
+  
+  if (result <> nil) and (result^ <> '!') then begin
+    Dec(result);
+    
+    while result^ <> '!' do begin
+      Dec(result);
+    end;
+    
+    Inc(result);
+    
+    if result^ <> '!' then begin
+      // [!]#
+      Dec(result);
+    end else begin
+      // ![!]
+      Dec(result, 2);
+    end;
+  end; // .if
+end; // .function FindErmCmdBeginning
+
+function GrabErmCmd ({n} CmdPtr: pchar): string;
+var
+  StartPos: pchar;
+  EndPos:   pchar;
+
+begin
+  if CmdPtr <> nil then begin
+    StartPos := FindErmCmdBeginning(CmdPtr);
+    EndPos   := CmdPtr;
+    
+    repeat
+      Inc(EndPos);
+    until (EndPos^ = ';') or (EndPos^ = #0);
+    
+    if EndPos^ = ';' then begin
+      Inc(EndPos);
+    end;
+    
+    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
+  end; // .if
+end; // .function GrabErmCmd
+
+function GrabErmCmdContext ({n} CmdPtr: pchar): string;
+const
+  NEW_LINE_COST        = 40;
+  MIN_CHARS_TO_ACCOUNT = 50;
+  MAX_CONTEXT_COST     = NEW_LINE_COST * 5;
+
+var
+  StartPos: pchar;
+  EndPos:   pchar;
+  Cost:     integer;
+  CurrCost: integer;
+
+
+begin
+  result := '';
+
+  if CmdPtr <> nil then begin
+    Cost     := 0;
+    CurrCost := 0;
+    StartPos := FindErmCmdBeginning(CmdPtr);
+    EndPos   := CmdPtr;
+    
+    repeat
+      Inc(EndPos);
+
+      if EndPos^ = #10 then begin
+        Inc(Cost, NEW_LINE_COST);
+        CurrCost := 0;
+      end else begin
+        Inc(CurrCost);
+
+        if CurrCost >= MIN_CHARS_TO_ACCOUNT then begin
+          Inc(Cost, CurrCost);
+          CurrCost := 0;
+        end;
+      end;
+    until (EndPos^ = #0) or (Cost >= MAX_CONTEXT_COST);
+    
+    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
+  end; // .if
+end; // .function GrabErmCmdContext
+
+procedure ReportErmError (Error: string; {n} ErrCmd: pchar);
+const
+  CONTEXT_LEN = 00;
+
+var
+  PositionLocated: boolean;
+  ScriptName:      string;
+  Line:            integer;
+  LinePos:         integer;
+  Question:        string;
+  
+begin
+  ErmErrReported  := true;
+  PositionLocated := AddrToScriptNameAndLine(ErrCmd, ScriptName, Line, LinePos);
+  
+  if Error = '' then begin
+    Error := 'Unknown error';
+  end;
+
+  Question := '{~FF3333}' + Error + '{~}';
+
+  if PositionLocated then begin
+    Question := Format('%s'#10'Location: %s:%d:%d', [Question, ScriptName, Line, LinePos]);
+  end;
+  
+  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10'Continue without saving ERM memory dump?';
+  
+  if not Ask(Question) then begin
+    ZvsDumpErmVars(pchar(Error), ErrCmd);
+  end;
+end; // .procedure ReportErmError
+
+function Hook_MError (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  ReportErmError(ppchar(Context.EBP + 16)^, ErmErrCmdPtr^);
+  Context.RetAddr := Ptr($712483);
+  result          := not Core.EXEC_DEF_CODE;
+end;
+
+procedure Hook_ErmMess (OrigFunc: pointer; SubCmd: PErmSubCmd); stdcall;
+var
+  Code: pchar;
+  i:    integer;
+
+begin
+  Code := SubCmd.Code.Value;
+  // * * * * * //
+  if not ErmErrReported then begin
+    ReportErmError('', Code);
+  end; // .if
+
+  i := SubCmd.Pos;
+
+  while not (Code[i] in [#0, ';']) do begin
+    Inc(i);
+  end;
+
+  SubCmd.Pos     := i;
+  ErmErrReported := false;
+end; // .function Hook_ErmMess
+
+function Hook_FindErm_SkipUntil2 (SubCmd: PErmSubCmd): integer; cdecl;
+var
+  CurrChar: pchar;
+
+begin
+  CurrChar := @SubCmd.Code.Value[SubCmd.Pos];
+
+  while (CurrChar^ <> #0) and not ((CurrChar^ = '!') and (CurrChar[1] in ['!', '#', '?', '$', '@'])) do begin
+    Inc(CurrChar);
+  end;
+
+  if CurrChar^ <> #0 then begin
+    ErmErrCmdPtr^ := CurrChar;
+    SubCmd.Pos    := integer(CurrChar) - integer(SubCmd.Code.Value) + 1;
+    result        := 0;
+  end else begin
+    result := -1;
+  end;
+end; // .function Hook_FindErm_SkipUntil2
 
 procedure RegisterErmEventNames;
 begin
@@ -1599,190 +1908,6 @@ begin
   NameTrigger(Erm.TRIGGER_ONGAMELEAVE,               'OnGameLeave');
 end; // .procedure RegisterErmEventNames
 
-procedure LoadErmScripts;
-const
-  SCRIPTS_LIST_FILEPATH = ERM_SCRIPTS_PATH + '\load only these scripts.txt';
-  JOINT_SCRIPT_NAME     = 'others.erm';
-
-var
-{O} ScriptBuilder:  StrLib.TStrBuilder;
-{O} ScriptList:     Lists.TStringList;
-    
-    FileContents:   string;
-    ForcedScripts:  Utils.TArrayOfStr;
-    
-    i:              integer;
-  
-begin
-  ScriptBuilder :=  StrLib.TStrBuilder.Create;
-  ScriptList    :=  nil;
-  // * * * * * //
-  (* Because Associative Memory from AdvErm is used more widely, we need to manually init it
-     on game start. Tha lack of generic "GameStart" event leads us to solution of initiating
-     memory here *)
-  if not Erm.ZvsIsGameLoading^ then begin
-    AdvErm.ResetMemory;
-    FuncNames.Clear;
-    FuncAutoId := INITIAL_FUNC_AUTO_ID;
-  end;
-
-  if TrackingOpts.Enabled then begin
-    EventTracker.Reset;
-  end;
-
-  RegisterErmEventNames;
-  ScriptNames.Clear;
-  
-  for i := 0 to MAX_ERM_SCRIPTS_NUM - 1 do begin
-    ErmScriptsInfo[i].State :=  SCRIPT_NOT_USED;
-  end;
-  
-  if SysUtils.FileExists(SCRIPTS_LIST_FILEPATH) and Files.ReadFileContents(SCRIPTS_LIST_FILEPATH, FileContents) then begin
-    ForcedScripts :=  StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
-    
-    for i := 0 to Math.Min(High(ForcedScripts), MAX_ERM_SCRIPTS_NUM - 2) do begin
-      LoadScript(SysUtils.AnsiLowerCase(ForcedScripts[i]));
-    end;
-    
-    for i := MAX_ERM_SCRIPTS_NUM - 1 to High(ForcedScripts) do begin
-      if Files.ReadFileContents(ERM_SCRIPTS_PATH + '\' + ForcedScripts[i], FileContents) then begin
-        LoadErtFile(ForcedScripts[i]);
-        
-        if Length(FileContents) > MIN_ERM_SCRIPT_SIZE then begin
-          FileContents  :=  PreprocessErm(ForcedScripts[i], FileContents);
-          ScriptBuilder.AppendBuf(Length(FileContents) - 2, pointer(FileContents));
-          ScriptBuilder.Append(#10);
-        end;
-      end;
-    end; // .for
-  end else begin
-    ScriptList := GetFileList(ERM_SCRIPTS_PATH, '.erm');
-    
-    for i := 0 to Math.Min(ScriptList.Count - 1, MAX_ERM_SCRIPTS_NUM - 2) do begin
-      LoadScript(SysUtils.AnsiLowerCase(ScriptList[i]));
-    end;
-    
-    for i := MAX_ERM_SCRIPTS_NUM - 1 to ScriptList.Count - 1 do begin
-      if Files.ReadFileContents(ERM_SCRIPTS_PATH + '\' + ScriptList[i], FileContents) then begin
-        LoadErtFile(ScriptList[i]);
-        
-        if Length(FileContents) > MIN_ERM_SCRIPT_SIZE then begin
-          ScriptBuilder.AppendBuf(Length(FileContents) - 2, pointer(FileContents));
-          ScriptBuilder.Append(#10);
-        end;
-      end;
-    end;
-  end; // .else
-  
-  ScriptBuilder.Append(#10#13);
-  FileContents := ScriptBuilder.BuildStr;
-  
-  if Length(FileContents) > MIN_ERM_SCRIPT_SIZE then begin
-    LoadScriptFromMemory(JOINT_SCRIPT_NAME, FileContents);
-  end;
-  // * * * * * //
-  SysUtils.FreeAndNil(ScriptBuilder);
-  SysUtils.FreeAndNil(ScriptList);
-end; // .procedure LoadErmScripts
-
-procedure ReloadErm;
-const
-  SUCCESS_MES:  string  = '{~white}ERM is updated{~}';
-
-begin
-  if ErmTriggerDepth = 0 then begin
-    GameExt.FireEvent('OnBeforeScriptsReload', nil, 0);
-    ZvsClearErtStrings;
-    ZvsClearErmScripts;
-    ZvsIsGameLoading^ := true;
-    LoadErmScripts;
-    ZvsFindErm;
-    GameExt.FireEvent('OnAfterScriptsReload', nil, 0);
-    Utils.CopyMem(Length(SUCCESS_MES) + 1, pointer(SUCCESS_MES), @z[1]);
-    ExecErmCmd('IF:Lz1;');
-  end; // .if
-end; // .procedure ReloadErm
-
-procedure ExtractErm;
-var
-  Res:        boolean;
-  Mes:        string;
-  ScriptPath: string;
-  i:          integer;
-  
-begin
-  Files.DeleteDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
-  Res := SysUtils.CreateDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
-  
-  if not Res then begin
-    Mes := '{~red}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
-  end else begin
-    i := 0;
-    
-    while Res and (i < MAX_ERM_SCRIPTS_NUM) do begin
-      if ErmScripts[i] <> nil then begin
-        ScriptPath  :=  GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH + '\' + ScriptNames[i];
-        Res         :=  Files.WriteFileContents(ErmScripts[i] + #10#13, ScriptPath);
-        if not Res then begin
-          Mes :=  '{~red}Error writing to file "' + ScriptPath + '"{~}';
-        end;
-      end;
-      
-      Inc(i);
-    end; // .while
-  end; // .else
-  
-  if Res then begin
-    Mes :=  '{~white}Scripts were successfully extracted{~}';
-  end;
-  
-  if not Res then begin
-    PrintChatMsg(Mes);
-  end;
-end; // .procedure ExtractErm
-
-(*
-  Scans all loaded ERM scripts and detects script name, line and position by errorous character address.
-  Returns success flag.
-  @return bool
-*)
-function AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
-var
-{U} CharPtr: pchar;
-    i:       integer;
-
-begin
-  CharPtr := nil;
-  // * * * * * //
-  result := false;
-  i      := 0;
-
-  while ((i < MAX_ERM_SCRIPTS_NUM) and not result) do begin
-    if (ErmScriptsInfo[i].State = SCRIPT_IS_USED) and (cardinal(CharPos) >= cardinal(ErmScripts[i])) and
-                                                      (cardinal(CharPos) < cardinal(ErmScripts[i]) + cardinal(ErmScriptsInfo[i].Size))
-    then begin
-      result     := true;
-      ScriptName := ScriptNames[i];
-      LineN      := 1;
-      LinePos    := 1;
-      CharPtr    := ErmScripts[i];
-
-      while (CharPtr <> CharPos) and (CharPtr^ <> #0) do begin
-        if CharPtr^ = #10 then begin
-          inc(LineN);
-          LinePos := 1;
-        end else begin
-          inc(LinePos);
-        end;
-        
-        inc(CharPtr);
-      end;
-    end; // .if
-
-    Inc(i);
-  end; // .while
-end; // .function AddrToScriptNameAndLine
-
 procedure FireErmEventEx (EventId: integer; Params: array of integer);
 var
   i: integer;
@@ -1818,7 +1943,7 @@ end;
 function ErmCurrHeroInd: integer; // or -1
 begin
   if ErmCurrHero <> nil then begin
-    result := PINTEGER(Utils.PtrOfs(ErmCurrHero, $1A))^;
+    result := pinteger(Utils.PtrOfs(ErmCurrHero, $1A))^;
   end else begin
     result := -1;
   end;
@@ -1882,7 +2007,7 @@ begin
 
     EventArgs.TriggerId         := CurrErmEventID^;
     EventArgs.BlockErmExecution := false;
-    GameExt.FireEvent('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
+    EventMan.GetInstance.Fire('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
     
     if EventArgs.BlockErmExecution then begin
       CurrErmEventID^ := TRIGGER_INVALID;
@@ -1904,7 +2029,7 @@ begin
     YVars := SavedYVars.Pop;
     // * * * * * //
     TriggerId := pinteger(Context.EBP - $1A0)^;
-    GameExt.FireEvent('OnAfterTrigger', @TriggerId, sizeof(TriggerId));
+    EventMan.GetInstance.Fire('OnAfterTrigger', @TriggerId, sizeof(TriggerId));
     
     if YVars.Value <> nil then begin
       Utils.CopyMem(sizeof(y^), @YVars.Value[0], @y[1]);
@@ -1931,6 +2056,59 @@ begin
   ErmErrReported := false;  
   result         := Core.EXEC_DEF_CODE;
 end;
+
+function Hook_FindErm_BeforeMainLoop (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
+  GLOBAL_EVENT_SIZE = 52;
+
+begin
+  // Skip internal map events: GEp_ = GEp1 - [sizeof(_GlbEvent_) = 52]
+  pinteger(Context.EBP - $3F4)^ := pinteger(pinteger(Context.EBP - $24)^ + $88)^ - GLOBAL_EVENT_SIZE;
+  ErmErrReported                := false;
+  EventMan.GetInstance.Fire('OnBeforeErm');
+
+  if not ZvsIsGameLoading^ then begin
+    EventMan.GetInstance.Fire('OnBeforeErmInstructions');
+  end;
+  
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_FindErm_BeforeMainLoop
+
+function Hook_FindErm_AfterMapScripts (Context: Core.PHookContext): LONGBOOL; stdcall;
+const
+  GLOBAL_EVENT_SIZE = 52;
+
+var
+  ScriptIndPtr: pinteger;
+  
+begin
+  ScriptIndPtr := Ptr(Context.EBP - $18);
+  // * * * * * //
+  if not ZvsIsGameLoading^ and (ScriptIndPtr^ = 0) then begin
+    ZvsResetCommanders;
+    ScriptMan.LoadScriptsFromDisk;
+  end;
+  
+  if ScriptIndPtr^ < ScriptMan.NumScripts then begin
+    // M.m.i = 0
+    pinteger(Context.EBP - $318)^ := 0;
+    // M.m.s = ErmScript
+    ppchar(Context.EBP - $314)^ := ScriptMan.Scripts[ScriptIndPtr^].GetPtr();
+    // M.m.l = Length(ErmScript)
+    pinteger(Context.EBP - $310)^ := Length(ScriptMan.Scripts[ScriptIndPtr^].Contents);
+    // GEp_--; Process one more script
+    Dec(pinteger(Context.EBP - $3F4)^, GLOBAL_EVENT_SIZE);
+    Inc(ScriptIndPtr^);
+    // Jump to ERM header processing
+    Context.RetAddr := Ptr($74A00C);
+  end // .if
+  else begin
+    // Jimp right after loop end
+    Context.RetAddr := Ptr($74C5A7);
+  end; // .else
+  
+  result := not Core.EXEC_DEF_CODE;
+end; // .function Hook_FindErm_AfterMapScripts
 
 function LoadWoGOptions (FilePath: pchar): boolean; ASSEMBLER;
 asm
@@ -1989,7 +2167,7 @@ end;
 
 function Hook_ErmHeroArt (Context: Core.PHookContext): longbool; stdcall;
 begin
-  result := ((PINTEGER(Context.EBP - $E8)^ shr 8) and 7) = 0;
+  result := ((pinteger(Context.EBP - $E8)^ shr 8) and 7) = 0;
   
   if not result then begin
     Context.RetAddr := Ptr($744B85);
@@ -2055,106 +2233,9 @@ begin
     POPAD
   end; // .asm
   
-  PINTEGER(Context.EDI + MOUSE_STRUCT_ITEM_OFS)^ := PINTEGER(CM3_RES_ADDR)^;
+  pinteger(Context.EDI + MOUSE_STRUCT_ITEM_OFS)^ := pinteger(CM3_RES_ADDR)^;
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_CM3
-
-procedure OnSavegameWrite (Event: GameExt.PEvent); stdcall;
-var
-  SerializedFuncNames: string;
-  NumScripts:          integer;
-  ScriptName:          string;
-  ScriptNameLen:       integer;
-  i:                   integer;
-   
-begin
-  (* Save function names and auto ID *)
-  SerializedFuncNames := DataLib.SerializeDict(FuncNames);
-  Stores.WriteSavegameSection(sizeof(FuncAutoId), @FuncAutoId, FUNC_NAMES_SECTION);
-  i                   := length(SerializedFuncNames);
-  Stores.WriteSavegameSection(sizeof(i), @i, FUNC_NAMES_SECTION);
-  Stores.WriteSavegameSection(length(SerializedFuncNames), pointer(SerializedFuncNames), FUNC_NAMES_SECTION);
-
-  (* Save script file names *)
-  NumScripts := ScriptNames.Count;
-  Stores.WriteSavegameSection(sizeof(NumScripts), @NumScripts, SCRIPT_NAMES_SECTION);
-  
-  for i := 0 to NumScripts - 1 do begin
-    ScriptName    := ScriptNames[i];
-    ScriptNameLen := Length(ScriptName);
-    Stores.WriteSavegameSection(sizeof(ScriptNameLen), @ScriptNameLen, SCRIPT_NAMES_SECTION);
-    
-    if ScriptNameLen > 0 then begin
-      Stores.WriteSavegameSection(ScriptNameLen, pointer(ScriptName), SCRIPT_NAMES_SECTION);
-    end;
-  end;
-end; // .procedure OnSavegameWrite
-
-procedure OnSavegameRead (Event: GameExt.PEvent); stdcall;
-var
-  SerializedFuncNamesLen: integer;
-  SerializedFuncNames:    string;
-  NumScripts:             integer;
-  ScriptName:             string;
-  ScriptNameLen:          integer;
-  i:                      integer;
-   
-begin
-  (* Read function names and auto ID *)
-  FuncAutoId := INITIAL_FUNC_AUTO_ID;
-  Stores.ReadSavegameSection(sizeof(FuncAutoId), @FuncAutoId, FUNC_NAMES_SECTION);
-
-  FreeAndNil(FuncNames);
-  SerializedFuncNamesLen := 0;
-  Stores.ReadSavegameSection(sizeof(SerializedFuncNamesLen), @SerializedFuncNamesLen, FUNC_NAMES_SECTION);
-  {!} Assert(SerializedFuncNamesLen > 0);
-  
-  SetLength(SerializedFuncNames, SerializedFuncNamesLen);
-  Stores.ReadSavegameSection(SerializedFuncNamesLen, @SerializedFuncNames[1], FUNC_NAMES_SECTION);
-  FuncNames := DataLib.UnserializeDict(SerializedFuncNames, not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-  
-  FreeAndNil(FuncIdToNameMap);
-  FuncIdToNameMap := DataLib.FlipDict(FuncNames);
-
-  (* Read script file names *)
-  ScriptNames.Clear;
-  NumScripts :=  0;
-  Stores.ReadSavegameSection(sizeof(NumScripts), @NumScripts, SCRIPT_NAMES_SECTION);
-  
-  for i := 0 to NumScripts - 1 do begin
-    Stores.ReadSavegameSection(sizeof(ScriptNameLen), @ScriptNameLen, SCRIPT_NAMES_SECTION);
-    SetLength(ScriptName, ScriptNameLen);
-    
-    if ScriptNameLen > 0 then begin
-      Stores.ReadSavegameSection(ScriptNameLen, pointer(ScriptName), SCRIPT_NAMES_SECTION);
-    end;
-    
-    ScriptNames.Add(ScriptName);
-  end;
-end; // .procedure OnSavegameRead
-
-function Hook_LoadErmScripts (Context: Core.PHookContext): longbool; stdcall;
-begin
-  LoadErmScripts;
-  
-  Context.RetAddr :=  Ptr($72CA82);
-  result          :=  not Core.EXEC_DEF_CODE;
-end;
-
-function Hook_LoadErtFile (Context: Core.PHookContext): longbool; stdcall;
-const
-  ARG_FILENAME = 2;
-
-var
-  FileName: pchar;
-  
-begin
-  FileName := pchar(PINTEGER(Context.EBP + 12)^);
-  Utils.CopyMem(SysUtils.StrLen(FileName) + 1, FileName, Ptr(Context.EBP - $410));
-  
-  Context.RetAddr := Ptr($72C760);
-  result          := not Core.EXEC_DEF_CODE;
-end; // .function Hook_LoadErtFile
 
 function Hook_MR_N (c: Core.PHookContext): longbool; stdcall;
 begin
@@ -2224,6 +2305,50 @@ begin
   // Patch WoG FindErm to allow functions with arbitrary IDs
   Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
 
+  (* Disable internal map scripts interpretation *)
+  Core.ApiHook(@Hook_FindErm_BeforeMainLoop, Core.HOOKTYPE_BRIDGE, Ptr($749BBA));
+
+  (* Remove default mechanism of loading [mapname].erm *)
+  Core.p.WriteDataPatch(Ptr($72CA8A), ['E90102000090909090']);
+
+  (* Never load [mapname].cmd file *)
+  Core.p.WriteDataPatch(Ptr($771CA8), ['E9C2070000']);
+
+  (* Replace all points of wog option 5 (Wogify) access with FreezedWogOptionWogify *)
+  Core.p.WriteDword(Ptr($705601 + 2), integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword(Ptr($72CA2F + 2), integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword(Ptr($749BFE + 2), integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword(Ptr($749CAF + 2), integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword(Ptr($749D91 + 2), integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword(Ptr($749E2D + 2), integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword(Ptr($749E9D + 2), integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword(Ptr($74C6F5 + 2), integer(@FreezedWogOptionWogify));
+  Core.p.WriteDword(Ptr($753F07 + 2), integer(@FreezedWogOptionWogify));
+
+  (* Force all maps to be treated as WoG format *)
+  // Replace MOV WoG, 0 with MOV WoG, 1
+  Core.p.WriteDataPatch(Ptr($704F48 + 6), ['01']);
+  Core.p.WriteDataPatch(Ptr($74C6E1 + 6), ['01']);
+
+  (* New way of iterating scripts in FindErm *)
+  Core.ApiHook(@Hook_FindErm_AfterMapScripts, Core.HOOKTYPE_BRIDGE, Ptr($749BF5));
+
+  (* Remove LoadERMTXT calls everywhere *)
+  Core.p.WriteDataPatch(Ptr($749932 - 2), ['33C09090909090909090']);
+  Core.p.WriteDataPatch(Ptr($749C24 - 2), ['33C09090909090909090']);
+  Core.p.WriteDataPatch(Ptr($74C7DD - 2), ['33C09090909090909090']);
+  Core.p.WriteDataPatch(Ptr($7518CC - 2), ['33C09090909090909090']);
+
+  (* Remove call to FindErm from _B1.cpp::LoadManager *)
+  Core.p.WriteDataPatch(Ptr($7051A2), ['9090909090']);
+  
+  (* Remove saving and loading old ERM scripts array *)
+  Core.p.WriteDataPatch(Ptr($75139D), ['EB7D909090']);
+  Core.p.WriteDataPatch(Ptr($751EED), ['E99C000000']);
+  
+  (* InitErm always sets IsWoG to true *)
+  Core.p.WriteDataPatch(Ptr($74C6FC), ['9090']);
+
   (* ERM OnAnyTrigger *)
   Core.Hook(@Hook_ProcessErm, Core.HOOKTYPE_BRIDGE, 6, Ptr($74C819));
   Core.Hook(@Hook_ProcessErm_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($74CE2A));
@@ -2245,10 +2370,9 @@ begin
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
   
-  (* New method of scripts loading *)
-  Core.Hook(@Hook_LoadErmScripts, Core.HOOKTYPE_BRIDGE, 7, Ptr($72CA5E));
+  (* Fix LoadErtFile to handle any relative pathes *)
   Core.Hook(@Hook_LoadErtFile, Core.HOOKTYPE_BRIDGE, 5, Ptr($72C660));
-  
+
   (* Disable connection between script number and option state in WoG options *)
   Core.p.WriteDataPatch(Ptr($777E48), ['E9180100009090909090']);
   
@@ -2265,14 +2389,6 @@ begin
 
   (* Fix MR:N in !?MR1 !?MR2 *)
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
-
-  // MR:N is detected by stack position, taken from local structure. Sometimes position is invalid (dummy)
-  // but disabling structure copy from battleman to local leaded to bug, because local structure is
-  // changed during AI calculations, especially if AI has dispell
-  if false then begin
-    Core.p.WriteDataPatch(Ptr($439840), ['8B4D08909090']);
-    Core.p.WriteDataPatch(Ptr($439857), ['8B4D08909090']);
-  end;  
 
   (* Allow !!FU:P?x[n] syntax. *)
   Core.ApiHook(@Hook_FU_P_RetValue, Core.HOOKTYPE_BRIDGE, Ptr($72D04A));
@@ -2295,6 +2411,9 @@ begin
   Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
   Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', integer(NEW_ERM_HEAP_SIZE)]);
 
+  (* Disable default tracing of last ERM command *)
+  Core.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);
+
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
     if Enabled then begin
@@ -2306,6 +2425,7 @@ begin
 end; // .procedure OnAfterWoG
 
 begin
+  ScriptMan       := TScriptMan.Create;
   FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   FuncIdToNameMap := DataLib.NewObjDict(Utils.OWNS_ITEMS);
   
@@ -2321,7 +2441,7 @@ begin
   
   EventMan.GetInstance.On('OnBeforeWoG',         OnBeforeWoG);
   EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
-  EventMan.GetInstance.On('OnSavegameWrite',     OnSavegameWrite);
-  EventMan.GetInstance.On('OnSavegameRead',      OnSavegameRead);
+  EventMan.GetInstance.On('$OnEraSaveScripts',   OnEraSaveScripts);
+  EventMan.GetInstance.On('$OnEraLoadScripts',   OnEraLoadScripts);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 end.
