@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers,
+  SysUtils, Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
   Lists, StrLib, Math, Windows,
   Core, Heroes, GameExt, EventMan;
 
@@ -141,7 +141,13 @@ const
   REMOTE_EVENT_NONE         = 0;
   REMOTE_EVENT_PLACE_OBJECT = 1;
 
-  ZvsProcessErm:  Utils.TProcedure  = Ptr($74C816);
+  ZvsProcessErm:        Utils.TProcedure = Ptr($74C816);
+  ZvsErmError:          procedure ({n} FileName: pchar; Line: integer; ErrStr: pchar) cdecl = Ptr($712333);
+  ZvsIsErmError:        pinteger  = Ptr($2772744);
+  ZvsBreakTrigger:      PLONGBOOL = Ptr($27F9A40);
+  ZvsErmErrorsDisabled: PLONGBOOL = Ptr($2772740);
+  ZvsErmHeapPtr:        ppointer  = Ptr($27F9548);
+  ZvsErmHeapSize:       pinteger  = Ptr($27F9958);
 
   (* ERM Flags *)
   ERM_FLAG_NETWORK_BATTLE               = 997;
@@ -240,6 +246,15 @@ type
     CmdHeader:    TErmString; // ##:...
     CmdBody:      TErmString; // #^...^/...
   end; // .record TErmCmd
+
+  PErmSubCmd = ^TErmSubCmd;
+  TErmSubCmd = packed record
+    Pos:        integer;
+    Code:       TGameString;
+    Conditions: TErmCmdConditions;
+    Params:     TErmCmdParams;
+    (* ... *)
+  end; // .record TErmSubCmd
 
   PZvsTriggerIfs = ^TZvsTriggerIfs;
   TZvsTriggerIfs = array [0..9] of shortint;
@@ -426,6 +441,7 @@ function  Msg
 ): integer;
 
 procedure ShowMessage (const Mes: string);
+procedure ShowErmError (const Error: string);
 function  Ask (const Question: string): boolean;
 function  GetErmFuncByName (const FuncName: string): integer;
 function  GetErmFuncName (FuncId: integer; out Name: string): boolean;
@@ -459,6 +475,7 @@ var
 {O} ErmCmdCache:     {O} TAssocArray {OF PErmCmd};
 {O} SavedYVars:      {O} Lists.TList {OF TYVars};
 {O} EventTracker:    ErmTracking.TEventTracker;
+    ErmErrReported:  boolean = false;
 
 
 procedure PrintChatMsg (const Msg: string);
@@ -537,6 +554,11 @@ end; // .function Msg
 procedure ShowMessage (const Mes: string);
 begin
   Msg(Mes);
+end;
+
+procedure ShowErmError (const Error: string);
+begin
+  ZvsErmError(nil, 0, pchar(Error));
 end;
 
 function Ask (const Question: string): boolean;
@@ -970,6 +992,174 @@ begin
     ZvsLoadErtFile('', pchar('..\' + ErtFilePath));
   end;
 end; // .procedure LoadErtFile
+
+function FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
+begin
+  result := CmdPtr;
+  
+  if (result <> nil) and (result^ <> '!') then begin
+    Dec(result);
+    
+    while result^ <> '!' do begin
+      Dec(result);
+    end;
+    
+    Inc(result);
+    
+    if result^ <> '!' then begin
+      // [!]#
+      Dec(result);
+    end else begin
+      // ![!]
+      Dec(result, 2);
+    end;
+  end; // .if
+end; // .function FindErmCmdBeginning
+
+function GrabErmCmd ({n} CmdPtr: pchar): string;
+var
+  StartPos: pchar;
+  EndPos:   pchar;
+
+begin
+  if CmdPtr <> nil then begin
+    StartPos := FindErmCmdBeginning(CmdPtr);
+    EndPos   := CmdPtr;
+    
+    repeat
+      Inc(EndPos);
+    until (EndPos^ = ';') or (EndPos^ = #0);
+    
+    if EndPos^ = ';' then begin
+      Inc(EndPos);
+    end;
+    
+    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
+  end; // .if
+end; // .function GrabErmCmd
+
+function GrabErmCmdContext ({n} CmdPtr: pchar): string;
+const
+  NEW_LINE_COST        = 40;
+  MIN_CHARS_TO_ACCOUNT = 50;
+  MAX_CONTEXT_COST     = NEW_LINE_COST * 5;
+
+var
+  StartPos: pchar;
+  EndPos:   pchar;
+  Cost:     integer;
+  CurrCost: integer;
+
+
+begin
+  result := '';
+
+  if CmdPtr <> nil then begin
+    Cost     := 0;
+    CurrCost := 0;
+    StartPos := FindErmCmdBeginning(CmdPtr);
+    EndPos   := CmdPtr;
+    
+    repeat
+      Inc(EndPos);
+
+      if EndPos^ = #10 then begin
+        Inc(Cost, NEW_LINE_COST);
+        CurrCost := 0;
+      end else begin
+        Inc(CurrCost);
+
+        if CurrCost >= MIN_CHARS_TO_ACCOUNT then begin
+          Inc(Cost, CurrCost);
+          CurrCost := 0;
+        end;
+      end;
+    until (EndPos^ = #0) or (Cost >= MAX_CONTEXT_COST);
+    
+    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
+  end; // .if
+end; // .function GrabErmCmdContext
+
+procedure ReportErmError (Error: string; {n} ErrCmd: pchar);
+const
+  CONTEXT_LEN = 00;
+
+var
+  PositionLocated: boolean;
+  ScriptName:      string;
+  Line:            integer;
+  LinePos:         integer;
+  Question:        string;
+  
+begin
+  ErmErrReported  := true;
+  PositionLocated := AddrToScriptNameAndLine(ErrCmd, ScriptName, Line, LinePos);
+  
+  if Error = '' then begin
+    Error := 'Unknown error';
+  end;
+
+  Question := '{~FF3333}' + Error + '{~}';
+
+  if PositionLocated then begin
+    Question := Format('%s'#10'Location: %s:%d:%d', [Question, ScriptName, Line, LinePos]);
+  end;
+  
+  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10'Continue without saving ERM memory dump?';
+  
+  if not Ask(Question) then begin
+    ZvsDumpErmVars(pchar(Error), ErrCmd);
+  end;
+end; // .procedure ReportErmError
+
+function Hook_MError (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  ReportErmError(PPCHAR(Context.EBP + 16)^, ErmErrCmdPtr^);
+  Context.RetAddr := Ptr($712483);
+  result          := not Core.EXEC_DEF_CODE;
+end;
+
+procedure Hook_ErmMess (OrigFunc: pointer; SubCmd: PErmSubCmd); stdcall;
+var
+  Code: pchar;
+  i:    integer;
+
+begin
+  Code := SubCmd.Code.Value;
+  // * * * * * //
+  if not ErmErrReported then begin
+    ReportErmError('', Code);
+  end; // .if
+
+  i := SubCmd.Pos;
+
+  while not (Code[i] in [#0, ';']) do begin
+    Inc(i);
+  end;
+
+  SubCmd.Pos     := i;
+  ErmErrReported := false;
+end; // .function Hook_ErmMess
+
+function Hook_FindErm_SkipUntil2 (SubCmd: PErmSubCmd): integer; cdecl;
+var
+  CurrChar: pchar;
+
+begin
+  CurrChar := @SubCmd.Code.Value[SubCmd.Pos];
+
+  while (CurrChar^ <> #0) and not ((CurrChar^ = '!') and (CurrChar[1] in ['!', '#', '?', '$', '@'])) do begin
+    Inc(CurrChar);
+  end;
+
+  if CurrChar^ <> #0 then begin
+    ErmErrCmdPtr^ := CurrChar;
+    SubCmd.Pos    := integer(CurrChar) - integer(SubCmd.Code.Value) + 1;
+    result        := 0;
+  end else begin
+    result := -1;
+  end;
+end; // .function Hook_FindErm_SkipUntil2
 
 function PreprocessErm (const ScriptName, Script: string): string;
 const
@@ -1609,29 +1799,6 @@ begin
   GameExt.EraRestoreEventParams;
 end; // .procedure FireErmEventEx
 
-function FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
-begin
-  result := CmdPtr;
-  
-  if result <> nil then begin
-    Dec(result);
-    
-    while result^ <> '!' do begin
-      Dec(result);
-    end;
-    
-    Inc(result);
-    
-    if result^ = '#' then begin
-      // [!]#
-      Dec(result);
-    end else begin
-      // ![!]
-      Dec(result, 2);
-    end;
-  end; // .if
-end; // .function FindErmCmdBeginning
-
 procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 begin
   {!} Assert(length(Args) <= 16, 'Cannot fire remote ERM event with more than 16 arguments');
@@ -1642,28 +1809,6 @@ begin
     FireRemoteEventProc(EventId, @Args[0], length(Args));
   end;
 end;
-
-function GrabErmCmd ({n} CmdPtr: pchar): string;
-var
-  StartPos: pchar;
-  EndPos:   pchar;
-
-begin
-  if CmdPtr <> nil then begin
-    StartPos := FindErmCmdBeginning(CmdPtr);
-    EndPos   := CmdPtr;
-    
-    repeat
-      Inc(EndPos);
-    until (EndPos^ = ';') or (EndPos^ = #0);
-    
-    if EndPos^ = ';' then begin
-      Inc(EndPos);
-    end;
-    
-    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
-  end; // .if
-end; // .function GrabErmCmd
 
 function ErmCurrHero: {n} pointer;
 begin
@@ -1779,8 +1924,12 @@ end; // .function Hook_ProcessErm_End
 
 function Hook_ProcessCmd (Context: Core.PHookContext): longbool; stdcall;
 begin
-  EventTracker.TrackCmd(PErmCmd(ppointer(Context.EBP + 8)^).CmdHeader.Value);
-  result := Core.EXEC_DEF_CODE;
+  if TrackingOpts.Enabled then begin
+    EventTracker.TrackCmd(PErmCmd(ppointer(Context.EBP + 8)^).CmdHeader.Value);
+  end;
+
+  ErmErrReported := false;  
+  result         := Core.EXEC_DEF_CODE;
 end;
 
 function LoadWoGOptions (FilePath: pchar): boolean; ASSEMBLER;
@@ -2058,16 +2207,6 @@ begin
   end;
 end;
 
-procedure OnBeforeErm (Event: GameExt.PEvent); stdcall;
-var
-  ResetEra: Utils.TProcedure;
-
-begin
-  ResetEra := Windows.GetProcAddress(GameExt.hAngel, 'ResetEra');
-  {!} Assert(@ResetEra <> nil);
-  ResetEra;
-end;
-
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* Remove WoG CM3 trigger *)
@@ -2075,6 +2214,12 @@ begin
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+const
+  NEW_ERM_HEAP_SIZE = 128 * 1000 * 1000;
+
+var
+{On} NewErmHeap: pointer;
+
 begin
   // Patch WoG FindErm to allow functions with arbitrary IDs
   Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
@@ -2134,12 +2279,29 @@ begin
   Core.p.WriteDataPatch(Ptr($72D0A0), ['8D849520EAFFFF']);
   Core.p.WriteDataPatch(Ptr($72D0B2), ['E9E70000009090909090']);
 
-  (* Enable ERM tracking *)
+  (* Detailed ERM error reporting *)
+  // Replace simple message with detailed message with location and context
+  Core.ApiHook(@Hook_MError,  Core.HOOKTYPE_BRIDGE, Ptr($71236A));
+  // Disallow repeated message, display detailed message with location otherwise
+  ApiJack.StdSplice(Ptr($73DE8A), @Hook_ErmMess, ApiJack.CONV_CDECL, 1);
+  // Disable double reporting of error location in ProcessCmd
+  Core.p.WriteDataPatch(Ptr($749421), ['E9BF0200009090']);
+  // Track ERM errors location during FindErm
+  Core.ApiHook(@Hook_FindErm_SkipUntil2, Core.HOOKTYPE_CALL, Ptr($74A14A));
+
+  (* Extend ERM memory limit to 128 MB *)
+  NewErmHeap := Windows.VirtualAlloc(nil, NEW_ERM_HEAP_SIZE, Windows.MEM_RESERVE or Windows.MEM_COMMIT, Windows.PAGE_EXECUTE_READWRITE);
+  {!} Assert(NewErmHeap <> nil, 'Failed to allocate 128 MB memory block for new ERM heap');
+  Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
+  Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', integer(NEW_ERM_HEAP_SIZE)]);
+
+  (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
     if Enabled then begin
       EventTracker := ErmTracking.TEventTracker.Create(MaxRecords).SetDumpCommands(DumpCommands).SetIgnoreEmptyTriggers(IgnoreEmptyTriggers).SetIgnoreRealTimeTimers(IgnoreRealTimeTimers);
-      Core.ApiHook(@Hook_ProcessCmd, Core.HOOKTYPE_BRIDGE, Ptr($741E3F));
     end;
+
+    Core.ApiHook(@Hook_ProcessCmd, Core.HOOKTYPE_BRIDGE, Ptr($741E3F));
   end;
 end; // .procedure OnAfterWoG
 
@@ -2161,6 +2323,5 @@ begin
   EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
   EventMan.GetInstance.On('OnSavegameWrite',     OnSavegameWrite);
   EventMan.GetInstance.On('OnSavegameRead',      OnSavegameRead);
-  EventMan.GetInstance.On('OnBeforeErm',         OnBeforeErm);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 end.

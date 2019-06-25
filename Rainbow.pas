@@ -499,7 +499,7 @@ var
   REbp:  integer;
 
 begin
-  REbp :=  Context.EBP;
+  REbp := Context.EBP;
 
   asm
     MOV ECX, Name
@@ -548,7 +548,7 @@ end; // .function Hook_DrawPic
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
-  ChineseLoaderOpt  :=  IsChineseLoaderPresent(ChineseHandler);
+  ChineseLoaderOpt := IsChineseLoaderPresent(ChineseHandler);
   
   if ChineseLoaderOpt then begin
     (* Remove Chinese loader hook *)

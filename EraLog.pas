@@ -176,10 +176,6 @@ constructor TFileLogger.Create (const FilePath: string);
 begin
   inherited Create;
   Self.fFile := Windows.CreateFileA(pchar(FilePath), Windows.GENERIC_WRITE, Windows.FILE_SHARE_READ or Windows.FILE_SHARE_DELETE, nil, Windows.CREATE_ALWAYS, Windows.FILE_ATTRIBUTE_NORMAL, 0);
-
-  if Self.fFile = Windows.INVALID_HANDLE_VALUE then begin
-    DlgMes.MsgError('Failed to create log file at "' + FilePath + '". Probably another application instance is running');
-  end;
 end;
 
 destructor TFileLogger.Destroy;

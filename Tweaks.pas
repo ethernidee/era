@@ -988,8 +988,8 @@ begin
   Core.ApiHook(@Hook_ApplyDamage_Local13,     Core.HOOKTYPE_BRIDGE, Ptr($5A1065 + 5));
 
   (* Fix negative offsets handling in fonts *)
-  PBYTE($4B534A)^ :=  $B6;
-  PBYTE($4B53E6)^ :=  $B6;
+  Core.p.WriteDataPatch(Ptr($4B534A), ['B6']);
+  Core.p.WriteDataPatch(Ptr($4B53E6), ['B6']);
   
   (* Fix WoG/ERM versions *)
   Core.Hook(@Hook_GetWoGAndErmVersions, Core.HOOKTYPE_BRIDGE, 14, Ptr($73226C));

@@ -7,6 +7,7 @@ unit Extern;
 (***)  interface  (***)
 
 uses
+  SysUtils,
   Utils, Core, ApiJack,
   GameExt, Heroes, Erm, Ini, Rainbow, Stores,
   EraButtons, Lodman, Graph, Trans, EventMan;
@@ -195,9 +196,16 @@ begin
   result := GameExt.ERA_VERSION_STR;
 end;
 
-function Splice (OrigFunc, HandlerFunc: pointer): pointer; stdcall;
+function Splice (OrigFunc, HandlerFunc: pointer; CallingConv: integer; NumArgs: integer; CustomParam: pinteger; AppliedPatch: ppointer): pointer; stdcall;
 begin
-  result := ApiJack.Splice(OrigFunc, HandlerFunc);
+  {!} Assert((CallingConv >= ord(ApiJack.CONV_FIRST)) and (CallingConv <= ord(ApiJack.CONV_LAST)), Format('Splice>> Invalid calling convention: %d', [CallingConv]));
+  {!} Assert(NumArgs >= 0, Format('Splice>> Invalid arguments number: %d', [NumArgs]));
+  if AppliedPatch <> nil then begin
+    New(ApiJack.PAppliedPatch(AppliedPatch^));
+    AppliedPatch := AppliedPatch^;
+  end;
+
+  result := ApiJack.StdSplice(OrigFunc, HandlerFunc, ApiJack.TCallingConv(CallingConv), NumArgs, CustomParam, ApiJack.PAppliedPatch(AppliedPatch));
 end;
 
 function HookCode (Addr: pointer; HandlerFunc: THookHandler): pointer; stdcall;

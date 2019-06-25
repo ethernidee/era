@@ -1,12 +1,12 @@
 unit AdvErm;
 {
-DESCRIPTION:  Era custom Memory implementation
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+DESCRIPTION: Era custom Memory implementation
+AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files,
+  Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack,
   PatchApi, Core, GameExt, Erm, Stores, Heroes, Trans, EventMan;
 
 const
@@ -50,7 +50,7 @@ type
 
   TReceiverHandler = procedure;
 
-  TVarType  = (INT_VAR, STR_VAR);
+  TVarType = (INT_VAR, STR_VAR);
   
   TSlot = class
     ItemsType:  TVarType;
@@ -64,24 +64,6 @@ type
     StrValue: string;
   end; // .class TAssocVar
 
-  TParamValue = packed record
-    case byte of
-      0: (v:  integer);
-      1: (p:  pointer);
-      2: (pc: pchar);
-  end;
-  
-  TServiceParam = packed record
-    IsStr:          boolean;
-    OperGet:        boolean;
-    Dummy:          word;
-    Value:          TParamValue;
-    _Private_:      array [0..3] of byte;
-    ParamModifier:  integer;
-  end; // .record TServiceParam
-
-  PServiceParams  = ^TServiceParams;
-  TServiceParams  = array [0..23] of TServiceParam;
 
 procedure ResetMemory;
 function GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
@@ -137,7 +119,18 @@ begin
     MODIFIER_DIV: Dest := Dest div Param.Value.v;
   end;
 end;
-    
+
+(* Parameters must be either reused or filled with zeroes before function call *)
+function GetServiceParams (Cmd: pchar; var NumParams: integer; var {O} Params: TServiceParams): integer;
+begin
+  result := GameExt.EraGetServiceParams(Cmd, NumParams, Params);
+end;
+
+procedure ReleaseServiceParams ({O} var Params: TServiceParams); stdcall;
+begin
+  GameExt.EraReleaseServiceParams(Params);
+end;
+
 function CheckCmdParams (Params: PServiceParams; const Checks: array of boolean): boolean;
 var
   i:  integer;
@@ -1627,10 +1620,61 @@ begin
   Core.ApiHook(@Hook_DumpErmVars, Core.HOOKTYPE_BRIDGE, @Erm.ZvsDumpErmVars);
 end;
 
+function New_ZvsSaveMP3 (OrigFunc: pointer): integer; stdcall;
+begin
+  Heroes.GzipWrite(4, pchar('-MP3'));
+  result := 0;
+end;
+
+function New_ZvsLoadMP3 (OrigFunc: pointer): integer; stdcall;
+var
+  Header: array [0..3] of char;
+  Buf:    array of byte;
+
+begin
+  Heroes.GzipRead(sizeof(Header), @Header);
+
+  // Emulate original WoG Mp3 data loading
+  if Header = 'LMP3' then begin
+    SetLength(Buf, 200 * 256);
+    Heroes.GzipRead(Length(Buf), pointer(Buf));
+  end;
+
+  result := 0;
+end;
+
+function New_MP3_Receiver (OrigFunc: pointer; Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: PErmSubCmd): integer; stdcall;
+var
+  Params:    GameExt.TServiceParams;
+  ParamsLen: integer;
+
+begin
+  FillChar(Params, sizeof(Params), 0);
+  // * * * * * //
+  ParamsLen := GetServiceParams(@CmdInfo.Code.Value[CmdInfo.Pos - 1], NumParams, Params);
+  ShowMessage(Format('Cmd: %s. NumParams: %d. ParamsLen: %d, Line: %s', [Cmd, NumParams, ParamsLen, Copy(pchar(@CmdInfo.Code.Value[CmdInfo.Pos - 1]), 1, 30)]));
+  Inc(CmdInfo.Pos, ParamsLen - 1);
+  result := 1;
+  // * * * * * //
+  ReleaseServiceParams(Params);
+end;
+
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* SN:H for adventure map object hints *)
   Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
+
+  (* ERM MP3 trigger/receivers remade *)
+  // Make WoG ResetMP3, SaveMP3, LoadMP3 doing nothing
+  Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
+  ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
+  ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
+
+  // Disable MP3Start WoG hook
+  Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
+
+  // Replace MP3 receiver
+  ApiJack.StdSplice(Ptr($774A8C), @New_MP3_Receiver, CONV_CDECL, 4);
 
   (* Apply SN:H hints for heroes specialties on game loading *)
   //Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));

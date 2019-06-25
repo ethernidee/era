@@ -73,16 +73,40 @@ procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: 
 procedure Init (hDll: integer);
 
 
+type
+  (* ERM parsing structures from Era 1.9- *)
+  TParamValue = packed record
+    case byte of
+      0: (v:  integer);
+      1: (p:  pointer);
+      2: (pc: pchar);
+  end;
+
+  TServiceParam = packed record
+    IsStr:          boolean;
+    OperGet:        boolean;
+    Dummy:          word;
+    Value:          TParamValue;
+    _Private_:      array [0..3] of byte;
+    ParamModifier:  integer;
+  end; // .record TServiceParam
+
+  PServiceParams  = ^TServiceParams;
+  TServiceParams  = array [0..23] of GameExt.TServiceParam;
+
+
 var
 {O} PluginsList:            DataLib.TStrList {OF TDllHandle};
     hAngel:                 integer;  // Era 1.8x DLL
     hEra:                   integer;  // Era 1.9+ DLL
     
     (* Compability with Era 1.8x *)
-    EraInit:                Utils.TProcedure;
-    EraSaveEventParams:     Utils.TProcedure;
-    EraRestoreEventParams:  Utils.TProcedure;
-{U} EraEventParams:         PEraEventParams;
+    EraInit:                 Utils.TProcedure;
+    EraSaveEventParams:      Utils.TProcedure;
+    EraRestoreEventParams:   Utils.TProcedure;
+    EraGetServiceParams:     function (Cmd: pchar; var NumParams: integer; var Params: TServiceParams): integer; stdcall;
+    EraReleaseServiceParams: procedure (var Params: TServiceParams); stdcall;
+{U} EraEventParams:          PEraEventParams;
 
     DumpVfsOpt: boolean;
 
@@ -460,16 +484,20 @@ begin
 
   
   (* Era 1.8x integration *)
-  hAngel                :=  Windows.LoadLibrary('angel.dll');
+  hAngel                  := Windows.LoadLibrary('angel.dll');
   {!} Assert(hAngel <> 0, 'Failed to load angel.dll');
-  EraInit               :=  Windows.GetProcAddress(hAngel, 'InitEra');
+  EraInit                 := Windows.GetProcAddress(hAngel, 'InitEra');
   {!} Assert(@EraInit <> nil, 'Missing angel.dll:EraInit function');
-  EraSaveEventParams    :=  Windows.GetProcAddress(hAngel, 'SaveEventParams');
+  EraSaveEventParams      := Windows.GetProcAddress(hAngel, 'SaveEventParams');
   {!} Assert(@EraSaveEventParams <> nil, 'Missing angel.dll:SaveEventParams function');
-  EraRestoreEventParams :=  Windows.GetProcAddress(hAngel, 'RestoreEventParams');
+  EraRestoreEventParams   := Windows.GetProcAddress(hAngel, 'RestoreEventParams');
   {!} Assert(@EraRestoreEventParams <> nil, 'Missing angel.dll:RestoreEventParams function');
-  EraEventParams        :=  Windows.GetProcAddress(hAngel, 'EventParams');
+  EraEventParams          := Windows.GetProcAddress(hAngel, 'EventParams');
   {!} Assert(EraEventParams <> nil, 'Missing angel.dll:EventParams variable');
+  EraGetServiceParams     := Windows.GetProcAddress(hAngel, 'GetServiceParams');
+  {!} Assert(@EraGetServiceParams <> nil, 'Missing angel.dll:GetServiceParams function');
+  EraReleaseServiceParams := Windows.GetProcAddress(hAngel, 'ReleaseServiceParams');
+  {!} Assert(@EraReleaseServiceParams <> nil, 'Missing angel.dll:ReleaseServiceParams function');
   
   LoadPlugins('era');
   EventMan.GetInstance.Fire('OnBeforeWoG', NO_EVENT_DATA, 0);
