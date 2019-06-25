@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Utils, AssocArrays, TypeWrappers,
-  Core, Heroes, GameExt, EventMan;
+  Core, Heroes, GameExt;
 
 type
   (* IMPORT *)
@@ -31,9 +31,10 @@ begin
   // * * * * * //
   if AddText = nil then begin
     AddText[FileName] :=  TString.Create(Lines);
-  end else begin
+  end // .if
+  else begin
     AddText.Value :=  AddText.Value + Lines;
-  end;
+  end; // .else
 end; // .procedure AddLinesToText
 
 function ExtendText (const TextName: string; var TxtSize: integer): pointer;
@@ -48,9 +49,10 @@ begin
     TxtSize :=  TxtSize + Length(AddText.Value);
     result  :=  Heroes.MAlloc(TxtSize);
     Utils.CopyMem(Length(AddText.Value), pointer(AddText.Value), Utils.PtrOfs(result, TxtSize));
-  end else begin
+  end // .if
+  else begin
     result  :=  Heroes.MAlloc(TxtSize);
-  end;
+  end; // .else
 end; // .function ExtendText
 
 function Hook_LoadTextFromFile_BeforeLoad (Context: Core.PHookContext): LONGBOOL; stdcall;
@@ -59,7 +61,7 @@ begin
   Context.EAX     :=  ExtendText(Ptr(Context.EBX), TxtSize);
   Context.RetAddr :=  Ptr($55C110);
   result          :=  not Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_LoadTextFromFile_BeforeLoad
 
 function Hook_LoadTextFromFile_AfterLoad (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -67,14 +69,14 @@ begin
   Context.EAX     :=  ExtendText(Ptr(Context.EBX), TxtSize);
   Context.RetAddr :=  Ptr($55C110);
   result          :=  not Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_LoadTextFromFile_AfterLoad
 
 procedure OnAfterWoG (Event: GameExt.PEvent);
 begin
   Core.ApiHook(@Hook_LoadTextFromFile, Core.HOOKTYPE_BRIDGE, Ptr($55C106));
-end;
+end; // .procedure OnAfterWoG
 
 begin
-  AddTexts := AssocArrays.NewStrictAssocArr(TString);
-  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  AddTexts  :=  AssocArrays.NewStrictAssocArr(TString);
+  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
 end.

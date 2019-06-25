@@ -45,8 +45,8 @@ begin
     $469A98:  Context.EBX                   :=  WOG_MF_DAMAGE^;
     $5A106A:  PINTEGER(Context.EBP - $34)^  :=  WOG_MF_DAMAGE^;
   else
-    {!} Assert(false);
-  end; // .switch HookAddr
+    {!} Assert(FALSE);
+  end; // .SWITCH HookAddr
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_AfterApplyDamage
 
@@ -99,9 +99,9 @@ begin
   // * * * * * //
   Locator.DirPath :=  SCRIPTS_PATH;
 
-  ScriptList.CaseInsensitive   :=  true;
-  ScriptList.Sorted            :=  true;
-  ScriptList.ForbidDuplicates  :=  true;
+  ScriptList.CaseInsensitive   :=  TRUE;
+  ScriptList.Sorted            :=  TRUE;
+  ScriptList.ForbidDuplicates  :=  TRUE;
 
   Locator.InitSearch('*.erm');
   
@@ -133,7 +133,7 @@ begin
         (SysUtils.TryStrToInt(ScriptNameTokens[PRIORITY_TOKEN], TestPriority))
       then begin
         ScriptPriority  :=  TestPriority;
-      end;
+      end; // .if
 
       ScriptList.AddObj(ScriptName, Ptr(ScriptPriority));
     end; // .if
@@ -143,9 +143,9 @@ begin
   
   Locator.FinitSearch;
 
-  ScriptList.Sorted            :=  false;
-  ScriptList.ForbidDuplicates  :=  false;
-  ScriptList.CaseInsensitive   :=  false;
+  ScriptList.Sorted            :=  FALSE;
+  ScriptList.ForbidDuplicates  :=  FALSE;
+  ScriptList.CaseInsensitive   :=  FALSE;
 
   (* Sort via insertion by Priority *)
   for i:=1 to ScriptList.Count - 1 do begin
@@ -154,10 +154,10 @@ begin
 
     while (j >= 0) and (ScriptPriority > integer(ScriptList.Values[j])) do begin
       Dec(j);
-    end;
+    end; // .while
 
     ScriptList.Move(i, j + 1);
-  end;
+  end; // .for
 
   SetLength(ScriptContents, ScriptList.Count);
   FirstScriptSize :=  0;
@@ -169,15 +169,17 @@ begin
       (Length(ScriptContents[i]) <= Length(SCRIPT_POSTFIX))
     then begin
       ScriptContents[i] :=  nil;
-    end else begin
+    end // .if
+    else begin
       Priority  :=  integer(ScriptList.Values[i]);
       
       if Priority < 0 then begin
         FirstScriptSize  :=  FirstScriptSize + Length(ScriptContents[i]) - Length(SCRIPT_POSTFIX);
         FirstScriptBuilder.AppendBuf(pointer(ScriptContents), ScriptEndMarkerPos - 1);
-      end else begin
+      end // .if
+      else begin
         LastScriptBuilder.AppendBuf(pointer(ScriptContents), ScriptEndMarkerPos - 1);
-      end;
+      end; // .else
     end; // .else
   end; // .for
   
@@ -234,10 +236,10 @@ var
     while CharMatch do begin
       Inc(p);
       Inc(s);
-    end;
+    end; // .while
     
     result  :=  ( <= StrLen;
-  end;
+  end; // .function StrictMatch
   
   function SkipWildcards: boolean;
   var
@@ -249,16 +251,16 @@ var
     while (p <= PatternLen) and (Pattern[p] in WILDCARDS) do begin
       if Pattern[p] = ONE_SYM_WILDCARD then begin
         Inc(NumOneSymWildcards);
-      end;
+      end; // .if
       
       Inc(p);
-    end;
+    end; // .while
     
     result  :=  (p <= PatternLen) and ((s + NumOneSymWildcards - 1) <= StrLen);
     
     if result then begin
       s :=  s + NumOneSymWildcards;
-    end;
+    end; // .if
   end; // .function SkipWildcards
   
   function FindNextStr;
@@ -275,18 +277,18 @@ var
       
       while (s <= StrLen) and (Str[s] <> c) do begin
         Inc(s);
-      end;
+      end; // .while
       
       result  :=  s <= StrLen;
       
       if result then begin
         Inc(p);
         Inc(s);
-      end;
+      end; // .if
     end; // .function FindFirstChar
   
   begin
-    result          :=  false;
+    result          :=  FALSE;
     StrBasePos      :=  s;
     PatternBasePos  :=  p;
   
@@ -294,8 +296,8 @@ var
       while CharMatch do begin
         Inc(p);
         Inc(s);
-      end;
-    end;
+      end; // .while
+    end; // .while
     
     result  :=  s <= StrLen;
   end; // .function FindNextStr
@@ -306,9 +308,9 @@ begin
   s               :=  1;
   p               :=  1;
   State           :=  STATE_STRICT_COMPARE;
-  result          :=  false;
+  result          :=  FALSE;
   
   if StrictMatch then begin
     while SkipWillcards and FindNextStr do begin end;
-  end;
+  end; // .if
 end; // .function Match

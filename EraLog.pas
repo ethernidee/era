@@ -5,18 +5,10 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
-uses Windows, SysUtils, Utils, Files, ConsoleAPI, Log, StrLib, Concur, DlgMes;
+uses SysUtils, Utils, Files, ConsoleAPI, Log, StrLib;
 
 type
   TLogger = class (Log.TLogger)
-   protected
-    {O} fCritSection: Concur.TCritSection;
-        fLocked:      boolean;
-
-   public
-    constructor Create;
-    destructor Destroy; override;
-
     function  Read (out LogRec: TLogRec): boolean; override;
     function  IsLocked: boolean; override;
     procedure Lock; override;
@@ -27,8 +19,8 @@ type
   end; // .class TLogger
 
   TMemoryLogger  = class (TLogger)
-    function Write (const EventSource, Operation, Description: string): boolean; override;
-  end;
+    function  Write (const EventSource, Operation, Description: string): boolean; override;
+  end; // .class TMemoryLogger
   
   TConsoleLogger  = class (TLogger)
     (***) protected (***)
@@ -38,184 +30,124 @@ type
       constructor Create (const Title: string);
       destructor  Destroy; override;
       
-      function Write (const EventSource, Operation, Description: string): boolean; override;
+      function  Write (const EventSource, Operation, Description: string): boolean; override;
   end; // .class TConsoleLogger
   
   TFileLogger = class (TLogger)
     (***) protected (***)
-      {O} fFile: Windows.THandle;
+      {O} fFile:  Files.TFile;
       
     (***) public (***)
       constructor Create (const FilePath: string);
       destructor  Destroy; override;
       
-      function Write (const EventSource, Operation, Description: string): boolean; override;
-  end;
+      function  Write (const EventSource, Operation, Description: string): boolean; override;
+  end; // .class TFileLogger
 
 
 (***) implementation (***)
 
 
 const
-  BR                     = #13#10;
-  RECORD_BEGIN_SEPARATOR = '>> ';
-  RECORD_END_SEPARATOR   = BR + BR;
-  OPERATION_SEPARATOR    = ': ';
-  DESCRIPTION_SEPARATOR  = BR;
-  DESCR_LINES_PREFIX     = '   ';
-  DESCR_LINES_GLUE       = BR + DESCR_LINES_PREFIX;
+  BR                      = #13#10;
+  RECORD_BEGIN_SEPARATOR  = '>> ';
+  RECORD_END_SEPARATOR    = BR + BR;
+  OPERATION_SEPARATOR     = ': ';
+  DESCRIPTION_SEPARATOR   = BR;
+  DESCR_LINES_PREFIX      = '   ';
+  DESCR_LINES_GLUE        = BR + DESCR_LINES_PREFIX;
 
-
-constructor TLogger.Create;
-begin
-  Self.fCritSection.Init;
-  Self.fLocked := false;
-end;
-
-destructor TLogger.Destroy;
-begin
-  Self.fCritSection.Delete;
-end;
 
 function TLogger.Read (out LogRec: TLogRec): boolean;
 begin
-  result := false;
-end;
+  result  :=  FALSE;
+end; // .function TLogger.Read
 
 function TLogger.IsLocked: boolean;
 begin
-  with Self.fCritSection do begin
-    Enter;
-    result := Self.fLocked;
-    Leave;
-  end;
-end;
+  result  :=  FALSE;
+end; // .function TLogger.IsLocked
 
 procedure TLogger.Lock;
 begin
-  with Self.fCritSection do begin
-    Enter;
-    Self.fLocked := true;
-    Leave;
-  end;
-end;
+end; // .procedure TLogger.Lock
 
 procedure TLogger.Unlock;
 begin
-  with Self.fCritSection do begin
-    Enter;
-    Self.fLocked := false;
-    Leave;
-  end;
-end;
+end; // .procedure TLogger.Unlock
 
 function TLogger.GetPos (out Pos: integer): boolean;
 begin
-  Pos    := -1;
-  result := false;
-end;
+  Pos     :=  -1;
+  result  :=  FALSE;
+end; // .function TLogger.GetPos
 
 function TLogger.Seek (NewPos: integer): boolean;
 begin
-  result := false;
-end;
+  result  :=  FALSE;
+end; // .function TLogger.Seek
 
 function TLogger.GetCount (out Count: integer): boolean;
 begin
-  Count  := -1;
-  result := false;
-end;
+  Count   :=  -1;
+  result  :=  FALSE;
+end; // .function TLogger.GetCount
 
 function TMemoryLogger.Write (const EventSource, Operation, Description: string): boolean;
 begin
-  result := true;
-end;
+  result  :=  TRUE;
+end; // .function TMemoryLogger.Write
 
 constructor TConsoleLogger.Create (const Title: string);
 begin
-  inherited Create;
-  Self.fCon := ConsoleAPI.TConsole.Create(Title, 80, 50, 80, 1000);
-end;
+  Self.fCon :=  ConsoleAPI.TConsole.Create(Title, 80, 50, 80, 1000);
+end; // .constructor TConsoleLogger.Create
 
 destructor TConsoleLogger.Destroy;
 begin
   SysUtils.FreeAndNil(Self.fCon);
-  inherited;
-end;
+end; // .destructor TConsoleLogger.Destroy
 
 function TConsoleLogger.Write (const EventSource, Operation, Description: string): boolean;
 begin
-  with Self.fCritSection do begin
-    Enter;
-
-    result := not Self.fLocked;
-
-    if result then begin
-      Self.Lock;
-
-      Writeln
-      (
-        RECORD_BEGIN_SEPARATOR,
-        EventSource,
-        OPERATION_SEPARATOR,
-        Operation,
-        DESCRIPTION_SEPARATOR,
-        DESCR_LINES_PREFIX,
-        StrLib.Join(StrLib.Explode(Description, BR), DESCR_LINES_GLUE),
-        RECORD_END_SEPARATOR
-      );
-
-      Self.Unlock;
-    end; // .if
-
-    Leave;
-  end; // .with
+  Writeln
+  (
+    RECORD_BEGIN_SEPARATOR,
+    EventSource,
+    OPERATION_SEPARATOR,
+    Operation,
+    DESCRIPTION_SEPARATOR,
+    DESCR_LINES_PREFIX,
+    StrLib.Join(StrLib.Explode(Description, BR), DESCR_LINES_GLUE),
+    RECORD_END_SEPARATOR
+  );
+  
+  result  :=  TRUE;
 end; // .function TConsoleLogger.Write
 
 constructor TFileLogger.Create (const FilePath: string);
 begin
-  inherited Create;
-  Self.fFile := Windows.CreateFileA(pchar(FilePath), Windows.GENERIC_WRITE, Windows.FILE_SHARE_READ or Windows.FILE_SHARE_DELETE, nil, Windows.CREATE_ALWAYS, Windows.FILE_ATTRIBUTE_NORMAL, 0);
-end;
+  Self.fFile  :=  Files.TFile.Create;
+  {!} Assert(Self.fFile.CreateNew(FilePath));
+end; // .constructor TFileLogger.Create
 
 destructor TFileLogger.Destroy;
 begin
   SysUtils.FreeAndNil(Self.fFile);
-  inherited;
-end;
+end; // .destructor TFileLogger.Destroy
 
 function TFileLogger.Write (const EventSource, Operation, Description: string): boolean;
-var
-  Buf:          string;
-  BytesWritten: cardinal;
-
 begin
-  with Self.fCritSection do begin
-    Enter;
-
-    result := not Self.fLocked;
-
-    if result then begin
-      Self.Lock;
-
-      Buf := StrLib.Concat([
-        RECORD_BEGIN_SEPARATOR,
-        EventSource,
-        OPERATION_SEPARATOR,
-        Operation,
-        DESCRIPTION_SEPARATOR,
-        DESCR_LINES_PREFIX,
-        StrLib.Join(StrLib.Explode(Description, BR), DESCR_LINES_GLUE),
-        RECORD_END_SEPARATOR
-      ]);
-
-      Windows.WriteFile(Self.fFile, pchar(Buf)^, Length(Buf), BytesWritten, nil);
-
-      Self.Unlock;
-    end; // .if    
-
-    Leave;
-  end; // .with  
+  result  :=  Self.fFile.WriteStr(StrLib.Concat([
+    RECORD_BEGIN_SEPARATOR,
+    EventSource,
+    OPERATION_SEPARATOR,
+    Operation,
+    DESCRIPTION_SEPARATOR,
+    DESCR_LINES_PREFIX,
+    StrLib.Join(StrLib.Explode(Description, BR), DESCR_LINES_GLUE),
+    RECORD_END_SEPARATOR
+  ]));
 end; // .function TFileLogger.Write
 
 end.

@@ -5,7 +5,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 interface
-uses SysUtils, Utils, PatchApi, Core, DataLib, Files;
+uses SysUtils, Utils, Core, DataLib, Files;
 
 type
   (* Import *)
@@ -44,16 +44,14 @@ function GetUniquePatchName (const BasePatchName: string): string;
 begin
   result := IntToStr(PatchAutoId) + ':' + BasePatchName;
   Inc(PatchAutoId);
-end;
+end; // .function GetUniquePatchName
 
 procedure ApplyBinPatch (const BinPatchSource: string; BinPatchFile: PBinPatchFile);
 const
-  IS_CODE_PATCH = true;
+  CODE_PATCH = true;
 
 var
-{O} Patcher:    PatchApi.TPatcherInstance; // unmanaged
 {U} Patch:      PBinPatch;
-    PatchName:  string;
     NumPatches: integer;
     i:          integer;  
   
@@ -62,21 +60,18 @@ begin
   Patch := @BinPatchFile.Patches;
   // * * * * * //
   NumPatches := BinPatchFile.NumPatches;
-  PatchName  := GetUniquePatchName(BinPatchSource);
 
   try
-    Patcher := Core.GlobalPatcher.CreateInstance(pchar(PatchName));
-
     for i := 1 to NumPatches do begin
-      if not Patcher.Write(Patch.Addr, @Patch.Bytes, Patch.NumBytes, IS_CODE_PATCH).IsApplied() then begin
+      if not Core.WriteAtCode(Patch.NumBytes, @Patch.Bytes, Patch.Addr) then begin
         Core.FatalError('Failed to write binary patch data at address '
                         + IntToHex(integer(Patch.Addr), 8));
-      end;
+      end; // .if
 
       Patch := Utils.PtrOfs(Patch, sizeof(Patch^) + Patch.NumBytes);
-    end;
+    end; // .for
   except
-    Core.FatalError('Failed to apply binary patch "' + PatchName + '"');
+    Core.FatalError('Failed to apply binary patch "' + BinPatchSource + '"');
   end; // .try
 end; // .procedure ApplyBinPatch
 
@@ -86,12 +81,39 @@ var
 
 begin
   result := Files.ReadFileContents(FilePath, FileContents) and
-            (Length(FileContents) >= sizeof(TBinPatchFile));
+            (length(FileContents) >= sizeof(TBinPatchFile));
 
   if result then begin
     PatchContents := FileContents;
-  end;
+  end; // .if
 end; // .function LoadBinPatch
+
+function CompileJsonPatch (const JsonSource, JsonContents: string;
+                           out Patch: Utils.TArrayOfByte): boolean;
+var
+{U} Json:  TlkJsonList;
+    Error: string;
+    i:     integer;
+
+  function ReadHexInt (): integer;
+  begin
+    
+  end; // .function ReadHexInt
+
+begin
+  Utils.CastOrFree(TlkJson.ParseText(JsonContents), TlkJsonList, Json);
+  result := Json <> nil;
+
+  if result then begin
+    i := 0;
+
+    while result and (i < Json.Count) do begin
+      Json.Child[i]
+    end; // .while
+  end else begin
+    NotifyError('Invalid json patch file "' + JsonSource + '"');
+  end; // .else
+end; // .function CompileJsonPatch
 
 procedure ApplyPatches (const DirPath: string);
 var
@@ -101,11 +123,11 @@ begin
   with Files.Locate(DirPath + '\*.bin', Files.ONLY_FILES) do begin
     while FindNext do begin
       if LoadBinPatch(DirPath + '\' + FoundName, FileContents) then begin
-        PatchList.AddObj(FoundName, Ptr(Length(FileContents)));
+        PatchList.AddObj(FoundName, Ptr(length(FileContents)));
         ApplyBinPatch(FoundName, pointer(FileContents));
-      end;
-    end;
-  end;
+      end; // .if
+    end; // .while
+  end; // .with
 end; // .procedure ApplyPatches
 
 begin

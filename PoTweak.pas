@@ -5,11 +5,11 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
-uses Core, GameExt, Heroes, Stores, EventMan;
+uses Core, GameExt, Heroes, Stores;
 
 const
   FILE_SECTION_NAME = 'Era.PO';
-  MAX_MAP_SIZE      = 256;
+  MAX_MAP_SIZE = 256;
 
 type
   PSquare = ^TSquare;
@@ -98,25 +98,25 @@ function Hook_BeforeResetErmFunc (Context: Core.PHookContext): LONGBOOL; stdcall
 begin
   GameExt.FireEvent('$OnBeforeResetErmFunc', nil, 0);
   result := Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_BeforeResetErmFunc
 
 procedure OnSavegameWrite (Event: GameExt.PEvent); stdcall;
 begin
   Stores.WriteSavegameSection(SquaresSize, @Squares[0], FILE_SECTION_NAME);
   Stores.WriteSavegameSection(Squares2Size, @Squares2[0], FILE_SECTION_NAME);
-end;
+end; // .procedure OnSavegameWrite
 
 procedure OnSavegameRead (Event: GameExt.PEvent); stdcall;
 begin
   PatchSquaresRefs;
   Stores.ReadSavegameSection(SquaresSize, @Squares[0], FILE_SECTION_NAME);
   Stores.ReadSavegameSection(Squares2Size, @Squares2[0], FILE_SECTION_NAME);
-end;
+end; // .procedure OnSavegameRead
 
 procedure OnBeforeResetErmFunc (Event: GameExt.PEvent); stdcall;
 begin
   PatchSquaresRefs;
-end;
+end; // .procedure OnBeforeResetErmFunc
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
@@ -137,8 +137,8 @@ begin
 end; // .procedure OnAfterWoG
 
 begin
-  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
-  EventMan.GetInstance.On('OnSavegameWrite', OnSavegameWrite);
-  EventMan.GetInstance.On('OnSavegameRead', OnSavegameRead);
-  EventMan.GetInstance.On('$OnBeforeResetErmFunc', OnBeforeResetErmFunc);
+  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  GameExt.RegisterHandler(OnSavegameWrite, 'OnSavegameWrite');
+  GameExt.RegisterHandler(OnSavegameRead, 'OnSavegameRead');
+  GameExt.RegisterHandler(OnBeforeResetErmFunc, '$OnBeforeResetErmFunc');
 end.

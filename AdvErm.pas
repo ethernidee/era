@@ -1,13 +1,13 @@
 unit AdvErm;
 {
-DESCRIPTION: Era custom Memory implementation
-AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+DESCRIPTION:  Era custom Memory implementation
+AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack,
-  PatchApi, Core, GameExt, Erm, Stores, Heroes, Trans, EventMan;
+  Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, Files,
+  PatchApi, Core, GameExt, Erm, Stores, Heroes;
 
 const
   SPEC_SLOT = -1;
@@ -16,14 +16,11 @@ const
   IS_TEMP   = 0;
   NOT_TEMP  = 1;
   
-  IS_STR    = true;
-  IS_INT    = false;
-  OPER_GET  = true;
-  OPER_SET  = false;
+  IS_STR    = TRUE;
+  OPER_GET  = TRUE;
   
   SLOTS_SAVE_SECTION  = 'Era.DynArrays_SN_M';
   ASSOC_SAVE_SECTION  = 'Era.AssocArray_SN_W';
-  HINTS_SAVE_SECTION  = 'Era.Hints_SN_H';
   
   (* TParamModifier *)
   NO_MODIFIER     = 0;
@@ -32,17 +29,13 @@ const
   MODIFIER_MUL    = 3;
   MODIFIER_DIV    = 4;
   MODIFIER_CONCAT = 5;
-
-  (* Hint code flags *)
-  CODE_TYPE_SUBTYPE = $01000000;
-
+  
   ERM_MEMORY_DUMP_FILE = GameExt.DEBUG_DIR + '\erm memory dump.txt';
+
 
 type
   (* IMPORT *)
-  TDict    = DataLib.TDict;
   TObjDict = DataLib.TObjDict;
-  TString  = TypeWrappers.TString;
 
   TErmCmdContext = packed record
     
@@ -50,7 +43,7 @@ type
 
   TReceiverHandler = procedure;
 
-  TVarType = (INT_VAR, STR_VAR);
+  TVarType  = (INT_VAR, STR_VAR);
   
   TSlot = class
     ItemsType:  TVarType;
@@ -63,10 +56,19 @@ type
     IntValue: integer;
     StrValue: string;
   end; // .class TAssocVar
+  
+  TServiceParam = packed record
+    IsStr:          boolean;
+    OperGet:        boolean;
+    Dummy:          word;
+    Value:          integer;
+    StrValue:       pchar;
+    ParamModifier:  integer;
+  end; // .record TServiceParam
 
+  PServiceParams  = ^TServiceParams;
+  TServiceParams  = array [0..23] of TServiceParam;
 
-procedure ResetMemory;
-function GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
 
 function ExtendedEraService
 (
@@ -76,8 +78,6 @@ function ExtendedEraService
   out Err:        pchar
 ): boolean; stdcall;
 
-var
-{O} AssocMem: {O} AssocArrays.TAssocArray {OF TAssocVar};
 
 exports
   ExtendedEraService;
@@ -89,8 +89,8 @@ exports
 var
 {O} NewReceivers: {O} TObjDict {OF TErmCmdHandler};
 
-{O} Hints:      {O} TDict {of [O] TObjDict of TString};
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
+{O} AssocMem:   {O} AssocArrays.TAssocArray {OF TAssocVar};
     FreeSlotN:  integer = SPEC_SLOT - 1;
     ErrBuf:     array [0..255] of char;
 
@@ -104,33 +104,23 @@ begin
 
   if @OldReceiverHandler = nil then begin
     NewReceivers[Ptr(ReceiverName)] := @ReceiverHandler;
-  end else begin
+  end // .if
+  else begin
     Erm.ShowMessage('Receiver "' + CHR(ReceiverName and $FF) + CHR(ReceiverName shr 8 and $FF) + '" is already registered!');
-  end;
+  end; // .else
 end; // .procedure RegisterReceiver
     
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
 begin
   case Param.ParamModifier of 
-    NO_MODIFIER:  Dest := Param.Value.v;
-    MODIFIER_ADD: Dest := Dest + Param.Value.v;
-    MODIFIER_SUB: Dest := Dest - Param.Value.v;
-    MODIFIER_MUL: Dest := Dest * Param.Value.v;
-    MODIFIER_DIV: Dest := Dest div Param.Value.v;
-  end;
-end;
-
-(* Parameters must be either reused or filled with zeroes before function call *)
-function GetServiceParams (Cmd: pchar; var NumParams: integer; var {O} Params: TServiceParams): integer;
-begin
-  result := GameExt.EraGetServiceParams(Cmd, NumParams, Params);
-end;
-
-procedure ReleaseServiceParams ({O} var Params: TServiceParams); stdcall;
-begin
-  GameExt.EraReleaseServiceParams(Params);
-end;
-
+    NO_MODIFIER:  Dest := Param.Value;
+    MODIFIER_ADD: Dest := Dest + Param.Value;
+    MODIFIER_SUB: Dest := Dest - Param.Value;
+    MODIFIER_MUL: Dest := Dest * Param.Value;
+    MODIFIER_DIV: Dest := Dest div Param.Value;
+  end; // .SWITCH Paramo.ParamModifier
+end; // .procedure ModifyWithParam
+    
 function CheckCmdParams (Params: PServiceParams; const Checks: array of boolean): boolean;
 var
   i:  integer;
@@ -138,7 +128,7 @@ var
 begin
   {!} Assert(Params <> nil);
   {!} Assert(not ODD(Length(Checks)));
-  result  :=  true;
+  result  :=  TRUE;
   i       :=  0;
   
   while result and (i <= High(Checks)) do begin
@@ -147,7 +137,7 @@ begin
       (Params[i shr 1].OperGet = Checks[i + 1]);
     
     i :=  i + 2;
-  end;
+  end; // .while
 end; // .function CheckCmdParams
 
 function GetSlotItemsCount (Slot: TSlot): integer;
@@ -155,10 +145,11 @@ begin
   {!} Assert(Slot <> nil);
   if Slot.ItemsType = INT_VAR then begin
     result  :=  Length(Slot.IntItems);
-  end else begin
+  end // .if
+  else begin
     result  :=  Length(Slot.StrItems);
-  end;
-end;
+  end; // .else
+end; // .function GetSlotItemsCount
 
 procedure SetSlotItemsCount (NewNumItems: integer; Slot: TSlot);
 begin
@@ -166,10 +157,11 @@ begin
   {!} Assert(Slot <> nil);
   if Slot.ItemsType = INT_VAR then begin
     SetLength(Slot.IntItems, NewNumItems);
-  end else begin
+  end // .if
+  else begin
     SetLength(Slot.StrItems, NewNumItems);
-  end;
-end;
+  end; // .else
+end; // .procedure SetSlotItemsCount
 
 function NewSlot (ItemsCount: integer; ItemsType: TVarType; IsTemp: boolean): TSlot;
 begin
@@ -179,7 +171,7 @@ begin
   result.IsTemp     :=  IsTemp;
   
   SetSlotItemsCount(ItemsCount, result);
-end;
+end; // .function NewSlot
   
 function GetSlot (SlotN: integer; out {U} Slot: TSlot; out Error: string): boolean;
 begin
@@ -189,8 +181,8 @@ begin
   
   if not result then begin
     Error :=  'Slot #' + SysUtils.IntToStr(SlotN) + ' does not exist.';
-  end;
-end;
+  end; // .if
+end; // .function GetSlot 
 
 function AllocSlot (ItemsCount: integer; ItemsType: TVarType; IsTemp: boolean): integer;
 begin
@@ -199,8 +191,8 @@ begin
     
     if FreeSlotN > 0 then begin
       FreeSlotN :=  SPEC_SLOT - 1;
-    end;
-  end;
+    end; // .if
+  end; // .while
   
   Slots[Ptr(FreeSlotN)] :=  NewSlot(ItemsCount, ItemsType, IsTemp);
   result                :=  FreeSlotN;
@@ -208,277 +200,8 @@ begin
   
   if FreeSlotN > 0 then begin
     FreeSlotN :=  SPEC_SLOT - 1;
-  end;
+  end; // .if
 end; // .function AllocSlot
-
-function GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
-begin
-  result := AssocMem[VarName];
-
-  if result = nil then begin
-    result            := TAssocVar.Create;
-    AssocMem[VarName] := result;
-  end;
-end;
-
-function SN_H (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
-var
-{U} Section:     TObjDict;
-{U} StrValue:    TString;
-    SectionName: string;
-    Hint:        string;
-    HintRaw:     pchar;
-    Code:        integer;
-    DeleteHint:  boolean;
-
-    ObjType:    integer;
-    ObjSubtype: integer;
-
-    x: integer;
-    y: integer;
-    z: integer;
-
-    Hero:     integer;
-    NameType: integer;
-    Skill:    integer;
-
-  (* Returns new hint address or nil if hint was deleted *)
-  function UpdateHint (HintParamN: integer): {n} pchar;
-  begin
-    if DeleteHint then begin
-      Section.DeleteItem(Ptr(Code));
-      result := nil;
-    end else begin
-      Hint     := Params[HintParamN].Value.pc;
-      StrValue := TString(Section[Ptr(Code)]);
-
-      if StrValue = nil then begin
-        StrValue           := TString.Create(Hint);
-        Section[Ptr(Code)] := StrValue;
-      end else begin
-        StrValue.Value := Hint;
-      end;
-
-      result := pchar(StrValue.Value);
-    end; // .else
-  end; // .function UpdateHint
-
-begin
-  Section  := nil;
-  StrValue := nil;
-  result   := true;
-  // * * * * * //
-  if NumParams >= 3 then begin
-    result := not Params[0].OperGet and Params[0].IsStr;
-
-    if result then begin
-      SectionName := Params[0].Value.pc;
-      DeleteHint  := (SectionName <> '') and (SectionName[1] = '-');
-
-      if DeleteHint then begin
-        SectionName := Copy(SectionName, 2);
-      end;
-
-      Section := TObjDict(Hints[SectionName]);
-      result  := Section <> nil;
-
-      if result then begin
-        if SectionName = 'object' then begin
-          // SN:H^object^/type/subtype or -1/hint
-          if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
-            
-            if result then begin
-              ObjType    := Params[1].Value.v;
-              ObjSubtype := Params[2].Value.v;
-              result     := Math.InRange(ObjType, -1, 254) and Math.InRange(ObjSubtype, -1, 254);
-
-              if result then begin
-                if ObjType = -1 then begin
-                  ObjType := 255;
-                end;
-
-                if ObjSubtype = -1 then begin
-                  ObjSubtype := 255;
-                end;
-
-                Code := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
-
-                if Params[3].OperGet then begin
-                  StrValue := Section[Ptr(Code)];                 
-                  Erm.SetZVar(Ptr(Params[3].Value.v), Utils.IfThen(StrValue <> nil, StrValue.Value, ''));
-                end else begin
-                  UpdateHint(3);
-                end;
-              end; // .if
-            end; // .if
-          // SN:H^object^/x/y/z/hint
-          end else if NumParams = 5 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and not Params[3].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr
-                      and not Params[3].IsStr and (Params[4].OperGet or Params[4].IsStr);
-
-            if result then begin
-              x      := Params[1].Value.v;
-              y      := Params[2].Value.v;
-              z      := Params[3].Value.v;
-              result := Math.InRange(x, 0, 255) and Math.InRange(y, 0, 255) and Math.InRange(z, 0, 255);
-
-              if result then begin
-                Code := x or (y shl 8) or (z shl 16);
-
-                if Params[4].OperGet then begin
-                  StrValue := Section[Ptr(Code)];                 
-                  Erm.SetZVar(Ptr(Params[4].Value.v), Utils.IfThen(StrValue <> nil, StrValue.Value, ''));
-                end else begin
-                  UpdateHint(4);
-                end;
-              end;
-            end; // .if
-          end else begin
-            result := false;
-            Error  := 'Invalid number of command parameters';
-          end; // .else
-        // SN:H^spec^/hero/short (0), full (1) or descr (2)/hint
-        end else if SectionName = 'spec' then begin
-          if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
-
-            if result then begin
-              Hero     := Params[1].Value.v;
-              NameType := Params[2].Value.v;
-              result   := Math.InRange(Hero, 0, Erm.NUM_WOG_HEROES - 1) and Math.InRange(NameType, 0, 2);
-              
-              if result then begin
-                if Params[3].OperGet then begin
-                  Windows.LStrCpy(pchar(Params[3].Value.v), Erm.HeroSpecsTable[Hero].Descr[NameType]);
-                end else begin
-                  Code    := Hero or (NameType shl 8);
-                  HintRaw := UpdateHint(3);
-                  Erm.HeroSpecSettingsTable[Hero].ZVarDescr[NameType] := 0;
-
-                  if DeleteHint then begin
-                    Erm.HeroSpecsTable[Hero].Descr[NameType] := Erm.HeroSpecsTableBack[Hero].Descr[NameType];
-                  end else begin
-                    Erm.HeroSpecsTable[Hero].Descr[NameType] := HintRaw;
-                  end;
-                end; // .else
-              end; // .if
-            end; // .if
-          end else begin
-            result := false;
-            Error  := 'Invalid number of command parameters';
-          end; // .else
-        // SN:H^secskill^/skill/name (0), basic (1), advanced (2) or expert (3)/text
-        end else if SectionName = 'secskill' then begin
-          if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
-
-            if result then begin
-              Skill    := Params[1].Value.v;
-              NameType := Params[2].Value.v;
-              result   := Math.InRange(Skill, 0, Heroes.MAX_SECONDARY_SKILLS - 1) and Math.InRange(NameType, 0, Heroes.SKILL_LEVEL_EXPERT);
-              
-              if result then begin
-                if Params[3].OperGet then begin
-                  Windows.LStrCpy(pchar(Params[3].Value.v), Heroes.SecSkillTexts[Skill].Texts[NameType]);
-                end else begin
-                  Code    := Skill or (NameType shl 8);
-                  HintRaw := UpdateHint(3);
-                  Erm.SecSkillSettingsTable[Skill].Texts[NameType] := 0;
-
-                  if DeleteHint then begin
-                    Heroes.SecSkillTexts[Skill].Texts[NameType] := Erm.SecSkillTextsBack[Skill].Texts[NameType];
-
-                    if NameType = Heroes.SKILL_LEVEL_NONE then begin
-                      Heroes.SecSkillNames[Skill] := Erm.SecSkillNamesBack[Skill];
-                    end else begin
-                      Heroes.SecSkillDescs[Skill].Descs[NameType - 1] := Erm.SecSkillDescsBack[Skill].Descs[NameType - 1];
-                    end;
-                  end else begin
-                    Heroes.SecSkillTexts[Skill].Texts[NameType] := HintRaw;
-
-                    if NameType = Heroes.SKILL_LEVEL_NONE then begin
-                      Heroes.SecSkillNames[Skill] := HintRaw;
-                    end else begin
-                      Heroes.SecSkillDescs[Skill].Descs[NameType - 1] := HintRaw;
-                    end;
-                  end; // .else
-                end; // .else
-              end; // .if
-            end; // .if
-          end else begin
-            result := false;
-            Error  := 'Invalid number of command parameters';
-          end; // .else
-        end; // .elsif
-      end; // .if
-    end; // .if
-  end else begin
-    result := false;
-    Error  := 'Invalid number of command parameters';
-  end; // .else
-end; // .function SN_H
-
-function SN_T (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
-const
-  NUM_OBLIG_PARAMS  = 2;
-  NUM_DEF_TR_PARAMS = 1;
-
-var
-{U} ResPtr:      pchar;
-    TrParams:    StrLib.TArrayOfStr;
-    Translation: string;
-    NumTrParams: integer;
-    i:           integer;
-
-begin
-  ResPtr := nil;
-  result := false;
-  // * * * * * //
-  if NumParams < NUM_OBLIG_PARAMS then begin
-    Error := 'Invalid number of command parameters';
-    exit;
-  end;
-
-  if Params[0].OperGet or not Params[1].OperGet then begin
-    Error := 'Valid syntax is !!SN:T^key^ or quantity/?(str result)';
-    exit;
-  end;
-
-  // SN:T^key^/?(translation)/...parameters...
-  if Params[0].IsStr then begin
-    NumTrParams                  := (NumParams - NUM_OBLIG_PARAMS) div 2;
-    SetLength(TrParams, (NumTrParams + NUM_DEF_TR_PARAMS) * 2);
-    TrParams[high(TrParams) - 1] := '';
-    TrParams[high(TrParams)]     := Trans.TEMPL_CHAR;
-
-    for i := NUM_OBLIG_PARAMS to NUM_OBLIG_PARAMS + NumTrParams * 2 - 1 do begin
-      if Params[i].OperGet then begin
-        Error := 'Arguments for translation must use set syntax';
-        exit;
-      end;
-
-      if Params[i].IsStr then begin
-        TrParams[i - NUM_OBLIG_PARAMS] := Params[i].Value.pc;
-      end else begin
-        TrParams[i - NUM_OBLIG_PARAMS] := SysUtils.IntToStr(Params[i].Value.v);
-      end;
-    end;
-
-    Translation := Trans.tr(Params[0].Value.pc, TrParams);
-    Erm.SetZVar(pchar(Params[1].Value.v), Translation);
-  end
-  // SN:T(item quantity)/?(key suffix)
-  else begin
-    
-  end; // .else
-
-  result := true;
-end; // .function SN_T
 
 function ExtendedEraService
 (
@@ -497,16 +220,12 @@ var
     NewSlotItemsCount:  integer;
     GameState:          TGameState;
 
-{U} Tile:    Heroes.PMapTile;
-    Coords:  Heroes.TMapCoords;
-    MapSize: integer;
-
 begin
   Slot          :=  nil;
   AssocVarValue :=  nil;
   // * * * * * //
-  result := true;
-  Error  := 'Invalid command parameters';
+  result  :=  TRUE;
+  Error   :=  'Invalid command parameters';
   
   case Cmd of 
     'M':
@@ -522,11 +241,11 @@ begin
             begin
               result  :=
                 CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
-                (Params[0].Value.v <> SPEC_SLOT);
+                (Params[0].Value <> SPEC_SLOT);
               
               if result then begin
-                Slots.DeleteItem(Ptr(Params[0].Value.v));
-              end;
+                Slots.DeleteItem(Ptr(Params[0].Value));
+              end; // .if
             end; // .case 1
           // M(Slot)/[?]ItemsCount; analog of SetLength/Length
           2:
@@ -534,26 +253,27 @@ begin
               result  :=
                 CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
                 (not Params[1].IsStr)                               and
-                (Params[1].OperGet or (Params[1].Value.v >= 0));
+                (Params[1].OperGet or (Params[1].Value >= 0));
 
               if result then begin          
                 if Params[1].OperGet then begin
-                  Slot  :=  Slots[Ptr(Params[0].Value.v)];
+                  Slot  :=  Slots[Ptr(Params[0].Value)];
                   
                   if Slot <> nil then begin
-                    PINTEGER(Params[1].Value.v)^  :=  GetSlotItemsCount(Slot);
-                  end else begin
-                    PINTEGER(Params[1].Value.v)^  :=  NO_SLOT;
-                  end;
+                    PINTEGER(Params[1].Value)^  :=  GetSlotItemsCount(Slot);
+                  end // .if
+                  else begin
+                    PINTEGER(Params[1].Value)^  :=  NO_SLOT;
+                  end; // .else
                   end // .if
                 else begin
-                  result  :=  GetSlot(Params[0].Value.v, Slot, Error);
+                  result  :=  GetSlot(Params[0].Value, Slot, Error);
                   
                   if result then begin
                     NewSlotItemsCount := GetSlotItemsCount(Slot);
                     ModifyWithIntParam(NewSlotItemsCount, Params[1]);
                     SetSlotItemsCount(NewSlotItemsCount, Slot);
-                  end;
+                  end; // .if
                 end; // .else
               end; // .if
             end; // .case 2
@@ -562,7 +282,7 @@ begin
             begin
               result  :=
                 CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
-                GetSlot(Params[0].Value.v, Slot, Error)               and
+                GetSlot(Params[0].Value, Slot, Error)               and
                 (not Params[1].IsStr);
               
               if result then begin
@@ -570,20 +290,22 @@ begin
                   result  :=
                     (not Params[2].OperGet) and
                     (not Params[2].IsStr)   and
-                    Math.InRange(Params[2].Value.v, 0, GetSlotItemsCount(Slot) - 1);
+                    Math.InRange(Params[2].Value, 0, GetSlotItemsCount(Slot) - 1);
                   
                   if result then begin
                     if Slot.ItemsType = INT_VAR then begin
-                      PPOINTER(Params[1].Value.v)^  :=  @Slot.IntItems[Params[2].Value.v];
-                    end else begin
-                      PPOINTER(Params[1].Value.v)^  :=  pointer(Slot.StrItems[Params[2].Value.v]);
-                    end;
-                  end;
-                end else begin
+                      PPOINTER(Params[1].Value)^  :=  @Slot.IntItems[Params[2].Value];
+                    end // .if
+                    else begin
+                      PPOINTER(Params[1].Value)^  :=  pointer(Slot.StrItems[Params[2].Value]);
+                    end; // .else
+                  end; // .if
+                end // .if
+                else begin
                   result  :=
                     (not Params[1].OperGet) and
                     (not Params[1].IsStr)   and
-                    Math.InRange(Params[1].Value.v, 0, GetSlotItemsCount(Slot) - 1);
+                    Math.InRange(Params[1].Value, 0, GetSlotItemsCount(Slot) - 1);
                   
                   if result then begin
                     if Params[2].OperGet then begin
@@ -591,51 +313,58 @@ begin
                         if Params[2].IsStr then begin
                           Windows.LStrCpy
                           (
-                            Ptr(Params[2].Value.v),
-                            Ptr(Slot.IntItems[Params[1].Value.v])
+                            Ptr(Params[2].Value),
+                            Ptr(Slot.IntItems[Params[1].Value])
                           );
-                        end else begin
-                          PINTEGER(Params[2].Value.v)^  :=  Slot.IntItems[Params[1].Value.v];
-                        end;
-                      end else begin
+                        end // .if
+                        else begin
+                          PINTEGER(Params[2].Value)^  :=  Slot.IntItems[Params[1].Value];
+                        end; // .else
+                      end // .if
+                      else begin
                         Windows.LStrCpy
                         (
-                          Ptr(Params[2].Value.v),
-                          pchar(Slot.StrItems[Params[1].Value.v])
+                          Ptr(Params[2].Value),
+                          pchar(Slot.StrItems[Params[1].Value])
                         );
                       end; // .else
-                    end else begin
+                    end // .if
+                    else begin
                       if Slot.ItemsType = INT_VAR then begin
                         if Params[2].IsStr then begin
                           if Params[2].ParamModifier = MODIFIER_CONCAT then begin
-                            StrLen := SysUtils.StrLen(pchar(Slot.IntItems[Params[1].Value.v]));
+                            StrLen := SysUtils.StrLen(pchar(Slot.IntItems[Params[1].Value]));
                             
                             Windows.LStrCpy
                             (
-                              Utils.PtrOfs(Ptr(Slot.IntItems[Params[1].Value.v]), StrLen),
-                              Ptr(Params[2].Value.v)
+                              Utils.PtrOfs(Ptr(Slot.IntItems[Params[1].Value]), StrLen),
+                              Ptr(Params[2].Value)
                             );
-                          end else begin
+                          end // .if
+                          else begin
                             Windows.LStrCpy
                             (
-                              Ptr(Slot.IntItems[Params[1].Value.v]),
-                              Ptr(Params[2].Value.v)
+                              Ptr(Slot.IntItems[Params[1].Value]),
+                              Ptr(Params[2].Value)
                             );
                           end; // .else
-                        end else begin
-                          Slot.IntItems[Params[1].Value.v]  :=  Params[2].Value.v;
+                        end // .if
+                        else begin
+                          Slot.IntItems[Params[1].Value]  :=  Params[2].Value;
                         end; // .else
-                      end else begin
-                        if Params[2].Value.v = 0 then begin
-                          Params[2].Value.v := integer(pchar(''));
-                        end;
+                      end // .if
+                      else begin
+                        if Params[2].Value = 0 then begin
+                          Params[2].Value := integer(pchar(''));
+                        end; // .if
                         
                         if Params[2].ParamModifier = MODIFIER_CONCAT then begin
-                          Slot.StrItems[Params[1].Value.v] := Slot.StrItems[Params[1].Value.v] +
-                                                            pchar(Params[2].Value.v);
-                        end else begin
-                          Slot.StrItems[Params[1].Value.v] := pchar(Params[2].Value.v);
-                        end;
+                          Slot.StrItems[Params[1].Value] := Slot.StrItems[Params[1].Value] +
+                                                            pchar(Params[2].Value);
+                        end // .if
+                        else begin
+                          Slot.StrItems[Params[1].Value] := pchar(Params[2].Value);
+                        end; // .else
                       end; // .else
                     end; // .else
                   end; // .if
@@ -658,29 +387,30 @@ begin
                   not OPER_GET
                 ]
               ) and
-              (Params[0].Value.v >= SPEC_SLOT)                        and
-              (Params[1].Value.v >= 0)                                and
-              Math.InRange(Params[2].Value.v, 0, ORD(High(TVarType))) and
-              ((Params[3].Value.v = IS_TEMP) or (Params[3].Value.v = NOT_TEMP));
+              (Params[0].Value >= SPEC_SLOT)                        and
+              (Params[1].Value >= 0)                                and
+              Math.InRange(Params[2].Value, 0, ORD(High(TVarType))) and
+              ((Params[3].Value = IS_TEMP) or (Params[3].Value = NOT_TEMP));
               
               if result then begin
-                if Params[0].Value.v = SPEC_SLOT then begin
+                if Params[0].Value = SPEC_SLOT then begin
                   Erm.v[1]  :=  AllocSlot
                   (
-                    Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP
+                    Params[1].Value, TVarType(Params[2].Value), Params[3].Value = IS_TEMP
                   );
-                end else begin
-                  Slots[Ptr(Params[0].Value.v)] :=  NewSlot
+                end // .if
+                else begin
+                  Slots[Ptr(Params[0].Value)] :=  NewSlot
                   (
-                    Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP
+                    Params[1].Value, TVarType(Params[2].Value), Params[3].Value = IS_TEMP
                   );
                 end; // .else
               end; // .if
             end; // .case 4
         else
-          result  :=  false;
+          result  :=  FALSE;
           Error   :=  'Invalid number of command parameters';
-        end; // .switch NumParams
+        end; // .SWITCH NumParams
       end; // .case "M"
     'K':
       begin
@@ -691,8 +421,8 @@ begin
               result  :=  (not Params[0].OperGet) and (not Params[1].IsStr) and (Params[1].OperGet);
               
               if result then begin
-                PINTEGER(Params[1].Value.v)^  :=  SysUtils.StrLen(pointer(Params[0].Value.v));
-              end;
+                PINTEGER(Params[1].Value)^  :=  SysUtils.StrLen(pointer(Params[0].Value));
+              end; // .if
             end; // .case 2
           // C(str)/(ind)/[?](strchar)
           3:
@@ -701,33 +431,34 @@ begin
                 (not Params[0].OperGet) and
                 (not Params[1].IsStr)   and
                 (not Params[1].OperGet) and
-                (Params[1].Value.v >= 0)  and
+                (Params[1].Value >= 0)  and
                 (Params[2].IsStr);
               
               if result then begin
                 if Params[2].OperGet then begin
-                  pchar(Params[2].Value.v)^     :=  PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v];
-                  pchar(Params[2].Value.v + 1)^ :=  #0;
-                end else begin
-                  PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v] :=  pchar(Params[2].Value.v)^;
-                end;
-              end;
+                  pchar(Params[2].Value)^     :=  PEndlessCharArr(Params[0].Value)[Params[1].Value];
+                  pchar(Params[2].Value + 1)^ :=  #0;
+                end // .if
+                else begin
+                  PEndlessCharArr(Params[0].Value)[Params[1].Value] :=  pchar(Params[2].Value)^;
+                end; // .else
+              end; // .if
             end; // .case 3
           4:
             begin
               result  :=
                 (not Params[0].IsStr)   and
                 (not Params[0].OperGet) and
-                (Params[0].Value.v >= 0);
+                (Params[0].Value >= 0);
               
-              if result and (Params[0].Value.v > 0) then begin
-                Utils.CopyMem(Params[0].Value.v, pointer(Params[1].Value.v), pointer(Params[2].Value.v));
-              end;
+              if result and (Params[0].Value > 0) then begin
+                Utils.CopyMem(Params[0].Value, pointer(Params[1].Value), pointer(Params[2].Value));
+              end; // .if
             end; // .case 4
         else
-          result  :=  false;
+          result  :=  FALSE;
           Error   :=  'Invalid number of command parameters';
-        end; // .switch NumParams
+        end; // .SWITCH NumParams
       end; // .case "K"
     'W':
       begin
@@ -744,13 +475,14 @@ begin
               
               if result then begin
                 if Params[0].IsStr then begin
-                  AssocVarName  :=  pchar(Params[0].Value.v);
-                end else begin
-                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value.v);
-                end;
+                  AssocVarName  :=  pchar(Params[0].Value);
+                end // .if
+                else begin
+                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value);
+                end; // .else
                 
                 AssocMem.DeleteItem(AssocVarName);
-              end;
+              end; // .if
             end; // .case 1
           // Get/set var
           2:
@@ -759,54 +491,61 @@ begin
               
               if result then begin
                 if Params[0].IsStr then begin
-                  AssocVarName  :=  pchar(Params[0].Value.v);
-                end else begin
-                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value.v);
-                end;
+                  AssocVarName  :=  pchar(Params[0].Value);
+                end // .if
+                else begin
+                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value);
+                end; // .else
                 
                 AssocVarValue :=  AssocMem[AssocVarName];
                 
                 if Params[1].OperGet then begin
                   if Params[1].IsStr then begin
                     if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
-                      pchar(Params[1].Value.v)^ :=  #0;
-                    end else begin
+                      pchar(Params[1].Value)^ :=  #0;
+                    end // .if
+                    else begin
                       Utils.CopyMem
                       (
                         Length(AssocVarValue.StrValue) + 1,
                         pointer(AssocVarValue.StrValue),
-                        pointer(Params[1].Value.v)
+                        pointer(Params[1].Value)
                       );
-                    end;
-                  end else begin
+                    end; // .else
+                  end // .if
+                  else begin
                     if AssocVarValue = nil then begin
-                      PINTEGER(Params[1].Value.v)^  :=  0;
-                    end else begin
-                      PINTEGER(Params[1].Value.v)^  :=  AssocVarValue.IntValue;
-                    end;
+                      PINTEGER(Params[1].Value)^  :=  0;
+                    end // .if
+                    else begin
+                      PINTEGER(Params[1].Value)^  :=  AssocVarValue.IntValue;
+                    end; // .else
                   end; // .else
-                end else begin
+                end // .if
+                else begin
                   if AssocVarValue = nil then begin
                     AssocVarValue           :=  TAssocVar.Create;
                     AssocMem[AssocVarName]  :=  AssocVarValue;
-                  end;
+                  end; // .if
                   
                   if Params[1].IsStr then begin
                     if Params[1].ParamModifier <> MODIFIER_CONCAT then begin
-                      AssocVarValue.StrValue  :=  pchar(Params[1].Value.v);
-                    end else begin
-                      AssocVarValue.StrValue := AssocVarValue.StrValue + pchar(Params[1].Value.v);
-                    end;
-                  end else begin
+                      AssocVarValue.StrValue  :=  pchar(Params[1].Value);
+                    end // .if
+                    else begin
+                      AssocVarValue.StrValue := AssocVarValue.StrValue + pchar(Params[1].Value);
+                    end; // .else
+                  end // .if
+                  else begin
                     ModifyWithIntParam(AssocVarValue.IntValue, Params[1]);
-                  end;
+                  end; // .else
                 end; // .else
               end; // .if
             end; // .case 2
         else
-          result  :=  false;
+          result  :=  FALSE;
           Error   :=  'Invalid number of command parameters';
-        end; // .switch
+        end; // .SWITCH
       end; // .case "W"
     'D':
       begin
@@ -814,76 +553,33 @@ begin
         
         if GameState.CurrentDlgId = ADVMAP_DLGID then begin
           Erm.ExecErmCmd('UN:R1;');
-        end else if GameState.CurrentDlgId = TOWN_SCREEN_DLGID then begin
+        end // .if
+        else if GameState.CurrentDlgId = TOWN_SCREEN_DLGID then begin
           Erm.ExecErmCmd('UN:R4;');
-        end else if GameState.CurrentDlgId = HERO_SCREEN_DLGID then begin
+        end // .ELSEIF
+        else if GameState.CurrentDlgId = HERO_SCREEN_DLGID then begin
           Erm.ExecErmCmd('UN:R3/-1;');
-        end else if GameState.CurrentDlgId = HERO_MEETING_SCREEN_DLGID then begin
+        end // .ELSEIF
+        else if GameState.CurrentDlgId = HERO_MEETING_SCREEN_DLGID then begin
           Heroes.RedrawHeroMeetingScreen;
-        end;
+        end; // .ELSEIF
       end; // .case "D"
-    'O':
-      begin
-        // O?$/?$/?$
-        if NumParams = 3 then begin
-          result := Params[0].OperGet and Params[1].OperGet and Params[2].OperGet and
-                    not Params[0].IsStr and not Params[1].IsStr and not Params[2].IsStr;
-
-          if result then begin
-            Coords[0] := pinteger(Params[0].Value.v)^;
-            Coords[1] := pinteger(Params[1].Value.v)^;
-            Coords[2] := pinteger(Params[2].Value.v)^;
-            MapSize   := GameManagerPtr^.MapSize;
-
-            if (Coords[0] < 0) or (Coords[0] >= MapSize) or (Coords[1] < 0) or
-               (Coords[1] >= MapSize) or (Coords[2] < 0) or (Coords[2] > 1) or
-               ((Coords[2] = 1) and not GameManagerPtr^.IsTwoLevelMap)
-            then begin
-              result := false;
-              Error  := Format('Invalid coordinates: %d %d %d', [Coords[0], Coords[1], Coords[2]]);
-            end else begin
-              Tile := @GameManagerPtr^.MapTiles[(Coords[2] * MapSize + Coords[1]) * MapSize + Coords[0]];
-              Tile := Heroes.GetObjectEntranceTile(Tile);
-              Heroes.MapTileToCoords(Tile, Coords);
-              pinteger(Params[0].Value.v)^ := Coords[0];
-              pinteger(Params[1].Value.v)^ := Coords[1];
-              pinteger(Params[2].Value.v)^ := Coords[2];
-            end; // .else
-          end; // .if
-        end else begin
-          result := false;
-          Error  := 'Invalid number of command parameters';
-        end; // .else
-      end; // .case "O"
-
-    'T': result := SN_T(NumParams, Params, Error);
-    'H': result := SN_H(NumParams, Params, Error);
   else
-    result := false;
-    Error  := 'Unknown command "' + Cmd +'".';
-  end; // .switch Cmd
+    result  :=  FALSE;
+    Error   :=  'Unknown command "' + Cmd +'".';
+  end; // .SWITCH Cmd
   
   if not result then begin
-    Error :=  'Error executing Era command SN:' + Cmd + ':'#13#10 + Error;
     Utils.CopyMem(Length(Error) + 1, pointer(Error), @ErrBuf);
     Err := @ErrBuf;
-  end;
+  end; // .if
 end; // .function ExtendedEraService
 
-procedure ResetMemory;
+procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
 begin
   Slots.Clear;
   AssocMem.Clear;
-end;
-
-procedure ResetHints;
-begin
-  with DataLib.IterateDict(Hints) do begin
-    while IterNext do begin
-      TObjDict(IterValue).Clear;
-    end;
-  end;
-end;
+end; // .procedure OnBeforeErmInstructions
 
 procedure SaveSlots;
 var
@@ -918,15 +614,16 @@ begin
           sizeof(integer) * NumItems,
           @Slot.IntItems[0], SLOTS_SAVE_SECTION
         );
-      end else begin
+      end // .if
+      else begin
         for i:=0 to NumItems - 1 do begin
           StrLen  :=  Length(Slot.StrItems[i]);
           Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
           
           if StrLen > 0 then begin
             Stores.WriteSavegameSection(StrLen, pointer(Slot.StrItems[i]), SLOTS_SAVE_SECTION);
-          end;
-        end;
+          end; // .if
+        end; // .for
       end; // .else
     end; // .if
     
@@ -974,44 +671,11 @@ begin
   AssocMem.EndIterate;
 end; // .procedure SaveAssocMem
 
-procedure SaveHints;
-var
-{U} HintSection: TObjDict;
-
-begin
-  HintSection := nil;
-  // * * * * * //
-  with Stores.NewRider(HINTS_SAVE_SECTION) do begin
-    // Write number of hint sections
-    WriteInt(Hints.ItemCount);
-    
-    // Process each hint section in a loop
-    with DataLib.IterateDict(Hints) do begin
-      while IterNext do begin
-        // Write hint section name and records count and get hint section object
-        WriteStr(IterKey);
-        HintSection := TObjDict(IterValue);
-        WriteInt(HintSection.ItemCount);
-
-        // Process hint section records
-        with DataLib.IterateObjDict(HintSection) do begin
-          while IterNext do begin
-            // Write item code and hint string
-            WriteInt(integer(IterKey));
-            WriteStr(TString(IterValue).Value);
-          end;
-        end;
-      end; // .while
-    end; // .with
-  end; // .with
-end; // .procedure SaveHints
-
 procedure OnSavegameWrite (Event: PEvent); stdcall;
 begin
   SaveSlots;
   SaveAssocMem;
-  SaveHints;
-end;
+end; // .procedure OnSavegameWrite
 
 procedure LoadSlots;
 var
@@ -1051,12 +715,13 @@ begin
           @Slot.IntItems[0],
           SLOTS_SAVE_SECTION
         );
-      end else begin
+      end // .if
+      else begin
         for y:=0 to NumItems - 1 do begin
           Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
           SetLength(Slot.StrItems[y], StrLen);
           Stores.ReadSavegameSection(StrLen, pointer(Slot.StrItems[y]), SLOTS_SAVE_SECTION);
-        end;
+        end; // .for
       end; // .else
     end; // .if
   end; // .for
@@ -1097,138 +762,18 @@ begin
     
     if (AssocVarValue.IntValue <> 0) or (AssocVarValue.StrValue <> '') then begin
       AssocMem[AssocVarName]  :=  AssocVarValue; AssocVarValue  :=  nil;
-    end else begin
+    end // .if
+    else begin
       SysUtils.FreeAndNil(AssocVarValue);
-    end;
+    end; // .else
   end; // .for
 end; // .procedure LoadAssocMem
-
-procedure LoadHints;
-var
-{U} HintSection:     TObjDict;
-    NumHintSections: integer;
-    NumRecords:      integer;
-    ItemCode:        integer;
-    i, k:            integer;
-
-{U} Name:     pchar;
-    Hero:     integer;
-    Skill:    integer;
-    NameType: integer;
-
-begin
-  HintSection := nil;
-  Name        := nil;
-  // * * * * * //
-  ResetHints;
-  
-  with Stores.NewRider(HINTS_SAVE_SECTION) do begin
-    // Read number of hint sections
-    NumHintSections := ReadInt;
-
-    // Read each hint section in a loop
-    for i := 1 to NumHintSections do begin
-      // Read hint section name and create hint section object
-      HintSection    := DataLib.NewObjDict(Utils.OWNS_ITEMS);
-      Hints[ReadStr] := HintSection;
-      NumRecords     := ReadInt;
-
-      // Read hint section records
-      for k := 1 to NumRecords do begin
-        // Read item code and hint string
-        ItemCode := ReadInt;
-        HintSection[Ptr(ItemCode)] := TString.Create(ReadStr);
-      end;
-    end; // .for
-  end; // .with
-
-  (* Apply hero specialties hints *)
-  HintSection := TObjDict(Hints['spec']);
-
-  if HintSection <> nil then begin
-    with DataLib.IterateObjDict(HintSection) do begin
-      while IterNext do begin
-        Hero                                                := integer(IterKey) and $FF;
-        NameType                                            := integer(IterKey) shr 8;
-        Erm.HeroSpecsTable[Hero].Descr[NameType]            := pchar(TString(IterValue).Value);
-        Erm.HeroSpecSettingsTable[Hero].ZVarDescr[NameType] := 0;
-      end;
-    end;
-  end;
-
-  (* Apply secondary skill texts *)
-  HintSection := TObjDict(Hints['secskill']);
-
-  if HintSection <> nil then begin
-    with DataLib.IterateObjDict(HintSection) do begin
-      while IterNext do begin
-        Skill    := integer(IterKey) and $FF;
-        NameType := integer(IterKey) shr 8;
-        Name     := pchar(TString(IterValue).Value);
-
-        Erm.SecSkillSettingsTable[Skill].Texts[NameType] := 0;
-        Heroes.SecSkillTexts[Skill].Texts[NameType]      := Name;
-
-        if NameType = Heroes.SKILL_LEVEL_NONE then begin
-          Heroes.SecSkillNames[Skill] := Name;
-        end else begin
-          Heroes.SecSkillDescs[Skill].Descs[NameType - 1] := Name;
-        end;
-      end; // .while
-    end; // .with
-  end; // .if
-end; // .procedure LoadHints
 
 procedure OnSavegameRead (Event: PEvent); stdcall;
 begin
   LoadSlots;
   LoadAssocMem;
-  LoadHints;
-end;
-
-function Hook_ZvsCheckObjHint (C: Core.PHookContext): longbool; stdcall;
-var
-{U} HintSection: TObjDict;
-{U} StrValue:    TString;
-    Code:        integer;
-    ObjType:     integer;
-    ObjSubtype:  integer;
-
-begin
-  HintSection := TObjDict(Hints['object']);
-  Code        := pinteger(C.EBP - 12)^ or (pinteger(C.EBP - 8)^ shl 8)
-                 or (pinteger(C.EBP - 24)^ shl 16);
-  StrValue    := HintSection[Ptr(Code)];
-  
-  if StrValue = nil then begin
-    ObjType    := pword(pinteger(C.EBP + 8)^ + $1E)^;
-    ObjSubtype := pword(pinteger(C.EBP + 8)^ + $22)^;
-    Code       := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
-    StrValue   := HintSection[Ptr(Code)];
-
-    if StrValue = nil then begin
-      Code     := ObjType or $FF00 or CODE_TYPE_SUBTYPE;
-      StrValue := HintSection[Ptr(Code)];
-
-      if StrValue = nil then begin
-        Code     := (ObjSubtype shl 8) or $FF or CODE_TYPE_SUBTYPE;
-        StrValue := HintSection[Ptr(Code)];
-
-        if StrValue = nil then begin
-          StrValue := HintSection[Ptr($FFFF or CODE_TYPE_SUBTYPE)];
-        end;
-      end;
-    end; // .if
-  end; // .if
-
-  if StrValue <> nil then begin
-    Utils.SetPcharValue(ppointer(C.EBP + 12)^, StrValue.Value, sizeof(Erm.z[1]));
-    C.RetAddr := Ptr($74DFFB);
-    result    := not Core.EXEC_DEF_CODE;
-  end else begin
-    result := Core.EXEC_DEF_CODE;
-  end;
-end; // .function Hook_ZvsCheckObjHint
+end; // .procedure OnSavegameRead
 
 (*function HookFindErm_NewReceivers (Hook: TLoHook; Context: PHookContext): integer; stdcall;
 const
@@ -1249,7 +794,8 @@ begin
     PINTEGER(Context.EBP - $358)^ := 0;
     // ParSet = Num
     PINTEGER(Context.EBP - $3F8)^ := NumParams;
-  end else begin
+  end // .if
+  else begin
     
   end; // .else
   // BREKA IS JUMP to JMP SHORT 0074B8C5
@@ -1271,7 +817,7 @@ var
     ErmContextHeader: string;
     ErmContext:       string;
     ScriptName:       string;
-    LineN, LinePos:   integer;
+    LineN:            integer;
     ErmContextStart:  pchar;
     i:                integer;
     
@@ -1279,25 +825,25 @@ var
   begin
     if Buf.Size > 0 then begin
       Buf.Append(#13#10);
-    end;
+    end; // .if
     
     Buf.Append('> ' + Header + #13#10);
-  end;
+  end; // .procedure WriteSectionHeader
   
   procedure Append (const Str: string);
   begin
     Buf.Append(Str);
-  end;
+  end; // .procedure Append
   
   procedure LineEnd;
   begin
     Buf.Append(#13#10);
-  end;
+  end; // .procedure LineEnd
   
   procedure Line (const Str: string);
   begin
     Buf.Append(Str + #13#10);
-  end;
+  end; // .procedure Line
   
   function ErmStrToWinStr (const Str: string): string;
   begin
@@ -1305,7 +851,7 @@ var
     (
       StringReplace(Str, #13, '', [rfReplaceAll]), #10, #13#10, [rfReplaceAll]
     );
-  end;
+  end; // .function ErmStrToWinStr
   
   procedure DumpVars (const Caption, VarPrefix: string; VarType: TVarType; VarsPtr: pointer;
                       NumVars, StartInd: integer);
@@ -1329,17 +875,17 @@ var
       
       if RangeEnd - RangeStart > 1 then begin
         result := result + '..' + VarPrefix + IntToStr(StartInd + RangeEnd - 1);
-      end;
+      end; // .if
       
       result := result + ' = ';
-    end;
+    end; // .function GetVarName
      
   begin
     {!} Assert(VarsPtr <> nil);
     {!} Assert(NumVars >= 0);
     if Caption <> '' then begin
       WriteSectionHeader(Caption); LineEnd;
-    end;
+    end; // .if
 
     case VarType of 
       INT_VAR:
@@ -1354,7 +900,7 @@ var
             
             while (i < NumVars) and (IntArr[i] = StartIntVal) do begin
               Inc(i);
-            end;
+            end; // .while
             
             Line(GetVarName(RangeStart, i) + IntToStr(StartIntVal));
           end; // .while
@@ -1371,7 +917,7 @@ var
             
             while (i < NumVars) and (FloatArr[i] = StartFloatVal) do begin
               Inc(i);
-            end;
+            end; // .while
             
             Line(GetVarName(RangeStart, i) + Format('%0.3f', [StartFloatVal]));
           end; // .while
@@ -1388,7 +934,7 @@ var
             
             while (i < NumVars) and (pchar(@StrArr[i]) = StartStrVal) do begin
               Inc(i);
-            end;
+            end; // .while
             
             Line(GetVarName(RangeStart, i) + '"' + ErmStrToWinStr(StartStrVal) + '"');
           end; // .while
@@ -1405,7 +951,7 @@ var
             
             while (i < NumVars) and (BoolArr[i] = StartBoolVal) do begin
               Inc(i);
-            end;
+            end; // .while
             
             Line(GetVarName(RangeStart, i) + IntToStr(byte(StartBoolVal)));
           end; // .while
@@ -1430,8 +976,8 @@ var
     with DataLib.IterateDict(AssocMem) do begin
       while IterNext do begin
         AssocList.AddObj(IterKey, IterValue);
-      end;
-    end; 
+      end; // .while
+    end; // .with 
     
     AssocList.Sort;
     
@@ -1446,12 +992,12 @@ var
           
           if AssocVar.StrValue <> '' then begin
             Append(', ');
-          end;
-        end;
+          end; // .if
+        end; // .if
         
         if AssocVar.StrValue <> '' then begin
           Append('"' + ErmStrToWinStr(AssocVar.StrValue) + '"');
-        end;
+        end; // .if
         
         LineEnd;
       end; // .if
@@ -1476,10 +1022,10 @@ var
       
       if RangeEnd - RangeStart > 1 then begin
         result := result + '..' + IntToStr(RangeEnd - 1);
-      end;
+      end; // .if
       
       result := result + '] = ';
-    end;
+    end; // .function GetVarName
      
   begin
     SlotList := DataLib.NewList(not Utils.OWNS_ITEMS);
@@ -1489,8 +1035,8 @@ var
     with DataLib.IterateObjDict(Slots) do begin
       while IterNext do begin
         SlotList.Add(IterKey);
-      end;
-    end;
+      end; // .while
+    end; // .with
     
     SlotList.Sort;
     
@@ -1501,9 +1047,10 @@ var
 
       if Slot.IsTemp then begin
         Append('Temporal array (#');
-      end else begin
+      end // .if
+      else begin
         Append('Permanent array (#');
-      end;
+      end; // .else
       
       Append(IntToStr(SlotInd) + ') of ');
       
@@ -1518,11 +1065,12 @@ var
           
           while (k < Length(Slot.IntItems)) and (Slot.IntItems[k] = StartIntVal) do begin
             Inc(k);
-          end;
+          end; // .while
           
           Line(GetVarName(RangeStart, k) + IntToStr(StartIntVal));
         end; // .while
-      end else begin
+      end // .if
+      else begin
         Line(IntToStr(Length(Slot.StrItems)) + ' strings');
         k := 0;
         
@@ -1533,7 +1081,7 @@ var
           
           while (k < Length(Slot.StrItems)) and (Slot.StrItems[k] = StartStrVal) do begin
             Inc(k);
-          end;
+          end; // .while
           
           Line(GetVarName(RangeStart, k) + '"' + ErmStrToWinStr(StartStrVal) + '"');
         end; // .while
@@ -1550,11 +1098,12 @@ begin
   
   if ErmErrCmdPtr^ <> nil then begin
     ErmContextHeader := 'ERM context';
-    PositionLocated  := Erm.AddrToScriptNameAndLine(Erm.ErmErrCmdPtr^, ScriptName, LineN, LinePos);
+    PositionLocated  := ScriptMan.AddrToScriptNameAndLine(Erm.ErmErrCmdPtr^, ScriptName, LineN);
     
     if PositionLocated then begin
-      ErmContextHeader := ErmContextHeader + ' in ' + ScriptName + ':' + IntToStr(LineN) + ':' + IntToStr(LinePos);
-    end;
+      ErmContextHeader := ErmContextHeader + ' in file "' + ScriptName + '" on line '
+                          + IntToStr(LineN);
+    end; // .if
     
     WriteSectionHeader(ErmContextHeader); LineEnd;
 
@@ -1564,10 +1113,10 @@ begin
 
       if StrLib.IsBinaryStr(ErmContext) then begin
         ErmContext := '';
-      end;
+      end; // .if
     except
       ErmContext := '';
-    end;
+    end; // .try
 
     Line(ErmContext);
   end; // .if
@@ -1576,7 +1125,7 @@ begin
   
   for i := 0 to High(Erm.QuickVars^) do begin
     Line(CHR(ORD('f') + i) + ' = ' + IntToStr(Erm.QuickVars[i]));
-  end;
+  end; // .for
   
   DumpVars('Vars y1..y100', 'y', INT_VAR, @Erm.y[1], 100, 1);
   DumpVars('Vars y-1..y-100', 'y-', INT_VAR, @Erm.ny[1], 100, 1);
@@ -1593,7 +1142,7 @@ begin
     LineEnd;
     Line('; Hero #' + IntToStr(i));
     DumpVars('', 'w', INT_VAR, @Erm.w[i, 1], 200, 1);
-  end;
+  end; // .for
   
   DumpVars('Vars z1..z1000', 'z', STR_VAR, @Erm.z[1], 1000, 1);  
   Files.WriteFileContents(Buf.BuildStr, DumpFilePath);
@@ -1606,105 +1155,30 @@ begin
   DumpErmMemory(ERM_MEMORY_DUMP_FILE);
   Context.RetAddr := Core.Ret(0);
   result          := not Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_DumpErmVars
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   DumpErmMemory(ERM_MEMORY_DUMP_FILE);
-end;
+end; // .procedure OnGenerateDebugInfo
 
 procedure OnBeforeWoG (Event: PEvent); stdcall;
 begin
   (*Core.p.WriteLoHook($74B6B2, @HookFindErm_NewReceivers);*)
+  
   (* Custom ERM memory dump *)
   Core.ApiHook(@Hook_DumpErmVars, Core.HOOKTYPE_BRIDGE, @Erm.ZvsDumpErmVars);
-end;
-
-function New_ZvsSaveMP3 (OrigFunc: pointer): integer; stdcall;
-begin
-  Heroes.GzipWrite(4, pchar('-MP3'));
-  result := 0;
-end;
-
-function New_ZvsLoadMP3 (OrigFunc: pointer): integer; stdcall;
-var
-  Header: array [0..3] of char;
-  Buf:    array of byte;
-
-begin
-  Heroes.GzipRead(sizeof(Header), @Header);
-
-  // Emulate original WoG Mp3 data loading
-  if Header = 'LMP3' then begin
-    SetLength(Buf, 200 * 256);
-    Heroes.GzipRead(Length(Buf), pointer(Buf));
-  end;
-
-  result := 0;
-end;
-
-function New_MP3_Receiver (OrigFunc: pointer; Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: PErmSubCmd): integer; stdcall;
-var
-  Params:    GameExt.TServiceParams;
-  ParamsLen: integer;
-
-begin
-  FillChar(Params, sizeof(Params), 0);
-  // * * * * * //
-  ParamsLen := GetServiceParams(@CmdInfo.Code.Value[CmdInfo.Pos - 1], NumParams, Params);
-  ShowMessage(Format('Cmd: %s. NumParams: %d. ParamsLen: %d, Line: %s', [Cmd, NumParams, ParamsLen, Copy(pchar(@CmdInfo.Code.Value[CmdInfo.Pos - 1]), 1, 30)]));
-  Inc(CmdInfo.Pos, ParamsLen - 1);
-  result := 1;
-  // * * * * * //
-  ReleaseServiceParams(Params);
-end;
-
-procedure OnAfterWoG (Event: PEvent); stdcall;
-begin
-  (* SN:H for adventure map object hints *)
-  Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
-
-  (* ERM MP3 trigger/receivers remade *)
-  // Make WoG ResetMP3, SaveMP3, LoadMP3 doing nothing
-  Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
-  ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
-  ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
-
-  // Disable MP3Start WoG hook
-  Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
-
-  // Replace MP3 receiver
-  ApiJack.StdSplice(Ptr($774A8C), @New_MP3_Receiver, CONV_CDECL, 4);
-
-  (* Apply SN:H hints for heroes specialties on game loading *)
-  //Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
-end;
-
-procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
-begin
-  // NOTE! Erm module now manually calls ResetMemory
-  ResetHints;
-end;
-
-procedure InitHints;
-begin
-  Hints['object']   := DataLib.NewObjDict(Utils.OWNS_ITEMS);
-  Hints['spec']     := DataLib.NewObjDict(Utils.OWNS_ITEMS);
-  Hints['secskill'] := DataLib.NewObjDict(Utils.OWNS_ITEMS);
-end;
+end; // .procedure OnBeforeWoG
 
 begin
   (*NewReceivers  :=  DataLib.NewObjDict(Utils.OWNS_ITEMS);*)
 
-  Slots    := AssocArrays.NewStrictObjArr(TSlot);
-  AssocMem := AssocArrays.NewStrictAssocArr(TAssocVar);
-  Hints    := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-  InitHints;
+  Slots     :=  AssocArrays.NewStrictObjArr(TSlot);
+  AssocMem  :=  AssocArrays.NewStrictAssocArr(TAssocVar);
   
-  EventMan.GetInstance.On('OnBeforeWoG',             OnBeforeWoG);
-  EventMan.GetInstance.On('OnAfterWoG',              OnAfterWoG);
-  EventMan.GetInstance.On('OnBeforeErmInstructions', OnBeforeErmInstructions);
-  EventMan.GetInstance.On('OnSavegameWrite',         OnSavegameWrite);
-  EventMan.GetInstance.On('OnSavegameRead',          OnSavegameRead);
-  EventMan.GetInstance.On('OnGenerateDebugInfo',     OnGenerateDebugInfo);
+  GameExt.RegisterHandler(OnBeforeWoG,             'OnBeforeWoG');
+  GameExt.RegisterHandler(OnBeforeErmInstructions, 'OnBeforeErmInstructions');
+  GameExt.RegisterHandler(OnSavegameWrite,         'OnSavegameWrite');
+  GameExt.RegisterHandler(OnSavegameRead,          'OnSavegameRead');
+  GameExt.RegisterHandler(OnGenerateDebugInfo,     'OnGenerateDebugInfo');
 end.

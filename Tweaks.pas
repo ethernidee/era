@@ -7,8 +7,8 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes, WinNative,
-  PatchApi, Core, GameExt, Heroes, Lodman, Erm, EventMan;
+  CFiles, Files, FilesEx, Ini, DataLib,
+  PatchApi, Core, GameExt, Heroes, Lodman;
 
 type
   (* Import *)
@@ -16,22 +16,19 @@ type
 
 const
   // f (Value: pchar; MaxResLen: integer; DefValue, Key, SectionName, FileName: pchar): integer; cdecl;
-  ZvsReadStrIni  = Ptr($773A46);
+  ZvsReadStrIni   = Ptr($773A46);
   // f (Res: PINTEGER; DefValue: integer; Key, SectionName, FileName: pchar): integer; cdecl;
-  ZvsReadIntIni  = Ptr($7739D1);
+  ZvsReadIntIni   = Ptr($7739D1);
   // f (Value: pchar; Key, SectionName, FileName: pchar): integer; cdecl;
-  ZvsWriteStrIni = Ptr($773B34);
+  ZvsWriteStrIni  = Ptr($773B34);
   // f (Value, Key, SectionName, FileName: pchar): integer; cdecl;
-  ZvsWriteIntIni = Ptr($773ACB);
+  ZvsWriteIntIni  = Ptr($773ACB);
   
-  ZvsAppliedDamage: pinteger = Ptr($2811888);
-  CurrentMp3Track:  pchar = pointer($6A33F4);
+  ZvsAppliedDamage: PINTEGER  = Ptr($2811888);
 
 
 var
-  (* Desired level of CPU loading *)
-  CpuTargetLevel: integer;
-  
+  CPUPatchOpt:          boolean;
   FixGetHostByNameOpt:  boolean;
   UseOnlyOneCpuCoreOpt: boolean;
   
@@ -39,28 +36,11 @@ var
 (***) implementation (***)
 
 
-type
-  TWogMp3Process = procedure; stdcall;
-
 var
-{O} TopLevelExceptionHandlers: DataLib.TList {OF Handler: pointer};
-
-  hTimerEvent:           THandle;
-  InetCriticalSection:   Windows.TRTLCriticalSection;
-  ExceptionsCritSection: Concur.TCritSection;
-  ZvsLibImageTemplate:   string;
-  ZvsLibGamePath:        string;
-  IsLocalPlaceObject:    boolean = true;
-
-  Mp3TriggerHandledEvent: THandle;
-  IsMp3Trigger:           boolean = false;
-  WogCurrentMp3TrackPtr:  ppchar = pointer($28AB204);
-  WoGMp3Process:          TWogMp3Process = pointer($77495F);
-
-threadvar
-  (* Counter (0..100). When reaches 100, PeekMessageA does not call sleep before returning result *)
-  CpuPatchCounter: integer;
-  IsMainThread:    boolean;
+  hTimerEvent:          THandle;
+  InetCriticalSection:  Windows.TRTLCriticalSection;
+  ZvsLibImageTemplate:  string;
+  ZvsLibGamePath:       string;
 
 
 function Hook_ReadIntIni
@@ -83,7 +63,7 @@ begin
     not SysUtils.TryStrToInt(Value, Res^)
   then begin
     Res^  :=  DefValue;
-  end;
+  end; // .if
 end; // .function Hook_ReadIntIni
 
 function Hook_ReadStrIni
@@ -107,13 +87,14 @@ begin
     (Length(Value) > MaxResLen)
   then begin
     Value :=  DefValue;
-  end;
+  end; // .if
   
   if Value <> '' then begin
     Utils.CopyMem(Length(Value) + 1, pointer(Value), Res);
-  end else begin
+  end // .if
+  else begin
     Res^  :=  #0;
-  end;
+  end; // .else
 end; // .function Hook_ReadStrIni
 
 function Hook_WriteStrIni (Value, Key, SectionName, FileName: pchar): integer; cdecl;
@@ -122,8 +103,8 @@ begin
   
   if Ini.WriteStrToIni(Key, Value, SectionName, FileName) then begin
     Ini.SaveIni(FileName);
-  end;
-end;
+  end; // .if
+end; // .function Hook_WriteStrIni
 
 function Hook_WriteIntIni (Value: integer; Key, SectionName, FileName: pchar): integer; cdecl;
 begin
@@ -131,20 +112,20 @@ begin
   
   if Ini.WriteStrToIni(Key, SysUtils.IntToStr(Value), SectionName, FileName) then begin
     Ini.SaveIni(FileName);
-  end;
-end;
+  end; // .if
+end; // .function Hook_ReadIntIni
 
 function Hook_ZvsGetWindowWidth (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ECX :=  WndManagerPtr^.ScreenPcx16.Width;
   result      :=  not Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ZvsGetWindowWidth
 
 function Hook_ZvsGetWindowHeight (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EDX :=  WndManagerPtr^.ScreenPcx16.Height;
   result      :=  not Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ZvsGetWindowHeight
 
 procedure MarkFreshestSavegame;
 var
@@ -173,7 +154,7 @@ begin
     then begin
       FreshestFileName  :=  FileName;
       FreshestTime      :=  INT64(FileInfo.Data.ftLastWriteTime);
-    end;
+    end; // .if
     SysUtils.FreeAndNil(FileInfo);
   end; // .while
   
@@ -213,43 +194,15 @@ begin
     CALL [EDX + $34]
   end; // .asm
   
-  result := not Core.EXEC_DEF_CODE;
+  result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_SetHotseatHeroName
 
-function Hook_Mp3TrackChanged (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_PeekMessageA (Hook: PatchApi.THiHook; var lpMsg: TMsg; hWnd: Windows.HWND;
+                            wMsgFilterMin, wMsgFilterMax, wRemoveMsg: UINT): BOOL; stdcall;
 begin
-  IsMp3Trigger := true;
-  Windows.WaitForSingleObject(Mp3TriggerHandledEvent, Windows.INFINITE);
-  result := Core.EXEC_DEF_CODE;
-end;
-
-function Hook_PeekMessageA (Context: Core.PHookContext): LONGBOOL; stdcall;
-var
-  GameState: Heroes.TGameState;
-
-begin
-  // Handle MP3 trigger in main thread only
-  // if IsMp3Trigger and IsMainThread then begin
-  //   IsMp3Trigger := false;
-  //   Heroes.GetGameState(GameState);
-    
-  //   if Erm.ErmEnabled^ and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
-  //     WoGCurrentMp3TrackPtr^ := CurrentMp3Track;
-  //     WoGMp3Process();
-  //   end;
-    
-  //   Windows.SetEvent(Mp3TriggerHandledEvent);
-  // end;
-
-  Inc(CpuPatchCounter, CpuTargetLevel);
-
-  if CpuPatchCounter >= 100 then begin
-    Dec(CpuPatchCounter, 100);
-  end else begin
-    Windows.WaitForSingleObject(hTimerEvent, 1);
-  end;
-
-  result := Core.EXEC_DEF_CODE;
+  Windows.WaitForSingleObject(hTimerEvent, 1);
+  result := BOOL(PatchApi.Call(PatchApi.STDCALL_, Hook.GetDefaultFunc,
+                               [@lpMsg, hWnd, wMsgFilterMin, wMsgFilterMax, wRemoveMsg]));
 end; // .function Hook_PeekMessageA
 
 function New_Zvslib_GetPrivateProfileStringA
@@ -270,11 +223,11 @@ begin
 
   if not Ini.ReadStrFromIni(Key, Section, FileName, Res) then begin
     Res :=  DefValue;
-  end;
+  end; // .if
   
   if BufSize <= Length(Res) then begin
     SetLength(Res, BufSize - 1);
-  end;
+  end; // .if
   
   Utils.CopyMem(Length(Res) + 1, pchar(Res), Buf);
   
@@ -311,7 +264,7 @@ procedure ReadGameSettings;
       Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, Heroes.GAME_SETTINGS_FILE, StrValue)
     then begin
       Utils.CopyMem(Length(StrValue) + 1, pchar(StrValue), Res);
-    end;
+    end; // .if
   end; // .procedure ReadStr
   
 const
@@ -359,7 +312,7 @@ begin
     for i:=1 to UNIQUE_ID_LEN do begin
       RandomStr[i]  :=  UPCASE(StrLib.ByteToHexChar(RandomValue and $F));
       RandomValue   :=  RandomValue shr 4;
-    end;
+    end; // .for
     
     Utils.CopyMem(Length(RandomStr) + 1, pointer(RandomStr), Heroes.UNIQUE_SYSTEM_ID_OPT);
     
@@ -404,7 +357,7 @@ procedure WriteGameSettings;
       Heroes.GAME_SETTINGS_SECTION,
       Heroes.GAME_SETTINGS_FILE
     );
-  end;
+  end; // .procedure WriteInt
   
   procedure WriteStr (const Key: string; Value: pchar);
   begin
@@ -415,7 +368,7 @@ procedure WriteGameSettings;
       Heroes.GAME_SETTINGS_SECTION,
       Heroes.GAME_SETTINGS_FILE
     );
-  end;
+  end; // .procedure WriteStr
    
 begin
   WriteInt('Show Intro',             Heroes.SHOW_INTRO_OPT);
@@ -479,7 +432,7 @@ var
     result := (TInt32(Addr)[0] = 10) or ((TInt32(Addr)[0] = 172) and Math.InRange(TInt32(Addr)[1],
                                                                                   16, 31)) or
                                         ((TInt32(Addr)[0] = 192) and (TInt32(Addr)[1] = 168));
-  end;
+  end; // .function IsLocalAddr
     
 begin
   {!} Windows.EnterCriticalSection(InetCriticalSection);
@@ -495,11 +448,11 @@ begin
 
       while (Addrs[i] <> nil) and IsLocalAddr(Addrs[i]^) do begin
         Inc(i);
-      end;
+      end; // .while
 
       if Addrs[i] <> nil then begin
         Utils.Exchange(Addrs[0]^, Addrs[i]^);
-      end;
+      end; // .if
     end; // .if
   end; // .if
   
@@ -510,63 +463,63 @@ function Hook_UN_C (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PPOINTER(Context.EBP - $0C)^  :=  GameExt.GetRealAddr(PPOINTER(Context.EBP - $0C)^);
   result  :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_UN_C
 
 function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX :=  ZvsAppliedDamage^;
   result      :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_Ebx
 
 function Hook_ApplyDamage_Esi (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ESI :=  ZvsAppliedDamage^;
   result      :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_Esi
 
 function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.ESI                 :=  ZvsAppliedDamage^;
   PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_Esi
 
 function Hook_ApplyDamage_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_Arg1
 
 function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX                    := ZvsAppliedDamage^;
   PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_Ebx_Local7
 
 function Hook_ApplyDamage_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_ocal7
 
 function Hook_ApplyDamage_Local4 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_Local4
 
 function Hook_ApplyDamage_Local8 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_Local8
 
 function Hook_ApplyDamage_Local13 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   PINTEGER(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
   result                          := Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_ApplyDamage_Local13
 
 function Hook_GetWoGAndErmVersions (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -576,7 +529,7 @@ begin
   PINTEGER(Context.EBP - $0C)^  :=  NEW_WOG_VERSION;
   PINTEGER(Context.EBP - $24)^  :=  GameExt.ERA_VERSION_INT;
   result                        :=  not Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_GetWoGAndErmVersions
 
 function Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -602,7 +555,7 @@ begin
     Tokens[TOKEN_LODNAME] :=  SysUtils.ExtractFileName(LodName);
     ZvsLibImageTemplate   :=  StrLib.Join(Tokens, ';');
     PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^ :=  pchar(ZvsLibImageTemplate);
-  end;
+  end; // .if
   
   //fatalerror(PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^);
   
@@ -624,80 +577,6 @@ begin
   result          :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsLib_ExtractDef_GetGamePath
 
-function Hook_ZvsPlaceMapObject (Hook: PatchApi.THiHook; x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; stdcall;
-begin
-  if IsLocalPlaceObject then begin
-    Erm.FireRemoteErmEvent(Erm.TRIGGER_ONREMOTEEVENT, [Erm.REMOTE_EVENT_PLACE_OBJECT, x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain]);
-  end;
-
-  result := PatchApi.Call(PatchApi.CDECL_, Hook.GetOriginalFunc(), [x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain]);
-end;
-
-procedure OnRemoteMapObjectPlace (Event: GameExt.PEvent); stdcall;
-begin
-  // Switch Network event
-  case Erm.x[1] of
-    Erm.REMOTE_EVENT_PLACE_OBJECT: begin
-      IsLocalPlaceObject := false;
-      Erm.ZvsPlaceMapObject(Erm.x[2], Erm.x[3], Erm.x[4], Erm.x[5], Erm.x[6], Erm.x[7], Erm.x[8], Erm.x[9]);
-      IsLocalPlaceObject := true;
-    end;
-  end;
-end; // .procedure OnRemoteMapObjectPlace
-
-function Hook_ZvsEnter2Monster (Context: Core.PHookContext): LONGBOOL; stdcall;
-const
-  ARG_MAP_ITEM  = 8;
-  ARG_MIXED_POS = 16;
-
-var
-  x, y, z:  integer;
-  MixedPos: integer;
-  MapItem:  pointer;
-
-begin
-  MapItem  := ppointer(Context.EBP + ARG_MAP_ITEM)^;
-  MapItemToCoords(MapItem, x, y, z);
-  MixedPos := CoordsToMixedPos(x, y, z);
-  pinteger(Context.EBP + ARG_MIXED_POS)^ := MixedPos;
-
-  Context.RetAddr := Ptr($7577B2);
-  result          := not Core.EXEC_DEF_CODE;
-end; // .function Hook_ZvsEnter2Monster
-
-function Hook_ZvsEnter2Monster2 (Context: Core.PHookContext): LONGBOOL; stdcall;
-const
-  ARG_MAP_ITEM  = 8;
-  ARG_MIXED_POS = 16;
-
-var
-  x, y, z:  integer;
-  MixedPos: integer;
-  MapItem:  pointer;
-
-begin
-  MapItem  := ppointer(Context.EBP + ARG_MAP_ITEM)^;
-  MapItemToCoords(MapItem, x, y, z);
-  MixedPos := CoordsToMixedPos(x, y, z);
-  pinteger(Context.EBP + ARG_MIXED_POS)^ := MixedPos;
-
-  Context.RetAddr := Ptr($757A87);
-  result          := not Core.EXEC_DEF_CODE;
-end; // .function Hook_ZvsEnter2Monster2
-
-function Hook_ZvsEnter2Object (Hook: PatchApi.THiHook; Ecx, Edx, Hero: pointer; MapItem: pointer; MixedPos: integer; IsAI: integer): integer; stdcall;
-const
-  MAP_ITEM_TYPE_OFFSET = $1E;
-  OBJ_MON              = 54;
-
-begin
-  if pword(Utils.PtrOfs(MapItem, MAP_ITEM_TYPE_OFFSET))^ <> OBJ_MON then begin
-    result := PatchApi.Call(PatchApi.FASTCALL_, Hook.GetOriginalFunc(), [Ecx, Edx, Hero, MapItem, MixedPos, IsAi]);
-  end else begin
-    result := PatchApi.Call(PatchApi.FASTCALL_, Ptr($4A8160), [Ecx, Edx, Hero, MapItem, MixedPos, IsAi]);
-  end;
-end; // .function Hook_ZvsEnter2Object
-
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -709,182 +588,22 @@ begin
   {!} Core.ModuleContext.Lock;
   Core.ModuleContext.UpdateModuleList;
 
-  with FilesEx.WriteFormattedOutput(GameExt.GameDir + '\' + DEBUG_WINPE_MODULE_LIST_PATH) do begin
+  with FilesEx.WriteFormattedOutput(DEBUG_WINPE_MODULE_LIST_PATH) do begin
     Line('> Win32 executable modules');
     EmptyLine;
 
     for i := 0 to Core.ModuleContext.ModuleList.Count - 1 do begin
       Line(Core.ModuleContext.ModuleInfo[i].ToStr);
-    end;
-  end;
+    end; // .for
+  end; // .with
 
   {!} Core.ModuleContext.Unlock;
 end; // .procedure DumpWinPeModuleList
 
-procedure DumpExceptionContext (ExcRec: PExceptionRecord; Context: Windows.PContext);
-const
-  DEBUG_EXCEPTION_CONTEXT_PATH = GameExt.DEBUG_DIR + '\exception context.txt';
-
-var
-  ExceptionText: string;
-  LineText:      string;
-  Ebp:           integer;
-  Esp:           integer;
-  RetAddr:       integer;
-  i:             integer;
-
-begin
-  {!} Core.ModuleContext.Lock;
-  Core.ModuleContext.UpdateModuleList;
-
-  with FilesEx.WriteFormattedOutput(GameExt.GameDir + '\' + DEBUG_EXCEPTION_CONTEXT_PATH) do begin
-    case ExcRec.ExceptionCode of
-      $C0000005: begin
-        if ExcRec.ExceptionInformation[0] <> 0 then begin
-          ExceptionText := 'Failed to write data at ' + Format('%x', [integer(ExcRec.ExceptionInformation[1])]);
-        end else begin
-          ExceptionText := 'Failed to read data at ' + Format('%x', [integer(ExcRec.ExceptionInformation[1])]);
-        end;
-      end; // .case $C0000005
-
-      $C000008C: ExceptionText := 'Array index is out of bounds';
-      $80000003: ExceptionText := 'Breakpoint encountered';
-      $80000002: ExceptionText := 'Data access misalignment';
-      $C000008D: ExceptionText := 'One of the operands in a floating-point operation is denormal';
-      $C000008E: ExceptionText := 'Attempt to divide a floating-point value by a floating-point divisor of zero';
-      $C000008F: ExceptionText := 'The result of a floating-point operation cannot be represented exactly as a decimal fraction';
-      $C0000090: ExceptionText := 'Invalid floating-point exception';
-      $C0000091: ExceptionText := 'The exponent of a floating-point operation is greater than the magnitude allowed by the corresponding type';
-      $C0000092: ExceptionText := 'The stack overflowed or underflowed as the result of a floating-point operation';
-      $C0000093: ExceptionText := 'The exponent of a floating-point operation is less than the magnitude allowed by the corresponding type';
-      $C000001D: ExceptionText := 'Attempt to execute an illegal instruction';
-      $C0000006: ExceptionText := 'Attempt to access a page that was not present, and the system was unable to load the page';
-      $C0000094: ExceptionText := 'Attempt to divide an integer value by an integer divisor of zero';
-      $C0000095: ExceptionText := 'Integer arithmetic overflow';
-      $C0000026: ExceptionText := 'An invalid exception disposition was returned by an exception handler';
-      $C0000025: ExceptionText := 'Attempt to continue from an exception that isn''t continuable';
-      $C0000096: ExceptionText := 'Attempt to execute a privilaged instruction.';
-      $80000004: ExceptionText := 'Single step exception';
-      $C00000FD: ExceptionText := 'Stack overflow';
-      else       ExceptionText := 'Unknown exception';
-    end; // .switch ExcRec.ExceptionCode
-    
-    Line(ExceptionText + '.');
-    Line(Format('EIP: %s. Code: %x', [Core.ModuleContext.AddrToStr(Ptr(Context.Eip)), ExcRec.ExceptionCode]));
-    EmptyLine;
-    Line('> Registers');
-
-    Line('EAX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Eax), Core.ANALYZE_DATA));
-    Line('ECX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ecx), Core.ANALYZE_DATA));
-    Line('EDC: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edx), Core.ANALYZE_DATA));
-    Line('EBX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebx), Core.ANALYZE_DATA));
-    Line('ESP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esp), Core.ANALYZE_DATA));
-    Line('EBP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebp), Core.ANALYZE_DATA));
-    Line('ESI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esi), Core.ANALYZE_DATA));
-    Line('EDI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edi), Core.ANALYZE_DATA));
-
-    EmptyLine;
-    Line('> Callstack');
-    Ebp     := Context.Ebp;
-    RetAddr := 1;
-
-    try
-      while (Ebp <> 0) and (RetAddr <> 0) do begin
-        RetAddr := pinteger(Ebp + 4)^;
-
-        if RetAddr <> 0 then begin
-          Line(Core.ModuleContext.AddrToStr(Ptr(RetAddr)));
-          Ebp := pinteger(Ebp)^;
-        end;
-      end;
-    except
-      // Stop processing callstack
-    end; // .try
-
-    EmptyLine;
-    Line('> Stack');
-    Esp := Context.Esp - sizeof(integer) * 5;
-
-    try
-      for i := 1 to 40 do begin
-        LineText := IntToHex(Esp, 8);
-
-        if Esp = integer(Context.Esp) then begin
-          LineText := LineText + '*';
-        end;
-
-        LineText := LineText + ': ' + Core.ModuleContext.AddrToStr(ppointer(Esp)^, Core.ANALYZE_DATA);
-        Inc(Esp, sizeof(integer));
-        Line(LineText);
-      end; // .for
-    except
-      // Stop stack traversing
-    end; // .try
-  end; // .with
-
-  {!} Core.ModuleContext.Unlock;
-end; // .procedure DumpExceptionContext
-
-function TopLevelExceptionHandler (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
-const
-  EXCEPTION_CONTINUE_SEARCH = 0;
-
-begin
-  DumpExceptionContext(ExceptionPtrs.ExceptionRecord, ExceptionPtrs.ContextRecord);
-  GameExt.FireEvent('OnGenerateDebugInfo', nil, 0);
-  DlgMes.Msg('Game crashed. All debug information is inside ' + DEBUG_DIR + ' subfolder');
-  
-  result := EXCEPTION_CONTINUE_SEARCH;
-end; // .function TopLevelExceptionHandler
-
-function OnUnhandledException (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
-type
-  THandler = function (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
-
-const
-  EXCEPTION_CONTINUE_SEARCH = 0;
-
-var
-  i: integer;
-
-begin
-  {!} ExceptionsCritSection.Enter;
-
-  for i := 0 to TopLevelExceptionHandlers.Count - 1 do begin
-    THandler(TopLevelExceptionHandlers[i])(ExceptionPtrs);
-  end;
-
-  {!} ExceptionsCritSection.Leave;
-  
-  result := EXCEPTION_CONTINUE_SEARCH;
-end; // .function OnUnhandledException
-
-function Hook_SetUnhandledExceptionFilter (Context: Core.PHookContext): longbool; stdcall;
-var
-{Un} NewHandler: pointer;
-
-begin
-  NewHandler := ppointer(Context.ESP + 8)^;
-  // * * * * * //
-  if (NewHandler <> nil) and ((cardinal(NewHandler) < $401000) or (cardinal(NewHandler) > $7845FA)) then begin
-    {!} ExceptionsCritSection.Enter;
-    TopLevelExceptionHandlers.Add(NewHandler);
-    {!} ExceptionsCritSection.Leave;
-  end;
-
-  (* result = nil *)
-  Context.EAX := 0;
-
-  (* return to calling routine *)
-  Context.RetAddr := Core.Ret(1);
-  
-  result := Core.IGNORE_DEF_CODE;
-end; // .function Hook_SetUnhandledExceptionFilter
-
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   DumpWinPeModuleList;
-end;
+end; // .procedure OnGenerateDebugInfo
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 const
@@ -897,9 +616,6 @@ var
   Zvslib1Handle:  integer;
   Addr:           integer;
   NewAddr:        pointer;
-  MinTimerResol:  cardinal;
-  MaxTimerResol:  cardinal;
-  CurrTimerResol: cardinal;
 
 begin
   (* Ini handling *)
@@ -917,22 +633,25 @@ begin
   (* Fix multi-thread CPU problem *)
   if UseOnlyOneCpuCoreOpt then begin
     Windows.SetProcessAffinityMask(Windows.GetCurrentProcess, 1);
-  end;
+  end; // .if
   
   (* Fix HotSeat second hero name *)
   Core.Hook(@Hook_SetHotseatHeroName, Core.HOOKTYPE_BRIDGE, 6, Ptr($5125B0));
   Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
   
   (* Universal CPU patch *)
-  if CpuTargetLevel < 100 then begin
-    // Try to set timer resolution to at least 1ms = 10000 ns
-    if (WinNative.NtQueryTimerResolution(MinTimerResol, MaxTimerResol, CurrTimerResol) = STATUS_SUCCESS) and (CurrTimerResol > 10000) and (MaxTimerResol < CurrTimerResol) then begin
-      WinNative.NtSetTimerResolution(Math.Max(10000, MaxTimerResol), true, CurrTimerResol);
-    end;
-
-    hTimerEvent := Windows.CreateEvent(nil, true, false, nil);
-    Core.ApiHook(@Hook_PeekMessageA, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'));
-  end;
+  if CPUPatchOpt then begin
+    hTimerEvent := Windows.CreateEvent(nil, TRUE, FALSE, 'CPUPatch');
+    
+    Core.p.WriteHiHook
+    (
+      integer(Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA')),
+      PatchApi.SPLICE_,
+      PatchApi.EXTENDED_,
+      PatchApi.STDCALL_,
+      @Hook_PeekMessageA
+    );
+  end; // .if
   
   (* Remove duplicate ResetAll call *)
   PINTEGER($7055BF)^ :=  integer($90909090);
@@ -961,13 +680,13 @@ begin
   if FixGetHostByNameOpt then begin
     Core.p.WriteHiHook
     (
-      Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname'),
+      integer(Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
       @Hook_GetHostByName
     );
-  end;
+  end; // .if
   
   (* Fix UN:C to work with redirected addresses also *)
   Core.ApiHook(@Hook_UN_C, Core.HOOKTYPE_BRIDGE, Ptr($732086));
@@ -988,8 +707,8 @@ begin
   Core.ApiHook(@Hook_ApplyDamage_Local13,     Core.HOOKTYPE_BRIDGE, Ptr($5A1065 + 5));
 
   (* Fix negative offsets handling in fonts *)
-  Core.p.WriteDataPatch(Ptr($4B534A), ['B6']);
-  Core.p.WriteDataPatch(Ptr($4B53E6), ['B6']);
+  PBYTE($4B534A)^ :=  $B6;
+  PBYTE($4B53E6)^ :=  $B6;
   
   (* Fix WoG/ERM versions *)
   Core.Hook(@Hook_GetWoGAndErmVersions, Core.HOOKTYPE_BRIDGE, 14, Ptr($73226C));
@@ -1006,66 +725,14 @@ begin
     Core.HOOKTYPE_BRIDGE,
     Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS)
   );
-
-  Core.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
   
-  (* Syncronise object creation at local and remote PC *)
-  EventMan.GetInstance.On('OnTrigger ' + IntToStr(Erm.TRIGGER_ONREMOTEEVENT), OnRemoteMapObjectPlace);
-
-  (* Disable MP3 trigger; Overriden by Lodman redirection *)
-  if false then Core.p.WriteHexPatch(Ptr($59AC51), 'BFF4336A00');
-
-  (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
-  Core.p.WriteDataPatch(Ptr($4DC358), ['A0']);
-
-  (* Fix WoG bug: do not rely on MixedPos argument for Enter2Monster(2), get coords from map object instead
-     EDIT: no need anymore, fixed MixedPos *)
-  if FALSE then begin
-    Core.Hook(@Hook_ZvsEnter2Monster,  Core.HOOKTYPE_BRIDGE, 19, Ptr($75779F));
-    Core.Hook(@Hook_ZvsEnter2Monster2, Core.HOOKTYPE_BRIDGE, 19, Ptr($757A74));
-  end;
-
-  (* Fix MixedPos to not drop higher order bits and not treat them as underground flag *)
-  Core.p.WriteDataPatch(Ptr($711F4F), ['8B451425FFFFFF048945149090909090909090']);
-  
-  (* Fix WoG bug: double !?OB54 event generation when attacking without moving due to Enter2Object + Enter2Monster2 calling *)
-  Core.p.WriteHiHook(Ptr($705979), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.FASTCALL_, @Hook_ZvsEnter2Object);
-
-  (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
-  Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
-  Core.p.WriteDataPatch(Ptr($6067E2), ['E809000000']);       // Disable WoG GZ functions hooks
-  Core.p.WriteDataPatch(Ptr($4D6FCC), ['E8AF001300']);       // ...
-  Core.p.WriteDataPatch(Ptr($4D700D), ['E8DEFE1200']);       // ...
-  Core.p.WriteDataPatch(Ptr($4CAF32), ['EB']);               // do not create orig.dat on send
-  if false then Core.p.WriteDataPatch(Ptr($4CAF37), ['01']); // save orig.dat on send compressed
-  Core.p.WriteDataPatch(Ptr($4CAD91), ['E99701000090']);     // do not perform savegame diffs
-  Core.p.WriteDataPatch(Ptr($41A0D1), ['EB']);               // do not create orig.dat on receive
-  if false then Core.p.WriteDataPatch(Ptr($41A0DC), ['01']); // save orig.dat on receive compressed
-  Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
-  Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
-
-  (* Fix !?MP3 trigger crashes due to thread unsafe nature *)
-  //Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']); // Disable MP3Start WoG hook
-  //Core.ApiHook(@Hook_Mp3TrackChanged, Core.HOOKTYPE_BRIDGE, Ptr($59AC51));
+  (* Disable MP3 trigger *)
+  // Overriden by Lodman redirection
+  // Core.p.WriteHexPatch($59AC51, 'BF F4 33 6A 00');
 end; // .procedure OnAfterWoG
-
-procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
-begin
-  (* Install global top-level exception filter *)
-  Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
-  Windows.SetUnhandledExceptionFilter(@OnUnhandledException);
-  Core.ApiHook(@Hook_SetUnhandledExceptionFilter, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(Windows.LoadLibrary('kernel32.dll'), 'SetUnhandledExceptionFilter'));
-  Windows.SetUnhandledExceptionFilter(@TopLevelExceptionHandler);
-end;
 
 begin
   Windows.InitializeCriticalSection(InetCriticalSection);
-  ExceptionsCritSection.Init;
-  TopLevelExceptionHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
-  IsMainThread              := true;
-  Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
-
-  EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
-  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
-  EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
+  GameExt.RegisterHandler(OnAfterWoG,  'OnAfterWoG');
+  RegisterHandler(OnGenerateDebugInfo, 'OnGenerateDebugInfo');
 end.

@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Crypto, StrLib, Files, AssocArrays, DlgMes,
-  Core, GameExt, Trans, EventMan;
+  Core, GameExt;
 
 const
   BUTTONS_PATH  = 'Data\Buttons';
@@ -42,15 +42,14 @@ const
   TYPE_DUMMY  = '9';
   
 
-function GetButtonID (const ButtonName: string): integer; stdcall;
+function  GetButtonID (const ButtonName: string): integer; stdcall;
   
   
 (***) implementation (***)
 
 
 const
-  BUTTONS_DLL_NAME          = 'buttons.era';
-  BUTTONS_TABLE_GROWTH_STEP = 16;
+  BUTTONS_DLL_NAME  = 'buttons.dll';
 
 
 type
@@ -72,96 +71,129 @@ var
 
 procedure LoadButtons;
 var
-  FileContents: string;
-  Lines:        StrLib.TArrayOfStr;
-  Line:         StrLib.TArrayOfStr;
-  NumLines:     integer;
-  ButtonName:   string;
-  i:            integer;
-  y:            integer;
+{O} Locator:      Files.TFileLocator;
+{O} ItemInfo:     Files.TFileItemInfo;
+    FileName:     string;
+    FileContents: string;
+    Lines:        StrLib.TArrayOfStr;
+    Line:         StrLib.TArrayOfStr;
+    NumLines:     integer;
+    ButtonName:   string;
+    i:            integer;
+    y:            integer;
    
-begin 
-  with Files.Locate(GameExt.GameDir + '\' + BUTTONS_PATH + '\*.btn', Files.ONLY_FILES) do begin
-    while FindNext do begin
-      if FoundRec.Rec.Size > 0 then begin
-        {!} Assert(Files.ReadFileContents(FoundPath, FileContents), Format('Failed to load button config file at "%s"', [FoundPath]));
-        Lines    := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
-        NumLines := Length(Lines);
-        
-        for i := 0 to NumLines - 1 do begin
-          Line := StrLib.Explode(SysUtils.Trim(Lines[i]), ';');
-          
-          if Length(Line) < NUM_BUTTON_COLUMNS then begin
-            Core.NotifyError(Format('Invalid number of columns (%d) on line (%d) in file "%s".'#13#10'Expected %d columns', [Length(Line), i + 1, FoundPath, NUM_BUTTON_COLUMNS]));
-          end else begin
-            Line[COL_TYPE] := SysUtils.AnsiLowerCase(Line[COL_TYPE]);
-          
-            for y := 0 to NUM_BUTTON_COLUMNS - 1 do begin
-              if Line[y] = '' then begin
-                Line[y] := #0;
-              end;
-            end;
-            
-            if Line[COL_TYPE] = TYPENAME_ADVMAP then begin
-              Line[COL_TYPE] := TYPE_ADVMAP;
-            end else if Line[COL_TYPE] = TYPENAME_TOWN then begin
-              Line[COL_TYPE] := TYPE_TOWN;
-            end else if Line[COL_TYPE] = TYPENAME_HERO then begin
-              Line[COL_TYPE] := TYPE_HERO;
-            end else if Line[COL_TYPE] = TYPENAME_HEROES then begin
-              Line[COL_TYPE] := TYPE_HEROES;
-            end else if Line[COL_TYPE] = TYPENAME_BATTLE then begin
-              Line[COL_TYPE] := TYPE_BATTLE;
-            end else if Line[COL_TYPE] = TYPENAME_DUMMY then begin
-              Line[COL_TYPE] := TYPE_DUMMY;
-            end else begin
-              Core.NotifyError(Format('Unknown button type ("%s") on line %d in file "%s"', [Line[COL_TYPE], i + 1, FoundPath]));
-            end; // .else
-            
-            ButtonName := Line[COL_NAME];
-            
-            if ButtonNames[ButtonName] <> nil then begin
-              Core.NotifyError(Format('Duplicate button name ("%s") on line %d in file "%s"', [ButtonName, i + 1, FoundPath]));
-            end else begin
-              Line[COL_SHORTHINT]     := Trans.tr(Line[COL_SHORTHINT], []);
-              Line[COL_LONGHINT]      := Trans.tr(Line[COL_LONGHINT], []);
-              ButtonNames[ButtonName] := Ptr(ButtonID);
-              Line[COL_NAME]          := SysUtils.IntToStr(ButtonID);
-              Inc(ButtonID);
-
-              if NumButtons + 1 >= Length(ButtonsTable) then begin
-                SetLength(ButtonsTable, NumButtons + BUTTONS_TABLE_GROWTH_STEP);
-              end;
-              
-              ButtonsTable[NumButtons] := Line;
-              Inc(NumButtons);
-            end; // .else
-          end; // .else
-        end; // .for
-      end; // .if
-    end; // .while
-  end; // .with
+begin
+  Locator   :=  Files.TFileLocator.Create;
+  ItemInfo  :=  nil;
+  // * * * * * //
+  Locator.DirPath :=  BUTTONS_PATH;
+  Locator.InitSearch('*.btn');
   
-  ExtButtonsTable^ := pointer(ButtonsTable);
-  ExtNumButtons^   := NumButtons;
+  while Locator.NotEnd do begin
+    FileName  :=  SysUtils.AnsiLowerCase(Locator.GetNextItem(Files.TItemInfo(ItemInfo)));
+    
+    if
+      not ItemInfo.IsDir                            and
+      (SysUtils.ExtractFileExt(FileName) = '.btn')  and
+      ItemInfo.HasKnownSize                         and
+      (ItemInfo.FileSize > 0)
+    then begin
+      {!} Assert(Files.ReadFileContents(BUTTONS_PATH + '\' + FileName, FileContents));
+      Lines     :=  StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
+      NumLines  :=  Length(Lines);
+      
+      for i := 0 to NumLines - 1 do begin
+        Line  :=  StrLib.Explode(SysUtils.Trim(Lines[i]), ';');
+        
+        if Length(Line) < NUM_BUTTON_COLUMNS then begin
+          DlgMes.Msg
+          (
+            'Invalid number of columns (' + SysUtils.IntToStr(Length(Line)) +
+            ') on line ' + SysUtils.IntToStr(i + 1) +
+            ' in file "' + FileName + '".'#13#10 +
+            'Expected ' + SysUtils.IntToStr(NUM_BUTTON_COLUMNS) + ' columns'
+          );
+        end // .if
+        else begin
+          Line[COL_TYPE]  :=  SysUtils.AnsiLowerCase(Line[COL_TYPE]);
+        
+          for y := 0 to NUM_BUTTON_COLUMNS - 1 do begin
+            if Line[y] = '' then begin
+              Line[y] :=  #0;
+            end; // .if
+          end; // .for
+          
+          if Line[COL_TYPE] = TYPENAME_ADVMAP then begin
+            Line[COL_TYPE]  :=  TYPE_ADVMAP;
+          end // .if
+          else if Line[COL_TYPE] = TYPENAME_TOWN then begin
+            Line[COL_TYPE]  :=  TYPE_TOWN;
+          end // .ELSEIF
+          else if Line[COL_TYPE] = TYPENAME_HERO then begin
+            Line[COL_TYPE]  :=  TYPE_HERO;
+          end // .ELSEIF
+          else if Line[COL_TYPE] = TYPENAME_HEROES then begin
+            Line[COL_TYPE]  :=  TYPE_HEROES;
+          end // .ELSEIF
+          else if Line[COL_TYPE] = TYPENAME_BATTLE then begin
+            Line[COL_TYPE]  :=  TYPE_BATTLE;
+          end // .ELSEIF
+          else if Line[COL_TYPE] = TYPENAME_DUMMY then begin
+            Line[COL_TYPE]  :=  TYPE_DUMMY;
+          end // .ELSEIF
+          else begin
+            {!} Assert(FALSE);
+          end; // .else
+          
+          ButtonName  :=  Line[COL_NAME];
+          
+          if ButtonNames[ButtonName] <> nil then begin
+            DlgMes.Msg
+            (
+              'Duplicate button name ("' + ButtonName + '") on line ' + SysUtils.IntToStr(i + 1) +
+              ' in file "' + FileName + '"'
+            );
+          end // .if
+          else begin
+            ButtonNames[ButtonName] :=  Ptr(ButtonID);
+            Line[COL_NAME]          :=  SysUtils.IntToStr(ButtonID);
+            Inc(ButtonID);
+            
+            SetLength(ButtonsTable, NumButtons + 1);
+            ButtonsTable[NumButtons]  :=  Line;
+            Inc(NumButtons);
+          end; // .else
+        end; // .else
+      end; // .for
+    end; // .if
+    
+    SysUtils.FreeAndNil(ItemInfo);
+  end; // .while
+  
+  Locator.FinitSearch;
+  
+  ExtButtonsTable^  :=  pointer(ButtonsTable);
+  ExtNumButtons^    :=  NumButtons;
+  // * * * * * //
+  SysUtils.FreeAndNil(Locator);
 end; // .procedure LoadButtons 
 
 function GetButtonID (const ButtonName: string): integer; stdcall;
 begin
-  result := integer(ButtonNames[ButtonName]);
+  result  :=  integer(ButtonNames[ButtonName]);
   
   if result = 0 then begin
-    result := -1;
-  end;
-end;
+    result  :=  -1;
+  end; // .if
+end; // .function GetButtonID
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
-  (* Connect to Buttons plugin *)
-  hButtons := Windows.GetModuleHandle(BUTTONS_DLL_NAME);
-  {!} Assert(hButtons <> 0, 'Obligatory plugin "' + BUTTONS_DLL_NAME + '" is not loaded');
-  ExtButtonsTable := GetProcAddress(hButtons, 'ButtonsTable');
-  ExtNumButtons   := GetProcAddress(hButtons, 'NumButtons');
+  (* Connect to Buttons.dll *)
+  hButtons  :=  Windows.LoadLibrary(BUTTONS_DLL_NAME);
+  {!} Assert(hButtons <> 0);
+  ExtButtonsTable :=  GetProcAddress(hButtons, 'ButtonsTable');
+  ExtNumButtons   :=  GetProcAddress(hButtons, 'NumButtons');
   {!} Assert(ExtButtonsTable <> nil);
   {!} Assert(ExtNumButtons <> nil);
   
@@ -169,9 +201,8 @@ begin
 end; // .procedure OnAfterWoG
 
 begin
-  NumButtons  := 0;
-  SetLength(ButtonsTable, BUTTONS_TABLE_GROWTH_STEP);
-  ButtonNames := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
+  NumButtons  :=  0;
+  ButtonNames :=  AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
 
-  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
 end.

@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils,
-  Core, PatchApi, GameExt, Heroes, Erm, EventMan;
+  Core, PatchApi, GameExt, Heroes, Erm;
 
 const
   NO_STACK  = -1;
@@ -55,13 +55,13 @@ begin
   GameExt.EraEventParams[MAX_DAMAGE_PARAM]        :=  -1;
   
   result  :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_BattleHint_GetAttacker
 
 function Hook_BattleHint_GetDefender (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraEventParams[DEFENDER_STACK_N_PARAM]  :=  Context.EAX;
   result                                          :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_BattleHint_GetDefender
 
 function Hook_BattleHint_CalcMinMaxDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -69,30 +69,159 @@ begin
   GameExt.EraEventParams[MAX_DAMAGE_PARAM]  :=  Context.EAX;
   
   result  :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_BattleHint_CalcMinMaxDamage
 
 function Hook_MMTrigger (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraRestoreEventParams;
   result  :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_MMTrigger
 
 procedure OnBeforeTrigger (Event: GameExt.PEvent); stdcall;
 var
-{U} EventArgs: Erm.POnBeforeTriggerArgs;
-    TriggerId: integer;
+{U} EventArgs:      Erm.POnBeforeTriggerArgs;
+    EventName:      string;
+    BaseEventName:  string;
+    EventID:        integer;
+    
+    x:              integer;
+    y:              integer;
+    z:              integer;
+    
+    ObjType:        integer;
+    ObjSubtype:     integer;
 
 begin
   {!} Assert(Event <> nil);
   EventArgs :=  Erm.POnBeforeTriggerArgs(Event.Data);
   // * * * * * //
-  TriggerId := EventArgs.TriggerId;
+  EventName :=  '';
+  EventID   :=  EventArgs.TriggerID;
   
-  GameExt.FireEvent('OnTrigger ' + SysUtils.IntToStr(TriggerId), @EventArgs.BlockErmExecution, sizeof(EventArgs.BlockErmExecution));
-
-  if not EventArgs.BlockErmExecution then begin
-    GameExt.FireEvent(Erm.GetTriggerReadableName(TriggerId), @EventArgs.BlockErmExecution, sizeof(EventArgs.BlockErmExecution));
-  end;
+  GameExt.FireEvent('OnTrigger ' + SysUtils.IntToStr(EventID), nil, 0);
+  
+  case EventID of
+    {*} Erm.TRIGGER_TM1..Erm.TRIGGER_TM100:
+      EventName :=  'OnErmTimer ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_TM1 + 1); 
+    {*} Erm.TRIGGER_HE0..Erm.TRIGGER_HE198:
+      EventName :=  'OnHeroInteraction ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HE0);
+    {*} Erm.TRIGGER_BA0:      EventName :=  'OnBeforeBattle';
+    {*} Erm.TRIGGER_BA1:      EventName :=  'OnAfterBattle';
+    {*} Erm.TRIGGER_BR:       EventName :=  'OnBattleRound';
+    {*} Erm.TRIGGER_BG0:      EventName :=  'OnBeforeBattleAction';
+    {*} Erm.TRIGGER_BG1:      EventName :=  'OnAfterBattleAction';
+    {*} Erm.TRIGGER_MW0:      EventName :=  'OnWanderingMonsterReach';
+    {*} Erm.TRIGGER_MW1:      EventName :=  'OnWanderingMonsterDeath';
+    {*} Erm.TRIGGER_MR0:      EventName :=  'OnMagicBasicResistance';
+    {*} Erm.TRIGGER_MR1:      EventName :=  'OnMagicCorrectedResistance';
+    {*} Erm.TRIGGER_MR2:      EventName :=  'OnDwarfMagicResistance';
+    {*} Erm.TRIGGER_CM0:      EventName :=  'OnAdventureMapRightMouseClick';
+    {*} Erm.TRIGGER_CM1:      EventName :=  'OnTownMouseClick';
+    {*} Erm.TRIGGER_CM2:      EventName :=  'OnHeroScreenMouseClick';
+    {*} Erm.TRIGGER_CM3:      EventName :=  'OnHeroesMeetScreenMouseClick';
+    {*} Erm.TRIGGER_CM4:      EventName :=  'OnBattleScreenMouseClick';
+    {*} Erm.TRIGGER_CM5:      EventName :=  'OnAdventureMapLeftMouseClick';
+    {*} Erm.TRIGGER_AE0:      EventName :=  'OnEquipArt';
+    {*} Erm.TRIGGER_AE1:      EventName :=  'OnUnequipArt';
+    {*} Erm.TRIGGER_MM0:      EventName :=  'OnBattleMouseHint';
+    {*} Erm.TRIGGER_MM1:      EventName :=  'OnTownMouseHint';
+    {*} Erm.TRIGGER_MP:       EventName :=  'OnMp3MusicChange';
+    {*} Erm.TRIGGER_SN:       EventName :=  'OnSoundPlay';
+    {*} Erm.TRIGGER_MG0:      EventName :=  'OnBeforeAdventureMagic';
+    {*} Erm.TRIGGER_MG1:      EventName :=  'OnAfterAdventureMagic';
+    {*} Erm.TRIGGER_TH0:      EventName :=  'OnEnterTown';
+    {*} Erm.TRIGGER_TH1:      EventName :=  'OnLeaveTown';
+    {*} Erm.TRIGGER_IP0:      EventName :=  'OnBeforeBattleBeforeDataSend';
+    {*} Erm.TRIGGER_IP1:      EventName :=  'OnBeforeBattleAfterDataReceived';
+    {*} Erm.TRIGGER_IP2:      EventName :=  'OnAfterBattleBeforeDataSend';
+    {*} Erm.TRIGGER_IP3:      EventName :=  'OnAfterBattleAfterDataReceived';
+    {*} Erm.TRIGGER_CO0:      EventName :=  'OnOpenCommanderWindow';
+    {*} Erm.TRIGGER_CO1:      EventName :=  'OnCloseCommanderWindow';
+    {*} Erm.TRIGGER_CO2:      EventName :=  'OnAfterCommanderBuy';
+    {*} Erm.TRIGGER_CO3:      EventName :=  'OnAfterCommanderResurrect';
+    {*} Erm.TRIGGER_BA50:     EventName :=  'OnBeforeBattleForThisPcDefender';
+    {*} Erm.TRIGGER_BA51:     EventName :=  'OnAfterBattleForThisPcDefender';
+    {*} Erm.TRIGGER_BA52:     EventName :=  'OnBeforeBattleUniversal';
+    {*} Erm.TRIGGER_BA53:     EventName :=  'OnAfterBattleUniversal';
+    {*} Erm.TRIGGER_GM0:      EventName :=  'OnAfterLoadGame';
+    {*} Erm.TRIGGER_GM1:      EventName :=  'OnBeforeSaveGame';
+    {*} Erm.TRIGGER_PI:       EventName :=  'OnAfterErmInstructions';
+    {*} Erm.TRIGGER_DL:       EventName :=  'OnCustomDialogEvent';
+    {*} Erm.TRIGGER_HM:       EventName :=  'OnHeroMove';
+    {*} Erm.TRIGGER_HM0..Erm.TRIGGER_HM198:
+      EventName :=  'OnHeroMove ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HM0);
+    {*} Erm.TRIGGER_HL:   EventName :=  'OnHeroGainLevel';
+    {*} Erm.TRIGGER_HL0..Erm.TRIGGER_HL198:
+      EventName :=  'OnHeroGainLevel ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HL0);
+    {*} Erm.TRIGGER_BF:       EventName :=  'OnSetupBattlefield';
+    {*} Erm.TRIGGER_MF1:      EventName :=  'OnMonsterPhysicalDamage';
+    {*} Erm.TRIGGER_TL0:      EventName :=  'OnEverySecond';
+    {*} Erm.TRIGGER_TL1:      EventName :=  'OnEvery2Seconds';
+    {*} Erm.TRIGGER_TL2:      EventName :=  'OnEvery5Seconds';
+    {*} Erm.TRIGGER_TL3:      EventName :=  'OnEvery10Seconds';
+    {*} Erm.TRIGGER_TL4:      EventName :=  'OnEveryMinute';
+    (* Era Triggers *)
+    {*  Erm.TRIGGER_BEFORE_SAVE_GAME:           EventName :=  'OnBeforeSaveGameEx';}
+    {*} Erm.TRIGGER_SAVEGAME_WRITE:             EventName :=  'OnSavegameWrite';
+    {*} Erm.TRIGGER_SAVEGAME_READ:              EventName :=  'OnSavegameRead';
+    {*} Erm.TRIGGER_KEYPRESS:                   EventName :=  'OnKeyPressed';
+    {*} Erm.TRIGGER_OPEN_HEROSCREEN:            EventName :=  'OnOpenHeroScreen';
+    {*} Erm.TRIGGER_CLOSE_HEROSCREEN:           EventName :=  'OnCloseHeroScreen';
+    {*} Erm.TRIGGER_STACK_OBTAINS_TURN:         EventName :=  'OnBattleStackObtainsTurn';
+    {*} Erm.TRIGGER_REGENERATE_PHASE:           EventName :=  'OnBattleRegeneratePhase';
+    {*} Erm.TRIGGER_AFTER_SAVE_GAME:            EventName :=  'OnAfterSaveGame';
+    {*  Erm.TRIGGER_SKEY_SAVEDIALOG:            EventName :=  'OnSKeySaveDialog';}
+    {*} Erm.TRIGGER_BEFOREHEROINTERACT:         EventName :=  'OnBeforeHeroInteraction';
+    {*} Erm.TRIGGER_AFTERHEROINTERACT:          EventName :=  'OnAfterHeroInteraction';
+    {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:       EventName :=  'OnStackToStackDamage';
+    {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT:  EventName :=  'OnAICalcStackAttackEffect';
+    {*} Erm.TRIGGER_ONCHAT:                     EventName :=  'OnChat';
+    {*} Erm.TRIGGER_ONGAMEENTER:                EventName :=  'OnGameEnter';
+    {*} Erm.TRIGGER_ONGAMELEAVE:                EventName :=  'OnGameLeave';
+    (* end Era Triggers *)
+  else
+    if EventID >= Erm.TRIGGER_OB_POS then begin
+      if ((EventID and Erm.TRIGGER_OB_POS) or (EventID and Erm.TRIGGER_LE_POS)) <> 0 then begin
+        x :=  EventID and 1023;
+        y :=  (EventID shr 16) and 1023;
+        z :=  (EventID shr 26) and 1;
+        
+        if (EventID and Erm.TRIGGER_LE_POS) <> 0 then begin
+          BaseEventName :=  'OnLocalEvent ';
+        end // .if
+        else begin
+          if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
+            BaseEventName :=  'OnAfterVisitObject ';
+          end // .if
+          else begin
+            BaseEventName :=  'OnBeforeVisitObject ';
+          end; // .else
+        end; // .else
+        
+        EventName :=
+          BaseEventName + SysUtils.IntToStr(x) + '/' +
+          SysUtils.IntToStr(y) + '/' + SysUtils.IntToStr(z);
+      end // .if
+      else begin
+        ObjType     :=  (EventID shr 12) and 255;
+        ObjSubtype  :=  (EventID and 255) - 1;
+        
+        if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
+          BaseEventName :=  'OnAfterVisitObject ';
+        end // .if
+        else begin
+          BaseEventName :=  'OnBeforeVisitObject ';
+        end; // .else
+        
+        EventName :=
+          BaseEventName + SysUtils.IntToStr(ObjType) + '/' + SysUtils.IntToStr(ObjSubtype);
+      end; // .else
+    end; // .if
+  end; // .SWITCH
+  
+  if EventName <> '' then begin
+    GameExt.FireEvent(EventName, @EventArgs.BlockErmExecution, sizeof(EventArgs.BlockErmExecution));
+  end; // .if
 end; // .procedure OnBeforeTrigger
 
 function MainWndProc (hWnd, Msg, wParam, lParam: integer): LONGBOOL; stdcall;
@@ -103,9 +232,7 @@ const
   ENABLE_DEF_REACTION = 0;
 
 var
-  GameState: Heroes.TGameState;
-  SavedV:    array [1..10] of integer;
-  SavedZ:    Erm.TErmZVar;
+  GameState:  Heroes.TGameState;
   
 begin
   result := false;
@@ -118,66 +245,46 @@ begin
 
       if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
         Erm.PrintChatMsg('{~white}Debug information was dumped to ' + GameExt.DEBUG_DIR +'{~}');
-      end;
+      end; // .if
     end else if (wParam = KEY_F12) and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
       Erm.ReloadErm;
-    end else begin
+    end // .else
+    else begin
       GameExt.EraSaveEventParams;
       
-      GameExt.EraEventParams[0] := wParam;
-      GameExt.EraEventParams[1] := ENABLE_DEF_REACTION;
+      GameExt.EraEventParams[0] :=  wParam;
+      GameExt.EraEventParams[1] :=  ENABLE_DEF_REACTION;
       
       if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
-        Utils.CopyMem(sizeof(SavedV), @Erm.v[1], @SavedV);
-        Utils.CopyMem(sizeof(SavedZ), @Erm.z[1], @SavedZ);
-        
         Erm.FireErmEvent(Erm.TRIGGER_KEYPRESS);
-
-        Utils.CopyMem(sizeof(SavedV), @SavedV, @Erm.v[1]);
-        Utils.CopyMem(sizeof(SavedZ), @SavedZ, @Erm.z[1]);
-      end else begin
+      end // .if
+      else begin
         GameExt.FireEvent('OnKeyPressed', GameExt.NO_EVENT_DATA, 0);
       end; // .else
       
-      result := GameExt.EraEventParams[1] = ENABLE_DEF_REACTION;
+      result  :=  GameExt.EraEventParams[1] = ENABLE_DEF_REACTION;
       
       GameExt.EraRestoreEventParams;
       
       if result then begin
         PrevWndProc(hWnd, Msg, wParam, lParam);
-      end;
+      end; // .if
     end; // .else
-  end else begin
-    result := PrevWndProc(hWnd, Msg, wParam, lParam);
+  end // .if
+  else begin
+    result  :=  PrevWndProc(hWnd, Msg, wParam, lParam);
   end; // .else
 end; // .function MainWndProc
 
-function Hook_AfterCreateWindow (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_CreateWindow (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  PrevWndProc := Ptr
+  PrevWndProc :=  Ptr
   (
     Windows.SetWindowLong(Heroes.hWnd^, Windows.GWL_WNDPROC, integer(@MainWndProc))
   );
-
-  GameExt.FireEvent('OnAfterCreateWindow', GameExt.NO_EVENT_DATA, 0);
-  
-  result := Core.EXEC_DEF_CODE;
-end; // .function Hook_AfterCreateWindow
-
-function Hook_BeforeErmInstructions (Context: Core.PHookContext): LONGBOOL; stdcall;
-begin
-  GameExt.EraSaveEventParams;
-  GameExt.FireEvent('OnBeforeErm', GameExt.NO_EVENT_DATA, 0);
-  GameExt.EraRestoreEventParams;
-
-  if not Erm.ZvsIsGameLoading^ then begin
-    GameExt.EraSaveEventParams;
-    GameExt.FireEvent('OnBeforeErmInstructions', GameExt.NO_EVENT_DATA, 0);
-    GameExt.EraRestoreEventParams;
-  end;
   
   result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_BeforeErmInstructions
+end; // .function Hook_CreateWindow
 
 function Hook_StartCalcDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -196,7 +303,7 @@ function Hook_CalcDamage_GetDamageBonus (Context: Core.PHookContext): LONGBOOL; 
 begin
   DamageBonus :=  Context.EAX;
   result      :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_CalcDamage_GetDamageBonus
 
 function Hook_EndCalcDamage (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -239,7 +346,7 @@ begin
     (Heroes.GetBattleCellByPos(PINTEGER(PINTEGER(Context.ESP + 16)^ + STACK_POS_OFS)^));
   
   result  :=  Core.EXEC_DEF_CODE;
-end;
+end; // .function Hook_AI_CalcStackAttackEffect_Start
 
 function Hook_AI_CalcStackAttackEffect_End (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -287,7 +394,7 @@ begin
   
   if not result then begin
     Context.RetAddr :=  Core.Ret(NUM_ARGS);
-  end;
+  end; // .if
 end; // .function Hook_EnterChat
 
 procedure ClearChatBox; ASSEMBLER;
@@ -297,7 +404,7 @@ asm
   MOV EAX, [ESI + $38]
   PUSH $5547A0
   // RET
-end;
+end; // .procedure ClearChatBox
 
 function Hook_ChatInput (Context: Core.PHookContext): LONGBOOL; stdcall;
 const 
@@ -326,17 +433,17 @@ begin
   GameExt.EraEventParams[ARG_ACTION]        :=  ACTION_DEFAULT;
   
   Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
-  Action := GameExt.EraEventParams[ARG_ACTION];
-  Obj    := Context.ECX;
+  Action  :=  GameExt.EraEventParams[ARG_ACTION];
+  Obj     :=  Context.ECX;
   
   GameExt.EraRestoreEventParams;
   
-  result := not Core.EXEC_DEF_CODE;
+  result  :=  not Core.EXEC_DEF_CODE;
   
   case Action of 
-    ACTION_CLEAR_BOX: Context.RetAddr := @ClearChatBox;
+    ACTION_CLEAR_BOX: Context.RetAddr :=  @ClearChatBox;
     ACTION_CLOSE_BOX: begin
-      Context.RetAddr := @ClearChatBox;
+      Context.RetAddr :=  @ClearChatBox;
     
       asm
         MOV ECX, Obj
@@ -347,7 +454,7 @@ begin
     end; // .case ACTION_CLOSE_BOX    
   else
     result  :=  Core.EXEC_DEF_CODE;
-  end; // .switch Action
+  end; // .SWITCH Action
 end; // .function Hook_ChatInput
 
 function Hook_LeaveChat (Context: Core.PHookContext): LONGBOOL; stdcall;
@@ -360,19 +467,19 @@ const
 begin
   GameExt.EraSaveEventParams;
   
-  GameExt.EraEventParams[EVENT_SUBTYPE] := ON_LEAVE_CHAT;
+  GameExt.EraEventParams[EVENT_SUBTYPE] :=  ON_LEAVE_CHAT;
   Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
   
   GameExt.EraRestoreEventParams;
   
-  result := Core.EXEC_DEF_CODE;
+  result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_LeaveChat
 
 procedure Hook_MainGameLoop (h: PatchApi.THiHook; This: pointer); stdcall;
 begin
   if MainGameLoopDepth = 0 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);
-  end;
+  end; // .if
   
   Inc(MainGameLoopDepth);
   PatchApi.Call(PatchApi.THISCALL_, h.GetDefaultFunc(), [This]);
@@ -381,7 +488,7 @@ begin
   if MainGameLoopDepth = 0 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMELEAVE, []);
     GameExt.SetMapFolder('');
-  end;
+  end; // .if
 end; // .procedure Hook_MainGameLoop
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -393,10 +500,7 @@ begin
   Core.Hook(@Hook_MMTrigger, Core.HOOKTYPE_BRIDGE, 5, Ptr($74FD3B));
   
   (* Key handling trigger *)
-  Core.Hook(@Hook_AfterCreateWindow, Core.HOOKTYPE_BRIDGE, 6, Ptr($4F8226));
-  
-  (* Erm before instructions trigger *)
-  Core.Hook(@Hook_BeforeErmInstructions, Core.HOOKTYPE_BRIDGE, 6, Ptr($749BBA));
+  Core.Hook(@Hook_CreateWindow, Core.HOOKTYPE_BRIDGE, 6, Ptr($4F8239));
   
   (* Stack to stack damage calculation *)
   Core.Hook(@Hook_StartCalcDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($443C88));
@@ -414,10 +518,11 @@ begin
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
   
   (* MainGameCycle: OnEnterGame, OnLeaveGame and MapFolder settings*)
-  Core.p.WriteHiHook(Ptr($4B0BA0), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,  @Hook_MainGameLoop);
+  Core.p.WriteHiHook($4B0BA0, PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,
+                     @Hook_MainGameLoop);
 end; // .procedure OnAfterWoG
 
 begin
-  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
-  EventMan.GetInstance.On('OnBeforeTrigger', OnBeforeTrigger);
+  GameExt.RegisterHandler(OnAfterWoG, 'OnAfterWoG');
+  GameExt.RegisterHandler(OnBeforeTrigger, 'OnBeforeTrigger');
 end.
