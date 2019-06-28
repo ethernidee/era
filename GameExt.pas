@@ -63,7 +63,8 @@ function  PluginExists (const PluginName: string): boolean; stdcall;
 procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall;
 function  GetRealAddr (Addr: pointer): pointer; stdcall;
 function  GetMapDir: string; stdcall;
-procedure SetMapFolder (const NewMapFolder: string);
+function  GetMapDirName: string;
+procedure SetMapDir (const NewMapDir: string);
 function  GetMapResourcePath (const RelResourcePath: string; FallbackToOriginal: boolean = true): string;
 function  LoadMapRscFile (const RelResourcePath: string; out FileContents: string; FallbackToOriginal: boolean = true): boolean;
 function  MapRscFileExists (const RelResourcePath: string): boolean;
@@ -119,9 +120,9 @@ var
    structure address in a speed of binary search (log2(N)) *)
 {O} MemRedirections: {O} DataLib.TList {OF PMemRedirection};
 
-  GameDir:   string;
-  ModsDir:   string;
-  MapFolder: string = '';
+  GameDir: string;
+  ModsDir: string;
+  MapDir:  string = '';
 
 
 (***) implementation (***)
@@ -326,25 +327,30 @@ end;
 
 function GetMapDir: string;
 begin
-  if MapFolder = '' then begin
+  if MapDir = '' then begin
     if Heroes.IsCampaign then begin
-      MapFolder := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd);
+      MapDir := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd);
     end else begin
-      MapFolder := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
+      MapDir := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
     end;
   end;
   
-  result := MapFolder;
+  result := MapDir;
 end;
 
-procedure SetMapFolder (const NewMapFolder: string);
+function GetMapDirName: string;
 begin
-  MapFolder := NewMapFolder;
+  result := SysUtils.ExtractFileName(GetMapDirName);
+end;
+
+procedure SetMapDir (const NewMapDir: string);
+begin
+  MapDir := NewMapDir;
 end;
 
 function GetMapResourcePath (const RelResourcePath: string; FallbackToOriginal: boolean = true): string;
 begin
-  result := GetMapDir + '\' + RelResourcePath;
+  result := GetMapDirName + '\' + RelResourcePath;
   
   if FallbackToOriginal and (Windows.GetFileAttributesA(pchar(result)) = cardinal(-1)) then begin
     result := GameDir + '\' + RelResourcePath;

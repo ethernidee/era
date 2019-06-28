@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils, DataLib, TypeWrappers,
-  Files, StrLib, Json, Core, GameExt, Stores, EventMan;
+  Files, StrLib, Json, Core, GameExt, RscLists, EventMan;
 
 
 type
@@ -31,15 +31,11 @@ function  tr (const Key: string; const Params: array of string): string;
 
 
 type
-  TLangMap = {O} TDict {of TString};
+  TLangDict = {O} TDict {of TString};
 
 var
-{O} LangMap:                 TLangMap;
-{O} LangMapForMap:           TLangMap;
-    LangMapForMapSerialized: string = '';
-    LangMapForMapHadItems:   boolean = false;
-  
-  MixedLangMapData: boolean = false;
+{O} LangDict:         TLangDict;
+{O} MapLangResources: RscLists.TResourceList;
 
 
 function tr (const Key: string; const Params: array of string): string;
@@ -47,7 +43,7 @@ var
 {Un} Translation: TString;
 
 begin
-  Translation := LangMap[Key];
+  Translation := LangDict[Key];
   // * * * * * //
   if Translation <> nil then begin
     result := StrLib.BuildStr(Translation.Value, Params, TEMPL_CHAR);
@@ -56,22 +52,10 @@ begin
   end;
 end; // .function tr
 
-procedure SerializeMapItem ({Un} Data: pointer; Writer: StrLib.IStrBuilder);
-begin
-  Writer.WriteInt(Length(TString(Data).Value));
-  Writer.Append(TString(Data).Value);
-end;
-
-function UnserializeMapItem (ByteMapper: StrLib.IByteMapper): {UOn} pointer;
-begin
-  result := TString.Create(ByteMapper.ReadStrWithLenField(sizeof(integer)));
-end;
-
-procedure LoadLangFile (const FilePath: string; Map: TLangMap; OverrideExistingKeys: boolean);
+procedure LoadLangData (const ItemName, FileContents: string; OverrideExistingKeys: boolean);
 var
-{O} LangData:         TlkJsonObject;
-    LangFileContents: string;
-    IsInvalidFile:    boolean;
+{O} LangData:      TlkJsonObject;
+    IsInvalidFile: boolean;
 
   procedure ProcessTree (Tree: TlkJsonObject; const KeyPrefix: string);
   var
@@ -92,74 +76,87 @@ var
       if Value is Json.TlkJsonObject then begin
         ProcessTree(Json.TlkJsonObject(Value), Key + '.');
       end else if Value is Json.TlkJsonString then begin
-        if OverrideExistingKeys or (Map[Key] = nil) then begin
-          Map[Key] := TString.Create(Tree.GetString(i));
+        if OverrideExistingKeys or (LangDict[Key] = nil) then begin
+          LangDict[Key] := TString.Create(Tree.GetString(i));
         end;
       end else if not IsInvalidFile then begin
         IsInvalidFile := true;
-        Core.NotifyError('Invalid language json file: "' + FilePath + '". Erroneous key: ' + Key);
+        Core.NotifyError('Invalid language json file: "' + ItemName + '". Erroneous key: ' + Key);
       end;
     end; // .for
   end; // .procedure ProcessTree
 
 begin
-  {!} Assert(Map <> nil);
   LangData := nil;
   // * * * * * //
   IsInvalidFile := false;
-
-  if Files.ReadFileContents(FilePath, LangFileContents) then begin
-    Utils.CastOrFree(TlkJson.ParseText(LangFileContents), Json.TlkJsonObject, LangData);
-    
-    if LangData <> nil then begin
-      ProcessTree(LangData, '');
-    end else begin
-      Core.NotifyError('Invalid language json file: "' + FilePath + '"');
-    end;
-  end; // .if
+  Utils.CastOrFree(TlkJson.ParseText(FileContents), Json.TlkJsonObject, LangData);
+  
+  if LangData <> nil then begin
+    ProcessTree(LangData, '');
+  end else begin
+    Core.NotifyError('Invalid language json file: "' + ItemName + '"');
+  end;
   // * * * * * //
   FreeAndNil(LangData);
-end; // .procedure LoadLangFile
+end; // .procedure LoadLangData
 
-procedure LoadLangFiles (const Dir: string; Map: TLangMap; OverrideKeys: boolean);
+procedure LoadLangFile (const FilePath: string; OverrideExistingKeys: boolean);
+var
+  LangFileContents: string;
+
 begin
-  {!} Assert(Map <> nil);
+  if Files.ReadFileContents(FilePath, LangFileContents) then begin
+    LoadLangData(FilePath, LangFileContents, OverrideExistingKeys);
+  end;
+end;
+
+procedure LoadLangFiles (const Dir: string; OverrideKeys: boolean);
+begin
   with Files.Locate(SysUtils.ExcludeTrailingPathDelimiter(Dir) + '\*.json', Files.ONLY_FILES) do begin
     while FindNext do begin
-      LoadLangFile(FoundPath, Map, OverrideKeys);
+      LoadLangFile(FoundPath, OverrideKeys);
     end;
   end;
 end;
 
+(* Loads global language files and imports data from them without overriding existing keys *)
 procedure LoadGlobalLangFiles;
 begin
-  LangMap.Clear;
-  LoadLangFiles(GameExt.GameDir + '\' + LANG_DIR, LangMap, DONT_OVERRIDE_KEYS);
+  LoadLangFiles(GameExt.GameDir + '\' + LANG_DIR, DONT_OVERRIDE_KEYS);
 end;
 
-procedure LoadMapLangFiles;
-begin
-  LangMapForMap.Clear;
-  LoadLangFiles(GameExt.GetMapResourcePath(LANG_DIR, GameExt.DONT_FALLBACK_TO_ORIGINAL), LangMapForMap, DONT_OVERRIDE_KEYS);
-  LangMapForMapSerialized := DataLib.SerializeDict(LangMapForMap, SerializeMapItem);
-  LangMapForMapHadItems   := LangMapForMap.ItemCount > 0;
-end;
-
-procedure MoveMapDataToGlobal;
+(* Loads map langauge files as resource list without any parsing *)
+function LoadMapLangResources: {O} RscLists.TResourceList;
 var
-{On} Value: TString;
+  MapDirName:   string;
+  FileContents: string;
 
 begin
-  Value := nil;
-  // * * * * * //
-  with DataLib.IterateDict(LangMapForMap) do begin
-    while IterNext do begin
-      LangMapForMap.TakeValue(IterKey, pointer(Value));
-      LangMap[IterKey] := Value; Value := nil;
+  result     := RscLists.TResourceList.Create;
+  MapDirName := GameExt.GetMapDirName;
+
+  with Files.Locate(GameExt.GetMapResourcePath(LANG_DIR, GameExt.DONT_FALLBACK_TO_ORIGINAL) + '\*.json', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      if Files.ReadFileContents(FoundPath, FileContents) then begin
+        result.Add(RscLists.TResource.Create(MapDirName + '\' + FoundName, FileContents));
+      end;
     end;
   end;
+end;
+
+procedure ImportMapLangResources;
+var
+{Un} Item: RscLists.TResource;
+     i:    integer;
+
+begin
+  Item := nil;
   // * * * * * //
-  SysUtils.FreeAndNil(Value);
+  for i := 0 to MapLangResources.Count - 1 do begin
+    Item := RscLists.TResource(MapLangResources[i]);
+    LoadLangData(Item.Name, Item.Contents, DONT_OVERRIDE_KEYS);
+  end;
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -167,66 +164,59 @@ begin
   LoadGlobalLangFiles;
 end;
 
-сохранять в сейве оригиналы json?
-
 procedure OnBeforeScriptsReload (Event: GameExt.PEvent); stdcall;
 begin
+  LangDict.Clear;
+  SysUtils.FreeAndNil(MapLangResources);
+  MapLangResources := LoadMapLangResources;
+  ImportMapLangResources;
   LoadGlobalLangFiles;
-  LoadMapLangFiles;
-  MoveMapDataToGlobal;
 end;
 
 procedure OnEraMapStart (Event: GameExt.PEvent); stdcall;
 var
-  PrevLangMapForMapHadItems: boolean;
+{On} UpdatedMapLangResources: RscLists.TResourceList;
 
 begin
-  PrevLangMapForMapHadItems := LangMapForMapHadItems;
-  LoadMapLangFiles;
-
-  if PrevLangMapForMapHadItems or LangMapForMapHadItems then begin
+  UpdatedMapLangResources := LoadMapLangResources;  
+  // * * * * * //
+  if not UpdatedMapLangResources.FastCompare(MapLangResources) then begin
+    LangDict.Clear;
+    Utils.Exchange(int(MapLangResources), int(UpdatedMapLangResources));
+    ImportMapLangResources;
     LoadGlobalLangFiles;
-    MoveMapDataToGlobal;
   end;
+  // * * * * * //
+  SysUtils.FreeAndNil(UpdatedMapLangResources);
 end;
 
 procedure OnEraSaveScripts (Event: GameExt.PEvent); stdcall;
 begin
-  with Stores.NewRider(MAP_LANG_DATA_SECTION) do begin
-    WriteStr(LangMapForMapSerialized);
-  end;
+  MapLangResources.Save(MAP_LANG_DATA_SECTION);
 end;
 
 procedure OnEraLoadScripts (Event: GameExt.PEvent); stdcall;
 var
-{On} LoadedMap: TLangMap;
+{O} LoadedMapLangResources: RscLists.TResourceList;
 
 begin
-  LoadedMap := nil;
+  LoadedMapLangResources := RscLists.TResourceList.Create;
   // * * * * * //
-  with Stores.NewRider(MAP_LANG_DATA_SECTION) do begin
-    LangMapForMapSerialized := ReadStr;
-    LangMapForMap.Clear;
+  LoadedMapLangResources.LoadFromSavedGame(MAP_LANG_DATA_SECTION);
 
-    if LangMapForMapSerialized <> '' then begin
-      LoadedMap := DataLib.UnserializeDict(LangMapForMapSerialized, Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE, UnserializeMapItem);
-      Utils.Exchange(int(LangMapForMap), int(LoadedMap));
-    end;
-
-    if LangMapForMapHadItems or (LangMapForMap.ItemCount > 0) then begin
-      LoadGlobalLangFiles;
-      MoveMapDataToGlobal;
-    end;
-
-    LangMapForMapHadItems := LangMapForMap.ItemCount > 0;
-  end; // .with
+  if not LoadedMapLangResources.FastCompare(MapLangResources) then begin
+    LangDict.Clear;
+    Utils.Exchange(int(MapLangResources), int(LoadedMapLangResources));
+    ImportMapLangResources;
+    LoadGlobalLangFiles;
+  end;
   // * * * * * //
-  SysUtils.FreeAndNil(LoadedMap);
+  SysUtils.FreeAndNil(LoadedMapLangResources);
 end;
 
 begin
-  LangMap       := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-  LangMapForMap := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  LangDict         := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  MapLangResources := RscLists.TResourceList.Create;
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeScriptsReload', OnBeforeScriptsReload);
   EventMan.GetInstance.On('$OnEraMapStart', OnEraMapStart);

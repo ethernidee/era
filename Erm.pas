@@ -9,7 +9,7 @@ uses
   SysUtils, Math, Windows,
   Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
   Lists, StrLib,
-  Core, Heroes, GameExt, EventMan;
+  Core, Heroes, GameExt, RscLists, EventMan;
 
 type
   (* Import *)

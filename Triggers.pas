@@ -365,7 +365,7 @@ begin
   
   if MainGameLoopDepth = 0 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMELEAVE, []);
-    GameExt.SetMapFolder('');
+    GameExt.SetMapDir('');
   end;
 end; // .procedure Hook_MainGameLoop
 

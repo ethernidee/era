@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib, DlgMes,
-  Core, GameExt, Heroes, Erm, EventMan;
+  Core, GameExt, Heroes, EventMan;
 
 const
   DUMP_SAVEGAME_SECTIONS_DIR = GameExt.DEBUG_DIR + '\Savegame Sections';
@@ -43,6 +43,9 @@ var
 
 
 (***) implementation (***)
+
+
+uses Erm;
 
 
 type
@@ -100,7 +103,7 @@ begin
     
     Section.AppendBuf(DataSize, Data);
 
-    if DumpSavegameSectionsOpt then begin
+    if false and DumpSavegameSectionsOpt then begin
       Files.AppendFileContents(StrLib.BufToStr(Data, DataSize), GameExt.GameDir + '\' + DUMP_SAVEGAME_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
     end;
   end; // .if
@@ -296,7 +299,6 @@ var
     DataLen:        integer;
     BuiltData:      string;
     TotalWritten:   integer; // Trying to fix game diff algorithm in online games
-    PaddingSize:    integer;
     
   procedure GzipWrite (Count: integer; {n} Addr: pointer);
   begin
@@ -333,7 +335,7 @@ begin
 
       if DumpSavegameSectionsOpt then begin
         Files.WriteFileContents(BuiltData, DUMP_SAVEGAME_SECTIONS_DIR
-                                           + '\' + IterKey + '.joined.txt');
+                                           + '\' + IterKey + '.data');
       end;
     end; // .while
   end; // .with 
