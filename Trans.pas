@@ -7,7 +7,8 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils, DataLib, TypeWrappers,
-  Files, StrLib, Json, Core, GameExt, RscLists, EventMan;
+  Files, StrLib, Json, Core,
+  GameExt, RscLists, Heroes, EventMan;
 
 
 type
@@ -214,11 +215,24 @@ begin
   SysUtils.FreeAndNil(LoadedMapLangResources);
 end;
 
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+var
+  Error: string;
+
+begin
+  Error := MapLangResources.Export(GameExt.GameDir + '\' + GameExt.DEBUG_DIR);
+
+  if Error <> '' then begin
+    Heroes.PrintChatMsg('{~r}' + Error + '{~r}');
+  end;
+end;
+
 begin
   LangDict         := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   MapLangResources := RscLists.TResourceList.Create;
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeScriptsReload', OnBeforeScriptsReload);
+  EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
   EventMan.GetInstance.On('$OnEraMapStart', OnEraMapStart);
   EventMan.GetInstance.On('$OnEraSaveScripts', OnEraSaveScripts);
   EventMan.GetInstance.On('$OnEraLoadScripts', OnEraLoadScripts);

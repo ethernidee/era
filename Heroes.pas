@@ -152,7 +152,25 @@ const
   RED_COLOR         = '0F2223E';
   HEROES_GOLD_COLOR = '0FFFE794';
 
+  (* Msg result *)
+  MSG_RES_OK        = 0;
+  MSG_RES_CANCEL    = 2;
+  MSG_RES_LEFTPIC   = 0;
+  MSG_RES_RIGHTPIC  = 1;
+
+  (*  Dialog Pictures Types and Subtypes  *)
+  NO_PIC_TYPE = -1;
+
 type
+  TMesType =
+  (
+    MES_MES         = 1,
+    MES_QUESTION    = 2,
+    MES_RMB_HINT    = 4,
+    MES_CHOOSE      = 7,
+    MES_MAY_CHOOSE  = 10
+  );
+
   PValue  = ^TValue;
   TValue  = packed record
     case byte of
@@ -444,9 +462,108 @@ function  GetCampaignMapInd: integer;
 function  GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
 function  GetVal (BaseAddr, Offset: integer): PValue; overload;
 
+procedure PrintChatMsg (const Msg: string);
+function  Msg
+(
+  const Mes:          string;
+        MesType:      TMesType  = MES_MES;
+        Pic1Type:     integer   = NO_PIC_TYPE;
+        Pic1SubType:  integer   = 0;
+        Pic2Type:     integer   = NO_PIC_TYPE;
+        Pic2SubType:  integer   = 0;
+        Pic3Type:     integer   = NO_PIC_TYPE;
+        Pic3SubType:  integer   = 0
+): integer;
+
+procedure ShowMessage (const Mes: string);
+function  Ask (const Question: string): boolean;
+
 
 (***) implementation (***)
 
+
+procedure PrintChatMsg (const Msg: string);
+var
+  PtrMsg: pchar;
+
+begin
+  PtrMsg := pchar(Msg);
+  // * * * * * //
+  asm
+    PUSH PtrMsg
+    PUSH $69D800
+    MOV EAX, $553C40
+    CALL EAX
+    ADD ESP, $8
+  end; // .asm
+end; // .procedure PrintChatMsg
+
+function Msg
+(
+  const Mes:          string;
+        MesType:      TMesType  = MES_MES;
+        Pic1Type:     integer   = NO_PIC_TYPE;
+        Pic1SubType:  integer   = 0;
+        Pic2Type:     integer   = NO_PIC_TYPE;
+        Pic2SubType:  integer   = 0;
+        Pic3Type:     integer   = NO_PIC_TYPE;
+        Pic3SubType:  integer   = 0
+): integer;
+
+var
+  MesStr:     pchar;
+  MesTypeInt: integer;
+  Res:        integer;
+  
+begin
+  MesStr     := pchar(Mes);
+  MesTypeInt := ORD(MesType);
+
+  asm
+    MOV ECX, MesStr
+    PUSH Pic3SubType
+    PUSH Pic3Type
+    PUSH -1
+    PUSH -1
+    PUSH Pic2SubType
+    PUSH Pic2Type
+    PUSH Pic1SubType
+    PUSH Pic1Type
+    PUSH -1
+    PUSH -1 
+    MOV EAX, $4F6C00
+    MOV EDX, MesTypeInt
+    CALL EAX
+    MOV EAX, [HERO_WND_MANAGER]
+    MOV EAX, [EAX + $38]
+    MOV Res, EAX
+  end; // .asm
+  
+  result := MSG_RES_OK;
+  
+  if MesType = MES_QUESTION then begin
+    if Res = 30726 then begin
+      result := MSG_RES_CANCEL;
+    end // .if
+  end else if MesType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
+    case Res of 
+      30729: result := MSG_RES_LEFTPIC;
+      30730: result := MSG_RES_RIGHTPIC;
+    else
+      result := MSG_RES_CANCEL;
+    end; // .SWITCH Res
+  end; // .elseif
+end; // .function Msg
+
+procedure ShowMessage (const Mes: string);
+begin
+  Msg(Mes);
+end;
+
+function Ask (const Question: string): boolean;
+begin
+  result := Msg(Question, MES_QUESTION) = MSG_RES_OK;
+end;
 
 constructor TResourceNamer.Create;
 begin

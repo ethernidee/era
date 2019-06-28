@@ -117,7 +117,7 @@ begin
       GameExt.GenerateDebugInfo;
 
       if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
-        Erm.PrintChatMsg('{~white}Debug information was dumped to ' + GameExt.DEBUG_DIR +'{~}');
+        Heroes.PrintChatMsg('{~white}Debug information was dumped to ' + GameExt.DEBUG_DIR +'{~}');
       end;
     end else if (wParam = KEY_F12) and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
       Erm.ReloadErm;

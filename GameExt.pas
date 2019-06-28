@@ -340,7 +340,7 @@ end;
 
 function GetMapDirName: string;
 begin
-  result := SysUtils.ExtractFileName(GetMapDirName);
+  result := SysUtils.ExtractFileName(GetMapDir);
 end;
 
 procedure SetMapDir (const NewMapDir: string);
@@ -350,7 +350,7 @@ end;
 
 function GetMapResourcePath (const RelResourcePath: string; FallbackToOriginal: boolean = true): string;
 begin
-  result := GetMapDirName + '\' + RelResourcePath;
+  result := GetMapDir + '\' + RelResourcePath;
   
   if FallbackToOriginal and (Windows.GetFileAttributesA(pchar(result)) = cardinal(-1)) then begin
     result := GameDir + '\' + RelResourcePath;

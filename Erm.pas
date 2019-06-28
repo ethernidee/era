@@ -163,15 +163,6 @@ const
   WOG_OPTION_DISABLE_ERRORS = 904;
   DONT_WOGIFY               = 0;
   WOGIFY_ALL                = 2;
-  
-  (*  Msg result  *)
-  MSG_RES_OK        = 0;
-  MSG_RES_CANCEL    = 2;
-  MSG_RES_LEFTPIC   = 0;
-  MSG_RES_RIGHTPIC  = 1;
-  
-  (*  Dialog Pictures Types and Subtypes  *)
-  NO_PIC_TYPE = -1;
 
   NUM_WOG_HEROES = 156;
 
@@ -338,15 +329,6 @@ type
   end; // .class TYVars
 
   TWoGOptions = array [CURRENT_WOG_OPTIONS..GLOBAL_WOG_OPTIONS, 0..NUM_WOG_OPTIONS - 1] of integer;
-  
-  TMesType =
-  (
-    MES_MES         = 1,
-    MES_QUESTION    = 2,
-    MES_RMB_HINT    = 4,
-    MES_CHOOSE      = 7,
-    MES_MAY_CHOOSE  = 10
-  );
 
   THeroSpecRecord = packed record
     Setup:       array [0..6] of integer;
@@ -464,23 +446,8 @@ var
 
 procedure SetZVar (Str: pchar; const Value: string);
 procedure ZvsProcessCmd (Cmd: PErmCmd);
-procedure PrintChatMsg (const Msg: string);
 
-function  Msg
-(
-  const Mes:          string;
-        MesType:      TMesType  = MES_MES;
-        Pic1Type:     integer   = NO_PIC_TYPE;
-        Pic1SubType:  integer   = 0;
-        Pic2Type:     integer   = NO_PIC_TYPE;
-        Pic2SubType:  integer   = 0;
-        Pic3Type:     integer   = NO_PIC_TYPE;
-        Pic3SubType:  integer   = 0
-): integer;
-
-procedure ShowMessage (const Mes: string);
 procedure ShowErmError (const Error: string);
-function  Ask (const Question: string): boolean;
 function  GetErmFuncByName (const FuncName: string): integer;
 function  GetErmFuncName (FuncId: integer; out Name: string): boolean;
 function  AllocErmFunc (const FuncName: string; {i} out FuncId: integer): boolean;
@@ -516,94 +483,11 @@ var
     ErmErrReported:  boolean = false;
 
 
-procedure PrintChatMsg (const Msg: string);
-var
-  PtrMsg: pchar;
-
-begin
-  PtrMsg := pchar(Msg);
-  // * * * * * //
-  asm
-    PUSH PtrMsg
-    PUSH $69D800
-    MOV EAX, $553C40
-    CALL EAX
-    ADD ESP, $8
-  end; // .asm
-end; // .procedure PrintChatMsg
-
-function Msg
-(
-  const Mes:          string;
-        MesType:      TMesType  = MES_MES;
-        Pic1Type:     integer   = NO_PIC_TYPE;
-        Pic1SubType:  integer   = 0;
-        Pic2Type:     integer   = NO_PIC_TYPE;
-        Pic2SubType:  integer   = 0;
-        Pic3Type:     integer   = NO_PIC_TYPE;
-        Pic3SubType:  integer   = 0
-): integer;
-
-var
-  MesStr:     pchar;
-  MesTypeInt: integer;
-  Res:        integer;
-  
-begin
-  MesStr     := pchar(Mes);
-  MesTypeInt := ORD(MesType);
-
-  asm
-    MOV ECX, MesStr
-    PUSH Pic3SubType
-    PUSH Pic3Type
-    PUSH -1
-    PUSH -1
-    PUSH Pic2SubType
-    PUSH Pic2Type
-    PUSH Pic1SubType
-    PUSH Pic1Type
-    PUSH -1
-    PUSH -1 
-    MOV EAX, $4F6C00
-    MOV EDX, MesTypeInt
-    CALL EAX
-    MOV EAX, [Heroes.HERO_WND_MANAGER]
-    MOV EAX, [EAX + $38]
-    MOV Res, EAX
-  end; // .asm
-  
-  result := MSG_RES_OK;
-  
-  if MesType = MES_QUESTION then begin
-    if Res = 30726 then begin
-      result := MSG_RES_CANCEL;
-    end // .if
-  end else if MesType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
-    case Res of 
-      30729: result := MSG_RES_LEFTPIC;
-      30730: result := MSG_RES_RIGHTPIC;
-    else
-      result := MSG_RES_CANCEL;
-    end; // .SWITCH Res
-  end; // .elseif
-end; // .function Msg  
-  
-procedure ShowMessage (const Mes: string);
-begin
-  Msg(Mes);
-end;
-
 procedure ShowErmError (const Error: string);
 begin
   ZvsErmError(nil, 0, pchar(Error));
 end;
-
-function Ask (const Question: string): boolean;
-begin
-  result := Msg(Question, MES_QUESTION) = MSG_RES_OK;
-end;
-    
+   
 function GetErmValType (c: char; out ValType: TErmValType): boolean;
 begin
   result  :=  true;
@@ -1593,7 +1477,7 @@ begin
     ZvsIsGameLoading^ := true;
     ZvsFindErm;
     EventMan.GetInstance.Fire('OnAfterScriptsReload');
-    PrintChatMsg('{~white}ERM and language data were reloaded{~}');
+    Heroes.PrintChatMsg('{~white}ERM and language data were reloaded{~}');
   end;
 end;
 
@@ -1627,7 +1511,7 @@ begin
   end; // .else
   
   if not Res then begin
-    PrintChatMsg(Mes);
+    Heroes.PrintChatMsg(Mes);
   end;
 end; // .procedure TScriptMan.ExtractScripts
 

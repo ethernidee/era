@@ -178,12 +178,12 @@ end;
 
 procedure ShowMessage (Mes: pchar); stdcall;
 begin
-  Erm.ShowMessage(Mes);
+  Heroes.ShowMessage(Mes);
 end;
 
 function Ask (Question: pchar): boolean; stdcall;
 begin
-  result := Erm.Ask(Question);
+  result := Heroes.Ask(Question);
 end;
 
 procedure ReportPluginVersion (const VersionLine: pchar); stdcall;

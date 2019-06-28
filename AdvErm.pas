@@ -105,7 +105,7 @@ begin
   if @OldReceiverHandler = nil then begin
     NewReceivers[Ptr(ReceiverName)] := @ReceiverHandler;
   end else begin
-    Erm.ShowMessage('Receiver "' + CHR(ReceiverName and $FF) + CHR(ReceiverName shr 8 and $FF) + '" is already registered!');
+    Heroes.ShowMessage('Receiver "' + CHR(ReceiverName and $FF) + CHR(ReceiverName shr 8 and $FF) + '" is already registered!');
   end;
 end; // .procedure RegisterReceiver
     
