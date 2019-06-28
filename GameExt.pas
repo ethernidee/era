@@ -65,9 +65,8 @@ function  GetRealAddr (Addr: pointer): pointer; stdcall;
 function  GetMapDir: string; stdcall;
 function  GetMapDirName: string;
 procedure SetMapDir (const NewMapDir: string);
-function  GetMapResourcePath (const RelResourcePath: string; FallbackToOriginal: boolean = true): string;
-function  LoadMapRscFile (const RelResourcePath: string; out FileContents: string; FallbackToOriginal: boolean = true): boolean;
-function  MapRscFileExists (const RelResourcePath: string): boolean;
+function  GetMapResourcePath (const RelResourcePath: string): string;
+function  LoadMapRscFile (const RelResourcePath: string; out FileContents: string): boolean;
 procedure GenerateDebugInfo;
 procedure ReportPluginVersion (const VersionLine: string);
 
@@ -348,23 +347,14 @@ begin
   MapDir := NewMapDir;
 end;
 
-function GetMapResourcePath (const RelResourcePath: string; FallbackToOriginal: boolean = true): string;
+function GetMapResourcePath (const RelResourcePath: string): string;
 begin
   result := GetMapDir + '\' + RelResourcePath;
-  
-  if FallbackToOriginal and (Windows.GetFileAttributesA(pchar(result)) = cardinal(-1)) then begin
-    result := GameDir + '\' + RelResourcePath;
-  end;
 end;
 
-function LoadMapRscFile (const RelResourcePath: string; out FileContents: string; FallbackToOriginal: boolean = true): boolean;
+function LoadMapRscFile (const RelResourcePath: string; out FileContents: string): boolean;
 begin
-  result := Files.ReadFileContents(GetMapResourcePath(RelResourcePath, FallbackToOriginal), FileContents);
-end;
-
-function MapRscFileExists (const RelResourcePath: string): boolean;
-begin
-  result := SysUtils.FileExists(GetMapDir + '\' + RelResourcePath);
+  result := Files.ReadFileContents(GetMapResourcePath(RelResourcePath), FileContents);
 end;
 
 procedure GenerateDebugInfo;

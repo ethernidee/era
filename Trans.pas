@@ -137,7 +137,7 @@ begin
   result     := RscLists.TResourceList.Create;
   MapDirName := GameExt.GetMapDirName;
 
-  with Files.Locate(GameExt.GetMapResourcePath(LANG_DIR, GameExt.DONT_FALLBACK_TO_ORIGINAL) + '\*.json', Files.ONLY_FILES) do begin
+  with Files.Locate(GameExt.GetMapResourcePath(LANG_DIR) + '\*.json', Files.ONLY_FILES) do begin
     while FindNext do begin
       if Files.ReadFileContents(FoundPath, FileContents) then begin
         result.Add(RscLists.TResource.Create(MapDirName + '\' + FoundName, FileContents));
