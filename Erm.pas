@@ -17,6 +17,7 @@ type
   TStrList    = DataLib.TStrList;
   TDict       = DataLib.TDict;
   TString     = TypeWrappers.TString;
+  TResource   = RscLists.TResource;
 
 const
   ERM_SCRIPTS_SECTION      = 'Era.ErmScripts';
@@ -235,35 +236,10 @@ type
     Params:     TErmCmdParams;
     (* ... *)
   end; // .record TErmSubCmd
-
-  TErmScript = class
-     private
-       fFileName: string;
-       fContents: string;
-       fCrc32:    integer;
-
-      procedure Init (const aFileName, aScriptContents: string; aCrc32: integer);
-
-     public
-      constructor Create (const aFileName, aScriptContents: string; aCrc32: integer); overload;
-      constructor Create (const aFileName, aScriptContents: string); overload;
-      
-      function FastCompare (OtherScript: TErmScript): boolean;
-      function OwnsAddr ({n} Addr: pchar): boolean;
-      function GetPtr: pchar;
-      
-      property FileName: string read fFileName;
-      property Contents: string read fContents;
-      property Crc32:    integer read fCrc32;
-    end; // .class TErmScript
   
   TScriptMan = class
      private
-      {O} fScripts:        {O} TList {OF TErmScript};
-      {O} fScriptIsLoaded: {U} TDict {OF FileName => Ptr(BOOLEAN)};
-      
-      function  GetScriptCount: integer;
-      function  GetScript (Ind: integer): TErmScript;
+      {O} fScripts: RscLists.TResourceList;
      
      public
       constructor Create;
@@ -271,16 +247,14 @@ type
      
       procedure ClearScripts;
       procedure SaveScripts;
-      function  IsScriptLoaded (const ScriptName: string): boolean;
-      function  LoadScript (const ScriptName: string): boolean;
+      function  LoadScript (const ScriptPath: string; ScriptName: string = ''): boolean;
       procedure LoadScriptsFromSavedGame;
       procedure LoadScriptsFromDisk;
       procedure ReloadScriptsFromDisk;
       procedure ExtractScripts;
       function  AddrToScriptNameAndLine ({n} Addr: pchar; var {out} ScriptName: string; out LineN: integer; out LinePos: integer): boolean;
 
-      property NumScripts: integer read GetScriptCount;
-      property Scripts[Ind: integer]: TErmScript read GetScript;
+      property Scripts: RscLists.TResourceList read fScripts;
     end; // .class TScriptMan
 
   PZvsTriggerIfs = ^TZvsTriggerIfs;
@@ -881,39 +855,6 @@ begin
   end; // .for
 end; // .procedure ExecErmCmd
 
-procedure TErmScript.Init (const aFileName, aScriptContents: string; aCrc32: integer);
-begin
-  fFileName := aFileName;
-  fContents := aScriptContents;
-  fCrc32    := aCrc32;
-end;
-
-constructor TErmScript.Create (const aFileName, aScriptContents: string; aCrc32: integer);
-begin
-  Init(aFileName, aScriptContents, aCrc32);
-end;
-
-constructor TErmScript.Create (const aFileName, aScriptContents: string);
-begin
-  Init(aFileName, aScriptContents, Crypto.AnsiCrc32(aScriptContents));
-end;
-
-function TErmScript.FastCompare (OtherScript: TErmScript): boolean;
-begin
-  {!} Assert(OtherScript <> nil);
-  result := (Self.fCrc32 = OtherScript.fCrc32) and (Length(Self.fContents) = Length(OtherScript.fContents));
-end;
-
-function TErmScript.OwnsAddr ({n} Addr: pchar): boolean;
-begin
-  result := (cardinal(Addr) >= cardinal(Self.fContents)) and (cardinal(Addr) < cardinal(Self.fContents) + cardinal(Length(Self.fContents)));
-end;
-
-function TErmScript.GetPtr: pchar;
-begin
-  result := pchar(Self.fContents);
-end;
-
 procedure OnEraSaveScripts (Event: GameExt.PEvent); stdcall;
 begin
   (* Save function names and auto ID *)
@@ -1331,14 +1272,13 @@ end; // .function GetOrderedPrioritizedFileList
 
 constructor TScriptMan.Create;
 begin
-  fScripts        := DataLib.NewList(Utils.OWNS_ITEMS);
-  fScriptIsLoaded := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  inherited;
+  fScripts := RscLists.TResourceList.Create;
 end;
   
 destructor TScriptMan.Destroy;
 begin
   SysUtils.FreeAndNil(fScripts);
-  SysUtils.FreeAndNil(fScriptIsLoaded);
   inherited;
 end;
 
@@ -1346,7 +1286,6 @@ procedure TScriptMan.ClearScripts;
 begin
   EventMan.GetInstance.Fire('OnBeforeClearErmScripts');
   fScripts.Clear;
-  fScriptIsLoaded.Clear;
 
   if TrackingOpts.Enabled then begin
     EventTracker.Reset;
@@ -1354,89 +1293,45 @@ begin
 end;
 
 procedure TScriptMan.SaveScripts;
-var
-{U} Script: TErmScript;
-    i:      integer;
-  
 begin
-  Script := nil;
-  // * * * * * //
-  with Stores.NewRider(ERM_SCRIPTS_SECTION) do begin
-    WriteInt(fScripts.Count);
-
-    for i := 0 to fScripts.Count - 1 do begin
-      Script := TErmScript(fScripts[i]);
-      WriteStr(Script.FileName);
-      WriteInt(Script.Crc32);
-      WriteStr(Script.Contents);
-    end;
-  end; // .with 
-end; // .procedure TScriptMan.SaveScripts
-
-function TScriptMan.IsScriptLoaded (const ScriptName: string): boolean;
-begin
-  result := fScriptIsLoaded[ScriptName] <> nil;
+  Self.fScripts.Save(ERM_SCRIPTS_SECTION);
 end;
 
-function TScriptMan.LoadScript (const ScriptName: string): boolean;
+function TScriptMan.LoadScript (const ScriptPath: string; ScriptName: string = ''): boolean;
 var
   ScriptContents:     string;
   PreprocessedScript: string;
 
 begin
-  result := (fScriptIsLoaded[ScriptName] = nil) and (GameExt.LoadMapRscFile(ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents));
+  if ScriptName = '' then begin
+    ScriptName := SysUtils.ExtractFilePath(ScriptPath);
+  end;
+  
+  result := not Self.fScripts.ItemExists(ScriptName) and Files.ReadFileContents(ScriptPath, ScriptContents);
 
   if result then begin
-    fScriptIsLoaded[ScriptName] := Ptr(1);
-    PreprocessedScript          := PreprocessErm(ScriptName, ScriptContents);
-    fScripts.Add(TErmScript.Create(ScriptName, PreprocessedScript, Crypto.AnsiCrc32(ScriptContents)));
+    PreprocessedScript := PreprocessErm(ScriptName, ScriptContents);
+    fScripts.Add(TResource.Create(ScriptName, PreprocessedScript, Crypto.AnsiCrc32(ScriptContents)));
     LoadErtFile(ScriptName);
   end;
 end;
 
 procedure TScriptMan.LoadScriptsFromSavedGame;
 var
-{O} LoadedScripts:      {O} TList {OF TErmScript};
-    NumScripts:         integer;
-    ScriptContents:     string;
-    ScriptFileName:     string;
-    ScriptCrc32:        integer;
-    ScriptSetsAreEqual: boolean;
-    i:                  integer;
+{O} LoadedScripts: RscLists.TResourceList;
   
 begin
-  LoadedScripts := DataLib.NewList(Utils.OWNS_ITEMS);
+  LoadedScripts := RscLists.TResourceList.Create;
   // * * * * * //
-  with Stores.NewRider(ERM_SCRIPTS_SECTION) do begin
-    NumScripts := ReadInt;
+  LoadedScripts.LoadFromSavedGame(ERM_SCRIPTS_SECTION);
 
-    for i := 1 to NumScripts do begin
-      ScriptFileName := ReadStr;
-      ScriptCrc32    := ReadInt;
-      ScriptContents := ReadStr;
-      LoadedScripts.Add(TErmScript.Create(ScriptFileName, ScriptContents, ScriptCrc32));
-    end;
-  end;
-  
-  ScriptSetsAreEqual := fScripts.Count = LoadedScripts.Count;
-  
-  if ScriptSetsAreEqual then begin
-    i := 0;
-  
-    while (i < fScripts.Count) and TErmScript(fScripts[i]).FastCompare(TErmScript(LoadedScripts[i])) do begin
-      Inc(i);
-    end;
-    
-    ScriptSetsAreEqual := i = fScripts.Count;
-  end;
-  
-  if not ScriptSetsAreEqual then begin
-    Utils.Exchange(int(fScripts), int(LoadedScripts));
+  if not LoadedScripts.FastCompare(Self.fScripts) then begin
+    Utils.Exchange(int(LoadedScripts), int(Self.fScripts));
     ZvsFindErm;
   end;
   // * * * * * //
   SysUtils.FreeAndNil(LoadedScripts);
-end; // .procedure TScriptMan.LoadScriptsFromSavedGame
+end;
 
 procedure TScriptMan.LoadScriptsFromDisk;
 const
@@ -1444,12 +1339,15 @@ const
   
 var
 {O} ScriptList:    TStrList;
+    ScriptsDir:    string;
+    MapDirName:    string;
     ForcedScripts: Utils.TArrayOfStr;
     FileContents:  string;
     i:             integer;
    
 begin
   ForcedScripts := nil;
+  ScriptList    := nil;
   // * * * * * //
   Self.ClearScripts;
   ZvsClearErtStrings;
@@ -1458,15 +1356,26 @@ begin
     ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
 
     for i := 0 to High(ForcedScripts) do begin
-      Self.LoadScript(ForcedScripts[i]);
+      Self.LoadScript(GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ForcedScripts[i]);
     end;
   end else begin
-    ScriptList := GetOrderedPrioritizedFileList([GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH + '\*.erm', GameExt.DONT_FALLBACK_TO_ORIGINAL), GameExt.GameDir + '\' + ERM_SCRIPTS_PATH + '\*.erm']);
-    
+    ScriptsDir := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH);
+    ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+    MapDirName := GameExt.GetMapDirName;
+
     for i := 0 to ScriptList.Count - 1 do begin
-      Self.LoadScript(ScriptList[i]);
+      Self.LoadScript(ScriptsDir + '\' + ScriptList[i], MapDirName + '\' + ScriptList[i]);
+    end;
+
+    ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
+    ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+
+    for i := 0 to ScriptList.Count - 1 do begin
+      Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ScriptList[i]);
     end;
   end; // .else
+  // * * * * * //
+  SysUtils.FreeAndNil(ScriptList);
 end; // .procedure TScriptMan.LoadScriptsFromDisk
 
 procedure TScriptMan.ReloadScriptsFromDisk;
@@ -1483,52 +1392,28 @@ end;
 
 procedure TScriptMan.ExtractScripts;
 var
-  Res:        boolean;
-  Mes:        string;
-  ScriptPath: string;
-  i:          integer;
+  Error: string;
   
 begin
   Files.DeleteDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
-  Res := SysUtils.CreateDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
-  Mes := '';
+  Error := '';
+
+  if not Files.ForcePath(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH) then begin
+    Error := 'Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"';
+  end;
   
-  if not Res then begin
-    Mes := '{~r}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
-  end else begin
-    i := 0;
-    
-    while Res and (i < fScripts.Count) do begin
-      ScriptPath := GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH + '\' + TErmScript(fScripts[i]).FileName;
-      Res        := Files.WriteFileContents(TErmScript(fScripts[i]).Contents, ScriptPath);
-      
-      if not Res then begin
-        Mes := '{~r}Error writing to file "' + ScriptPath + '"{~}';
-      end;
-    
-      Inc(i);
-    end;
-  end; // .else
+  if Error = '' then begin
+    Error := Self.fScripts.Export(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
+  end;
   
-  if not Res then begin
-    Heroes.PrintChatMsg(Mes);
+  if Error <> '' then begin
+    Heroes.PrintChatMsg(Error);
   end;
 end; // .procedure TScriptMan.ExtractScripts
 
-function TScriptMan.GetScriptCount: integer;
-begin
-  result := fScripts.Count;
-end;
-
-function TScriptMan.GetScript (Ind: integer): TErmScript;
-begin
-  {!} Assert(Math.InRange(Ind, 0, fScripts.Count - 1));
-  result := fScripts[Ind];
-end;
-
 function TScriptMan.AddrToScriptNameAndLine ({n} Addr: pchar; var {out} ScriptName: string; out LineN: integer; out LinePos: integer): boolean;
 var
-{Un} Script: TErmScript;
+{Un} Script: TResource;
      i:      integer;
 
 
@@ -1541,11 +1426,11 @@ begin
     result := false;
     
     for i := 0 to Self.fScripts.Count - 1 do begin
-      Script := TErmScript(Self.fScripts[i]);
+      Script := TResource(Self.fScripts[i]);
 
       if Script.OwnsAddr(Addr) then begin
-        ScriptName := Script.FileName;
-        result     := AddrToLineAndPos(pchar(Script.fContents), Length(Script.fContents), Addr, LineN, LinePos);
+        ScriptName := Script.Name;
+        result     := AddrToLineAndPos(Script.GetPtr, Length(Script.Contents), Addr, LineN, LinePos);
         exit;
       end;
     end;
@@ -1991,7 +1876,7 @@ begin
     ScriptMan.LoadScriptsFromDisk;
   end;
   
-  if ScriptIndPtr^ < ScriptMan.NumScripts then begin
+  if ScriptIndPtr^ < ScriptMan.Scripts.Count then begin
     // M.m.i = 0
     pinteger(Context.EBP - $318)^ := 0;
     // M.m.s = ErmScript
