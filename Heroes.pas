@@ -423,7 +423,6 @@ procedure MemFreeAndNil (var p);
 procedure GZipWrite (Count: integer; {n} Addr: pointer);
 function  GzipRead (Count: integer; {n} Addr: pointer): integer;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
-procedure ForceTxtUnload (Name: pchar); stdcall;
 procedure LoadLod (const LodName: string; Res: PLod);
 procedure GetGameState (out GameState: TGameState); stdcall;
 function  GetMapSize: integer;
@@ -712,24 +711,6 @@ begin
     MOV @result, EAX
   end; // .asm
 end;
-
-procedure ForceTxtUnload (Name: pchar);
-var
-{U} Txt:  PTxtFile;
-  
-begin
-  Txt :=  LoadTxt(Name);
-  // * * * * * //
-  if Txt <> nil then begin
-    Txt.RefCount := 1;
-    
-    asm
-      MOV ECX, Txt
-      MOV EAX, UNLOAD_TXT_FUNC
-      CALL EAX
-    end; // .asm
-  end;
-end; // .procedure ForceTxtUnload
 
 procedure LoadLod (const LodName: string; Res: PLod);
 begin

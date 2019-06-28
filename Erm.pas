@@ -1389,9 +1389,10 @@ begin
   SysUtils.FreeAndNil(Labels);
 end; // .function PreprocessErm
 
-(* Returns list of files in specified directory, sorted by numeric priorities like '906 file name.erm'.
-   The higher priority is, the ealier in the list item will appear *)
-function GetOrderedPrioritizedFileList (const MaskedPath: string): {O} Lists.TStringList;
+(* Returns list of files in specified locations, sorted by numeric priorities like '906 file name.erm'.
+   The higher priority is, the ealier in the list item will appear. If same files exists ib several
+   locations, files from the earlier locations take precedence *)
+function GetOrderedPrioritizedFileList (const MaskedPaths: array of string): {O} Lists.TStringList;
 const
   PRIORITY_SEPARATOR  = ' ';
   DEFAULT_PRIORITY    = 0;
@@ -1404,24 +1405,32 @@ var
   FileNameTokens: Utils.TArrayOfStr;
   Priority:       integer;
   TestPriority:   integer;
+  ItemInd:        integer;
   i:              integer;
   j:              integer;
 
 begin
-  result := Lists.NewSimpleStrList;
+  result        := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  result.Sorted := true;
   
-  with Files.Locate(MaskedPath, Files.ONLY_FILES) do begin
-    while FindNext do begin
-      FileNameTokens := StrLib.ExplodeEx(FoundName, PRIORITY_SEPARATOR, not StrLib.INCLUDE_DELIM, StrLib.LIMIT_TOKENS, FILENAME_NUM_TOKENS);
-      Priority       := DEFAULT_PRIORITY;
-      
-      if (Length(FileNameTokens) = FILENAME_NUM_TOKENS) and (SysUtils.TryStrToInt(FileNameTokens[PRIORITY_TOKEN], TestPriority)) then begin
-        Priority := TestPriority;
-      end;
+  for i := 0 to High(MaskedPaths) do begin
+    with Files.Locate(MaskedPaths[i], Files.ONLY_FILES) do begin
+      while FindNext do begin
+        FileNameTokens := StrLib.ExplodeEx(FoundName, PRIORITY_SEPARATOR, not StrLib.INCLUDE_DELIM, StrLib.LIMIT_TOKENS, FILENAME_NUM_TOKENS);
+        Priority       := DEFAULT_PRIORITY;
+        
+        if (Length(FileNameTokens) = FILENAME_NUM_TOKENS) and (SysUtils.TryStrToInt(FileNameTokens[PRIORITY_TOKEN], TestPriority)) then begin
+          Priority := TestPriority;
+        end;
 
-      result.AddObj(FoundName, Ptr(Priority));
-    end;
-  end;
+        if not result.Find(FoundName, ItemInd) then begin
+          result.AddObj(FoundName, Ptr(Priority));
+        end;
+      end;
+    end; // .with
+  end; // .for
+
+  result.Sorted := false;
   
   (* Sort via insertion by Priority *)
   for i := 1 to result.Count - 1 do begin
@@ -1454,6 +1463,10 @@ begin
   EventMan.GetInstance.Fire('OnBeforeClearErmScripts');
   fScripts.Clear;
   fScriptIsLoaded.Clear;
+
+  if TrackingOpts.Enabled then begin
+    EventTracker.Reset;
+  end;
 end;
 
 procedure TScriptMan.SaveScripts;
@@ -1487,7 +1500,7 @@ var
   PreprocessedScript: string;
 
 begin
-  result := (fScriptIsLoaded[ScriptName] = nil) and (Files.ReadFileContents(GameExt.GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents));
+  result := (fScriptIsLoaded[ScriptName] = nil) and (GameExt.LoadMapRscFile(ERM_SCRIPTS_PATH + '\' + ScriptName, ScriptContents));
 
   if result then begin
     fScriptIsLoaded[ScriptName] := Ptr(1);
@@ -1554,24 +1567,22 @@ var
 begin
   ForcedScripts := nil;
   // * * * * * //
-  ClearScripts;
+  Self.ClearScripts;
   ZvsClearErtStrings;
 
-  if Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents) then begin
+  if GameExt.LoadMapRscFile(SCRIPTS_LIST_FILEPATH, FileContents) then begin
     ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
 
     for i := 0 to High(ForcedScripts) do begin
       Self.LoadScript(ForcedScripts[i]);
     end;
   end else begin
-    ScriptList := GetOrderedPrioritizedFileList(GameExt.GameDir + '\' + ERM_SCRIPTS_PATH + '\*.erm');
+    ScriptList := GetOrderedPrioritizedFileList([GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH + '\*.erm', GameExt.DONT_FALLBACK_TO_ORIGINAL), GameExt.GameDir + '\' + ERM_SCRIPTS_PATH + '\*.erm']);
     
     for i := 0 to ScriptList.Count - 1 do begin
       Self.LoadScript(ScriptList[i]);
     end;
   end; // .else
-  // * * * * * //
-  SysUtils.FreeAndNil(ForcedScripts);
 end; // .procedure TScriptMan.LoadScriptsFromDisk
 
 procedure TScriptMan.ReloadScriptsFromDisk;
@@ -1582,7 +1593,7 @@ begin
     ZvsIsGameLoading^ := true;
     ZvsFindErm;
     EventMan.GetInstance.Fire('OnAfterScriptsReload');
-    PrintChatMsg('{~white}ERM is updated{~}');
+    PrintChatMsg('{~white}ERM and language data were reloaded{~}');
   end;
 end;
 
@@ -1596,7 +1607,7 @@ var
 begin
   Files.DeleteDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
   Res := SysUtils.CreateDir(GameExt.GameDir + '\' + EXTRACTED_SCRIPTS_PATH);
-  Mes := '{~white}Scripts were successfully extracted{~}';
+  Mes := '';
   
   if not Res then begin
     Mes := '{~r}Cannot recreate directory "' + EXTRACTED_SCRIPTS_PATH + '"{~}';
@@ -1615,7 +1626,9 @@ begin
     end;
   end; // .else
   
-  PrintChatMsg(Mes);
+  if not Res then begin
+    PrintChatMsg(Mes);
+  end;
 end; // .procedure TScriptMan.ExtractScripts
 
 function TScriptMan.GetScriptCount: integer;
@@ -2085,7 +2098,12 @@ begin
   ScriptIndPtr := Ptr(Context.EBP - $18);
   // * * * * * //
   if not ZvsIsGameLoading^ and (ScriptIndPtr^ = 0) then begin
+    EventMan.GetInstance.Fire('$OnEraMapStart');
     ZvsResetCommanders;
+    AdvErm.ResetMemory;
+    FuncNames.Clear;
+    FuncAutoId := INITIAL_FUNC_AUTO_ID;
+    RegisterErmEventNames;
     ScriptMan.LoadScriptsFromDisk;
   end;
   
@@ -2101,8 +2119,7 @@ begin
     Inc(ScriptIndPtr^);
     // Jump to ERM header processing
     Context.RetAddr := Ptr($74A00C);
-  end // .if
-  else begin
+  end else begin
     // Jimp right after loop end
     Context.RetAddr := Ptr($74C5A7);
   end; // .else
@@ -2302,7 +2319,7 @@ var
 {On} NewErmHeap: pointer;
 
 begin
-  // Patch WoG FindErm to allow functions with arbitrary IDs
+  // Patch WoG FindErm to allow functions with arbitrary positive IDs
   Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
 
   (* Disable internal map scripts interpretation *)

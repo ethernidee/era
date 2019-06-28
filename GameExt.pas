@@ -41,6 +41,9 @@ const
   ERA_VERSION_STR = '2.8.3';
   ERA_VERSION_INT = 2803;
 
+  FALLBACK_TO_ORIGINAL      = true;
+  DONT_FALLBACK_TO_ORIGINAL = false;
+
 type
   EAssertFailure = class (Exception) end;
 
@@ -59,9 +62,11 @@ function  PatchExists (const PatchName: string): boolean; stdcall;
 function  PluginExists (const PluginName: string): boolean; stdcall;
 procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall;
 function  GetRealAddr (Addr: pointer): pointer; stdcall;
-function  GetMapFolder: string; stdcall;
+function  GetMapDir: string; stdcall;
 procedure SetMapFolder (const NewMapFolder: string);
-function  GetMapResourcePath (const OrigResourcePath: string): string; stdcall;
+function  GetMapResourcePath (const RelResourcePath: string; FallbackToOriginal: boolean = true): string;
+function  LoadMapRscFile (const RelResourcePath: string; out FileContents: string; FallbackToOriginal: boolean = true): boolean;
+function  MapRscFileExists (const RelResourcePath: string): boolean;
 procedure GenerateDebugInfo;
 procedure ReportPluginVersion (const VersionLine: string);
 
@@ -319,7 +324,7 @@ begin
   EventMan.GetInstance.Fire(EventName, EventData, DataSize);
 end;
 
-function GetMapFolder: string;
+function GetMapDir: string;
 begin
   if MapFolder = '' then begin
     if Heroes.IsCampaign then begin
@@ -330,20 +335,30 @@ begin
   end;
   
   result := MapFolder;
-end; // .function GetMapFolder
+end;
 
 procedure SetMapFolder (const NewMapFolder: string);
 begin
   MapFolder := NewMapFolder;
 end;
 
-function GetMapResourcePath (const OrigResourcePath: string): string;
+function GetMapResourcePath (const RelResourcePath: string; FallbackToOriginal: boolean = true): string;
 begin
-  result := GetMapFolder + '\' + OrigResourcePath;
+  result := GetMapDir + '\' + RelResourcePath;
   
-  if not SysUtils.FileExists(result) then begin
-    result := OrigResourcePath;
+  if FallbackToOriginal and (Windows.GetFileAttributesA(pchar(result)) = cardinal(-1)) then begin
+    result := GameDir + '\' + RelResourcePath;
   end;
+end;
+
+function LoadMapRscFile (const RelResourcePath: string; out FileContents: string; FallbackToOriginal: boolean = true): boolean;
+begin
+  result := Files.ReadFileContents(GetMapResourcePath(RelResourcePath, FallbackToOriginal), FileContents);
+end;
+
+function MapRscFileExists (const RelResourcePath: string): boolean;
+begin
+  result := SysUtils.FileExists(GetMapDir + '\' + RelResourcePath);
 end;
 
 procedure GenerateDebugInfo;
