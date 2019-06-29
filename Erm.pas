@@ -1367,6 +1367,7 @@ begin
       Self.LoadScript(ScriptsDir + '\' + ScriptList[i], MapDirName + '\' + ScriptList[i]);
     end;
 
+    SysUtils.FreeAndNil(ScriptList);
     ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
     ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
 
@@ -2075,18 +2076,24 @@ begin
 end;
 
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
-begin
-  (* Remove WoG CM3 trigger *)
-  Core.p.WriteDword(Ptr($78C210), $887668);
-end;
-
-procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 const
   NEW_ERM_HEAP_SIZE = 128 * 1000 * 1000;
 
 var
 {On} NewErmHeap: pointer;
 
+begin
+  (* Remove WoG CM3 trigger *)
+  Core.p.WriteDword(Ptr($78C210), $887668);
+
+  (* Extend ERM memory limit to 128 MB *)
+  NewErmHeap := Windows.VirtualAlloc(nil, NEW_ERM_HEAP_SIZE, Windows.MEM_RESERVE or Windows.MEM_COMMIT, Windows.PAGE_EXECUTE_READWRITE);
+  {!} Assert(NewErmHeap <> nil, 'Failed to allocate 128 MB memory block for new ERM heap');
+  Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
+  Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', integer(NEW_ERM_HEAP_SIZE)]);
+end;
+
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   // Patch WoG FindErm to allow functions with arbitrary positive IDs
   Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
@@ -2190,12 +2197,6 @@ begin
   Core.p.WriteDataPatch(Ptr($749421), ['E9BF0200009090']);
   // Track ERM errors location during FindErm
   Core.ApiHook(@Hook_FindErm_SkipUntil2, Core.HOOKTYPE_CALL, Ptr($74A14A));
-
-  (* Extend ERM memory limit to 128 MB *)
-  NewErmHeap := Windows.VirtualAlloc(nil, NEW_ERM_HEAP_SIZE, Windows.MEM_RESERVE or Windows.MEM_COMMIT, Windows.PAGE_EXECUTE_READWRITE);
-  {!} Assert(NewErmHeap <> nil, 'Failed to allocate 128 MB memory block for new ERM heap');
-  Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
-  Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', integer(NEW_ERM_HEAP_SIZE)]);
 
   (* Disable default tracing of last ERM command *)
   Core.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);
