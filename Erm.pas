@@ -157,13 +157,20 @@ const
   ERM_FLAG_HUMAN_VISITOR_OR_REAL_BATTLE = 1000;
 
   (* WoG Options *)
-  NUM_WOG_OPTIONS           = 1000;
-  CURRENT_WOG_OPTIONS       = 0;
-  GLOBAL_WOG_OPTIONS        = 1;
-  WOG_OPTION_ERROR          = 905;
-  WOG_OPTION_DISABLE_ERRORS = 904;
-  DONT_WOGIFY               = 0;
-  WOGIFY_ALL                = 2;
+  NUM_WOG_OPTIONS                           = 1000;
+  CURRENT_WOG_OPTIONS                       = 0;
+  GLOBAL_WOG_OPTIONS                        = 1;
+  WOG_OPTION_TOWERS_EXP_DISABLED            = 1;
+  WOG_OPTION_LEAVE_MONS_ON_ADV_MAP_DISABLED = 2;
+  WOG_OPTION_COMMANDERS_DISABLED            = 3;
+  WOG_OPTION_TOWN_DESTRUCT_DISABLED         = 4;
+  WOG_OPTION_WOGIFY                         = 5;
+  WOG_OPTION_COMMANDERS_NEED_HIRING         = 6;
+  WOG_OPTION_MAP_RULES                      = 101;
+  WOG_OPTION_ERROR                          = 905;
+  WOG_OPTION_DISABLE_ERRORS                 = 904;
+  DONT_WOGIFY                               = 0;
+  WOGIFY_ALL                                = 2;
 
   NUM_WOG_HEROES = 156;
 
@@ -353,6 +360,7 @@ type
 
   TFireRemoteEventProc = procedure (EventId: integer; Data: pinteger; NumInts: integer); cdecl;
   TZvsPlaceMapObject   = function (x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; cdecl;
+  TZvsCheckEnabled     = array [0..19] of integer;
 
 const
   (* WoG vars *)
@@ -371,6 +379,7 @@ const
   ZvsIsGameLoading:   PBOOLEAN          = Ptr($A46BC0);
   ZvsTriggerIfs:      PZvsTriggerIfs    = Ptr($A46D18);
   ZvsTriggerIfsDepth: pbyte             = Ptr($A46D22);
+  ZvsChestsEnabled:   ^TZvsCheckEnabled = Ptr($27F99B0);
   IsWoG:              plongbool         = Ptr($803288);
   WoGOptions:         ^TWoGOptions      = Ptr($2771920);
   ErmEnabled:         plongbool         = Ptr($27F995C);
@@ -397,6 +406,8 @@ const
   FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
   ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
   ZvsResetCommanders: Utils.TProcedure  = Ptr($770B25);
+  ZvsEnableNpc:       procedure (HeroId: integer; AutoHired: integer) cdecl = Ptr($76B541);
+  ZvsDisableNpc:      procedure (HeroId: integer) cdecl = Ptr($76B5D6);
 
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
@@ -1338,12 +1349,13 @@ const
   SCRIPTS_LIST_FILEPATH = ERM_SCRIPTS_PATH + '\load only these scripts.txt';
   
 var
-{O} ScriptList:    TStrList;
-    ScriptsDir:    string;
-    MapDirName:    string;
-    ForcedScripts: Utils.TArrayOfStr;
-    FileContents:  string;
-    i:             integer;
+{O} ScriptList:          TStrList;
+    ScriptsDir:          string;
+    MapDirName:          string;
+    ForcedScripts:       Utils.TArrayOfStr;
+    LoadFixedScriptsSet: boolean;
+    FileContents:        string;
+    i:                   integer;
    
 begin
   ForcedScripts := nil;
@@ -1352,29 +1364,33 @@ begin
   Self.ClearScripts;
   ZvsClearErtStrings;
 
-  if GameExt.LoadMapRscFile(SCRIPTS_LIST_FILEPATH, FileContents) then begin
+  ScriptsDir := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH);
+  ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+  MapDirName := GameExt.GetMapDirName;
+
+  for i := 0 to ScriptList.Count - 1 do begin
+    Self.LoadScript(ScriptsDir + '\' + ScriptList[i], MapDirName + '\' + ScriptList[i]);
+  end;
+
+  SysUtils.FreeAndNil(ScriptList);
+
+  LoadFixedScriptsSet := Files.ReadFileContents(GameExt.GetMapResourcePath(SCRIPTS_LIST_FILEPATH), FileContents) or
+                         Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents);
+
+  if LoadFixedScriptsSet then begin
     ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
 
     for i := 0 to High(ForcedScripts) do begin
       Self.LoadScript(GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ForcedScripts[i]);
     end;
   end else begin
-    ScriptsDir := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH);
-    ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
-    MapDirName := GameExt.GetMapDirName;
-
-    for i := 0 to ScriptList.Count - 1 do begin
-      Self.LoadScript(ScriptsDir + '\' + ScriptList[i], MapDirName + '\' + ScriptList[i]);
-    end;
-
-    SysUtils.FreeAndNil(ScriptList);
     ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
     ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
 
     for i := 0 to ScriptList.Count - 1 do begin
       Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ScriptList[i]);
     end;
-  end; // .else
+  end;
   // * * * * * //
   SysUtils.FreeAndNil(ScriptList);
 end; // .procedure TScriptMan.LoadScriptsFromDisk
@@ -1897,6 +1913,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_FindErm_AfterMapScripts
 
+(* Loads WoG options from file for current map only (not global) *)
 function LoadWoGOptions (FilePath: pchar): boolean; ASSEMBLER;
 asm
   PUSH $0FA0
@@ -1915,10 +1932,33 @@ asm
 @Done:
 end; // .function LoadWoGOptions
 
+procedure EnableCommanders;
+var
+  i: integer;
+
+begin
+  ZvsEnableNpc(-1, 1 - ord(WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_COMMANDERS_NEED_HIRING] <> 0));
+
+  for i := 7 to 10 do begin
+    ZvsChestsEnabled[i] := 1;
+  end;
+end;
+
+procedure DisableCommanders;
+var
+  i: integer;
+
+begin
+  ZvsDisableNpc(-1);
+
+  for i := 7 to 10 do begin
+    ZvsChestsEnabled[i] := 0;
+  end;
+end;
+
 function Hook_UN_J3_End (Context: Core.PHookContext): longbool; stdcall;
 const
   RESET_OPTIONS_COMMAND = ':clear:';
-  WOG_OPTION_MAP_RULES  = 101;
   USE_SELECTED_RULES    = 2;
 
 var
@@ -1933,13 +1973,51 @@ begin
       WoGOptions[CURRENT_WOG_OPTIONS][i] := 0;
     end;
     
-    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_MAP_RULES] := USE_SELECTED_RULES;
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_MAP_RULES]                      := USE_SELECTED_RULES;
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_TOWERS_EXP_DISABLED]            := 1;
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_LEAVE_MONS_ON_ADV_MAP_DISABLED] := 1;
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_COMMANDERS_DISABLED]            := 1;
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_TOWN_DESTRUCT_DISABLED]         := 1;
   end else if not LoadWoGOptions(pchar(WoGOptionsFile)) then begin
     ShowMessage('Cannot load file with WoG options: ' + WoGOptionsFile);
+  end;
+
+  WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL;
+
+  if WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_COMMANDERS_DISABLED] <> 0 then begin
+    DisableCommanders;
+  end else begin
+    EnableCommanders;
   end;
   
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_UN_J3_End
+
+function Hook_UN_J13 (Context: Core.PHookContext): longbool; stdcall;
+const
+  SUBCMD_ID = 13;
+
+begin 
+  if pinteger(Context.EBP - $E4)^ = SUBCMD_ID then begin
+    ZvsResetCommanders;
+    Context.RetAddr := Ptr($733F2E);
+    result          := not Core.EXEC_DEF_CODE;
+  end else begin
+    result := Core.EXEC_DEF_CODE;
+  end;
+end;
+
+function Hook_UN_P3 (Context: Core.PHookContext): longbool; stdcall;
+begin
+  if WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_COMMANDERS_DISABLED] = 0 then begin
+    EnableCommanders;
+  end else begin
+    DisableCommanders;
+  end;
+
+  Context.RetAddr := Ptr($732ED1);
+  result          := not Core.EXEC_DEF_CODE;
+end;
 
 {$W-}
 procedure Hook_ErmCastleBuilding; ASSEMBLER;
@@ -2178,7 +2256,13 @@ begin
 
   (* UN:J3 does not reset commanders or load scripts. New: it can be used to reset wog options *)
   // Turned off because of side effects of NPC reset and not displaying wogification message some authors could rely on.
-  //Core.ApiHook(@Hook_UN_J3_End, Core.HOOKTYPE_BRIDGE, Ptr($733A85));
+  Core.ApiHook(@Hook_UN_J3_End, Core.HOOKTYPE_BRIDGE, Ptr($733A85));
+
+  (* Add UN:J13 command: Reset Commanders *)
+  ApiJack.HookCode(Ptr($733F11), @Hook_UN_J13);
+
+  (* Fix UN:P3 command: reset/enable commanders must disable/enable commander chests *)
+  ApiJack.HookCode(Ptr($732EA5), @Hook_UN_P3);
 
   (* Fix MR:N in !?MR1 !?MR2 *)
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
