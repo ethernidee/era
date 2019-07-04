@@ -1,4 +1,4 @@
-unit Heroes;
+﻿unit Heroes;
 {
 DESCRIPTION:  Internal game functions and structures
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
@@ -190,6 +190,21 @@ type
   TLod  = packed record
     Dummy:  array [0..399] of byte;
   end; // .record TLod
+
+  PBasicString = ^TBasicString;
+  TBasicString = packed record
+    Value: pchar;
+    Len:   integer;
+  end;
+
+  PExtString = ^TExtString;
+  TExtString = packed record
+    Value: pchar;
+    Len:   integer;
+    Dummy: integer;
+
+    function ToString: string;
+  end;
   
   PGameState  = ^TGameState;
   TGameState  = packed record
@@ -217,13 +232,40 @@ type
     CurrentDlgIdPtr: ppinteger;
   end; // .record TAdvManager
 
+  (* Events are stored in random order, except events for the same day *)
+  PGlobalEvent = ^TGlobalEvent;
+  TGlobalEvent = packed record
+    _u1:            integer;
+    Message:        TExtString;
+    Resources:      array [0..6] of integer;
+    ForPlayers:     byte;
+    EnableForHuman: boolean;
+    EnableForAi:    boolean;
+    _u3:            byte;
+    FirstDay:       word;
+    RepeatInterval: word;
+  end;
+
   PPGameManager = ^PGameManager;
   PGameManager  = ^TGameManager;
   TGameManager  = packed record
-    _0:              array [1..130112] of byte;
-    MapTiles:        PMapTiles;
-    MapSize:         integer;
-    IsTwoLevelMap:   boolean;
+    _0:      array [1..129904] of byte;
+    Align_0: integer;                 _Types_:       array [0..2] of integer;                             // +00
+    Align_1: integer;                 _Position_:    array [0..2] of integer;                             // +10
+    Align_2: array [0..3] of integer; // DEFы                                                             // +20
+    Align_3: integer;                 _ArtRes_:      array [0..2] of integer;                             // +30
+    Align_4: integer;                 _Monster_:     array [0..2] of integer;                             // +40
+    Align_5: integer;                 _Event_:       array [0..2] of integer;                             // +50
+    Align_6: array [0..3] of integer;                                                                     // +60
+    Align_7: array [0..3] of integer;                                                                     // +70
+    Align_8: integer;                 GlobalEvents:  packed record First, Last, Dummy: PGlobalEvent; end; // +80
+    Align_9: integer;                 _CastleEvent_: array [0..2] of integer;                             // +90
+    Align_10: array [0..3] of integer;                                                                    // +A0
+    Align_11: array [0..3] of integer;                                                                    // +B0
+    Align_12: array [0..3] of integer;                                                                    // +C0
+    MapTiles:      PMapTiles;
+    MapSize:       integer;
+    IsTwoLevelMap: boolean;
   end; // .record TGameManager
   
   PScreenPcx16  = ^TScreenPcx16;
@@ -563,6 +605,12 @@ end;
 function Ask (const Question: string): boolean;
 begin
   result := Msg(Question, MES_QUESTION) = MSG_RES_OK;
+end;
+
+function TExtString.ToString: string;
+begin
+  SetLength(result, Self.Len);
+  Utils.CopyMem(Self.Len, Self.Value, pointer(result));
 end;
 
 constructor TResourceNamer.Create;

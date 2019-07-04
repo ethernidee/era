@@ -9,7 +9,7 @@ uses
   SysUtils, Math, Windows,
   Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
   Lists, StrLib,
-  Core, Heroes, GameExt, RscLists, EventMan;
+  Core, Heroes, GameExt, Trans, RscLists, EventMan;
 
 type
   (* Import *)
@@ -255,6 +255,7 @@ type
       procedure ClearScripts;
       procedure SaveScripts;
       function  LoadScript (const ScriptPath: string; ScriptName: string = ''): boolean;
+      procedure LoadMapInternalScripts;
       procedure LoadScriptsFromSavedGame;
       procedure LoadScriptsFromDisk;
       procedure ReloadScriptsFromDisk;
@@ -1327,6 +1328,68 @@ begin
   end;
 end;
 
+function CompareGlobalEventsByDayAndPtr (a, b: integer): integer;
+begin
+  result := Heroes.PGlobalEvent(a).FirstDay - Heroes.PGlobalEvent(b).FirstDay;
+
+  if result = 0 then begin
+    result := integer(a) - integer(b);
+  end;
+end;
+
+procedure TScriptMan.LoadMapInternalScripts;
+const
+  SCRIPT_START_SIGNATURE = integer($4553565A);
+
+var
+{O} EventList:          {U} TList {of Heroes.PGlobalEvent};
+{n} GlobalEvent:        Heroes.PGlobalEvent;
+    MapDirName:         string;
+    ScriptNamePrefix:   string;
+    ScriptName:         string;
+    PreprocessedScript: string;
+    PrevDay:            integer;
+    i, j:               integer;
+
+
+begin
+  EventList   := DataLib.NewList(not Utils.OWNS_ITEMS);
+  GlobalEvent := GameManagerPtr^.GlobalEvents.First;
+  // * * * * * //
+  MapDirName       := GameExt.GetMapDirName;
+  ScriptNamePrefix := MapDirName +'\_inmap_\';
+
+  while cardinal(GlobalEvent) + cardinal(sizeof(Heroes.TGlobalEvent)) < cardinal(GameManagerPtr^.GlobalEvents.Last) do begin
+    if (GlobalEvent.Message.Len > 4) and (pinteger(GlobalEvent.Message.Value)^ = SCRIPT_START_SIGNATURE) then begin
+      EventList.Add(GlobalEvent);
+    end;
+
+    Inc(GlobalEvent);
+  end;
+
+  EventList.CustomSort(CompareGlobalEventsByDayAndPtr);
+  PrevDay := -1;
+  j       := 0;
+
+  for i := 0 to EventList.Count - 1 do begin
+    GlobalEvent := EventList[i];
+
+    if GlobalEvent.FirstDay <> PrevDay then begin
+      PrevDay    := GlobalEvent.FirstDay;
+      j          := 0;
+      ScriptName := ScriptNamePrefix + 'day - ' + IntToStr(GlobalEvent.FirstDay) + '.erm';
+    end else begin
+      Inc(j);
+      ScriptName := ScriptNamePrefix + 'day - ' + IntToStr(GlobalEvent.FirstDay) + ' - ' + IntToStr(j) + '.erm';
+    end;
+
+    PreprocessedScript := PreprocessErm(ScriptName, GlobalEvent.Message.ToString);
+    fScripts.Add(TResource.Create(ScriptName, PreprocessedScript, Crypto.Crc32(GlobalEvent.Message.Value, GlobalEvent.Message.Len)));
+  end; // .for
+  // * * * * * //
+  SysUtils.FreeAndNil(EventList);
+end; // .procedure TScriptMan.LoadMapInternalScripts
+
 procedure TScriptMan.LoadScriptsFromSavedGame;
 var
 {O} LoadedScripts: RscLists.TResourceList;
@@ -1364,6 +1427,8 @@ begin
   Self.ClearScripts;
   ZvsClearErtStrings;
 
+  Self.LoadMapInternalScripts;
+  
   ScriptsDir := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH);
   ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
   MapDirName := GameExt.GetMapDirName;
@@ -1374,23 +1439,28 @@ begin
 
   SysUtils.FreeAndNil(ScriptList);
 
-  LoadFixedScriptsSet := Files.ReadFileContents(GameExt.GetMapResourcePath(SCRIPTS_LIST_FILEPATH), FileContents) or
-                         Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents);
+  LoadFixedScriptsSet := Files.ReadFileContents(GameExt.GetMapResourcePath(SCRIPTS_LIST_FILEPATH), FileContents);
 
-  if LoadFixedScriptsSet then begin
-    ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
-
-    for i := 0 to High(ForcedScripts) do begin
-      Self.LoadScript(GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ForcedScripts[i]);
-    end;
+  if (Self.fScripts.Count > 0) and not LoadFixedScriptsSet and Heroes.Ask(Trans.tr('era.global_scripts_vs_map_scripts_warning', [])) then begin
+    // Do not load global scripts at all
   end else begin
-    ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
-    ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+    LoadFixedScriptsSet := LoadFixedScriptsSet or Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents);
 
-    for i := 0 to ScriptList.Count - 1 do begin
-      Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ScriptList[i]);
+    if LoadFixedScriptsSet then begin
+      ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
+
+      for i := 0 to High(ForcedScripts) do begin
+        Self.LoadScript(GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ForcedScripts[i]);
+      end;
+    end else begin
+      ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
+      ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+
+      for i := 0 to ScriptList.Count - 1 do begin
+        Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ScriptList[i]);
+      end;
     end;
-  end;
+  end; // .else  
   // * * * * * //
   SysUtils.FreeAndNil(ScriptList);
 end; // .procedure TScriptMan.LoadScriptsFromDisk
@@ -1869,6 +1939,8 @@ begin
   if not ZvsIsGameLoading^ then begin
     EventMan.GetInstance.Fire('OnBeforeErmInstructions');
   end;
+
+
   
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_FindErm_BeforeMainLoop
@@ -1906,7 +1978,7 @@ begin
     // Jump to ERM header processing
     Context.RetAddr := Ptr($74A00C);
   end else begin
-    // Jimp right after loop end
+    // Jump right after loop end
     Context.RetAddr := Ptr($74C5A7);
   end; // .else
   
