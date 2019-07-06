@@ -171,6 +171,7 @@ const
   WOG_OPTION_DISABLE_ERRORS                 = 904;
   DONT_WOGIFY                               = 0;
   WOGIFY_ALL                                = 2;
+  WOGIFY_AFTER_ASKING                       = 3;
 
   NUM_WOG_HEROES = 156;
 
@@ -248,6 +249,10 @@ type
      private
       {O} fScripts: RscLists.TResourceList;
      
+     public const
+       IS_FIRST_LOADING = true;
+       IS_RELOADING     = false;
+
      public
       constructor Create;
       destructor  Destroy; override;
@@ -257,10 +262,11 @@ type
       function  LoadScript (const ScriptPath: string; ScriptName: string = ''): boolean;
       procedure LoadMapInternalScripts;
       procedure LoadScriptsFromSavedGame;
-      procedure LoadScriptsFromDisk;
+      procedure LoadScriptsFromDisk (IsFirstLoading: boolean);
       procedure ReloadScriptsFromDisk;
       procedure ExtractScripts;
       function  AddrToScriptNameAndLine ({n} Addr: pchar; var {out} ScriptName: string; out LineN: integer; out LinePos: integer): boolean;
+      function  IsMapScript (ScriptInd: integer): boolean;
 
       property Scripts: RscLists.TResourceList read fScripts;
     end; // .class TScriptMan
@@ -1407,7 +1413,7 @@ begin
   SysUtils.FreeAndNil(LoadedScripts);
 end;
 
-procedure TScriptMan.LoadScriptsFromDisk;
+procedure TScriptMan.LoadScriptsFromDisk (IsFirstLoading: boolean);
 const
   SCRIPTS_LIST_FILEPATH = ERM_SCRIPTS_PATH + '\load only these scripts.txt';
   
@@ -1427,6 +1433,11 @@ begin
   Self.ClearScripts;
   ZvsClearErtStrings;
 
+  if IsFirstLoading then begin
+    // Provide ability to disable or enable without questions for map makers to load global scripts
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_AFTER_ASKING;
+  end;
+
   Self.LoadMapInternalScripts;
   
   ScriptsDir := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH);
@@ -1441,26 +1452,27 @@ begin
 
   LoadFixedScriptsSet := Files.ReadFileContents(GameExt.GetMapResourcePath(SCRIPTS_LIST_FILEPATH), FileContents);
 
-  if (Self.fScripts.Count > 0) and not LoadFixedScriptsSet and Heroes.Ask(Trans.tr('era.global_scripts_vs_map_scripts_warning', [])) then begin
-    // Do not load global scripts at all
-  end else begin
-    LoadFixedScriptsSet := LoadFixedScriptsSet or Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents);
+  // Map maker forces fixed set of scripts
+  if LoadFixedScriptsSet then begin
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL
+  end;
 
-    if LoadFixedScriptsSet then begin
-      ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
+  LoadFixedScriptsSet := LoadFixedScriptsSet or Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents);
 
-      for i := 0 to High(ForcedScripts) do begin
-        Self.LoadScript(GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ForcedScripts[i]);
-      end;
-    end else begin
-      ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
-      ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+  if LoadFixedScriptsSet then begin
+    ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
 
-      for i := 0 to ScriptList.Count - 1 do begin
-        Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ScriptList[i]);
-      end;
+    for i := 0 to High(ForcedScripts) do begin
+      Self.LoadScript(GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ForcedScripts[i]);
     end;
-  end; // .else  
+  end else begin
+    ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
+    ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+
+    for i := 0 to ScriptList.Count - 1 do begin
+      Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ScriptList[i]);
+    end;
+  end;
   // * * * * * //
   SysUtils.FreeAndNil(ScriptList);
 end; // .procedure TScriptMan.LoadScriptsFromDisk
@@ -1469,7 +1481,9 @@ procedure TScriptMan.ReloadScriptsFromDisk;
 begin
   if ErmTriggerDepth = 0 then begin
     EventMan.GetInstance.Fire('OnBeforeScriptsReload');
-    Self.LoadScriptsFromDisk;
+    ErmEnabled^       := false;
+    Self.LoadScriptsFromDisk(TScriptMan.IS_RELOADING);
+    ErmEnabled^       := true;
     ZvsIsGameLoading^ := true;
     ZvsFindErm;
     EventMan.GetInstance.Fire('OnAfterScriptsReload');
@@ -1523,6 +1537,11 @@ begin
     end;
   end; // .if
 end; // .function TScriptMan.AddrToScriptNameAndLine
+
+function TScriptMan.IsMapScript (ScriptInd: integer): boolean;
+begin
+  result := (ScriptInd >= 0) and (ScriptInd < Self.fScripts.Count) and (System.Pos('\', RscLists.TResource(Self.fScripts[ScriptInd]).Name) > 0);
+end;
 
 procedure ReloadErm;
 begin
@@ -1934,16 +1953,19 @@ begin
   // Skip internal map events: GEp_ = GEp1 - [sizeof(_GlbEvent_) = 52]
   pinteger(Context.EBP - $3F4)^ := pinteger(pinteger(Context.EBP - $24)^ + $88)^ - GLOBAL_EVENT_SIZE;
   ErmErrReported                := false;
+  
   EventMan.GetInstance.Fire('OnBeforeErm');
 
   if not ZvsIsGameLoading^ then begin
     EventMan.GetInstance.Fire('OnBeforeErmInstructions');
   end;
-
-
   
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_FindErm_BeforeMainLoop
+
+var
+  _NumMapScripts:    integer;
+  _NumGlobalScripts: integer;
 
 function Hook_FindErm_AfterMapScripts (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
@@ -1962,9 +1984,33 @@ begin
     FuncNames.Clear;
     FuncAutoId := INITIAL_FUNC_AUTO_ID;
     RegisterErmEventNames;
-    ScriptMan.LoadScriptsFromDisk;
+    ScriptMan.LoadScriptsFromDisk(TScriptMan.IS_FIRST_LOADING);
   end;
-  
+
+  if ScriptIndPtr^ = 0 then begin
+    _NumMapScripts    := 0;
+    _NumGlobalScripts := 0;
+  end;
+
+  if (ScriptIndPtr^ < ScriptMan.Scripts.Count) and (_NumGlobalScripts = 0) then begin
+    if ScriptMan.IsMapScript(ScriptIndPtr^) then begin
+      Inc(_NumMapScripts);
+    end else begin
+      Inc(_NumGlobalScripts);
+    end;
+
+    if (_NumMapScripts > 0) and (_NumGlobalScripts > 0) then begin
+      if (WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] = DONT_WOGIFY) or
+         ((WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] <> WOGIFY_ALL) and Heroes.Ask(Trans.tr('era.global_scripts_vs_map_scripts_warning', [])))
+      then begin
+        WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := DONT_WOGIFY;
+        ScriptMan.Scripts.Truncate(ScriptIndPtr^);
+      end else begin
+        WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL;
+      end;
+    end;
+  end; // .if
+
   if ScriptIndPtr^ < ScriptMan.Scripts.Count then begin
     // M.m.i = 0
     pinteger(Context.EBP - $318)^ := 0;
@@ -2053,8 +2099,6 @@ begin
   end else if not LoadWoGOptions(pchar(WoGOptionsFile)) then begin
     ShowMessage('Cannot load file with WoG options: ' + WoGOptionsFile);
   end;
-
-  WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL;
 
   if WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_COMMANDERS_DISABLED] <> 0 then begin
     DisableCommanders;

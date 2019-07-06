@@ -52,6 +52,7 @@ type
     procedure Clear;
     function  ItemExists (const ItemName: string): boolean;
     function  Add ({O} Item: TResource): boolean;
+    procedure Truncate (NewCount: integer);
     procedure Save (const SectionName: string);
     procedure LoadFromSavedGame (const SectionName: string);
     function  FastCompare (OtherResourceList: TResourceList): boolean;
@@ -148,6 +149,20 @@ begin
     Self.fItemIsLoaded[Item.Name] := Ptr(1);
     Self.fItems.Add(Item);
   end;
+end;
+
+procedure TResourceList.Truncate (NewCount: integer);
+var
+  i: integer;
+
+begin
+  {!} Assert(NewCount >= 0);
+  // * * * * * //
+  for i := NewCount + 1 to Self.fItems.Count - 1 do begin
+    Self.fItemIsLoaded.DeleteItem(TResource(Self.fItems[i]).Name);
+  end;
+
+  Self.fItems.SetCount(NewCount);
 end;
 
 procedure TResourceList.Save (const SectionName: string);
