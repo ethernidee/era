@@ -170,6 +170,7 @@ const
   WOG_OPTION_ERROR                          = 905;
   WOG_OPTION_DISABLE_ERRORS                 = 904;
   DONT_WOGIFY                               = 0;
+  WOGIFY_WOG_MAPS_ONLY                      = 1;
   WOGIFY_ALL                                = 2;
   WOGIFY_AFTER_ASKING                       = 3;
 
@@ -1433,11 +1434,6 @@ begin
   Self.ClearScripts;
   ZvsClearErtStrings;
 
-  if IsFirstLoading then begin
-    // Provide ability to disable or enable without questions for map makers to load global scripts
-    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_AFTER_ASKING;
-  end;
-
   Self.LoadMapInternalScripts;
   
   ScriptsDir := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH);
@@ -2001,7 +1997,7 @@ begin
 
     if (_NumMapScripts > 0) and (_NumGlobalScripts > 0) then begin
       if (WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] = DONT_WOGIFY) or
-         ((WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] <> WOGIFY_ALL) and Heroes.Ask(Trans.tr('era.global_scripts_vs_map_scripts_warning', [])))
+         ((WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] = WOGIFY_AFTER_ASKING) and Heroes.Ask(Trans.tr('era.global_scripts_vs_map_scripts_warning', [])))
       then begin
         WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := DONT_WOGIFY;
         ScriptMan.Scripts.Truncate(ScriptIndPtr^);
