@@ -38,8 +38,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.8.3';
-  ERA_VERSION_INT = 2803;
+  ERA_VERSION_STR = '2.8.4';
+  ERA_VERSION_INT = 2804;
 
   FALLBACK_TO_ORIGINAL      = true;
   DONT_FALLBACK_TO_ORIGINAL = false;
@@ -328,7 +328,7 @@ function GetMapDir: string;
 begin
   if MapDir = '' then begin
     if Heroes.IsCampaign then begin
-      MapDir := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd);
+      MapDir := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd + 1);
     end else begin
       MapDir := GameDir + '\Maps\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
     end;

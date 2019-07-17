@@ -50,8 +50,8 @@ const
   ZVS_TRIGGER_IF_INACTIVE = -1;
 
   (* Erm triggers *)
-  TRIGGER_FU1       = 0;
-  TRIGGER_FU30000   = 29999;
+  TRIGGER_FU1       = 1;
+  TRIGGER_FU29999   = 29999;
   TRIGGER_TM1       = 30000;
   TRIGGER_TM100     = 30099;
   TRIGGER_HE0       = 30100;
@@ -554,7 +554,7 @@ begin
   result := '';
 
   case EventID of
-    {*} Erm.TRIGGER_FU1..Erm.TRIGGER_FU30000:
+    {*} Erm.TRIGGER_FU1..Erm.TRIGGER_FU29999:
       result := 'OnErmFunction ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_FU1 + 1); 
     {*} Erm.TRIGGER_TM1..Erm.TRIGGER_TM100:
       result := 'OnErmTimer ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_TM1 + 1); 
@@ -1842,7 +1842,7 @@ begin
   if ErmEnabled^ then begin
     YVars := TYVars.Create;
     // * * * * * //
-    if CurrErmEventID^ >= Erm.TRIGGER_FU30000 then begin
+    if CurrErmEventID^ >= Erm.TRIGGER_FU29999 then begin
       SetLength(YVars.Value, Length(y^));
       Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
     end;
@@ -1958,6 +1958,16 @@ begin
   
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_FindErm_BeforeMainLoop
+
+function Hook_FindErm_ZeroHeap (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  pinteger(Context.EBP - $354)^ := ZvsErmHeapSize^;
+  Windows.VirtualFree(ZvsErmHeapPtr^, ZvsErmHeapSize^, Windows.MEM_DECOMMIT);
+  Windows.VirtualAlloc(ZvsErmHeapPtr^, ZvsErmHeapSize^, Windows.MEM_COMMIT, Windows.PAGE_READWRITE);
+  
+  Context.RetAddr := Ptr($7499ED);
+  result          := not Core.EXEC_DEF_CODE;
+end;
 
 var
   _NumMapScripts:    integer;
@@ -2277,7 +2287,7 @@ begin
   Core.p.WriteDword(Ptr($78C210), $887668);
 
   (* Extend ERM memory limit to 128 MB *)
-  NewErmHeap := Windows.VirtualAlloc(nil, NEW_ERM_HEAP_SIZE, Windows.MEM_RESERVE or Windows.MEM_COMMIT, Windows.PAGE_EXECUTE_READWRITE);
+  NewErmHeap := Windows.VirtualAlloc(nil, NEW_ERM_HEAP_SIZE, Windows.MEM_RESERVE or Windows.MEM_COMMIT, Windows.PAGE_READWRITE);
   {!} Assert(NewErmHeap <> nil, 'Failed to allocate 128 MB memory block for new ERM heap');
   Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
   Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', integer(NEW_ERM_HEAP_SIZE)]);
@@ -2290,6 +2300,9 @@ begin
 
   (* Disable internal map scripts interpretation *)
   Core.ApiHook(@Hook_FindErm_BeforeMainLoop, Core.HOOKTYPE_BRIDGE, Ptr($749BBA));
+
+  (* Disable internal map scripts interpretation *)
+  Core.ApiHook(@Hook_FindErm_ZeroHeap, Core.HOOKTYPE_BRIDGE, Ptr($7499A2));
 
   (* Remove default mechanism of loading [mapname].erm *)
   Core.p.WriteDataPatch(Ptr($72CA8A), ['E90102000090909090']);
