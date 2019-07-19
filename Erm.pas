@@ -1323,7 +1323,7 @@ var
 
 begin
   if ScriptName = '' then begin
-    ScriptName := SysUtils.ExtractFilePath(ScriptPath);
+    ScriptName := SysUtils.ExtractFileName(ScriptPath);
   end;
   
   result := not Self.fScripts.ItemExists(ScriptName) and Files.ReadFileContents(ScriptPath, ScriptContents);
@@ -1450,23 +1450,24 @@ begin
 
   // Map maker forces fixed set of scripts
   if LoadFixedScriptsSet then begin
-    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL
+    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL;
   end;
 
   LoadFixedScriptsSet := LoadFixedScriptsSet or Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents);
 
   if LoadFixedScriptsSet then begin
+    ScriptsDir    := GameDir + '\' + ERM_SCRIPTS_PATH;
     ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
 
     for i := 0 to High(ForcedScripts) do begin
-      Self.LoadScript(GameDir + '\' + ERM_SCRIPTS_PATH + '\' + ForcedScripts[i]);
+      Self.LoadScript(ScriptsDir + '\' + ForcedScripts[i]);
     end;
   end else begin
     ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
     ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
 
     for i := 0 to ScriptList.Count - 1 do begin
-      Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ScriptList[i]);
+      Self.LoadScript(ScriptsDir + '\' + ScriptList[i]);
     end;
   end;
   // * * * * * //

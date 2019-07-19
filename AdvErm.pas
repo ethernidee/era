@@ -1666,18 +1666,15 @@ begin
 
   (* ERM MP3 trigger/receivers remade *)
   // Make WoG ResetMP3, SaveMP3, LoadMP3 doing nothing
-  Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
-  ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
-  ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
+  //Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
+  //ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
+  //ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
 
   // Disable MP3Start WoG hook
-  Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
+  //Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
 
   // Replace MP3 receiver
-  ApiJack.StdSplice(Ptr($774A8C), @New_MP3_Receiver, CONV_CDECL, 4);
-
-  (* Apply SN:H hints for heroes specialties on game loading *)
-  //Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
+  //ApiJack.StdSplice(Ptr($774A8C), @New_MP3_Receiver, CONV_CDECL, 4);
 end;
 
 procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
