@@ -7,7 +7,7 @@ AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack,
-  PatchApi, Core, GameExt, Erm, Stores, Heroes, Trans, EventMan;
+  PatchApi, Core, GameExt, Erm, Stores, Triggers, Heroes, Lodman, Trans, EventMan;
 
 const
   SPEC_SLOT = -1;
@@ -86,6 +86,15 @@ exports
 (***) implementation (***)
 
 
+type
+  PMp3TriggerContext = ^TMp3TriggerContext;
+  TMp3TriggerContext = record
+    TrackName:         string;
+    DontTrackPosition: integer;
+    Loop:              integer;
+    DefaultReaction:   integer;
+  end;
+
 var
 {O} NewReceivers: {O} TObjDict {OF TErmCmdHandler};
 
@@ -93,6 +102,8 @@ var
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
     FreeSlotN:  integer = SPEC_SLOT - 1;
     ErrBuf:     array [0..255] of char;
+
+    Mp3TriggerContext: PMp3TriggerContext = nil;
 
 
 procedure RegisterReceiver (ReceiverName: integer; ReceiverHandler: TReceiverHandler);
@@ -118,6 +129,23 @@ begin
     MODIFIER_MUL: Dest := Dest * Param.Value.v;
     MODIFIER_DIV: Dest := Dest div Param.Value.v;
   end;
+end;
+
+procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: integer = sizeof(Erm.TErmZVar));
+begin
+  if Param.OperGet then begin
+    if Param.IsStr then begin
+      Utils.SetPcharValue(Param.Value.pc, Value, sizeof(Erm.TErmZVar));
+    end else begin
+      pinteger(Param.Value.v)^ := pinteger(Value)^;
+    end;
+  end else begin
+    if Param.IsStr then begin
+      Utils.SetPcharValue(Value, Param.Value.pc, MaxParamLen);
+    end else begin
+      ModifyWithIntParam(pinteger(Value)^, Param);
+    end;
+  end; // .else
 end;
 
 (* Parameters must be either reused or filled with zeroes before function call *)
@@ -444,41 +472,46 @@ begin
     exit;
   end;
 
-  if Params[0].OperGet or not Params[1].OperGet then begin
-    Error := 'Valid syntax is !!SN:T^key^ or quantity/?(str result)';
+  if Params[0].OperGet or not Params[0].IsStr or not Params[1].OperGet then begin
+    Error := 'Valid syntax is !!SN:T^key^/?(str result)/...parameters...';
     exit;
   end;
 
   // SN:T^key^/?(translation)/...parameters...
-  if Params[0].IsStr then begin
-    NumTrParams                  := (NumParams - NUM_OBLIG_PARAMS) div 2;
-    SetLength(TrParams, (NumTrParams + NUM_DEF_TR_PARAMS) * 2);
-    TrParams[high(TrParams) - 1] := '';
-    TrParams[high(TrParams)]     := Trans.TEMPL_CHAR;
+  NumTrParams                  := (NumParams - NUM_OBLIG_PARAMS) div 2;
+  SetLength(TrParams, (NumTrParams + NUM_DEF_TR_PARAMS) * 2);
+  TrParams[high(TrParams) - 1] := '';
+  TrParams[high(TrParams)]     := Trans.TEMPL_CHAR;
 
-    for i := NUM_OBLIG_PARAMS to NUM_OBLIG_PARAMS + NumTrParams * 2 - 1 do begin
-      if Params[i].OperGet then begin
-        Error := 'Arguments for translation must use set syntax';
-        exit;
-      end;
-
-      if Params[i].IsStr then begin
-        TrParams[i - NUM_OBLIG_PARAMS] := Params[i].Value.pc;
-      end else begin
-        TrParams[i - NUM_OBLIG_PARAMS] := SysUtils.IntToStr(Params[i].Value.v);
-      end;
+  for i := NUM_OBLIG_PARAMS to NUM_OBLIG_PARAMS + NumTrParams * 2 - 1 do begin
+    if Params[i].OperGet then begin
+      Error := 'Arguments for translation must use set syntax';
+      exit;
     end;
 
-    Translation := Trans.tr(Params[0].Value.pc, TrParams);
-    Erm.SetZVar(pchar(Params[1].Value.v), Translation);
-  end
-  // SN:T(item quantity)/?(key suffix)
-  else begin
-    
-  end; // .else
+    if Params[i].IsStr then begin
+      TrParams[i - NUM_OBLIG_PARAMS] := Params[i].Value.pc;
+    end else begin
+      TrParams[i - NUM_OBLIG_PARAMS] := SysUtils.IntToStr(Params[i].Value.v);
+    end;
+  end;
+
+  Translation := Trans.tr(Params[0].Value.pc, TrParams);
+  Erm.SetZVar(pchar(Params[1].Value.v), Translation);
 
   result := true;
 end; // .function SN_T
+
+function SN_R (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := (NumParams = 2) and CheckCmdParams(Params, [IS_STR, OPER_SET, IS_STR, OPER_SET]);
+
+  if not result then begin
+    Error := 'Invalid command syntax. Valid syntax is !!SN:R^original resource name^/^new resource name^';
+  end else begin
+    Lodman.RedirectFile(Params[0].Value.pc, Params[1].Value.pc);
+  end;
+end; // .function SN_R
 
 function ExtendedEraService
 (
@@ -858,6 +891,7 @@ begin
 
     'T': result := SN_T(NumParams, Params, Error);
     'H': result := SN_H(NumParams, Params, Error);
+    'R': result := SN_R(NumParams, Params, Error);
   else
     result := false;
     Error  := 'Unknown command "' + Cmd +'".';
@@ -1643,21 +1677,162 @@ begin
   result := 0;
 end;
 
+function MP_P (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := (NumParams >= 2) and (NumParams <= 3);
+
+  if result then begin
+    // MP:P^track name^/[DontTrackPosition = 0 or 1]/[Loop = 0 or 1];
+    if NumParams = 3 then begin
+      result := CheckCmdParams(Params, [IS_STR, OPER_SET, IS_INT, OPER_SET, IS_INT, OPER_SET]);
+
+      if result then begin
+        Heroes.ChangeMp3Theme(Params[0].Value.pc, Params[1].Value.v <> 0, Params[2].Value.v <> 0);
+      end;
+    end
+    // MP:P0/[pause = 0, resume = 1]
+    else begin
+      result := CheckCmdParams(Params, [IS_INT, OPER_SET, IS_INT, OPER_SET]) and Math.InRange(Params[1].Value.v, 0, 1);
+
+      if result then begin
+        if Params[1].Value.v = 0 then begin
+          Heroes.PauseMp3Theme;
+        end else begin
+          Heroes.ResumeMp3Theme;
+        end;
+      end;
+    end;
+  end; // .if
+end; // .function MP_P
+
+function MP_C (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := (NumParams = 1) and CheckCmdParams(Params, [IS_STR, OPER_GET]);
+
+  if result then begin
+    Windows.LStrCpy(Params[0].Value.pc, pchar(Heroes.GetCurrentMp3Track()));
+  end;
+end;
+
+function MP_S (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := Math.InRange(NumParams, 1, 3);
+  result := result and Params[0].IsStr;
+  result := result and ((NumParams < 2) or not Params[1].IsStr);
+  result := result and ((NumParams < 3) or not Params[2].IsStr);
+
+  if result then begin
+    // TrackName
+    if Params[0].OperGet then begin
+      ApplyParam(Params[0], pchar(Mp3TriggerContext.TrackName));
+    end else begin
+      Mp3TriggerContext.TrackName := Utils.GetPcharValue(Params[0].Value.pc, sizeof(Heroes.TCurrentMp3Track) - 1);
+    end;
+
+    // DontTrackPosition
+    if NumParams >= 2 then begin
+      ApplyParam(Params[1], @Mp3TriggerContext.DontTrackPosition);
+      Mp3TriggerContext.DontTrackPosition := ord(Mp3TriggerContext.DontTrackPosition <> 0);
+    end;
+
+    // Loop
+    if NumParams >= 3 then begin
+      ApplyParam(Params[2], @Mp3TriggerContext.Loop);
+      Mp3TriggerContext.Loop := ord(Mp3TriggerContext.Loop <> 0);
+    end;
+  end; // .if
+end; // .function MP_S
+
+function MP_R (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := (NumParams = 1) and not Params[0].IsStr;
+
+  if result then begin
+    ApplyParam(Params[0], @Mp3TriggerContext.DefaultReaction);
+    Mp3TriggerContext.DefaultReaction := ord(Mp3TriggerContext.DefaultReaction <> 0);
+  end;
+end;
+
 function New_MP3_Receiver (OrigFunc: pointer; Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: PErmSubCmd): integer; stdcall;
 var
   Params:    GameExt.TServiceParams;
   ParamsLen: integer;
+  CmdPtr:    pchar;
+  Success:   boolean;
+  Error:     string;
 
 begin
   FillChar(Params, sizeof(Params), 0);
+  CmdPtr := @CmdInfo.Code.Value[0];
   // * * * * * //
-  ParamsLen := GetServiceParams(@CmdInfo.Code.Value[CmdInfo.Pos - 1], NumParams, Params);
-  ShowMessage(Format('Cmd: %s. NumParams: %d. ParamsLen: %d, Line: %s', [Cmd, NumParams, ParamsLen, Copy(pchar(@CmdInfo.Code.Value[CmdInfo.Pos - 1]), 1, 30)]));
-  Inc(CmdInfo.Pos, ParamsLen - 1);
-  result := 1;
+  CmdInfo.Pos := 0;
+  Success     := true;
+
+  while (CmdPtr^ <> ';') and Success do begin
+    Cmd       := CmdPtr^;
+    ParamsLen := GetServiceParams(CmdPtr, NumParams, Params);
+    Success   := ParamsLen <> -1;
+
+    if Success then begin
+      case Cmd of
+        'P': begin Success := MP_P(NumParams, @Params, Error); end;
+        'C': begin Success := MP_C(NumParams, @Params, Error); end;
+        'S': begin Success := MP_S(NumParams, @Params, Error); end;
+        'R': begin Success := MP_R(NumParams, @Params, Error); end;
+      else
+        Error   := 'Unknown command "!!MP:' + Cmd + '"';
+        Success := false;
+      end;
+
+      if not Success then begin
+        if Error = '' then begin
+          Error := 'Invalid command arguments';
+        end;
+
+        Erm.ErmErrCmdPtr^ := @CmdInfo.Code.Value[0];
+        Erm.ShowErmError(Error);
+      end;
+    end; // .if
+
+    if Success then begin
+      Inc(CmdPtr, ParamsLen);
+      Inc(CmdInfo.Pos, ParamsLen);
+    end;
+  end; // .while
+
+  result := ord(Success);
   // * * * * * //
   ReleaseServiceParams(Params);
-end;
+end; // .function New_MP3_Receiver
+
+function New_MP3_Trigger (OrigFunc: pointer; Self: pointer; TrackName: pchar; DontTrackPosition, Loop: integer): integer; stdcall;
+var
+  GameState:          Heroes.TGameState;
+  TriggerContext:     TMp3TriggerContext;
+  PrevTriggerContext: PMp3TriggerContext;
+
+begin
+  TriggerContext.TrackName         := SysUtils.AnsiLowerCase(Utils.GetPcharValue(TrackName, sizeof(Heroes.TCurrentMp3Track) - 1));
+  TriggerContext.DontTrackPosition := DontTrackPosition;
+  TriggerContext.Loop              := Loop;
+  TriggerContext.DefaultReaction   := 1;
+  PrevTriggerContext               := Mp3TriggerContext;
+  Mp3TriggerContext                := @TriggerContext;
+
+  Heroes.GetGameState(GameState);
+
+  if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
+    Erm.FireErmEvent(Erm.TRIGGER_MP);
+  end;
+
+  if TriggerContext.DefaultReaction <> 0 then begin
+    result := PatchApi.Call(THISCALL_, OrigFunc, [Self, pchar(TriggerContext.TrackName), TriggerContext.DontTrackPosition, TriggerContext.Loop]);
+  end else begin
+    result := 0;
+  end;
+  
+  Mp3TriggerContext := PrevTriggerContext;
+end; // .function New_MP3_Trigger
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
@@ -1666,15 +1841,18 @@ begin
 
   (* ERM MP3 trigger/receivers remade *)
   // Make WoG ResetMP3, SaveMP3, LoadMP3 doing nothing
-  //Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
-  //ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
-  //ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
+  Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
+  ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
+  ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
 
   // Disable MP3Start WoG hook
-  //Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
+  Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
 
   // Replace MP3 receiver
-  //ApiJack.StdSplice(Ptr($774A8C), @New_MP3_Receiver, CONV_CDECL, 4);
+  ApiJack.StdSplice(Ptr($774A8C), @New_MP3_Receiver, CONV_CDECL, 4);
+
+  // Add new !?MP trigger
+  ApiJack.StdSplice(Ptr($59AFB0), @New_Mp3_Trigger, CONV_THISCALL, 3);
 end;
 
 procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
@@ -1691,8 +1869,9 @@ begin
 end;
 
 begin
-  (*NewReceivers  :=  DataLib.NewObjDict(Utils.OWNS_ITEMS);*)
+  (* NewReceivers  :=  DataLib.NewObjDict(Utils.OWNS_ITEMS); *)
 
+  New(Mp3TriggerContext);
   Slots    := AssocArrays.NewStrictObjArr(TSlot);
   AssocMem := AssocArrays.NewStrictAssocArr(TAssocVar);
   Hints    := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);

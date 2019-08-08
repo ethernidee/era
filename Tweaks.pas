@@ -34,6 +34,8 @@ var
   
   FixGetHostByNameOpt:  boolean;
   UseOnlyOneCpuCoreOpt: boolean;
+  CombatRound:          integer;
+  HadTacticsPhase:      boolean;
   
   
 (***) implementation (***)
@@ -216,31 +218,11 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SetHotseatHeroName
 
-function Hook_Mp3TrackChanged (Context: Core.PHookContext): LONGBOOL; stdcall;
-begin
-  IsMp3Trigger := true;
-  Windows.WaitForSingleObject(Mp3TriggerHandledEvent, Windows.INFINITE);
-  result := Core.EXEC_DEF_CODE;
-end;
-
 function Hook_PeekMessageA (Context: Core.PHookContext): LONGBOOL; stdcall;
 var
   GameState: Heroes.TGameState;
 
 begin
-  // Handle MP3 trigger in main thread only
-  // if IsMp3Trigger and IsMainThread then begin
-  //   IsMp3Trigger := false;
-  //   Heroes.GetGameState(GameState);
-    
-  //   if Erm.ErmEnabled^ and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
-  //     WoGCurrentMp3TrackPtr^ := CurrentMp3Track;
-  //     WoGMp3Process();
-  //   end;
-    
-  //   Windows.SetEvent(Mp3TriggerHandledEvent);
-  // end;
-
   Inc(CpuPatchCounter, CpuTargetLevel);
 
   if CpuPatchCounter >= 100 then begin
@@ -698,6 +680,50 @@ begin
   end;
 end; // .function Hook_ZvsEnter2Object
 
+function Hook_OnBeforeBattlefieldVisible (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  HadTacticsPhase := false;
+  CombatRound     := -1000000000;
+  Erm.FireErmEvent(Erm.TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE);
+  result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_OnBattlefieldVisible (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  HadTacticsPhase := Heroes.CombatManagerPtr^.IsTactics;
+
+  if not HadTacticsPhase then begin
+    CombatRound := 0;
+  end;
+  
+  Erm.FireErmEvent(Erm.TRIGGER_BATTLEFIELD_VISIBLE);
+  Erm.v[997] := CombatRound;
+  Erm.FireErmEvent(Erm.TRIGGER_COMBAT_ROUND);
+  
+  result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_OnAfterTacticsPhase (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  Erm.FireErmEvent(Erm.TRIGGER_AFTER_TACTICS_PHASE);
+
+  if HadTacticsPhase then begin
+    CombatRound := 0;
+    Erm.v[997]  := CombatRound;
+    Erm.FireErmEvent(Erm.TRIGGER_COMBAT_ROUND);
+  end;
+  
+  result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_OnCombatRound (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
+  Inc(CombatRound);
+  Erm.v[997] := CombatRound;
+  Erm.FireErmEvent(Erm.TRIGGER_COMBAT_ROUND);
+  result := Core.EXEC_DEF_CODE;
+end;
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1031,6 +1057,20 @@ begin
   (* Fix WoG bug: double !?OB54 event generation when attacking without moving due to Enter2Object + Enter2Monster2 calling *)
   Core.p.WriteHiHook(Ptr($705979), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.FASTCALL_, @Hook_ZvsEnter2Object);
 
+  (* Fix battle round counting: no !?BR before battlefield is shown, -1 for the whole tactics phase, the
+     first real round always starts from 0 *)
+  Core.ApiHook(@Hook_OnBeforeBattlefieldVisible, Core.HOOKTYPE_BRIDGE, Ptr($75EAEA));
+  //Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($75D1B3));
+  Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($75D178));
+  Core.ApiHook(@Hook_OnAfterTacticsPhase,        Core.HOOKTYPE_BRIDGE, Ptr($75D137));
+  Core.ApiHook(@Hook_OnCombatRound,              Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
+  //Core.ApiHook(Y_FixNewRoundCountInTactics, Core.HOOKTYPE_BRIDGE, $473E73);
+  //Core.ApiHook(Y_FixNewRoundCountInTactics, Core.HOOKTYPE_BRIDGE, $474B79);
+  //Core.ApiHook(Y_FixNewRoundCountInTactics, Core.HOOKTYPE_BRIDGE, $4758B3);
+  //Core.p.WriteDataPatch(Ptr($473E69 + 6), ['00']);
+  //Core.p.WriteDataPatch(Ptr($474B63 + 6), ['00']);
+  //Core.p.WriteDataPatch(Ptr($47589D + 6), ['00']);
+
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
   Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
   Core.p.WriteDataPatch(Ptr($6067E2), ['E809000000']);       // Disable WoG GZ functions hooks
@@ -1043,10 +1083,6 @@ begin
   if false then Core.p.WriteDataPatch(Ptr($41A0DC), ['01']); // save orig.dat on receive compressed
   Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
-
-  (* Fix !?MP3 trigger crashes due to thread unsafe nature *)
-  //Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']); // Disable MP3Start WoG hook
-  //Core.ApiHook(@Hook_Mp3TrackChanged, Core.HOOKTYPE_BRIDGE, Ptr($59AC51));
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;

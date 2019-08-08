@@ -38,8 +38,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.8.5';
-  ERA_VERSION_INT = 2805;
+  ERA_VERSION_STR = '2.8.7';
+  ERA_VERSION_INT = 2807;
 
   FALLBACK_TO_ORIGINAL      = true;
   DONT_FALLBACK_TO_ORIGINAL = false;

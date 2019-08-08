@@ -120,16 +120,7 @@ const
 
   LOAD_TXT_FUNC   = $55C2B0;  // F (Name: pchar); FASTCALL;
   UNLOAD_TXT_FUNC = $55D300;  // F (PTxtFile); FASTCALL;
-  {
-  F
-  (
-    Name:       PCHAR;
-    AddExt:     LONGBOOL;
-    ShowDialog: LONGBOOL;
-    Compress:   INTBOOL;
-    SaveToData: LONGBOOL
-  ); THISCALL ([GAME_MANAGER]);
-  }
+  { F ( Name: PCHAR; AddExt: LONGBOOL; ShowDialog: LONGBOOL; Compress: INTBOOL; SaveToData: LONGBOOL); THISCALL ([GAME_MANAGER]); }
   SAVEGAME_FUNC     = $4BEB60;
   LOAD_LOD          = $559420;  // F (Name: pchar); THISCALL (PLod);
   LOAD_LODS         = $559390;
@@ -147,6 +138,8 @@ const
   (* Managers *)
   GAME_MANAGER     = $699538;
   HERO_WND_MANAGER = $6992D0;
+  SOUND_MANAGER    = $699414;
+  COMBAT_MANAGER   = $699420;
   
   (* Colors *)
   RED_COLOR         = '0F2223E';
@@ -267,6 +260,43 @@ type
     MapSize:       integer;
     IsTwoLevelMap: boolean;
   end; // .record TGameManager
+
+  PPCombatManager = ^PCombatManager;
+  PCombatManager  = ^TCombatManager;
+  TCombatManager  = packed record
+    Dummy:     array [1..$13D68] of byte;
+    IsTactics: boolean;
+    Align_1:   array [1..3] of byte;
+    Round:     integer;
+    // _byte_ field_0[452]; // + 0 ?
+    // _BattleHex_ hex[187]; // + 0x1c4 187=17*11
+    // _byte_ field_5394[56]; //?
+
+    // _Hero_* hero[2]; // + 21452 // 0 - attacker, 1 - defender
+    // _byte_ field_53D4[212]; // + 21460d
+    // _int32_ owner_id[2]; // + 21672d // 0 - attacker, 1 - defender
+    // _byte_ field_54B0[12];  // + 21680
+    // _int32_ stacks_count[2];//+0x54BC  // 0 - attacker, 1 - defender
+    // _Army_* army[2]; // + 21700 // 0 - attacker, 1 - defender
+    // //_BattleStack_ stack[42]; //+ 21708
+    // _BattleStack_ stack[2][21]; //+ 21708
+
+    // _byte_ field_1329C[28]; // + 0x1329C
+    // _int32_ unk_side; // +78520 0x132B8
+    // _int32_ current_stack_ix; // +78524 0x132BC
+    // _int32_ current_side; // +78528 0x132C0
+
+    // //_byte_ field_132C4[56]; // + 0x132C4
+    // _byte_ field_132C4[36]; // + 0x132C4
+    // _Def_* current_spell_def; // + 0x132E8
+    // _int_  current_spell_id; // + 0x132EC
+    // _dword_ field_132F0; // + 0x132F0
+    // _int32_ town_fort_type; // + 0x132F4
+    // _dword_ field_132F8; // + 0x132F8
+
+    // _Dlg_* dlg;       // + 0x132FC
+    // _byte_ field_13300[3564];
+  end; // .TCombatManager
   
   PScreenPcx16  = ^TScreenPcx16;
   TScreenPcx16  = packed record
@@ -320,6 +350,9 @@ type
 
   PSecSkillTexts = ^TSecSkillTexts;
   TSecSkillTexts = array [0..MAX_SECONDARY_SKILLS - 1] of TSecSkillText;
+
+  PCurrentMp3Track = ^TCurrentMp3Track;
+  TCurrentMp3Track = array [0..255] of char;
 
   TMAlloc = function (Size: integer): pointer; cdecl;
   TMFree  = procedure (Addr: pointer); cdecl;
@@ -451,9 +484,10 @@ const
   MAlloc: TMAlloc = Ptr($617492);
   MFree:  TMFree  = Ptr($60B0F0);
 
-  AdvManagerPtr:  PPAdvManager  = Ptr($6992D0);
-  WndManagerPtr:  ^PWndManager  = Ptr($6992D0); // CHECKME!
-  GameManagerPtr: PPGameManager = Ptr(GAME_MANAGER);
+  AdvManagerPtr:    PPAdvManager    = Ptr($6992D0);
+  WndManagerPtr:    ^PWndManager    = Ptr($6992D0); // CHECKME!
+  GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
+  CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
 
   CurrentPlayer: pinteger = Ptr($69CCF4);
 
@@ -471,6 +505,9 @@ const
   SecSkillNames: PSecSkillNames = Ptr($698BC4);
   SecSkillDescs: PSecSkillDescs = Ptr($698C30);
   SecSkillTexts: PSecSkillTexts = Ptr($698D88);
+
+  (* Variable is protected with two crit sections: pint(SOUND_MANAGER)^ + $a8 and pint(SOUND_MANAGER)^ + $c0 *)
+  CurrentMp3Track: PCurrentMp3Track = Ptr($6A32F0);
 
 
 var
@@ -519,6 +556,13 @@ function  Msg
 
 procedure ShowMessage (const Mes: string);
 function  Ask (const Question: string): boolean;
+function  GetCurrentMp3Track: string;
+
+(* Changes current MP3 theme to another one. Loop is used only if DontTrackPos = false *)
+procedure ChangeMp3Theme (const Mp3TrackName: string; DontTrackPos: boolean = false; Loop: boolean = true);
+
+procedure PauseMp3Theme;
+procedure ResumeMp3Theme;
 
 
 (***) implementation (***)
@@ -1008,7 +1052,7 @@ const
 
   function Stacks (Ind: integer; FieldOfs: integer): PStackField; inline;
   begin
-    result  :=  Utils.PtrOfs(PPOINTER($699420)^, 21708 + 1352 * Ind + FieldOfs);
+    result := Utils.PtrOfs(PPOINTER(COMBAT_MANAGER)^, 21708 + 1352 * Ind + FieldOfs);
   end;
 
 var
@@ -1102,6 +1146,31 @@ function GetCampaignMapInd: integer;
 begin
   {!} Assert(IsCampaign);
   result := pbyte(pinteger(GAME_MANAGER)^ + $1F45A)^;
+end;
+
+function GetCurrentMp3Track (): string;
+begin
+  (* Note, $A8 critsection lock of sound manager is not necessary and can take up to several seconds *)
+  // Windows.EnterCriticalSection(PRtlCriticalSection(pinteger(SOUND_MANAGER)^ + $A8)^);
+  Windows.EnterCriticalSection(PRtlCriticalSection(pinteger(SOUND_MANAGER)^ + $C0)^);
+  result := pchar(@CurrentMp3Track[0]);
+  Windows.LeaveCriticalSection(PRtlCriticalSection(pinteger(SOUND_MANAGER)^ + $C0)^);
+ // Windows.LeaveCriticalSection(PRtlCriticalSection(pinteger(SOUND_MANAGER)^ + $A8)^);
+end;
+
+procedure ChangeMp3Theme (const Mp3TrackName: string; DontTrackPos: boolean = false; Loop: boolean = true);
+begin
+  PatchApi.Call(THISCALL_, Ptr($59AFB0), [pinteger(SOUND_MANAGER)^, pchar(Mp3TrackName), ord(DontTrackPos), ord(Loop)]);
+end;
+
+procedure PauseMp3Theme;
+begin
+  PatchApi.Call(THISCALL_, Ptr($59B380), [pinteger(SOUND_MANAGER)^]);
+end;
+
+procedure ResumeMp3Theme;
+begin
+  PatchApi.Call(THISCALL_, Ptr($59AF00), [pinteger(SOUND_MANAGER)^]);
 end;
 
 begin

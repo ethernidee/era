@@ -117,24 +117,29 @@ const
   TRIGGER_INVALID   = -1;
   
   (* Era Triggers *)
-  FIRST_ERA_TRIGGER                 = 77001;
-  TRIGGER_SAVEGAME_WRITE            = 77001;
-  TRIGGER_SAVEGAME_READ             = 77002;
-  TRIGGER_KEYPRESS                  = 77003;
-  TRIGGER_OPEN_HEROSCREEN           = 77004;
-  TRIGGER_CLOSE_HEROSCREEN          = 77005;
-  TRIGGER_STACK_OBTAINS_TURN        = 77006;
-  TRIGGER_REGENERATE_PHASE          = 77007;
-  TRIGGER_AFTER_SAVE_GAME           = 77008;
-  TRIGGER_BEFOREHEROINTERACT        = 77010;
-  TRIGGER_AFTERHEROINTERACT         = 77011;
-  TRIGGER_ONSTACKTOSTACKDAMAGE      = 77012;
-  TRIGGER_ONAICALCSTACKATTACKEFFECT = 77013;
-  TRIGGER_ONCHAT                    = 77014;
-  TRIGGER_ONGAMEENTER               = 77015;
-  TRIGGER_ONGAMELEAVE               = 77016;
-  TRIGGER_ONREMOTEEVENT             = 77017;
-  {!} LAST_ERA_TRIGGER              = TRIGGER_ONREMOTEEVENT;
+  FIRST_ERA_TRIGGER                    = 77001;
+  TRIGGER_SAVEGAME_WRITE               = 77001;
+  TRIGGER_SAVEGAME_READ                = 77002;
+  TRIGGER_KEYPRESS                     = 77003;
+  TRIGGER_OPEN_HEROSCREEN              = 77004;
+  TRIGGER_CLOSE_HEROSCREEN             = 77005;
+  TRIGGER_STACK_OBTAINS_TURN           = 77006;
+  TRIGGER_REGENERATE_PHASE             = 77007;
+  TRIGGER_AFTER_SAVE_GAME              = 77008;
+  TRIGGER_BEFOREHEROINTERACT           = 77010;
+  TRIGGER_AFTERHEROINTERACT            = 77011;
+  TRIGGER_ONSTACKTOSTACKDAMAGE         = 77012;
+  TRIGGER_ONAICALCSTACKATTACKEFFECT    = 77013;
+  TRIGGER_ONCHAT                       = 77014;
+  TRIGGER_ONGAMEENTER                  = 77015;
+  TRIGGER_ONGAMELEAVE                  = 77016;
+  TRIGGER_ONREMOTEEVENT                = 77017;
+  TRIGGER_DAILY_TIMER                  = 77018;
+  TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE = 77019;
+  TRIGGER_BATTLEFIELD_VISIBLE          = 77020;
+  TRIGGER_AFTER_TACTICS_PHASE          = 77021;
+  TRIGGER_COMBAT_ROUND                 = 77022;
+  {!} LAST_ERA_TRIGGER                 = TRIGGER_COMBAT_ROUND;
   
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -306,6 +311,7 @@ type
   TZvsCheckFlags    = function (Flags: PErmCmdConditions): longbool; cdecl;
   TFireErmEvent     = function (EventId: integer): integer; cdecl;
   TZvsDumpErmVars   = procedure (Error, {n} ErmCmdPtr: pchar); cdecl;
+  TZvsRunTimer      = procedure (Owner: integer); cdecl;
   
   POnBeforeTriggerArgs  = ^TOnBeforeTriggerArgs;
   TOnBeforeTriggerArgs  = packed record
@@ -388,6 +394,7 @@ const
   ZvsTriggerIfs:      PZvsTriggerIfs    = Ptr($A46D18);
   ZvsTriggerIfsDepth: pbyte             = Ptr($A46D22);
   ZvsChestsEnabled:   ^TZvsCheckEnabled = Ptr($27F99B0);
+  ZvsPlayerIsHuman:   plongbool         = Ptr($793C80);
   IsWoG:              plongbool         = Ptr($803288);
   WoGOptions:         ^TWoGOptions      = Ptr($2771920);
   ErmEnabled:         plongbool         = Ptr($27F995C);
@@ -416,6 +423,7 @@ const
   ZvsResetCommanders: Utils.TProcedure  = Ptr($770B25);
   ZvsEnableNpc:       procedure (HeroId: integer; AutoHired: integer) cdecl = Ptr($76B541);
   ZvsDisableNpc:      procedure (HeroId: integer) cdecl = Ptr($76B5D6);
+  ZvsIsAi:            function (Owner: integer): boolean cdecl = Ptr($711828);
 
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
@@ -616,21 +624,27 @@ begin
     {*} Erm.TRIGGER_TL3:      result :=  'OnEvery10Seconds';
     {*} Erm.TRIGGER_TL4:      result :=  'OnEveryMinute';
     (* Era Triggers *)
-    {*} Erm.TRIGGER_SAVEGAME_WRITE:            result := 'OnSavegameWrite';
-    {*} Erm.TRIGGER_SAVEGAME_READ:             result := 'OnSavegameRead';
-    {*} Erm.TRIGGER_KEYPRESS:                  result := 'OnKeyPressed';
-    {*} Erm.TRIGGER_OPEN_HEROSCREEN:           result := 'OnOpenHeroScreen';
-    {*} Erm.TRIGGER_CLOSE_HEROSCREEN:          result := 'OnCloseHeroScreen';
-    {*} Erm.TRIGGER_STACK_OBTAINS_TURN:        result := 'OnBattleStackObtainsTurn';
-    {*} Erm.TRIGGER_REGENERATE_PHASE:          result := 'OnBattleRegeneratePhase';
-    {*} Erm.TRIGGER_AFTER_SAVE_GAME:           result := 'OnAfterSaveGame';
-    {*} Erm.TRIGGER_BEFOREHEROINTERACT:        result := 'OnBeforeHeroInteraction';
-    {*} Erm.TRIGGER_AFTERHEROINTERACT:         result := 'OnAfterHeroInteraction';
-    {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:      result := 'OnStackToStackDamage';
-    {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT: result := 'OnAICalcStackAttackEffect';
-    {*} Erm.TRIGGER_ONCHAT:                    result := 'OnChat';
-    {*} Erm.TRIGGER_ONGAMEENTER:               result := 'OnGameEnter';
-    {*} Erm.TRIGGER_ONGAMELEAVE:               result := 'OnGameLeave';
+    {*} Erm.TRIGGER_SAVEGAME_WRITE:               result := 'OnSavegameWrite';
+    {*} Erm.TRIGGER_SAVEGAME_READ:                result := 'OnSavegameRead';
+    {*} Erm.TRIGGER_KEYPRESS:                     result := 'OnKeyPressed';
+    {*} Erm.TRIGGER_OPEN_HEROSCREEN:              result := 'OnOpenHeroScreen';
+    {*} Erm.TRIGGER_CLOSE_HEROSCREEN:             result := 'OnCloseHeroScreen';
+    {*} Erm.TRIGGER_STACK_OBTAINS_TURN:           result := 'OnBattleStackObtainsTurn';
+    {*} Erm.TRIGGER_REGENERATE_PHASE:             result := 'OnBattleRegeneratePhase';
+    {*} Erm.TRIGGER_AFTER_SAVE_GAME:              result := 'OnAfterSaveGame';
+    {*} Erm.TRIGGER_BEFOREHEROINTERACT:           result := 'OnBeforeHeroInteraction';
+    {*} Erm.TRIGGER_AFTERHEROINTERACT:            result := 'OnAfterHeroInteraction';
+    {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:         result := 'OnStackToStackDamage';
+    {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT:    result := 'OnAICalcStackAttackEffect';
+    {*} Erm.TRIGGER_ONCHAT:                       result := 'OnChat';
+    {*} Erm.TRIGGER_ONGAMEENTER:                  result := 'OnGameEnter';
+    {*} Erm.TRIGGER_ONGAMELEAVE:                  result := 'OnGameLeave';
+    {*} Erm.TRIGGER_ONREMOTEEVENT:                result := 'OnRemoteEvent';
+    {*} Erm.TRIGGER_DAILY_TIMER:                  result := 'OnEveryDay';
+    {*} Erm.TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE: result := 'OnBeforeBattlefieldVisible';
+    {*} Erm.TRIGGER_BATTLEFIELD_VISIBLE:          result := 'OnBattlefieldVisible';
+    {*} Erm.TRIGGER_AFTER_TACTICS_PHASE:          result := 'OnAfterTacticsPhase';
+    {*} Erm.TRIGGER_COMBAT_ROUND:                 result := 'OnCombatRound';
     (* END Era Triggers *)
   else
     if EventID >= Erm.TRIGGER_OB_POS then begin
@@ -1559,21 +1573,14 @@ function FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 begin
   result := CmdPtr;
   
-  if (result <> nil) and (result^ <> '!') then begin
-    Dec(result);
-    
+  if (result <> nil) and (result^ <> '!') then begin   
     while result^ <> '!' do begin
       Dec(result);
     end;
     
-    Inc(result);
-    
-    if result^ <> '!' then begin
-      // [!]#
+    if result[1] <> '!' then begin
+      // ![!]X
       Dec(result);
-    end else begin
-      // ![!]
-      Dec(result, 2);
     end;
   end; // .if
 end; // .function FindErmCmdBeginning
@@ -1672,6 +1679,8 @@ begin
   if not Ask(Question) then begin
     ZvsDumpErmVars(pchar(Error), ErrCmd);
   end;
+
+  ErmErrReported := true;
 end; // .procedure ReportErmError
 
 function Hook_MError (Context: Core.PHookContext): LONGBOOL; stdcall;
@@ -1722,6 +1731,13 @@ begin
     result := -1;
   end;
 end; // .function Hook_FindErm_SkipUntil2
+
+procedure Hook_RunTimer (OrigFunc: TZvsRunTimer; Owner: integer); stdcall;
+begin
+  ZvsPlayerIsHuman^ := not ZvsIsAi(Owner);
+  FireErmEvent(TRIGGER_DAILY_TIMER);
+  OrigFunc(Owner);
+end;
 
 procedure RegisterErmEventNames;
 begin
@@ -1776,21 +1792,27 @@ begin
   NameTrigger(Erm.TRIGGER_TL2,  'OnEvery5Seconds');
   NameTrigger(Erm.TRIGGER_TL3,  'OnEvery10Seconds');
   NameTrigger(Erm.TRIGGER_TL4,  'OnEveryMinute');
-  NameTrigger(Erm.TRIGGER_SAVEGAME_WRITE,            'OnSavegameWrite');
-  NameTrigger(Erm.TRIGGER_SAVEGAME_READ,             'OnSavegameRead');
-  NameTrigger(Erm.TRIGGER_KEYPRESS,                  'OnKeyPressed');
-  NameTrigger(Erm.TRIGGER_OPEN_HEROSCREEN,           'OnOpenHeroScreen');
-  NameTrigger(Erm.TRIGGER_CLOSE_HEROSCREEN,          'OnCloseHeroScreen');
-  NameTrigger(Erm.TRIGGER_STACK_OBTAINS_TURN,        'OnBattleStackObtainsTurn');
-  NameTrigger(Erm.TRIGGER_REGENERATE_PHASE,          'OnBattleRegeneratePhase');
-  NameTrigger(Erm.TRIGGER_AFTER_SAVE_GAME,           'OnAfterSaveGame');
-  NameTrigger(Erm.TRIGGER_BEFOREHEROINTERACT,        'OnBeforeHeroInteraction');
-  NameTrigger(Erm.TRIGGER_AFTERHEROINTERACT,         'OnAfterHeroInteraction');
-  NameTrigger(Erm.TRIGGER_ONSTACKTOSTACKDAMAGE,      'OnStackToStackDamage');
-  NameTrigger(Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT, 'OnAICalcStackAttackEffect');
-  NameTrigger(Erm.TRIGGER_ONCHAT,                    'OnChat');
-  NameTrigger(Erm.TRIGGER_ONGAMEENTER,               'OnGameEnter');
-  NameTrigger(Erm.TRIGGER_ONGAMELEAVE,               'OnGameLeave');
+  NameTrigger(Erm.TRIGGER_SAVEGAME_WRITE,               'OnSavegameWrite');
+  NameTrigger(Erm.TRIGGER_SAVEGAME_READ,                'OnSavegameRead');
+  NameTrigger(Erm.TRIGGER_KEYPRESS,                     'OnKeyPressed');
+  NameTrigger(Erm.TRIGGER_OPEN_HEROSCREEN,              'OnOpenHeroScreen');
+  NameTrigger(Erm.TRIGGER_CLOSE_HEROSCREEN,             'OnCloseHeroScreen');
+  NameTrigger(Erm.TRIGGER_STACK_OBTAINS_TURN,           'OnBattleStackObtainsTurn');
+  NameTrigger(Erm.TRIGGER_REGENERATE_PHASE,             'OnBattleRegeneratePhase');
+  NameTrigger(Erm.TRIGGER_AFTER_SAVE_GAME,              'OnAfterSaveGame');
+  NameTrigger(Erm.TRIGGER_BEFOREHEROINTERACT,           'OnBeforeHeroInteraction');
+  NameTrigger(Erm.TRIGGER_AFTERHEROINTERACT,            'OnAfterHeroInteraction');
+  NameTrigger(Erm.TRIGGER_ONSTACKTOSTACKDAMAGE,         'OnStackToStackDamage');
+  NameTrigger(Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT,    'OnAICalcStackAttackEffect');
+  NameTrigger(Erm.TRIGGER_ONCHAT,                       'OnChat');
+  NameTrigger(Erm.TRIGGER_ONGAMEENTER,                  'OnGameEnter');
+  NameTrigger(Erm.TRIGGER_ONGAMELEAVE,                  'OnGameLeave');
+  NameTrigger(Erm.TRIGGER_ONREMOTEEVENT,                'OnRemoteEvent');
+  NameTrigger(Erm.TRIGGER_DAILY_TIMER,                  'OnEveryDay');
+  NameTrigger(Erm.TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE, 'OnBeforeBattlefieldVisible');
+  NameTrigger(Erm.TRIGGER_BATTLEFIELD_VISIBLE,          'OnBattlefieldVisible');
+  NameTrigger(Erm.TRIGGER_AFTER_TACTICS_PHASE,          'OnAfterTacticsPhase');
+  NameTrigger(Erm.TRIGGER_COMBAT_ROUND,                 'OnCombatRound');
 end; // .procedure RegisterErmEventNames
 
 procedure FireErmEventEx (EventId: integer; Params: array of integer);
@@ -2407,6 +2429,9 @@ begin
   Core.p.WriteDataPatch(Ptr($749421), ['E9BF0200009090']);
   // Track ERM errors location during FindErm
   Core.ApiHook(@Hook_FindErm_SkipUntil2, Core.HOOKTYPE_CALL, Ptr($74A14A));
+
+  (* Implement universal !?FU(OnEveryDay) event, like !?TM-1 occuring every day for every color before other !?TM triggers *)
+  ApiJack.StdSplice(Ptr($74DC74), @Hook_RunTimer, ApiJack.CONV_CDECL, 1);
 
   (* Disable default tracing of last ERM command *)
   Core.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);

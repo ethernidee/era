@@ -15,6 +15,10 @@ const
   STACK_POS_OFS = $38;
 
 
+(* Returns true, if current moment is between GameEnter and GameLeave events *)
+function IsGameLoop: boolean;
+
+
 (***) implementation (***)
 
 
@@ -45,7 +49,12 @@ var
   (* Controlling OnGameEnter and OnGameLeave events *)
   MainGameLoopDepth: integer = 0;
   
-  
+
+function IsGameLoop: boolean;
+begin
+  result := MainGameLoopDepth > 0;
+end;
+
 function Hook_BattleHint_GetAttacker (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.EraSaveEventParams;
@@ -355,18 +364,20 @@ end; // .function Hook_LeaveChat
 
 procedure Hook_MainGameLoop (h: PatchApi.THiHook; This: pointer); stdcall;
 begin
-  if MainGameLoopDepth = 0 then begin
+  Inc(MainGameLoopDepth);
+
+  if MainGameLoopDepth = 1 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);
   end;
   
-  Inc(MainGameLoopDepth);
   PatchApi.Call(PatchApi.THISCALL_, h.GetDefaultFunc(), [This]);
-  Dec(MainGameLoopDepth);
   
-  if MainGameLoopDepth = 0 then begin
+  if MainGameLoopDepth = 1 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMELEAVE, []);
     GameExt.SetMapDir('');
   end;
+
+  Dec(MainGameLoopDepth);
 end; // .procedure Hook_MainGameLoop
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
