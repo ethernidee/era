@@ -53,7 +53,8 @@ const
 procedure RedirectFile (const OldFileName, NewFileName: string);
 procedure GlobalRedirectFile (const OldFileName, NewFileName: string);
 function  FindFileLod (const FileName: string; out LodPath: string): boolean;
-function  FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean; 
+function  FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean;
+function  FindRedirection (const FileName: string; var {out} Redirected: string): boolean;
   
 
 (***) implementation (***)
@@ -201,7 +202,7 @@ begin
   result := FindFileLod(FileName, FoundLod);
 end;
 
-function FindRedirection (const FileName: string; out Redirected: string): boolean;
+function FindRedirection (const FileName: string; var {out} Redirected: string): boolean;
 var
 {U} Redirection: TString;
 
@@ -211,7 +212,7 @@ begin
   result := false;
 
   if Redirection = nil then begin
-    Redirection :=  GlobalLodRedirs[FileName];
+    Redirection := GlobalLodRedirs[FileName];
   end;
 
   if Redirection <> nil then begin
@@ -300,28 +301,6 @@ begin
   
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_FindFileInLod
-
-function Hook_OnMp3Start (Context: Core.PHookContext): LONGBOOL; stdcall;
-const
-  DEFAULT_BUFFER_SIZE = 128;
-
-var
-  FileName:   string;
-  Redirected: string;
-
-begin
-  (* Carefully copy redirected value to persistent storage and don't change anything in LodRedirs *)
-  {!} Windows.EnterCriticalSection(RedirCritSection);
-  FileName := Heroes.Mp3Name + '.mp3';
-  
-  if FindRedirection('*.mp3', Redirected) or FindRedirection(FileName, Redirected) then begin
-    Utils.SetPcharValue(Heroes.Mp3Name, SysUtils.ChangeFileExt(Redirected, ''),
-                        DEFAULT_BUFFER_SIZE);
-  end;
-
-  result := Core.EXEC_DEF_CODE;
-  {!} Windows.LeaveCriticalSection(RedirCritSection);
-end; // .function Hook_OnMp3Start
 
 function Hook_AfterLoadLods (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -438,9 +417,6 @@ end;
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
-  (* Mp3 redirection mechanism *)
-  Core.ApiHook(@Hook_OnMp3Start, Core.HOOKTYPE_BRIDGE, Ptr($59AC51));
-
   LoadGlobalRedirectionConfig(GLOBAL_REDIRECTIONS_CONFIG_DIR, REDIRECT_MISSING_AND_EXISTING);
 end;
 

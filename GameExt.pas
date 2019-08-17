@@ -38,8 +38,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '2.8.7';
-  ERA_VERSION_INT = 2807;
+  ERA_VERSION_STR = '2.8.8';
+  ERA_VERSION_INT = 2808;
 
   FALLBACK_TO_ORIGINAL      = true;
   DONT_FALLBACK_TO_ORIGINAL = false;
@@ -525,6 +525,8 @@ begin
 
   EventMan.GetInstance.Fire('OnReportVersion');
   AssignVersionsInfoToCredits;
+
+  EventMan.GetInstance.Fire('OnAfterStructRelocations');
 end; // .procedure Init
 
 procedure AssertHandler (const Mes, FileName: string; LineNumber: integer; Address: pointer);

@@ -70,7 +70,7 @@ type
 
 procedure TResource.Init (const Name, Contents: string; Crc32: integer);
 begin
-  Self.fName := Name;
+  Self.fName     := Name;
   Self.fContents := Contents;
   Self.fCrc32    := Crc32;
 end;
@@ -88,7 +88,7 @@ end;
 function TResource.Assign (OtherResource: TResource): TResource;
 begin
   {!} Assert(OtherResource <> nil);
-  Self.fName := OtherResource.fName;
+  Self.fName     := OtherResource.fName;
   Self.fContents := OtherResource.fContents;
   Self.fCrc32    := OtherResource.fCrc32;
   result         := Self;

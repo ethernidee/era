@@ -479,6 +479,47 @@ type
     class function Create (const aName: string; aWidth, aHeight: integer): {On} PPcx24Item; static;
   end;
 
+  PMonInfo = ^TMonInfo;
+  TMonInfo = packed record
+    Group:        integer; // +0  0...8,-1 - neutral
+    SubGroup:     integer; // +4  0...6,-1 - not available (423D87, 42A0FC)
+    ShortName:    pchar;   // +8  (4242B7)
+    DefName:      pchar;   // +C  loading and setting battlefield in 43DA45 
+    Flags:        integer; // +10 (424354, 42C6C0)
+    
+    Names:        packed record
+      case byte of
+        1: (
+          Singular:  pchar;
+          Plural:    pchar;
+          Specialty: pchar;
+        );
+
+        2: (
+          Texts: array [0..2] of pchar;
+        );
+    end;
+
+    CostRes:      array [0..6] of integer;// +20 (42B73A)
+    FightValue:   integer; // +3C
+    AiValue:      integer; // +40
+    Grow:         integer; // +44 initial number for hiring
+    HGrow:        integer; // +48
+    HitPoints:    integer; // +4C
+    Speed:        integer; // +50
+    Attack:       integer; // +54
+    Defence:      integer; // +58
+    DamageLow:    integer; // +5C
+    DamageHight:  integer; // +60
+    NumShots:     integer; // +64
+    NumCasts:     integer; // +68 - how many times creature can cas
+    AdvMapLow:    integer; // +6C
+    AdvMapHigh:   integer; // +70
+  end; // .record TMonInfo
+
+  TMonInfos = array [0..high(integer) div sizeof(TMonInfo) - 1] of TMonInfo;
+  PMonInfos = ^TMonInfos;
+
 
 const
   MAlloc: TMAlloc = Ptr($617492);
@@ -491,9 +532,9 @@ const
 
   CurrentPlayer: pinteger = Ptr($69CCF4);
 
-  ZvsGzipWrite: TGzipWrite  = Ptr($704062);
-  ZvsGzipRead:  TGzipRead   = Ptr($7040A7);
-  WndProc:      TWndProc    = Ptr($4F8290);
+  ZvsGzipWrite: TGzipWrite = Ptr($704062);
+  ZvsGzipRead:  TGzipRead  = Ptr($7040A7);
+  WndProc:      TWndProc   = Ptr($4F8290);
   
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
   MemAllocFunc:       TMemAllocFunc       = Ptr($617492);
@@ -503,8 +544,11 @@ const
   CoordsToMixedPos: TCoordsToMixedPos = Ptr($711E7F);
 
   SecSkillNames: PSecSkillNames = Ptr($698BC4);
-  SecSkillDescs: PSecSkillDescs = Ptr($698C30);
+  SecSkillDescs: PSecSkillDescs = Ptr($698C34);
   SecSkillTexts: PSecSkillTexts = Ptr($698D88);
+
+  MonInfos:       PMonInfos = Ptr($7D0C90);
+  NumMonstersPtr: pinteger  = Ptr($733326);
 
   (* Variable is protected with two crit sections: pint(SOUND_MANAGER)^ + $a8 and pint(SOUND_MANAGER)^ + $c0 *)
   CurrentMp3Track: PCurrentMp3Track = Ptr($6A32F0);
@@ -567,6 +611,7 @@ procedure ResumeMp3Theme;
 
 (***) implementation (***)
 
+uses GameExt, EventMan;
 
 procedure PrintChatMsg (const Msg: string);
 var
@@ -1056,17 +1101,18 @@ const
   end;
 
 var
-  i:  integer;
+  i: integer;
   
 begin
-  result := -1;
-  i      := 0;
-  
-  while (i < NUM_BATTLE_STACKS) and (result = NO_STACK) do begin
+  result := NO_STACK;
+
+  for i := 0 to NUM_BATTLE_STACKS - 1 do begin
     if Stacks(i, STACK_POS).v = StackPos then begin
-      result  :=  i;
-    end else begin
-      Inc(i);
+      result := i;
+
+      if Stacks(i, STACK_NUM).v > 0 then begin
+        exit;
+      end;
     end;
   end;
 end; // .function GetStackIdByPos
@@ -1173,6 +1219,15 @@ begin
   PatchApi.Call(THISCALL_, Ptr($59AF00), [pinteger(SOUND_MANAGER)^]);
 end;
 
+procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
+begin
+  SecSkillNames := GameExt.GetRealAddr(SecSkillNames);
+  SecSkillDescs := GameExt.GetRealAddr(SecSkillDescs);
+  SecSkillTexts := GameExt.GetRealAddr(SecSkillTexts);
+  MonInfos      := GameExt.GetRealAddr(MonInfos);
+end;
+
 begin
   ResourceNamer := TResourceNamer.Create;
+  EventMan.GetInstance.On('OnAfterStructRelocations', OnAfterStructRelocations);
 end.

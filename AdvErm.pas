@@ -104,6 +104,7 @@ var
     ErrBuf:     array [0..255] of char;
 
     Mp3TriggerContext: PMp3TriggerContext = nil;
+    CurrentMp3Track:   string;
 
 
 procedure RegisterReceiver (ReceiverName: integer; ReceiverHandler: TReceiverHandler);
@@ -269,6 +270,7 @@ var
     Hero:     integer;
     NameType: integer;
     Skill:    integer;
+    Monster:  integer;
 
   (* Returns new hint address or nil if hint was deleted *)
   function UpdateHint (HintParamN: integer): {n} pchar;
@@ -381,7 +383,7 @@ begin
               
               if result then begin
                 if Params[3].OperGet then begin
-                  Windows.LStrCpy(pchar(Params[3].Value.v), Erm.HeroSpecsTable[Hero].Descr[NameType]);
+                  Erm.SetZVar(Params[3].Value.pc, Erm.HeroSpecsTable[Hero].Descr[NameType]);
                 end else begin
                   Code    := Hero or (NameType shl 8);
                   HintRaw := UpdateHint(3);
@@ -412,7 +414,7 @@ begin
               
               if result then begin
                 if Params[3].OperGet then begin
-                  Windows.LStrCpy(pchar(Params[3].Value.v), Heroes.SecSkillTexts[Skill].Texts[NameType]);
+                  Erm.SetZVar(Params[3].Value.pc, Heroes.SecSkillTexts[Skill].Texts[NameType]);
                 end else begin
                   Code    := Skill or (NameType shl 8);
                   HintRaw := UpdateHint(3);
@@ -435,6 +437,39 @@ begin
                       Heroes.SecSkillDescs[Skill].Descs[NameType - 1] := HintRaw;
                     end;
                   end; // .else
+                end; // .else
+              end; // .if
+            end; // .if
+          end else begin
+            result := false;
+            Error  := 'Invalid number of command parameters';
+          end; // .else
+        // SN:H^monname^/monster/single (0), plural (1), description (2)/text
+        end else if SectionName = 'monname' then begin
+          if NumParams = 4 then begin
+            result := not Params[1].OperGet and not Params[2].OperGet and
+                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
+
+            if result then begin
+              Monster  := Params[1].Value.v;
+              NameType := Params[2].Value.v;
+              result   := Math.InRange(Monster, 0, Heroes.NumMonstersPtr^ - 1) and Math.InRange(NameType, 0, 2);
+              
+              if result then begin
+                if Params[3].OperGet then begin
+                  Erm.SetZVar(Params[3].Value.pc, Heroes.MonInfos[Monster].Names.Texts[NameType]);
+                end else begin
+                  Code    := Monster or (NameType shl 16);
+                  HintRaw := UpdateHint(3);
+                  Erm.MonNamesSettingsTable[Monster].Texts[NameType] := 0;
+
+                  if DeleteHint then begin
+                    Heroes.MonInfos[Monster].Names.Texts[NameType] := Erm.MonNamesTablesBack[NameType][Monster];
+                    Erm.MonNamesTables[NameType][Monster]          := Erm.MonNamesTablesBack[NameType][Monster];
+                  end else begin
+                    Heroes.MonInfos[Monster].Names.Texts[NameType] := HintRaw;
+                    Erm.MonNamesTables[NameType][Monster]          := HintRaw;
+                  end;
                 end; // .else
               end; // .if
             end; // .if
@@ -1148,6 +1183,7 @@ var
 {U} Name:     pchar;
     Hero:     integer;
     Skill:    integer;
+    Monster:  integer;
     NameType: integer;
 
 begin
@@ -1208,6 +1244,23 @@ begin
         end else begin
           Heroes.SecSkillDescs[Skill].Descs[NameType - 1] := Name;
         end;
+      end; // .while
+    end; // .with
+  end; // .if
+
+  (* Apply monster texts *)
+  HintSection := TObjDict(Hints['monname']);
+
+  if HintSection <> nil then begin
+    with DataLib.IterateObjDict(HintSection) do begin
+      while IterNext do begin
+        Monster  := integer(IterKey) and $FFFF;
+        NameType := integer(IterKey) shr 16;
+        Name     := pchar(TString(IterValue).Value);
+
+        Erm.MonNamesSettingsTable[Monster].Texts[NameType] := 0;
+        Heroes.MonInfos[Monster].Names.Texts[NameType]     := Name;
+        Erm.MonNamesTables[NameType][Monster]              := Name;
       end; // .while
     end; // .with
   end; // .if
@@ -1710,7 +1763,7 @@ begin
   result := (NumParams = 1) and CheckCmdParams(Params, [IS_STR, OPER_GET]);
 
   if result then begin
-    Windows.LStrCpy(Params[0].Value.pc, pchar(Heroes.GetCurrentMp3Track()));
+    Windows.LStrCpy(Params[0].Value.pc, pchar(CurrentMp3Track));
   end;
 end;
 
@@ -1753,7 +1806,7 @@ begin
   end;
 end;
 
-function New_MP3_Receiver (OrigFunc: pointer; Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: PErmSubCmd): integer; stdcall;
+function New_Mp3_Receiver (OrigFunc: pointer; Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: PErmSubCmd): integer; stdcall;
 var
   Params:    GameExt.TServiceParams;
   ParamsLen: integer;
@@ -1803,13 +1856,14 @@ begin
   result := ord(Success);
   // * * * * * //
   ReleaseServiceParams(Params);
-end; // .function New_MP3_Receiver
+end; // .function New_Mp3_Receiver
 
-function New_MP3_Trigger (OrigFunc: pointer; Self: pointer; TrackName: pchar; DontTrackPosition, Loop: integer): integer; stdcall;
+function New_Mp3_Trigger (OrigFunc: pointer; Self: pointer; TrackName: pchar; DontTrackPosition, Loop: integer): integer; stdcall;
 var
-  GameState:          Heroes.TGameState;
-  TriggerContext:     TMp3TriggerContext;
-  PrevTriggerContext: PMp3TriggerContext;
+  GameState:           Heroes.TGameState;
+  TriggerContext:      TMp3TriggerContext;
+  PrevTriggerContext:  PMp3TriggerContext;
+  RedirectedTrackName: string;
 
 begin
   TriggerContext.TrackName         := SysUtils.AnsiLowerCase(Utils.GetPcharValue(TrackName, sizeof(Heroes.TCurrentMp3Track) - 1));
@@ -1826,13 +1880,20 @@ begin
   end;
 
   if TriggerContext.DefaultReaction <> 0 then begin
-    result := PatchApi.Call(THISCALL_, OrigFunc, [Self, pchar(TriggerContext.TrackName), TriggerContext.DontTrackPosition, TriggerContext.Loop]);
+    CurrentMp3Track     := TriggerContext.TrackName;
+    RedirectedTrackName := CurrentMp3Track;
+
+    if Lodman.FindRedirection(TriggerContext.TrackName + '.mp3', RedirectedTrackName) then begin
+      RedirectedTrackName := SysUtils.ChangeFileExt(RedirectedTrackName, '');
+    end;
+
+    result := PatchApi.Call(THISCALL_, OrigFunc, [Self, pchar(RedirectedTrackName), TriggerContext.DontTrackPosition, TriggerContext.Loop]);
   end else begin
     result := 0;
   end;
   
   Mp3TriggerContext := PrevTriggerContext;
-end; // .function New_MP3_Trigger
+end; // .function New_Mp3_Trigger
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
@@ -1849,7 +1910,7 @@ begin
   Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
 
   // Replace MP3 receiver
-  ApiJack.StdSplice(Ptr($774A8C), @New_MP3_Receiver, CONV_CDECL, 4);
+  ApiJack.StdSplice(Ptr($774A8C), @New_Mp3_Receiver, CONV_CDECL, 4);
 
   // Add new !?MP trigger
   ApiJack.StdSplice(Ptr($59AFB0), @New_Mp3_Trigger, CONV_THISCALL, 3);
@@ -1866,6 +1927,7 @@ begin
   Hints['object']   := DataLib.NewObjDict(Utils.OWNS_ITEMS);
   Hints['spec']     := DataLib.NewObjDict(Utils.OWNS_ITEMS);
   Hints['secskill'] := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  Hints['monname']  := DataLib.NewObjDict(Utils.OWNS_ITEMS);
 end;
 
 begin

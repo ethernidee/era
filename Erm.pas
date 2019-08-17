@@ -372,6 +372,22 @@ type
   PSecSkillSettingsTable = ^TSecSkillSettingsTable;
   TSecSkillSettingsTable = array [0..Heroes.MAX_SECONDARY_SKILLS - 1] of TSecSkillSettings;
 
+  TMonNamesSettings = packed record
+    case byte of
+      0: (
+        NameSingular: integer; // z-index
+        NamePlural:   integer; // z-index
+        Specialty:    integer; // z-index
+      );
+
+      1: (
+        Texts: array [0..2] of integer;
+      );
+  end;
+
+  PMonNamesSettingsTable = ^TMonNamesSettingsTable;
+  TMonNamesSettingsTable = array [0..high(integer) div sizeof(TMonNamesSettings) div 3 - 1] of TMonNamesSettings;
+
   TFireRemoteEventProc = procedure (EventId: integer; Data: pinteger; NumInts: integer); cdecl;
   TZvsPlaceMapObject   = function (x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; cdecl;
   TZvsCheckEnabled     = array [0..19] of integer;
@@ -390,24 +406,31 @@ const
   ny: PErmNYVars = Ptr($A46A30);
   ne: PErmNEVars = Ptr($27F93B8);
 
-  ZvsIsGameLoading:   PBOOLEAN          = Ptr($A46BC0);
-  ZvsTriggerIfs:      PZvsTriggerIfs    = Ptr($A46D18);
-  ZvsTriggerIfsDepth: pbyte             = Ptr($A46D22);
-  ZvsChestsEnabled:   ^TZvsCheckEnabled = Ptr($27F99B0);
-  ZvsPlayerIsHuman:   plongbool         = Ptr($793C80);
-  IsWoG:              plongbool         = Ptr($803288);
-  WoGOptions:         ^TWoGOptions      = Ptr($2771920);
-  ErmEnabled:         plongbool         = Ptr($27F995C);
-  ErmErrCmdPtr:       ppchar            = Ptr($840E0C);
-  ErmDlgCmd:          pinteger          = Ptr($887658);
-  MrMonPtr:           PPOINTER          = Ptr($2846884); // MB_Mon
-  HeroSpecsTable:     PHeroSpecsTable   = Ptr($7B4C40);
-  HeroSpecsTableBack: PHeroSpecsTable   = Ptr($91DA78);
-  HeroSpecSettingsTable: PHeroSpecSettingsTable = Ptr($A49BC0);
-  SecSkillSettingsTable: PSecSkillSettingsTable = Ptr($899410);
-  SecSkillNamesBack:     Heroes.PSecSkillNames  = Ptr($A89190);
-  SecSkillDescsBack:     Heroes.PSecSkillDescs  = Ptr($A46BC4);
-  SecSkillTextsBack:     Heroes.PSecSkillTexts  = Ptr($A490A8);
+  ZvsIsGameLoading:           PBOOLEAN               = Ptr($A46BC0);
+  ZvsTriggerIfs:              PZvsTriggerIfs         = Ptr($A46D18);
+  ZvsTriggerIfsDepth:         pbyte                  = Ptr($A46D22);
+  ZvsChestsEnabled:           ^TZvsCheckEnabled      = Ptr($27F99B0);
+  ZvsPlayerIsHuman:           plongbool              = Ptr($793C80);
+  IsWoG:                      plongbool              = Ptr($803288);
+  WoGOptions:                 ^TWoGOptions           = Ptr($2771920);
+  ErmEnabled:                 plongbool              = Ptr($27F995C);
+  ErmErrCmdPtr:               ppchar                 = Ptr($840E0C);
+  ErmDlgCmd:                  pinteger               = Ptr($887658);
+  MrMonPtr:                   PPOINTER               = Ptr($2846884); // MB_Mon
+  HeroSpecsTable:             PHeroSpecsTable        = Ptr($7B4C40);
+  HeroSpecsTableBack:         PHeroSpecsTable        = Ptr($91DA78);
+  HeroSpecSettingsTable:      PHeroSpecSettingsTable = Ptr($A49BC0);
+  SecSkillSettingsTable:      PSecSkillSettingsTable = Ptr($899410);
+  SecSkillNamesBack:          Heroes.PSecSkillNames  = Ptr($A89190);
+  SecSkillDescsBack:          Heroes.PSecSkillDescs  = Ptr($A46BC4);
+  SecSkillTextsBack:          Heroes.PSecSkillTexts  = Ptr($A490A8);
+  MonNamesSettingsTable:      PMonNamesSettingsTable = Ptr($A48440);
+  MonNamesSingularTable:      Utils.PEndlessPcharArr = Ptr($7C8240);
+  MonNamesPluralTable:        Utils.PEndlessPcharArr = Ptr($7B6650);
+  MonNamesSpecialtyTable:     Utils.PEndlessPcharArr = Ptr($7C4018);
+  MonNamesSingularTableBack:  Utils.PEndlessPcharArr = Ptr($A498A8);
+  MonNamesPluralTableBack:    Utils.PEndlessPcharArr = Ptr($A48128);
+  MonNamesSpecialtyTableBack: Utils.PEndlessPcharArr = Ptr($A88E78);
 
   (* WoG funcs *)
   ZvsFindErm:         Utils.TProcedure  = Ptr($749955);
@@ -434,6 +457,9 @@ var
     ErmTriggerDepth: integer = 0;
 
     FreezedWogOptionWogify: integer = WOGIFY_ALL;
+
+    MonNamesTables:     array [0..2] of Utils.PEndlessPcharArr;
+    MonNamesTablesBack: array [0..2] of Utils.PEndlessPcharArr;
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -445,7 +471,8 @@ var
   end;
 
 
-procedure SetZVar (Str: pchar; const Value: string);
+procedure SetZVar (Str: pchar; const Value: string); overload;
+procedure SetZVar (Str, Value: pchar); overload;
 procedure ZvsProcessCmd (Cmd: PErmCmd);
 
 procedure ShowErmError (const Error: string);
@@ -689,18 +716,27 @@ begin
   end; // .switch
 end; // .function GetTriggerReadableName
 
-procedure SetZVar (Str: pchar; const Value: string);
+procedure SetZVar (Str: pchar; const Value: string); overload;
 var
   StrBufSize: integer;
 
 begin
-  if (cardinal(Str) >= cardinal(@z[1])) and (cardinal(Str) <= cardinal(@z[high(z^)])) then begin
-    StrBufSize := integer(@z[high(z^)]) - integer(Str) + sizeof(z[1]);
+  if FALSE { Allowing texts to overwrite several z-variables is bad practice. Better provide more functional API for lua } then begin
+    if (cardinal(Str) >= cardinal(@z[1])) and (cardinal(Str) <= cardinal(@z[high(z^)])) then begin
+      StrBufSize := integer(@z[high(z^)]) - integer(Str) + sizeof(z[1]);
+    end else begin
+      StrBufSize := sizeof(z[1]);
+    end;
   end else begin
     StrBufSize := sizeof(z[1]);
   end;
 
   Utils.SetPcharValue(Str, Value, StrBufSize);
+end;
+
+procedure SetZVar (Str, Value: pchar); overload;
+begin
+  Utils.SetPcharValue(Str, Value, sizeof(z[1]));
 end;
 
 procedure ZvsProcessCmd (Cmd: PErmCmd); ASSEMBLER;
@@ -2446,6 +2482,41 @@ begin
   end;
 end; // .procedure OnAfterWoG
 
+procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
+begin
+  ZvsIsGameLoading            := GameExt.GetRealAddr(ZvsIsGameLoading);
+  ZvsTriggerIfs               := GameExt.GetRealAddr(ZvsTriggerIfs);
+  ZvsTriggerIfsDepth          := GameExt.GetRealAddr(ZvsTriggerIfsDepth);
+  ZvsChestsEnabled            := GameExt.GetRealAddr(ZvsChestsEnabled);
+  ZvsPlayerIsHuman            := GameExt.GetRealAddr(ZvsPlayerIsHuman);
+  IsWoG                       := GameExt.GetRealAddr(IsWoG);
+  WoGOptions                  := GameExt.GetRealAddr(WoGOptions);
+  ErmEnabled                  := GameExt.GetRealAddr(ErmEnabled);
+  ErmErrCmdPtr                := GameExt.GetRealAddr(ErmErrCmdPtr);
+  ErmDlgCmd                   := GameExt.GetRealAddr(ErmDlgCmd);
+  MrMonPtr                    := GameExt.GetRealAddr(MrMonPtr);
+  HeroSpecsTable              := GameExt.GetRealAddr(HeroSpecsTable);
+  HeroSpecsTableBack          := GameExt.GetRealAddr(HeroSpecsTableBack);
+  HeroSpecSettingsTable       := GameExt.GetRealAddr(HeroSpecSettingsTable);
+  SecSkillSettingsTable       := GameExt.GetRealAddr(SecSkillSettingsTable);
+  SecSkillNamesBack           := GameExt.GetRealAddr(SecSkillNamesBack);
+  SecSkillDescsBack           := GameExt.GetRealAddr(SecSkillDescsBack);
+  SecSkillTextsBack           := GameExt.GetRealAddr(SecSkillTextsBack);
+  MonNamesSettingsTable       := GameExt.GetRealAddr(MonNamesSettingsTable);
+  MonNamesSingularTable       := GameExt.GetRealAddr(MonNamesSingularTable);
+  MonNamesPluralTable         := GameExt.GetRealAddr(MonNamesPluralTable);
+  MonNamesSpecialtyTable      := GameExt.GetRealAddr(MonNamesSpecialtyTable);
+  MonNamesSingularTableBack   := GameExt.GetRealAddr(MonNamesSingularTableBack);
+  MonNamesPluralTableBack     := GameExt.GetRealAddr(MonNamesPluralTableBack);
+  MonNamesSpecialtyTableBack  := GameExt.GetRealAddr(MonNamesSpecialtyTableBack);
+  MonNamesTables[0]           := MonNamesSingularTable;
+  MonNamesTables[1]           := MonNamesPluralTable;
+  MonNamesTables[2]           := MonNamesSpecialtyTable;
+  MonNamesTablesBack[0]       := MonNamesSingularTableBack;
+  MonNamesTablesBack[1]       := MonNamesPluralTableBack;
+  MonNamesTablesBack[2]       := MonNamesSpecialtyTableBack;
+end; // .procedure OnAfterStructRelocations
+
 begin
   ScriptMan       := TScriptMan.Create;
   FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
@@ -2461,9 +2532,10 @@ begin
   ScriptNames :=  Lists.NewSimpleStrList;
   SavedYVars  :=  Lists.NewStrictList(TYVars);
   
-  EventMan.GetInstance.On('OnBeforeWoG',         OnBeforeWoG);
-  EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
-  EventMan.GetInstance.On('$OnEraSaveScripts',   OnEraSaveScripts);
-  EventMan.GetInstance.On('$OnEraLoadScripts',   OnEraLoadScripts);
-  EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
+  EventMan.GetInstance.On('OnBeforeWoG',              OnBeforeWoG);
+  EventMan.GetInstance.On('OnAfterWoG',               OnAfterWoG);
+  EventMan.GetInstance.On('$OnEraSaveScripts',        OnEraSaveScripts);
+  EventMan.GetInstance.On('$OnEraLoadScripts',        OnEraLoadScripts);
+  EventMan.GetInstance.On('OnGenerateDebugInfo',      OnGenerateDebugInfo);
+  EventMan.GetInstance.On('OnAfterStructRelocations', OnAfterStructRelocations);
 end.

@@ -1038,9 +1038,6 @@ begin
   (* Syncronise object creation at local and remote PC *)
   EventMan.GetInstance.On('OnTrigger ' + IntToStr(Erm.TRIGGER_ONREMOTEEVENT), OnRemoteMapObjectPlace);
 
-  (* Disable MP3 trigger; Overriden by Lodman redirection *)
-  if false then Core.p.WriteHexPatch(Ptr($59AC51), 'BFF4336A00');
-
   (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
   Core.p.WriteDataPatch(Ptr($4DC358), ['A0']);
 
