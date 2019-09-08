@@ -6,7 +6,7 @@ AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Math, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack,
+  Windows, SysUtils, Math, Crypto, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack,
   PatchApi, Core, GameExt, Erm, Stores, Triggers, Heroes, Lodman, Trans, EventMan;
 
 const
@@ -16,10 +16,20 @@ const
   IS_TEMP   = 0;
   NOT_TEMP  = 1;
   
+  (* DEPRECATED *)
   IS_STR    = true;
   IS_INT    = false;
   OPER_GET  = true;
   OPER_SET  = false;
+
+  (* For CheckCmdParamsEx *)
+  TYPE_INT       = 1;
+  TYPE_STR       = 2;
+  TYPE_ANY       = 4;
+  ACTION_SET     = 8;
+  ACTION_GET     = 16;
+  ACTION_ANY     = 32;
+  PARAM_OPTIONAL = 64;
   
   SLOTS_SAVE_SECTION  = 'Era.DynArrays_SN_M';
   ASSOC_SAVE_SECTION  = 'Era.AssocArray_SN_W';
@@ -48,7 +58,8 @@ type
     
   end; // .record TErmCmdContext
 
-  TReceiverHandler = procedure;
+  (* Params index starts from 1 *)
+  TCommandHandler  = function (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 
   TVarType = (INT_VAR, STR_VAR);
   
@@ -66,7 +77,11 @@ type
 
 
 procedure ResetMemory;
-function GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
+function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
+procedure RegisterCommand (const CommandName: string; CommandHandler: TCommandHandler);
+procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: integer = sizeof(Erm.TErmZVar));
+procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
+function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
 
 function ExtendedEraService
 (
@@ -96,7 +111,8 @@ type
   end;
 
 var
-{O} NewReceivers: {O} TObjDict {OF TErmCmdHandler};
+(* The last extensible API for ERM. No more extensions. Use Lua *)
+{O} NewCommands: {U} TObjDict {OF command crc32 => TCommandHandler};
 
 {O} Hints:      {O} TDict {of [O] TObjDict of TString};
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
@@ -107,20 +123,20 @@ var
     CurrentMp3Track:   string;
 
 
-procedure RegisterReceiver (ReceiverName: integer; ReceiverHandler: TReceiverHandler);
-var
-  OldReceiverHandler: TReceiverHandler;
-   
+function GetCommandHandler (const CommandName: string): {n} TCommandHandler;
 begin
-  OldReceiverHandler := NewReceivers[Ptr(ReceiverName)];
+  result := TCommandHandler(NewCommands[Ptr(Crypto.AnsiCrc32(CommandName))]);
+end;
 
-  if @OldReceiverHandler = nil then begin
-    NewReceivers[Ptr(ReceiverName)] := @ReceiverHandler;
+procedure RegisterCommand (const CommandName: string; CommandHandler: TCommandHandler);  
+begin
+  if @GetCommandHandler(CommandName) <> nil then begin
+    Heroes.ShowMessage('Era command "' + CommandName + '" has hash collision and needs to be renamed');
   end else begin
-    Heroes.ShowMessage('Receiver "' + CHR(ReceiverName and $FF) + CHR(ReceiverName shr 8 and $FF) + '" is already registered!');
+    NewCommands[Ptr(Crypto.AnsiCrc32(CommandName))] := @CommandHandler;
   end;
-end; // .procedure RegisterReceiver
-    
+end;
+
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
 begin
   case Param.ParamModifier of 
@@ -142,7 +158,7 @@ begin
     end;
   end else begin
     if Param.IsStr then begin
-      Utils.SetPcharValue(Value, Param.Value.pc, MaxParamLen);
+      Utils.SetPcharValue(Value, Utils.IfThen(Param.ParamModifier <> MODIFIER_CONCAT, Param.Value.pc, AnsiString(pchar(Value)) + Param.Value.pc), MaxParamLen);
     end else begin
       ModifyWithIntParam(pinteger(Value)^, Param);
     end;
@@ -160,6 +176,7 @@ begin
   GameExt.EraReleaseServiceParams(Params);
 end;
 
+(* DEPRECATED. Use CheckCmdParamsEx instead *)
 function CheckCmdParams (Params: PServiceParams; const Checks: array of boolean): boolean;
 var
   i:  integer;
@@ -178,6 +195,34 @@ begin
     i :=  i + 2;
   end;
 end; // .function CheckCmdParams
+
+function CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
+var
+  i: integer;
+
+begin
+  {!} Assert(Params <> nil);
+  result := true;
+
+  for i := 0 to High(ParamConstraints) do begin
+    with Utils.Flags(ParamConstraints[i]) do begin
+      if i >= NumParams then begin
+        result := Have(PARAM_OPTIONAL);
+        exit;
+      end;
+
+      if
+        (Have(TYPE_INT)   and     Params[i].IsStr)   or
+        (Have(TYPE_STR)   and not Params[i].IsStr)   or
+        (Have(ACTION_GET) and not Params[i].OperGet) or
+        (Have(ACTION_SET) and     Params[i].OperGet)
+      then begin
+        result := false;
+        exit;
+      end;
+    end;
+  end; // .for
+end; // .function CheckCmdParamsEx
 
 function GetSlotItemsCount (Slot: TSlot): integer;
 begin
@@ -546,7 +591,41 @@ begin
   end else begin
     Lodman.RedirectFile(Params[0].Value.pc, Params[1].Value.pc);
   end;
-end; // .function SN_R
+end;
+
+function SN_I (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := (NumParams = 2) and CheckCmdParams(Params, [IS_STR, OPER_SET, IS_STR, OPER_GET]);
+
+  if not result then begin
+    Error := 'Invalid command syntax. Valid syntax is !!SN:Iz#/?z#';
+  end else begin
+    Erm.SetZVar(Params[1].Value.pc, Erm.ZvsInterpolateStr(Params[0].Value.pc));
+  end;
+end;
+
+function SN_F (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+var
+    CommandName:    string;
+{n} CommandHandler: TCommandHandler;
+
+begin
+  result := (NumParams > 0) and CheckCmdParams(Params, [IS_STR, OPER_SET]);
+
+  if not result then begin
+    Error := 'Invalid command syntax. Valid syntax is !!SN:F^command^/parameters...';
+  end else begin
+    CommandName    := Params[0].Value.pc;
+    CommandHandler := GetCommandHandler(CommandName);
+    result         := @CommandHandler <> nil;
+
+    if not result then begin
+      Error := 'Unknown Era command "' + Params[0].Value.pc + '"';
+    end else begin
+      result := CommandHandler(CommandName, NumParams - 1, Params, Error);
+    end;
+  end; // .else
+end; // .function SN_F
 
 function ExtendedEraService
 (
@@ -576,7 +655,9 @@ begin
   result := true;
   Error  := 'Invalid command parameters';
   
-  case Cmd of 
+  case Cmd of
+    'F': result := SN_F(NumParams, Params, Error);
+    
     'M':
       begin
         case NumParams of
@@ -588,9 +669,7 @@ begin
           // M(Slot); delete specified slot
           1:
             begin
-              result  :=
-                CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
-                (Params[0].Value.v <> SPEC_SLOT);
+              result := CheckCmdParams(Params, [not IS_STR, not OPER_GET]) and (Params[0].Value.v <> SPEC_SLOT);
               
               if result then begin
                 Slots.DeleteItem(Ptr(Params[0].Value.v));
@@ -606,16 +685,16 @@ begin
 
               if result then begin          
                 if Params[1].OperGet then begin
-                  Slot  :=  Slots[Ptr(Params[0].Value.v)];
+                  Slot := Slots[Ptr(Params[0].Value.v)];
                   
                   if Slot <> nil then begin
-                    PINTEGER(Params[1].Value.v)^  :=  GetSlotItemsCount(Slot);
+                    pinteger(Params[1].Value.v)^ := GetSlotItemsCount(Slot);
                   end else begin
-                    PINTEGER(Params[1].Value.v)^  :=  NO_SLOT;
+                    pinteger(Params[1].Value.v)^ := NO_SLOT;
                   end;
                   end // .if
                 else begin
-                  result  :=  GetSlot(Params[0].Value.v, Slot, Error);
+                  result := GetSlot(Params[0].Value.v, Slot, Error);
                   
                   if result then begin
                     NewSlotItemsCount := GetSlotItemsCount(Slot);
@@ -663,7 +742,7 @@ begin
                             Ptr(Slot.IntItems[Params[1].Value.v])
                           );
                         end else begin
-                          PINTEGER(Params[2].Value.v)^  :=  Slot.IntItems[Params[1].Value.v];
+                          pinteger(Params[2].Value.v)^  :=  Slot.IntItems[Params[1].Value.v];
                         end;
                       end else begin
                         Windows.LStrCpy
@@ -759,7 +838,7 @@ begin
               result  :=  (not Params[0].OperGet) and (not Params[1].IsStr) and (Params[1].OperGet);
               
               if result then begin
-                PINTEGER(Params[1].Value.v)^  :=  SysUtils.StrLen(pointer(Params[0].Value.v));
+                pinteger(Params[1].Value.v)^  :=  SysUtils.StrLen(pointer(Params[0].Value.v));
               end;
             end; // .case 2
           // C(str)/(ind)/[?](strchar)
@@ -801,20 +880,18 @@ begin
       begin
         case NumParams of 
           // Clear all
-          0:
-            begin
-              AssocMem.Clear;
-            end; // .case 0
+          0: AssocMem.Clear;
+          
           // Delete var
           1:
             begin
-              result  :=  not Params[0].OperGet;
+              result := not Params[0].OperGet;
               
               if result then begin
                 if Params[0].IsStr then begin
-                  AssocVarName  :=  pchar(Params[0].Value.v);
+                  AssocVarName := pchar(Params[0].Value.v);
                 end else begin
-                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value.v);
+                  AssocVarName := SysUtils.IntToStr(Params[0].Value.v);
                 end;
                 
                 AssocMem.DeleteItem(AssocVarName);
@@ -823,45 +900,40 @@ begin
           // Get/set var
           2:
             begin
-              result  :=  not Params[0].OperGet;
+              result := not Params[0].OperGet;
               
               if result then begin
                 if Params[0].IsStr then begin
-                  AssocVarName  :=  pchar(Params[0].Value.v);
+                  AssocVarName := pchar(Params[0].Value.v);
                 end else begin
-                  AssocVarName  :=  SysUtils.IntToStr(Params[0].Value.v);
+                  AssocVarName := SysUtils.IntToStr(Params[0].Value.v);
                 end;
                 
-                AssocVarValue :=  AssocMem[AssocVarName];
+                AssocVarValue := AssocMem[AssocVarName];
                 
                 if Params[1].OperGet then begin
                   if Params[1].IsStr then begin
                     if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
                       pchar(Params[1].Value.v)^ :=  #0;
                     end else begin
-                      Utils.CopyMem
-                      (
-                        Length(AssocVarValue.StrValue) + 1,
-                        pointer(AssocVarValue.StrValue),
-                        pointer(Params[1].Value.v)
-                      );
+                      Erm.SetZVar(Params[1].Value.pc, AssocVarValue.StrValue);
                     end;
                   end else begin
                     if AssocVarValue = nil then begin
-                      PINTEGER(Params[1].Value.v)^  :=  0;
+                      pinteger(Params[1].Value.v)^ := 0;
                     end else begin
-                      PINTEGER(Params[1].Value.v)^  :=  AssocVarValue.IntValue;
+                      pinteger(Params[1].Value.v)^ := AssocVarValue.IntValue;
                     end;
                   end; // .else
                 end else begin
                   if AssocVarValue = nil then begin
-                    AssocVarValue           :=  TAssocVar.Create;
-                    AssocMem[AssocVarName]  :=  AssocVarValue;
+                    AssocVarValue          := TAssocVar.Create;
+                    AssocMem[AssocVarName] := AssocVarValue;
                   end;
                   
                   if Params[1].IsStr then begin
                     if Params[1].ParamModifier <> MODIFIER_CONCAT then begin
-                      AssocVarValue.StrValue  :=  pchar(Params[1].Value.v);
+                      AssocVarValue.StrValue := pchar(Params[1].Value.v);
                     end else begin
                       AssocVarValue.StrValue := AssocVarValue.StrValue + pchar(Params[1].Value.v);
                     end;
@@ -872,8 +944,8 @@ begin
               end; // .if
             end; // .case 2
         else
-          result  :=  false;
-          Error   :=  'Invalid number of command parameters';
+          result := false;
+          Error  := 'Invalid number of command parameters';
         end; // .switch
       end; // .case "W"
     'D':
@@ -927,6 +999,7 @@ begin
     'T': result := SN_T(NumParams, Params, Error);
     'H': result := SN_H(NumParams, Params, Error);
     'R': result := SN_R(NumParams, Params, Error);
+    'I': result := SN_I(NumParams, Params, Error);
   else
     result := false;
     Error  := 'Unknown command "' + Cmd +'".';
@@ -1316,32 +1389,6 @@ begin
     result := Core.EXEC_DEF_CODE;
   end;
 end; // .function Hook_ZvsCheckObjHint
-
-(*function HookFindErm_NewReceivers (Hook: TLoHook; Context: PHookContext): integer; stdcall;
-const
-  FuncParseParams = $73FDDC; // int cdecl f (Mes& M)
-  
-var
-  NumParams: integer;
-
-begin
-  if  then begin
-    // M.c[0]=':';
-    PCharByte(Context.EBP - $8C])^ := ':';
-    // Ind=M.i;
-    PINTEGER(Context.EBP - $35C)^ := PINTEGER(Context.EBP - $318)^;
-    // Num=GetNumAutoFl(&M);
-    NumParams := PatchApi.Call(PatchApi.CDECL_, FuncParseParams, [Context.EBP - $35C]);
-    // ToDoPo = 0
-    PINTEGER(Context.EBP - $358)^ := 0;
-    // ParSet = Num
-    PINTEGER(Context.EBP - $3F8)^ := NumParams;
-  end else begin
-    
-  end; // .else
-  // BREKA IS JUMP to JMP SHORT 0074B8C5
-  result  :=  EXEC_DEFAULT;
-end; // .function HookFindErm_NewReceivers*)
 
 procedure DumpErmMemory (const DumpFilePath: string);
 const
@@ -1895,6 +1942,11 @@ begin
   Mp3TriggerContext := PrevTriggerContext;
 end; // .function New_Mp3_Trigger
 
+procedure RegisterCommands;
+begin
+  // ...
+end;
+
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* SN:H for adventure map object hints *)
@@ -1931,7 +1983,8 @@ begin
 end;
 
 begin
-  (* NewReceivers  :=  DataLib.NewObjDict(Utils.OWNS_ITEMS); *)
+  NewCommands := DataLib.NewObjDict(not Utils.OWNS_ITEMS);
+  RegisterCommands;
 
   New(Mp3TriggerContext);
   Slots    := AssocArrays.NewStrictObjArr(TSlot);

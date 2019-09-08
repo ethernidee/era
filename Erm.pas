@@ -139,7 +139,14 @@ const
   TRIGGER_BATTLEFIELD_VISIBLE          = 77020;
   TRIGGER_AFTER_TACTICS_PHASE          = 77021;
   TRIGGER_COMBAT_ROUND                 = 77022;
-  {!} LAST_ERA_TRIGGER                 = TRIGGER_COMBAT_ROUND;
+  TRIGGER_OPEN_RECRUIT_DLG             = 77023;
+  TRIGGER_CLOSE_RECRUIT_DLG            = 77024;
+  TRIGGER_RECRUIT_DLG_MOUSE_CLICK      = 77025;
+  TRIGGER_TOWN_HALL_MOUSE_CLICK        = 77026;
+  TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK = 77027;
+  TRIGGER_RECRUIT_DLG_RECALC           = 77028;
+  TRIGGER_RECRUIT_DLG_ACTION           = 77029;
+  {!} LAST_ERA_TRIGGER                 = TRIGGER_RECRUIT_DLG_ACTION;
   
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -411,6 +418,8 @@ const
   ZvsTriggerIfsDepth:         pbyte                  = Ptr($A46D22);
   ZvsChestsEnabled:           ^TZvsCheckEnabled      = Ptr($27F99B0);
   ZvsPlayerIsHuman:           plongbool              = Ptr($793C80);
+  ZvsAllowDefMouseReaction:   plongbool              = Ptr($A4AAFC);
+  ZvsMouseEventInfo:          Heroes.PMouseEventInfo = Ptr($8912A8);
   IsWoG:                      plongbool              = Ptr($803288);
   WoGOptions:                 ^TWoGOptions           = Ptr($2771920);
   ErmEnabled:                 plongbool              = Ptr($27F995C);
@@ -433,6 +442,7 @@ const
   MonNamesSpecialtyTableBack: Utils.PEndlessPcharArr = Ptr($A88E78);
 
   (* WoG funcs *)
+  ZvsProcessCmd:      procedure (Cmd: PErmCmd) cdecl = Ptr($741DF0);
   ZvsFindErm:         Utils.TProcedure  = Ptr($749955);
   ZvsClearErtStrings: Utils.TProcedure  = Ptr($7764F2);
   ZvsClearErmScripts: Utils.TProcedure  = Ptr($750191);
@@ -447,6 +457,9 @@ const
   ZvsEnableNpc:       procedure (HeroId: integer; AutoHired: integer) cdecl = Ptr($76B541);
   ZvsDisableNpc:      procedure (HeroId: integer) cdecl = Ptr($76B5D6);
   ZvsIsAi:            function (Owner: integer): boolean cdecl = Ptr($711828);
+  ZvsGetErtStr:       function (StrInd: integer): pchar cdecl = Ptr($776620);
+  ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
+  ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): LONGBOOL cdecl = Ptr($74195D);
 
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
@@ -473,7 +486,6 @@ var
 
 procedure SetZVar (Str: pchar; const Value: string); overload;
 procedure SetZVar (Str, Value: pchar); overload;
-procedure ZvsProcessCmd (Cmd: PErmCmd);
 
 procedure ShowErmError (const Error: string);
 function  GetErmFuncByName (const FuncName: string): integer;
@@ -484,7 +496,10 @@ procedure ExecErmCmd (const CmdStr: string);
 procedure ReloadErm; stdcall;
 procedure ExtractErm; stdcall;
 function  AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
-procedure FireErmEventEx (EventId: integer; Params: array of integer);
+procedure AssignEventParams (const Params: array of integer);
+procedure FireErmEventEx (EventId: integer; const Params: array of integer);
+(* Returns true if default reaction is allowed *)
+function  FireMouseEvent (TriggerId: integer; MouseEventInfo: Heroes.PMouseEventInfo): boolean;
 function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 
 (*  Up to 16 arguments  *)
@@ -672,6 +687,13 @@ begin
     {*} Erm.TRIGGER_BATTLEFIELD_VISIBLE:          result := 'OnBattlefieldVisible';
     {*} Erm.TRIGGER_AFTER_TACTICS_PHASE:          result := 'OnAfterTacticsPhase';
     {*} Erm.TRIGGER_COMBAT_ROUND:                 result := 'OnCombatRound';
+    {*} Erm.TRIGGER_OPEN_RECRUIT_DLG:             result := 'OnOpenRecruitDlg';
+    {*} Erm.TRIGGER_CLOSE_RECRUIT_DLG:            result := 'OnCloseRecruitDlg';
+    {*} Erm.TRIGGER_RECRUIT_DLG_MOUSE_CLICK:      result := 'OnRecruitDlgMouseClick';
+    {*} Erm.TRIGGER_TOWN_HALL_MOUSE_CLICK:        result := 'OnTownHallMouseClick';
+    {*} Erm.TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK: result := 'OnKingdomOverviewMouseClick';
+    {*} Erm.TRIGGER_RECRUIT_DLG_RECALC:           result := 'OnRecruitDlgRecalc';
+    {*} Erm.TRIGGER_RECRUIT_DLG_ACTION:           result := 'OnRecruitDlgAction';
     (* END Era Triggers *)
   else
     if EventID >= Erm.TRIGGER_OB_POS then begin
@@ -738,36 +760,6 @@ procedure SetZVar (Str, Value: pchar); overload;
 begin
   Utils.SetPcharValue(Str, Value, sizeof(z[1]));
 end;
-
-procedure ZvsProcessCmd (Cmd: PErmCmd); ASSEMBLER;
-asm
-  // Push parameters
-  MOV EAX, Cmd
-  PUSH 0
-  PUSH 0
-  PUSH EAX
-  // Push return address
-  LEA EAX, @@Ret
-  PUSH EAX
-  // Execute initial function code
-  PUSH EBP
-  MOV EBP, ESP
-  SUB ESP, $544
-  PUSH EBX
-  PUSH ESI
-  PUSH EDI
-  MOV EAX, [EBP + $8]
-  MOV CX, [EAX]
-  MOV [EBP - $314], CX
-  MOV EDX, [EBP + $8]
-  MOV EAX, [EDX + $294]
-  MOV [EBP - $2FC], EAX
-  // Give control to code after logging area
-  PUSH $741E3F
-  RET
-  @@Ret:
-  ADD ESP, $0C
-end; // .procedure ZvsProcessCmd
 
 procedure ClearErmCmdCache;
 begin
@@ -1681,7 +1673,7 @@ begin
       end;
     until (EndPos^ = #0) or (Cost >= MAX_CONTEXT_COST);
     
-    result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
+    result := SysUtils.WrapText(StrLib.ExtractFromPchar(StartPos, EndPos - StartPos), #10, [#0..#255], 100);
   end; // .if
 end; // .function GrabErmCmdContext
 
@@ -1849,23 +1841,53 @@ begin
   NameTrigger(Erm.TRIGGER_BATTLEFIELD_VISIBLE,          'OnBattlefieldVisible');
   NameTrigger(Erm.TRIGGER_AFTER_TACTICS_PHASE,          'OnAfterTacticsPhase');
   NameTrigger(Erm.TRIGGER_COMBAT_ROUND,                 'OnCombatRound');
+  NameTrigger(Erm.TRIGGER_OPEN_RECRUIT_DLG,             'OnOpenRecruitDlg');
+  NameTrigger(Erm.TRIGGER_CLOSE_RECRUIT_DLG,            'OnCloseRecruitDlg');
+  NameTrigger(Erm.TRIGGER_RECRUIT_DLG_MOUSE_CLICK,      'OnRecruitDlgMouseClick');
+  NameTrigger(Erm.TRIGGER_TOWN_HALL_MOUSE_CLICK,        'OnTownHallMouseClick');
+  NameTrigger(Erm.TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK, 'OnKingdomOverviewMouseClick');
+  NameTrigger(Erm.TRIGGER_RECRUIT_DLG_RECALC,           'OnRecruitDlgRecalc');
+  NameTrigger(Erm.TRIGGER_RECRUIT_DLG_ACTION,           'OnRecruitDlgAction');
 end; // .procedure RegisterErmEventNames
 
-procedure FireErmEventEx (EventId: integer; Params: array of integer);
+procedure AssignEventParams (const Params: array of integer);
 var
   i: integer;
 
 begin
   {!} Assert(Length(Params) <= Length(GameExt.EraEventParams^), 'Cannot fire ERM event with so many arguments: ' + SysUtils.IntToStr(length(Params)));
-  GameExt.EraSaveEventParams;
   
   for i := 0 to High(Params) do begin
     EraEventParams[i] := Params[i];
   end;
-  
-  Erm.FireErmEvent(EventId);
+end;
+
+procedure FireErmEventEx (EventId: integer; const Params: array of integer);
+begin
+  GameExt.EraSaveEventParams;
+  AssignEventParams(Params);
+  FireErmEvent(EventId);
   GameExt.EraRestoreEventParams;
-end; // .procedure FireErmEventEx
+end;
+
+function FireMouseEvent (TriggerId: integer; MouseEventInfo: Heroes.PMouseEventInfo): boolean;
+var
+  PrevMouseEventInfo:    Heroes.TMouseEventInfo;
+  PrevEnableDefReaction: LONGBOOL;
+
+begin
+  {!} Assert(MouseEventInfo <> nil);
+  PrevMouseEventInfo        := ZvsMouseEventInfo^;
+  PrevEnableDefReaction     := ZvsAllowDefMouseReaction^;
+  ZvsMouseEventInfo^        := MouseEventInfo^;
+  ZvsAllowDefMouseReaction^ := true;
+
+  Erm.FireErmEvent(TriggerId);
+
+  result                    := ZvsAllowDefMouseReaction^;
+  ZvsMouseEventInfo^        := PrevMouseEventInfo;
+  ZvsAllowDefMouseReaction^ := PrevEnableDefReaction;
+end; // .function FireMouseEvent
 
 procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 begin
@@ -1901,7 +1923,7 @@ begin
   if ErmEnabled^ then begin
     YVars := TYVars.Create;
     // * * * * * //
-    if CurrErmEventID^ >= Erm.TRIGGER_FU29999 then begin
+    if CurrErmEventID^ > Erm.TRIGGER_FU29999 then begin
       SetLength(YVars.Value, Length(y^));
       Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
     end;

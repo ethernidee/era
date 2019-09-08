@@ -1,4 +1,4 @@
-﻿unit Heroes;
+unit Heroes;
 {
 DESCRIPTION:  Internal game functions and structures
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
@@ -127,6 +127,9 @@ const
   LOAD_DEF_SETTINGS = $50B420;  // F();
   SMACK_OPEN        = $63A464;  // F(FileName: pchar; BufSize, BufMask: int): HANDLE or 0; stdcall;
   BINK_OPEN         = $63A390;  // F(hFile, BufMask or $8000000: int): HANDLE or 0; stdcall;
+
+  (* Limits *)
+  MAX_MONS_IN_STACK = 32767;
   
   hWnd:           pinteger  = Ptr($699650);
   hHeroes3Event:  pinteger  = Ptr($69965C);
@@ -137,6 +140,7 @@ const
   
   (* Managers *)
   GAME_MANAGER     = $699538;
+  TOWN_MANAGER     = $69954C;
   HERO_WND_MANAGER = $6992D0;
   SOUND_MANAGER    = $699414;
   COMBAT_MANAGER   = $699420;
@@ -144,6 +148,22 @@ const
   (* Colors *)
   RED_COLOR         = '0F2223E';
   HEROES_GOLD_COLOR = '0FFFE794';
+
+  (* Resources *)
+  RES_FIRST   = 0;
+  RES_WOOD    = 0;
+  RES_MERCURY = 1;
+  RES_ORE     = 2;
+  RES_SULFUR  = 3;
+  RES_CRYSTAL = 4;
+  RES_GEMS    = 5;
+  RES_GOLD    = 6;
+  RES_MITHRIL = 7;
+  RES_LAST    = RES_GOLD;
+
+  (* Map object types *)
+  OBKTYPE_NONE = -1;
+  OBJTYPE_TOWN = 98;
 
   (* Msg result *)
   MSG_RES_OK        = 0;
@@ -181,7 +201,7 @@ type
   
   PLod  = ^TLod;
   TLod  = packed record
-    Dummy:  array [0..399] of byte;
+    Dummy: array [0..399] of byte;
   end; // .record TLod
 
   PBasicString = ^TBasicString;
@@ -245,7 +265,7 @@ type
     _0:      array [1..129904] of byte;
     Align_0: integer;                 _Types_:       array [0..2] of integer;                             // +00
     Align_1: integer;                 _Position_:    array [0..2] of integer;                             // +10
-    Align_2: array [0..3] of integer; // DEFы                                                             // +20
+    Align_2: array [0..3] of integer; // DEFs                                                             // +20
     Align_3: integer;                 _ArtRes_:      array [0..2] of integer;                             // +30
     Align_4: integer;                 _Monster_:     array [0..2] of integer;                             // +40
     Align_5: integer;                 _Event_:       array [0..2] of integer;                             // +50
@@ -297,6 +317,10 @@ type
     // _Dlg_* dlg;       // + 0x132FC
     // _byte_ field_13300[3564];
   end; // .TCombatManager
+
+  TCastleManager = packed record
+
+  end; // .TCastleManager
   
   PScreenPcx16  = ^TScreenPcx16;
   TScreenPcx16  = packed record
@@ -520,6 +544,170 @@ type
   TMonInfos = array [0..high(integer) div sizeof(TMonInfo) - 1] of TMonInfo;
   PMonInfos = ^TMonInfos;
 
+  PMouseEventInfo = ^TMouseEventInfo;
+  TMouseEventInfo = packed record
+    ActionType:    integer;
+    ActionSubtype: integer;
+    Item:          integer;
+    Flags:         integer;
+    X:             integer;
+    Y:             integer;
+    Param1:        integer;
+    Param2:        integer;
+  end;
+
+  (* Ported from WoG. Needs refactoring *)
+  PHero = ^THero;
+  THero = packed record
+    X:            word;                           // +00  dw    = x position
+    Y:            word;                           // +02  dw    = y position
+    L:            word;                           // +04  dw    = ? uroven' starshaya chast' y (y<<2>>C)
+    Visible:      byte;                           // +06  db    = 1 - est' na karte (vnutri goroda ili ne aktiven)
+                                                  // Byte  _u1[17];
+                                                  // +07 db - x
+                                                  // +08 db - (?) musor (k x)
+                                                  // +09 db - y
+                                                  // +0A db - l(?) musor (k y)
+    PlMapItem:    integer;                        // MixedPos
+                                                  // +0B db - (?) l
+    _u1:          byte;                           
+                                                  // +0C dd - tip ob'ekta na kotorom geroj stoyal
+    PlOType:      integer;                        // dd +1E s karty
+                                                  // +10 db - bit zanyatosti vo flagah poverhnosti 00001000
+                                                  // eto bit oznachayuschij, chto zdes' est'/byla tochka vhoda (zheltaya kletka)
+    Pl0Cflag:     integer;                        
+                                                  // +14 dd - SetUp s karty
+    PlSetUp:      integer;                        // dd +0 s karty
+    SpPoints:     word;                           // +18  dw    = bally zaklinanij
+    Number:       integer;                        // +1A  dd    = nomer podtipa (konkretnyj geroj)
+    Id:           integer;                        // +1E  dd    = Id
+    Owner:        char;                           // +22  db    = nozyain (czvet)
+    Name:         array [0..12] of char;          // +23  db*D  = imya,0
+    Spec:         integer;                        // +30  dd    = str[8] str=(*[67CD08])[nomer podtipa *5C]
+    Pic:          byte;                           // +34  db    = nomer kartinki
+                                                  // dw +35 ???
+                                                  // dw +41 ???
+                                                  // db +43 0
+    _u2:          array [0..14] of byte;          
+                                                  // +3E db -??? 4E3BB5 - used in luck calculation
+    x0:           byte;                           // +44  db    = bazovyj x dlya obeganiya (FF-ne ogranichen)
+    y0:           byte;                           // +45  db    = bazovyj y dlya obeganiya (FF-ne ogranichen)
+    Run:          byte;                           // +46  db    = radius obeganiya (FF-ne ogranichen)
+    _u3:          byte;                           // +47  db    = ??? 
+    Flags:        byte;                           // +48  8*bb  (463253)
+                                                  // 01 - tip gruppirovki yunitov
+                                                  // 02 - razreshena taktika dlya geroya
+    Movement0:    integer;                        // +49  dd    = polnoe peremeschenie nachal'noe
+    Movement:     integer;                        // +4D  dd    = ostavshiesya peremescheniya
+    Exp:          integer;                        // +51  dd    = opyt
+    ExpLevel:     word;                           // +55  dw    = uroven'
+                                                  // Dword  VStones;  // +57 32 kamnya (1-poseschen,2-net)
+                                                  // Dword  VMTower;  // +5B Bashnya Mardetto
+                                                  // Dword  VGarden;  // +5F sad otkroveniya
+                                                  // Dword  VMCamp;   // +63 lager' naemnikov
+                                                  // Dword  VSAxis;   // +67 zvezdnoe koleso
+                                                  // Dword  VKTree;   // +6B derevo znanij
+                                                  // Dword  VUniver;  // +6F universitet
+                                                  // Dword  VArena;   // +73 arena
+                                                  // Dword  VSMagic;  // +77 shkola magov
+                                                  // Dword  VSWar;    // +7B shkola vojny
+    Visited:      array [0..9] of integer;        
+    _u4:          array [0..17] of byte;          // +7F
+    MonTypes:     array [0..6] of integer;        // +91  dd*7  = tip suschestv (-1 - net)
+    MonNums:      array [0..6] of integer;        // +AD  dd*7  = kolichestvo
+    SSkill:       array [0..27] of byte;          // +C9  db*1C = uroven' 2-h skilov (odin bajt - uroven' etogo nomera skila 1,2,3) 0-net
+                                                  // C9=Pathfinding CA=Archery CB=Logistics CC=Scouting CD=Diplomacy CE=Navigation CF=Leadership 
+                                                  // D0=Wisdom D1=Mysticism D2=Luck D3=Ballistics D4=Eagle Eye D5=Necromancy D6=Estates D7=Fire Magic 
+                                                  // D8=Air Magic D9=Water Magic DA=Earth Magic DB=Scholar DC=Tactics DD=Artillery DE=Learning DF=Offence 
+                                                  // E0=Armorer E1=Intelligence E2=Sorcery E3=Resistance E4=First Aid 
+    SShow:        array [0..27] of byte;          // +E5  db*1C = poryadok otobrazheniya 2-h skilov v okne geroya (1,2,3,4,5,6)
+    SSNum:        integer;                        // +101 dd    = kolichestvo 2-h skilov
+                                                  // Word  RefData1;  //   +105  4814D3+...
+                                                  // Word  RefData2;  //   +107  4DA466
+    TempMod:      integer;                        // +105 vremennye modifikatory
+                                                  // nach. inicz. pri najme 0xFFF9FFFF
+                                                  //  00000002 = konyuschnya 3.59 ERM
+                                                  //  00000008 = lebedinoe ozero swan pond 3.59 ERM
+                                                  //  00000020 = (???) fontan udachi fountain of fortune 3.59 ERM
+                                                  //  00000080 = oazis
+                                                  //  00002000 = domik fej
+                                                  //  00040000 = v lodke na vode
+                                                  //  00200000 = -3morale v varior tomb
+                                                  //  00400000 = Give Maximum Luck
+                                                  //  00800000 = Give Maximum Moral
+                                                  //  38000000 = konkretnyj tip fontana udachi
+    _u6:          array [0..8] of byte;           // +109
+    _u7:          integer;                        // +112 
+    DMorale:      char;                           // +116 modifikatory morali (nakaplivayutsya)
+    _u60:         array [0..2] of byte;           
+    DMorale1:     char;                           // +11A modif morali (oazis)
+    DLuck:        char;                           // +11B modif udachi do sled bitvy
+    _u6a:         array [0..16] of byte;          
+    IArt:         array [0..18, 0..1] of integer; // +12D dd*2*13h = artifakty dd-nomer,dd-(FF) (kniga 3,FF)
+    FreeAddSlots: byte;                           // +1C5 kolichestvo pustyh dop. slotov sleva
+    LockedSlot:   array [0..13] of char;          // +1C6
+    OArt:         array [0..63, 0..1] of integer; // +1D4 dd*2*40 = art v ryukzake dd-nomer, dd-(FF)
+    OANum:        byte;                           // +3D4 db   = chislo artifaktov v ryukzake
+    Sex:          integer;                        // +3D5 dd    = pol
+    fl_B:         byte;                           // +3D9 db    = est' biografiya
+                                                  // char  *Bibl;     //   +3DA dd    -> biografiya
+                                                  // Byte  _u7[12];    //  +3DE
+    _5b:          integer;                        // +3DA
+    Bibl:         TExtString;                     // +3DE
+    Spell:        array [0..69] of byte;          // +3EA db*46 = zaklinanie (est'/net)
+    LSpell:       array [0..69] of byte;          // +430 db*46 = uroven' zaklinaniya (>=1)
+    PSkill:       array [0..3] of char;           // +476 db*4  = pervichnye navyki
+    _u8:          array [0..23] of byte;
+  end; // .record THero
+
+  THeroes = packed array [0..999] of THero;
+  PHeroes = ^THeroes;
+
+  (* Ported from WoG. Needs refactoring *)
+  PTown = ^TTown;
+  TTown = packed record
+    Id:            byte;                         // +0 0,1,2,...
+    Owner:         char;                         // +1 0,...
+    BuiltThisTurn: char;                         // +2 - uzhe stroili v etot turn (0-net, 1-da, 2-ne nash gorod)
+    _u2:           byte;                         // +3 0
+    TownType:      byte;                         // +4 0,1...,8
+    x:             byte;                         // +5
+    y:             byte;                         // +6
+    l:             byte;                         // +7
+    Pos2PlaceBoatX:byte;                         // +8 pomeschat' lodku pri pokupki v Shipyard
+    Pos2PlaceBoatY:byte;                         // +9
+    _uAa:          array [0..1] of byte;         // +0A
+    IHero:         integer;                      // +0Ch = nomer geroya vnutri goroda (-1 - nikogo net)
+    VHero:         integer;                      // +10h = nomer geroya snaruzhi goroda (-1 - nikogo net)
+    MagLevel:      char;                         // +14h = uroven' magicheskoj gil'dii v gorode (isp. AI dlya postrojki)
+    _u15:          byte;                         
+    DwellingMons:  array [0..1, 0..6] of word;   // +16h ko-lvo prostyh i apgrejdnutyh
+    _u32:          char;                         // +32 = ?
+    _u33:          char;                         // +33 = 1
+    _u34:          char;                         // +34 = 0
+    _u35a:         array [0..2] of byte;         
+    _u38:          integer;                      // +38 = -1
+    _u3C:          integer;                      // +3C = -1
+    _u40:          short;                        // +40
+    _u42:          word;                         // +42
+    Spels:         array [0..4, 0..5] of integer;// +44 sami zaklinaniya
+    MagicHild:     array [0..4] of char;         // +BCh = kolvo zaklinanij v urovne gil'dii
+    _uC1:          array [0..2] of byte;         
+    _uC4:          char;                         // +C4 = 0
+    _uC5:          array [0..2] of byte;         
+    Name:          TExtString;                   // +C8 -> Imya goroda
+    _u8:           array [0..2] of integer;      // +D4 = 0
+    GuardsT:       array [0..6] of integer;      // +E0 = ohrana zamka
+    GuardsN:       array [0..6] of integer;      // +FC = kol-vo ohrany
+    GuardsT0:      array [0..6] of integer;      // +118 = ohrana zamka
+    GuardsN0:      array [0..6] of integer;      // +134 = kol-vo ohrany
+    Built:         array [0..7] of byte;         // +150h = uzhe postroennye zdaniya (0400)
+    Bonus:         array [0..7] of byte;         // +158h = bonus na suschestv, resursy i t.p., vyzvannyj stroeniyami
+    BMask:         array [0..1] of integer;      // +160h = maska dostupnyh dlya stroeniya stroenij
+  end; // .record TTown
+
+  TTowns = packed array [0..999] of TTown;
+  PTowns = ^TTowns;
 
 const
   MAlloc: TMAlloc = Ptr($617492);
@@ -532,9 +720,12 @@ const
 
   CurrentPlayer: pinteger = Ptr($69CCF4);
 
-  ZvsGzipWrite: TGzipWrite = Ptr($704062);
-  ZvsGzipRead:  TGzipRead  = Ptr($7040A7);
-  WndProc:      TWndProc   = Ptr($4F8290);
+  ZvsGzipWrite:  TGzipWrite = Ptr($704062);
+  ZvsGzipRead:   TGzipRead  = Ptr($7040A7);
+  WndProc:       TWndProc   = Ptr($4F8290);
+  ZvsGetHero:    function (HeroId: integer): {n} PHero cdecl = Ptr($71168D);
+  ZvsGetTowns:   function: {n} PTowns cdecl = Ptr($711BD4);
+  ZvsCountTowns: function: integer = Ptr($711C0E);
   
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
   MemAllocFunc:       TMemAllocFunc       = Ptr($617492);
@@ -549,6 +740,7 @@ const
 
   MonInfos:       PMonInfos = Ptr($7D0C90);
   NumMonstersPtr: pinteger  = Ptr($733326);
+  NumHeroes:      pinteger  = Ptr($7116B2);
 
   (* Variable is protected with two crit sections: pint(SOUND_MANAGER)^ + $a8 and pint(SOUND_MANAGER)^ + $c0 *)
   CurrentMp3Track: PCurrentMp3Track = Ptr($6A32F0);

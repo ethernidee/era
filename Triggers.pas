@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils,
-  Core, PatchApi, GameExt, Heroes, Erm, EventMan;
+  Core, PatchApi, GameExt, Heroes, ApiJack, Erm, EventMan;
 
 const
   NO_STACK  = -1;
@@ -380,6 +380,15 @@ begin
   Dec(MainGameLoopDepth);
 end; // .procedure Hook_MainGameLoop
 
+function Hook_KingdomOverviewMouseClick (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+begin
+  result := Erm.FireMouseEvent(Erm.TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK, Ptr(Context.EDI));
+
+  if not result then begin
+    Context.RetAddr := Ptr($521E84);
+  end;
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -408,6 +417,9 @@ begin
   
   (* MainGameCycle: OnEnterGame, OnLeaveGame and MapFolder settings*)
   Core.p.WriteHiHook(Ptr($4B0BA0), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,  @Hook_MainGameLoop);
+
+  (* Kingdom Overview mouse click *)
+  ApiJack.HookCode(Ptr($521E50), @Hook_KingdomOverviewMouseClick);
 end; // .procedure OnAfterWoG
 
 begin
