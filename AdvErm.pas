@@ -65,6 +65,8 @@ type
   (* Params index starts from 1 *)
   TCommandHandler = function (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 
+  TErmCmdHandler = function (Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: Erm.PErmSubCmd): integer cdecl;
+
   TVarType = (INT_VAR, STR_VAR);
   
   TSlot = class
@@ -79,10 +81,28 @@ type
     StrValue: string;
   end; // .class TAssocVar
 
+  TErmCmdWrapper = record
+    Success:    boolean;
+    CmdInfo:    Erm.PErmSubCmd;
+    CmdPtr:     pchar;
+    CmdName:    pchar;
+    Cmd:        char;
+    Error:      string;
+    NumParams:  integer;
+    _ParamsLen: integer;
+    Params:     GameExt.TServiceParams;
+
+    class function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper; static;
+    function  FindNextSubcmd (AllowedSubcmds: Utils.TCharSet): boolean;
+    procedure Cleanup;
+    function  GetCmdResult: integer;
+  end; // .record TErmCmdWrapper
+
 
 procedure ResetMemory;
 function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
 procedure RegisterCommand (const CommandName: string; CommandHandler: TCommandHandler);
+procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
 procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: integer = sizeof(Erm.TErmZVar));
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
 function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
@@ -113,8 +133,6 @@ type
     Loop:              integer;
     DefaultReaction:   integer;
   end;
-
-  TErmCmdHandler = function (Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: Erm.PErmSubCmd): integer cdecl;
 
   TErmAdditionalCmd = packed record
     Id:           Erm.TErmCmdId;
@@ -192,6 +210,76 @@ begin
   AdditionalCmds[NumAdditionalCmds].Handler := nil;
 end;
 
+(* Parameters must be either reused or filled with zeroes before function call *)
+function GetServiceParams (Cmd: pchar; var NumParams: integer; var {O} Params: TServiceParams): integer;
+begin
+  result := GameExt.EraGetServiceParams(Cmd, NumParams, Params);
+end;
+
+procedure ReleaseServiceParams ({O} var Params: TServiceParams); stdcall;
+begin
+  GameExt.EraReleaseServiceParams(Params);
+end;
+
+class function TErmCmdWrapper.WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
+begin
+  {!} Assert(CmdName <> nil);
+  {!} Assert(CmdInfo <> nil);
+  CmdInfo.Pos    := 0;
+  result.CmdInfo := CmdInfo;
+  result.CmdName := CmdName;
+
+  with result do begin
+    Success    := true;
+    CmdPtr     := @CmdInfo.Code.Value[0];
+    Cmd        := CmdPtr^;
+    Error      := 'Invalid command parameters';
+    NumParams  := 0;
+    _ParamsLen := 0;
+    FillChar(Params, sizeof(Params), 0);
+  end;
+end;
+
+function TErmCmdWrapper.FindNextSubcmd (AllowedSubcmds: Utils.TCharSet): boolean;
+begin
+  // Skip parameters and subcommand from previous call
+  if Self.Success and (Self._ParamsLen > 0) then begin
+    Inc(Self.CmdPtr, Self._ParamsLen);
+    Inc(Self.CmdInfo.Pos, Self._ParamsLen);
+    Self._ParamsLen := 0;
+  end;
+
+  result := Self.Success and (Self.CmdPtr^ <> ';');
+
+  if result then begin
+    Self.Cmd     := Self.CmdPtr^;
+    Self.Success := Self.Cmd in AllowedSubcmds;
+
+    if not Self.Success then begin
+      Error := 'Unknown command "!!' + Self.CmdName + ':' + Self.Cmd + '"';
+    end else begin
+      Self._ParamsLen := GetServiceParams(Self.CmdPtr, Self.NumParams, Self.Params);
+      Self.Success    := Self._ParamsLen <> -1;
+    end;
+  end;
+end; // .function TErmCmdWrapper.FindNextSubcmd
+
+procedure TErmCmdWrapper.Cleanup;
+begin
+  Self.Error := '';
+  ReleaseServiceParams(Self.Params);
+end;
+
+function TErmCmdWrapper.GetCmdResult: integer;
+begin
+  result := ord(Self.Success);
+
+  if not Self.Success then begin
+    Erm.ErmErrCmdPtr^ := @CmdInfo.Code.Value[0];
+    Erm.ShowErmError(Self.Error);
+  end;
+end;
+
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
 begin
   case Param.ParamModifier of 
@@ -218,17 +306,6 @@ begin
       ModifyWithIntParam(pinteger(Value)^, Param);
     end;
   end; // .else
-end;
-
-(* Parameters must be either reused or filled with zeroes before function call *)
-function GetServiceParams (Cmd: pchar; var NumParams: integer; var {O} Params: TServiceParams): integer;
-begin
-  result := GameExt.EraGetServiceParams(Cmd, NumParams, Params);
-end;
-
-procedure ReleaseServiceParams ({O} var Params: TServiceParams); stdcall;
-begin
-  GameExt.EraReleaseServiceParams(Params);
 end;
 
 (* DEPRECATED. Use CheckCmdParamsEx instead *)

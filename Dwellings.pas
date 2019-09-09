@@ -590,8 +590,8 @@ begin
   Erm.FireErmEvent(Erm.TRIGGER_OPEN_RECRUIT_DLG);
 
   RecruitMonsDlgOpenEvent.SelectedSlot := RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[Alg.ToRange(GameExt.EraEventParams[EVENT_PARAM_SELECTED_SLOT], 0, High(RecruitMonsDlgOpenEvent.Slots))];
-  CloseOnBuy                        := GameExt.EraEventParams[EVENT_PARAM_CLOSE_ON_BUY];
-  ShowDlg                           := GameExt.EraEventParams[EVENT_PARAM_SHOW_DIALOG];
+  CloseOnBuy                           := GameExt.EraEventParams[EVENT_PARAM_CLOSE_ON_BUY];
+  ShowDlg                              := GameExt.EraEventParams[EVENT_PARAM_SHOW_DIALOG];
   {!} GameExt.EraRestoreEventParams;
 
   if ShowDlg <> 0 then begin
@@ -615,29 +615,29 @@ function Hook_OpenTownDwelling (Context: ApiJack.PHookContext): LONGBOOL; stdcal
 begin
   NextRecruitMonsDlgOpenEventTownId     := (pcardinal(Context.EBX + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.EDI;
-  result                             := Core.EXEC_DEF_CODE;
+  result                                := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_OpenTownHallDwelling (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := (pcardinal(pcardinal(Heroes.TOWN_MANAGER)^ + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.ESI;
-  result                             := Core.EXEC_DEF_CODE;
+  result                                := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_OpenTownHordeDwelling (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := (pcardinal(Context.EBX + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := pbyte(pbyte(pinteger(pinteger(Heroes.TOWN_MANAGER)^ + $38)^ + 4)^ * 2 + Context.EDI + integer(GameExt.GetRealAddr(Ptr($68A3A2))))^;
-  result                             := Core.EXEC_DEF_CODE;
+  result                                := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_OpenTownDwellingFromKingdomOverview (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := (cardinal(Context.EAX) - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.EDI;
-  Context.EAX                        := Context.ESI;
-  result                             := Core.EXEC_DEF_CODE;
+  Context.EAX                           := Context.ESI;
+  result                                := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_UpdateAdvMapInRecruitMonsDlg (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
