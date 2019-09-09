@@ -92,7 +92,6 @@ type
     _ParamsLen: integer;
     Params:     GameExt.TServiceParams;
 
-    class function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper; static;
     function  FindNextSubcmd (AllowedSubcmds: Utils.TCharSet): boolean;
     procedure Cleanup;
     function  GetCmdResult: integer;
@@ -103,6 +102,7 @@ procedure ResetMemory;
 function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
 procedure RegisterCommand (const CommandName: string; CommandHandler: TCommandHandler);
 procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
+function  WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
 procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: integer = sizeof(Erm.TErmZVar));
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
 function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
@@ -221,7 +221,7 @@ begin
   GameExt.EraReleaseServiceParams(Params);
 end;
 
-class function TErmCmdWrapper.WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
+function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
 begin
   {!} Assert(CmdName <> nil);
   {!} Assert(CmdInfo <> nil);
@@ -1986,56 +1986,21 @@ begin
 end;
 
 function New_Mp3_Receiver (OrigFunc: pointer; Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: PErmSubCmd): integer; stdcall;
-var
-  Params:    GameExt.TServiceParams;
-  ParamsLen: integer;
-  CmdPtr:    pchar;
-  Success:   boolean;
-  Error:     string;
-
 begin
-  FillChar(Params, sizeof(Params), 0);
-  CmdPtr := @CmdInfo.Code.Value[0];
-  // * * * * * //
-  CmdInfo.Pos := 0;
-  Success     := true;
-
-  while (CmdPtr^ <> ';') and Success do begin
-    Cmd       := CmdPtr^;
-    ParamsLen := GetServiceParams(CmdPtr, NumParams, Params);
-    Success   := ParamsLen <> -1;
-
-    if Success then begin
+  with WrapErmCmd('MP', CmdInfo) do begin
+    while FindNextSubcmd(['P', 'C', 'S', 'R']) do begin
       case Cmd of
         'P': begin Success := MP_P(NumParams, @Params, Error); end;
         'C': begin Success := MP_C(NumParams, @Params, Error); end;
         'S': begin Success := MP_S(NumParams, @Params, Error); end;
         'R': begin Success := MP_R(NumParams, @Params, Error); end;
-      else
-        Error   := 'Unknown command "!!MP:' + Cmd + '"';
-        Success := false;
       end;
-
-      if not Success then begin
-        if Error = '' then begin
-          Error := 'Invalid command arguments';
-        end;
-
-        Erm.ErmErrCmdPtr^ := @CmdInfo.Code.Value[0];
-        Erm.ShowErmError(Error);
-      end;
-    end; // .if
-
-    if Success then begin
-      Inc(CmdPtr, ParamsLen);
-      Inc(CmdInfo.Pos, ParamsLen);
     end;
-  end; // .while
 
-  result := ord(Success);
-  // * * * * * //
-  ReleaseServiceParams(Params);
-end; // .function New_Mp3_Receiver
+    result := GetCmdResult;
+    Cleanup;
+  end;
+end;
 
 function New_Mp3_Trigger (OrigFunc: pointer; Self: pointer; TrackName: pchar; DontTrackPosition, Loop: integer): integer; stdcall;
 var

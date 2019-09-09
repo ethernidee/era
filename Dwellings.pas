@@ -132,7 +132,10 @@ type
     procedure ApplySlotToDlg (DlgSetup: PRecruitMonsDlgSetup; SlotInd, DlgSlotInd: integer);
     procedure UpdateSlotSourceAddr (SlotInd: integer);
     procedure SelectDlgSlot (DlgSetup: PRecruitMonsDlgSetup; SlotInd: integer);
-  end;
+  end; // .record TRecruitMonsDlgOpenEvent
+
+  POneBasedCmdParams  = ^TOneBasedCmdParams;
+  TOneBasedCmdParams  = array [1..24] of GameExt.TServiceParam;
 
 var
   ZvsRecruitMonsDlgSetupPtr: ^PRecruitMonsDlgSetup = Ptr($836A18);
@@ -700,7 +703,7 @@ begin
   Erm.FireErmEventEx(Erm.TRIGGER_RECRUIT_DLG_ACTION, [Context.ECX and $FFFF]);
 end;
 
-function Command_RecruitDlg (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+function Command_RecruitDlg (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
 var
   SlotInd:        integer;
   SourceId:       integer;
@@ -803,7 +806,7 @@ begin
   end; //.if
 end; // .function Command_RecruitDlg
 
-function Command_RecruitDlg_ShiftSlots (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+function Command_RecruitDlg_ShiftSlots (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
 begin
   if not RecruitMonsDlgOpenEvent.Inited then begin
     result := false;
@@ -832,7 +835,7 @@ begin
   RecruitMonsDlgOpenEvent.ShiftSlots(Params[1].Value.v);
 end; // .function Command_RecruitDlg_ShiftSlots
 
-function Command_RecruitDlg_SlotIndex (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+function Command_RecruitDlg_SlotIndex (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
 var
   DlgSlotInd: integer;
 
@@ -860,7 +863,7 @@ begin
   AdvErm.ApplyParam(Params[2], @RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[DlgSlotInd]);
 end; // .function Command_RecruitDlg_SlotIndex
 
-function Command_RecruitDlg_Info (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+function Command_RecruitDlg_Info (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
 begin
   if not RecruitMonsDlgOpenEvent.Inited then begin
     result := false;
@@ -868,8 +871,7 @@ begin
     exit;
   end;
 
-  result := (NumParams >= 1) and AdvErm.CheckCmdParamsEx(Params, NumParams + 1, [
-    AdvErm.TYPE_ANY,
+  result := (NumParams >= 1) and AdvErm.CheckCmdParamsEx(@Params^, NumParams, [
     AdvErm.TYPE_INT or AdvErm.ACTION_GET,
     AdvErm.TYPE_INT or AdvErm.ACTION_GET or AdvErm.PARAM_OPTIONAL,
     AdvErm.TYPE_INT or AdvErm.ACTION_GET or AdvErm.PARAM_OPTIONAL,
@@ -895,7 +897,7 @@ begin
   end;
 end; // .function Command_RecruitDlg_Info
 
-function Command_RecruitDlg_Mem (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+function Command_RecruitDlg_Mem (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
 var
 {U} AssocVarValue: AdvErm.TAssocVar;
     AssocVarName:  string;
@@ -909,8 +911,7 @@ begin
     exit;
   end;
 
-  result := (NumParams = 2) and AdvErm.CheckCmdParamsEx(Params, NumParams + 1, [
-    AdvErm.TYPE_ANY,
+  result := (NumParams = 2) and AdvErm.CheckCmdParamsEx(@Params^, NumParams, [
     AdvErm.TYPE_ANY or AdvErm.ACTION_SET,
     AdvErm.TYPE_ANY
   ]);
@@ -951,6 +952,24 @@ begin
   end; // .else
 end; // .function Command_RecruitDlg_Mem
 
+function Receiver_RD (Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
+begin
+  with AdvErm.WrapErmCmd('RD', CmdInfo) do begin
+    while FindNextSubcmd(['C', 'S', 'F', 'I', 'M']) do begin
+      case Cmd of
+        'C': Success := Command_RecruitDlg(NumParams, @Params, Error);
+        'S': Success := Command_RecruitDlg_ShiftSlots(NumParams, @Params, Error);
+        'F': Success := Command_RecruitDlg_SlotIndex(NumParams, @Params, Error);
+        'I': Success := Command_RecruitDlg_Info(NumParams, @Params, Error);
+        'M': Success := Command_RecruitDlg_Mem(NumParams, @Params, Error);
+      end;
+    end;
+
+    result := GetCmdResult;
+    Cleanup;
+  end;
+end;
+
 procedure OnAfterWoG (Event: EventMan.PEvent); stdcall;
 begin
   ApiJack.StdSplice(Ptr($4B0770), @Hook_OpenRecruitMonsDlg, ApiJack.CONV_THISCALL, 1);
@@ -967,14 +986,11 @@ begin
   ApiJack.HookCode(Ptr($5DD3C8), @Hook_TownHallMouseClick);
   ApiJack.HookCode(Ptr($550860), @Hook_RecruitDlgRecalc);
   ApiJack.HookCode(Ptr($551089), @Hook_RecruitDlgAction);
+
+  AdvErm.RegisterErmReceiver('RD', @Receiver_RD, AdvErm.CMD_PARAMS_CONFIG_NONE);
 end;
 
 begin
-  AdvErm.RegisterCommand('recruit_dlg', Command_RecruitDlg);
-  AdvErm.RegisterCommand('recruit_dlg.shift_slots', Command_RecruitDlg_ShiftSlots);
-  AdvErm.RegisterCommand('recruit_dlg.slot_index', Command_RecruitDlg_SlotIndex);
-  AdvErm.RegisterCommand('recruit_dlg.info', Command_RecruitDlg_Info);
-  AdvErm.RegisterCommand('recruit_dlg.mem', Command_RecruitDlg_Mem);
   RecruitMonsDlgOpenEvent.Inited := false;
   
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
