@@ -43,6 +43,14 @@ const
   MODIFIER_DIV    = 4;
   MODIFIER_CONCAT = 5;
 
+  (* ERM additional commands parameter config *)
+  CMD_PARAMS_CONFIG_NONE                     = 0;
+  CMD_PARAMS_CONFIG_SINGLE_INT               = 1;
+  CMD_PARAMS_CONFIG_THREE_TO_FIVE_INTS       = 2;
+  CMD_PARAMS_CONFIG_SINGLE_INT_AS_STRUCT_PTR = 3;
+  CMD_PARAMS_CONFIG_FOUR_INTS                = 4;
+  CMD_PARAMS_CONFIG_TWO_VARS                 = 5;
+
   (* Hint code flags *)
   CODE_TYPE_SUBTYPE = $01000000;
 
@@ -54,12 +62,8 @@ type
   TObjDict = DataLib.TObjDict;
   TString  = TypeWrappers.TString;
 
-  TErmCmdContext = packed record
-    
-  end; // .record TErmCmdContext
-
   (* Params index starts from 1 *)
-  TCommandHandler  = function (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+  TCommandHandler = function (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 
   TVarType = (INT_VAR, STR_VAR);
   
@@ -110,9 +114,20 @@ type
     DefaultReaction:   integer;
   end;
 
+  TErmCmdHandler = function (Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: Erm.PErmSubCmd): integer cdecl;
+
+  TErmAdditionalCmd = packed record
+    Id:           Erm.TErmCmdId;
+    Handler:      TErmCmdHandler;
+    ParamsConfig: integer;
+  end;
+
 var
 (* The last extensible API for ERM. No more extensions. Use Lua *)
 {O} NewCommands: {U} TObjDict {OF command crc32 => TCommandHandler};
+    
+    AdditionalCmds:    array [0..199] of TErmAdditionalCmd;
+    NumAdditionalCmds: integer = 67;
 
 {O} Hints:      {O} TDict {of [O] TObjDict of TString};
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
@@ -128,6 +143,27 @@ begin
   result := TCommandHandler(NewCommands[Ptr(Crypto.AnsiCrc32(CommandName))]);
 end;
 
+function GetAdditionalCmdHandler (CmdId: word): {n} TErmCmdHandler;
+var
+  i: integer;
+
+begin
+  result := nil;
+
+  for i := 0 to NumAdditionalCmds - 1 do begin
+    if AdditionalCmds[i].Id.Id = CmdId then begin
+      result := @AdditionalCmds[i].Handler;
+      exit;
+    end;
+  end;
+end;
+
+(* Stores direct cmd handler in cmd parameters *)
+procedure OptimizeErmCmd (Cmd: Erm.PErmCmd);
+begin
+  Cmd.Params[High(Cmd.Params)].Value := integer(GetAdditionalCmdHandler(Cmd.CmdId.Id));
+end;
+
 procedure RegisterCommand (const CommandName: string; CommandHandler: TCommandHandler);  
 begin
   if @GetCommandHandler(CommandName) <> nil then begin
@@ -135,6 +171,25 @@ begin
   end else begin
     NewCommands[Ptr(Crypto.AnsiCrc32(CommandName))] := @CommandHandler;
   end;
+end;
+
+procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
+var
+  CmdId: Erm.TErmCmdId;
+
+begin
+  {!} Assert(Length(Cmd) = 2, 'Cannot register invalid ERM receiver: ' + Cmd);
+  {!} Assert(@Handler <> nil);
+  {!} Assert(NumAdditionalCmds + 1 <= High(AdditionalCmds), 'Cannot register more ERM receivers');
+  CmdId.Name[0]                                  := Cmd[1];
+  CmdId.Name[1]                                  := Cmd[2];
+  AdditionalCmds[NumAdditionalCmds].Id.Id        := CmdId.Id;
+  AdditionalCmds[NumAdditionalCmds].Handler      := Handler;
+  AdditionalCmds[NumAdditionalCmds].ParamsConfig := ParamsConfig;
+
+  Inc(NumAdditionalCmds);
+  AdditionalCmds[NumAdditionalCmds].Id.Id   := 0;
+  AdditionalCmds[NumAdditionalCmds].Handler := nil;
 end;
 
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
@@ -1966,7 +2021,37 @@ begin
 
   // Add new !?MP trigger
   ApiJack.StdSplice(Ptr($59AFB0), @New_Mp3_Trigger, CONV_THISCALL, 3);
-end;
+
+  (* ERM direct call by hanlder instead of cmd linear scan implementation *)
+  // Allocate additional local variable for FindErm. CmdHandler: TErmCmdHandler; absolute (EBP - $6C8)
+  Core.p.WriteDataPatch(Ptr($74995A), ['%d', $6C4 + 4]);
+
+  // ParSet := 0  =>  CmdHandler := nil
+  Core.p.WriteDataPatch(Ptr($74B69D), ['%d', -$6C8]);
+  
+  // LogERMAnyReceiver => CmdHandler := ErmAdditions[i].Handler
+  Core.p.WriteDataPatch(Ptr($74C1A5), ['8B8DCCFCFFFF6BC90A8B817E8D7900898538F9FFFF9090909090909090909090909090909090909090909090909090909090909090909090909090']);
+  
+  // ZeroMem (Cmd.Params[ParSet..14]); Cmd.Params[15] := CmdHandler
+  Core.p.WriteDataPatch(Ptr($74C3A6), ['B80F0000002B859CFCFFFF6BC0086A00508B8D9CFCFFFF8B95C8FCFFFF8D84CA08020000508D82800200008B8D38F9FFFF8908E8454BFCFF83C40C90']);
+  
+  // Use direct handler address from Cmd.Params[15] instead of linear scanning
+  Core.p.WriteDataPatch(Ptr($7493A3), ['8B4D088B898002000085C90F84310300008D8500FDFFFF508B4508508B45F0508A85E3FCFFFF50FFD183C41085C0744CEB669090909090909090909090' +
+                                       '90909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090']);
+
+  // Relocate ERM_Additions list
+  Utils.CopyMem(NumAdditionalCmds * sizeof(TErmAdditionalCmd), Ptr($798AD8), @AdditionalCmds);
+  AdditionalCmds[NumAdditionalCmds].Id.Id := 0;
+  GameExt.RedirectMemoryBlock(Ptr($798AD8), (NumAdditionalCmds + 1) * sizeof(TErmAdditionalCmd), @AdditionalCmds);
+  // Core.p.WriteDataPatch(Ptr($7493C7 + 3), ['%d', @AdditionalCmds]); Overwritten by patch
+  Core.p.WriteDataPatch(Ptr($7493DD + 3), ['%d', @AdditionalCmds]);
+  Core.p.WriteDataPatch(Ptr($74BC8E + 3), ['%d', @AdditionalCmds]);
+  Core.p.WriteDataPatch(Ptr($74BCA4 + 3), ['%d', @AdditionalCmds]);
+  Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]);
+  // Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
+  Core.p.WriteDataPatch(Ptr($74BCE9 + 2), ['%d', @AdditionalCmds[0].ParamsConfig]);
+  Core.p.WriteDataPatch(Ptr($74C1AE + 2), ['%d', @@AdditionalCmds[0].Handler]); // Patched command
+end; // .procedure OnAfterWoG
 
 procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
 begin
@@ -1983,6 +2068,8 @@ begin
 end;
 
 begin
+  Erm.ErmCmdOptimizer := @OptimizeErmCmd;
+
   NewCommands := DataLib.NewObjDict(not Utils.OWNS_ITEMS);
   RegisterCommands;
 

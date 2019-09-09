@@ -473,6 +473,8 @@ var
 
     MonNamesTables:     array [0..2] of Utils.PEndlessPcharArr;
     MonNamesTablesBack: array [0..2] of Utils.PEndlessPcharArr;
+
+    ErmCmdOptimizer: procedure (Cmd: PErmCmd) = nil;
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -765,7 +767,7 @@ procedure ClearErmCmdCache;
 begin
   with DataLib.IterateDict(ErmCmdCache) do begin
     while IterNext do begin
-      FreeMem(PErmCmd(IterValue).CmdHeader.Value);
+      FreeMem(Utils.PtrOfs(PErmCmd(IterValue).CmdHeader.Value, -Length('!!')));
       Dispose(PErmCmd(IterValue));
     end;
   end; 
@@ -869,7 +871,10 @@ begin
 
     if Res then begin
       // Allocate memory, because ERM engine changes command contents during execution
-      GetMem(Cmd.CmdHeader.Value, Length(CmdStr) + 1);
+      GetMem(Cmd.CmdHeader.Value, Length(CmdStr) + 1 + Length('!!'));
+      pchar(Cmd.CmdHeader.Value)[0] := '!';
+      pchar(Cmd.CmdHeader.Value)[1] := '!';
+      Inc(pchar(Cmd.CmdHeader.Value), 2);
       Utils.CopyMem(Length(CmdStr) + 1, pointer(CmdStr), Cmd.CmdHeader.Value);
       
       Cmd.CmdBody.Value := Utils.PtrOfs(Cmd.CmdHeader.Value, ErmScanner.Pos - 1);
@@ -878,6 +883,10 @@ begin
       Cmd.NumParams     := NumArgs;
       Cmd.CmdHeader.Len := ErmScanner.Pos - 1;
       Cmd.CmdBody.Len   := Length(CmdStr) - ErmScanner.Pos + 1;
+
+      if @ErmCmdOptimizer <> nil then begin
+        ErmCmdOptimizer(Cmd);
+      end;
       
       if ErmCmdCache.ItemCount = ERM_CMD_CACHE_LIMIT then begin
         ClearErmCmdCache;
