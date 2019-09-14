@@ -690,15 +690,15 @@ type
     _u3C:          integer;                      // +3C = -1
     _u40:          short;                        // +40
     _u42:          word;                         // +42
-    Spels:         array [0..4, 0..5] of integer;// +44 sami zaklinaniya
+    Spells:        array [0..4, 0..5] of integer;// +44 sami zaklinaniya
     MagicHild:     array [0..4] of char;         // +BCh = kolvo zaklinanij v urovne gil'dii
     _uC1:          array [0..2] of byte;         
     _uC4:          char;                         // +C4 = 0
     _uC5:          array [0..2] of byte;         
     Name:          TExtString;                   // +C8 -> Imya goroda
     _u8:           array [0..2] of integer;      // +D4 = 0
-    GuardsT:       array [0..6] of integer;      // +E0 = ohrana zamka
-    GuardsN:       array [0..6] of integer;      // +FC = kol-vo ohrany
+    GuardTypes:    array [0..6] of integer;      // +E0 = ohrana zamka
+    GuardNums:     array [0..6] of integer;      // +FC = kol-vo ohrany
     GuardsT0:      array [0..6] of integer;      // +118 = ohrana zamka
     GuardsN0:      array [0..6] of integer;      // +134 = kol-vo ohrany
     Built:         array [0..7] of byte;         // +150h = uzhe postroennye zdaniya (0400)

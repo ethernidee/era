@@ -207,8 +207,8 @@ var
 
 begin
   result  :=
-    (Files.GetFileSize(PLUGINS_PATH + '\' + PluginName + '.dll', FileSize) and (FileSize > 0))  or
-    (Files.GetFileSize(PLUGINS_PATH + '\' + PluginName + '.era', FileSize) and (FileSize > 0));
+    (Files.GetFileSize(PLUGINS_PATH + '\' + PluginName + '.era', FileSize) and (FileSize > 0)) or
+    (Files.GetFileSize(PLUGINS_PATH + '\' + PluginName + '.dll', FileSize) and (FileSize > 0));
 end;
 
 function CompareMemoryBlocks (Addr1: pointer; Size1: integer; Addr2: pointer; Size2: integer): integer;

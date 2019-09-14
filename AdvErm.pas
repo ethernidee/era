@@ -100,7 +100,6 @@ type
 
 procedure ResetMemory;
 function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
-procedure RegisterCommand (const CommandName: string; CommandHandler: TCommandHandler);
 procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
 function  WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
 procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: integer = sizeof(Erm.TErmZVar));
@@ -141,8 +140,9 @@ type
   end;
 
 var
-(* The last extensible API for ERM. No more extensions. Use Lua *)
-{O} NewCommands: {U} TObjDict {OF command crc32 => TCommandHandler};
+(* Cached exported stdcall API of Era.dll and kernel32.dll *)
+{O} ApiCache:       {U} TDict {of command name => API function address};
+    Kernel32Handle: Windows.THandle;
     
     AdditionalCmds:    array [0..199] of TErmAdditionalCmd;
     NumAdditionalCmds: integer = 67;
@@ -156,9 +156,22 @@ var
     CurrentMp3Track:   string;
 
 
-function GetCommandHandler (const CommandName: string): {n} TCommandHandler;
+(* Returns Era/kernel32 API function address by name. Caches positive results *)
+function GetCombinedApiAddr (const ApiName: string): {n} pointer;
 begin
-  result := TCommandHandler(NewCommands[Ptr(Crypto.AnsiCrc32(CommandName))]);
+  result := ApiCache[ApiName];
+
+  if result = nil then begin
+    result := Windows.GetProcAddress(GameExt.hEra, pchar(ApiName));
+
+    if result = nil then begin
+      result := Windows.GetProcAddress(Kernel32Handle, pchar(ApiName));
+    end;
+
+    if result <> nil then begin
+      ApiCache[ApiName] := result;
+    end;
+  end;
 end;
 
 function GetAdditionalCmdHandler (CmdId: word): {n} TErmCmdHandler;
@@ -180,15 +193,6 @@ end;
 procedure OptimizeErmCmd (Cmd: Erm.PErmCmd);
 begin
   Cmd.Params[High(Cmd.Params)].Value := integer(GetAdditionalCmdHandler(Cmd.CmdId.Id));
-end;
-
-procedure RegisterCommand (const CommandName: string; CommandHandler: TCommandHandler);  
-begin
-  if @GetCommandHandler(CommandName) <> nil then begin
-    Heroes.ShowMessage('Era command "' + CommandName + '" has hash collision and needs to be renamed');
-  end else begin
-    NewCommands[Ptr(Crypto.AnsiCrc32(CommandName))] := @CommandHandler;
-  end;
 end;
 
 procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
@@ -736,25 +740,53 @@ begin
   end;
 end;
 
+type
+  PStdcallFuncArgs = ^TStdcallFuncArgs;
+  TStdcallFuncArgs = array [0..High(GameExt.TServiceParams)] of integer;
+
+function CallStdcallFunc (Addr: pointer; Args: PStdcallFuncArgs; NumArgs: integer): integer; assembler; stdcall;
+asm
+  mov ecx, NumArgs
+  mov edx, Args
+  mov eax, NumArgs
+  lea edx, [edx + eax * 4]
+@push_params:
+  test ecx, ecx
+  jz @push_params_end
+  sub edx, 4
+  push [edx]
+  dec ecx
+  jmp @push_params
+@push_params_end:
+  mov eax, Addr
+  call eax
+end;
+
 function SN_F (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
-    CommandName:    string;
-{n} CommandHandler: TCommandHandler;
+    ApiName: string;
+{n} ApiFunc: pointer;
+    ApiArgs: TStdcallFuncArgs;
+    i:       integer;
 
 begin
-  result := (NumParams > 0) and CheckCmdParams(Params, [IS_STR, OPER_SET]);
+  result := (NumParams >= 1) and not Params[0].OperGet and Params[0].IsStr;
 
   if not result then begin
-    Error := 'Invalid command syntax. Valid syntax is !!SN:F^command^/parameters...';
+    Error := 'Invalid command syntax. Valid syntax is !!SN:F^API function name^/possible parameters...';
   end else begin
-    CommandName    := Params[0].Value.pc;
-    CommandHandler := GetCommandHandler(CommandName);
-    result         := @CommandHandler <> nil;
+    ApiName := Params[0].Value.pc;
+    ApiFunc := GetCombinedApiAddr(ApiName);
+    result  := ApiFunc <> nil;
 
     if not result then begin
-      Error := 'Unknown Era command "' + Params[0].Value.pc + '"';
+      Error := 'Unknown Era/Kernel32 API function: "' + ApiName + '"';
     end else begin
-      result := CommandHandler(CommandName, NumParams - 1, Params, Error);
+      for i := 1 to NumParams do begin
+        ApiArgs[i - 1] := Params[i].Value.v;
+      end;
+      
+      Erm.v[1] := CallStdcallFunc(ApiFunc, @ApiArgs, NumParams - 1);
     end;
   end; // .else
 end; // .function SN_F
@@ -2078,7 +2110,7 @@ begin
   Core.p.WriteDataPatch(Ptr($74C3A6), ['B80F0000002B859CFCFFFF6BC0086A00508B8D9CFCFFFF8B95C8FCFFFF8D84CA08020000508D82800200008B8D38F9FFFF8908E8454BFCFF83C40C90']);
   
   // Use direct handler address from Cmd.Params[15] instead of linear scanning
-  Core.p.WriteDataPatch(Ptr($7493A3), ['8B4D088B898002000085C90F84310300008D8500FDFFFF508B4508508B45F0508A85E3FCFFFF50FFD183C41085C0744CEB669090909090909090909090' +
+  Core.p.WriteDataPatch(Ptr($7493A3), ['8B4D088B898002000085C90F84310300008D8500FDFFFF508B4508508B45F0508A85E3FCFFFF50FFD183C41085C00F8498000000EB6290909090909090' +
                                        '90909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090']);
 
   // Relocate ERM_Additions list
@@ -2086,10 +2118,10 @@ begin
   AdditionalCmds[NumAdditionalCmds].Id.Id := 0;
   GameExt.RedirectMemoryBlock(Ptr($798AD8), (NumAdditionalCmds + 1) * sizeof(TErmAdditionalCmd), @AdditionalCmds);
   // Core.p.WriteDataPatch(Ptr($7493C7 + 3), ['%d', @AdditionalCmds]); Overwritten by patch
-  Core.p.WriteDataPatch(Ptr($7493DD + 3), ['%d', @AdditionalCmds]);
+  // Core.p.WriteDataPatch(Ptr($7493DD + 3), ['%d', @AdditionalCmds]); Overwritten by patch
   Core.p.WriteDataPatch(Ptr($74BC8E + 3), ['%d', @AdditionalCmds]);
   Core.p.WriteDataPatch(Ptr($74BCA4 + 3), ['%d', @AdditionalCmds]);
-  Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]);
+  // Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
   // Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
   Core.p.WriteDataPatch(Ptr($74BCE9 + 2), ['%d', @AdditionalCmds[0].ParamsConfig]);
   Core.p.WriteDataPatch(Ptr($74C1AE + 2), ['%d', @@AdditionalCmds[0].Handler]); // Patched command
@@ -2112,8 +2144,8 @@ end;
 begin
   Erm.ErmCmdOptimizer := @OptimizeErmCmd;
 
-  NewCommands := DataLib.NewObjDict(not Utils.OWNS_ITEMS);
-  RegisterCommands;
+  Kernel32Handle := Windows.LoadLibraryW('kernel32.dll');
+  ApiCache       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
 
   New(Mp3TriggerContext);
   Slots    := AssocArrays.NewStrictObjArr(TSlot);

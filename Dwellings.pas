@@ -36,9 +36,9 @@ const
   RECRUIT_TARGET_CUSTOM   = 2;
   RECRUIT_TARGET_EXTERNAL = 3;
 
-  (* Special object type used for dwelling dialog. Indicates, that dialog should not be closed on Buy button press,
-     but no adventure map window must be updated *)
-  OBJTYPE_DUMMY = 0;
+  DLG_FLAG_CLOSE_ON_BUY       = 1;
+  DLG_FLAG_AUTO_UPDATE_ADVMAP = 2;
+  DLG_FLAGS_ALL               = DLG_FLAG_CLOSE_ON_BUY or DLG_FLAG_AUTO_UPDATE_ADVMAP;
 
   IS_DISPOSABLE     = true;
   IS_NON_DISPOSABLE = not IS_DISPOSABLE;
@@ -52,12 +52,15 @@ type
 
   PRecruitMonsDlgSetup = ^TRecruitMonsDlgSetup;
   TRecruitMonsDlgSetup = packed record
+    VirtTable:       pointer;
     _Zero1:          integer;
     _Zero2:          integer;
     _MinOne1:        integer;
     _MinOne2:        integer;
-    _Unk1:           array [0..55] of byte;
-    ObjType:         integer; // OBJTYPE_TOWN for Town (CloseOnBuy=true, no advmap update), OBJTYPE_DUMMY for (CloseOnBuy=false, no advmap update) -1 for any other (CloseOnBuy=false, advmap update)
+    ClassName:       array [0..31] of char;
+    PlayAnimation:   integer; // +52, 0 or 1. 0 means some controls inactive and def animation frozen. Can be changed any time
+    _Unk1:           array [0..3] of integer;
+    ObjType:         integer; // +72 OBJTYPE_TOWN for Town (CloseOnBuy=true, no advmap update), -1 for any other (CloseOnBuy=false, advmap update). Converted to DLG_FLAG_XXX set
     _Unk4:           integer;
     SelectedMonType: integer;
     SelectedMonNum:  pword;
@@ -66,12 +69,12 @@ type
     MonNums:         array [0..3] of pword;
     _Unk2:           array [0..7] of byte;
     Cost:            integer;                 // +132
-    Resource:        integer;
-    ResourceCost:    integer;
-    _One1:           integer;
+    Resource:        integer;                 // +136
+    ResourceCost:    integer;                 // +140
+    IsTownScreen:    integer;                 // +144, 0 for kingdom overview
     _Unk3:           integer;
     Target:          PRecruitMonsDlgTarget;
-    _One2:           integer;
+    _One1:           integer;
     _Unk5:           array [0..2] of integer;
     MaxQuantity:     integer;
     TotalPrice:      integer;
@@ -112,7 +115,7 @@ type
     Id:               integer; // unique autoincrementing ID
 
     (* Mapper of SourceId => SourceAddr. Can store up to 4 unique external sources and 4 slot sources *)
-    SourceAllocationTable:  array [0..7] of TSourceAllocationCell;
+    SourceAllocationTable: array [0..7] of TSourceAllocationCell;
 
     (* Storage of MonNum to use for custom sourceIds *)
     SourceLocalStorage: array [0..3] of integer;
@@ -131,7 +134,6 @@ type
     procedure ApplySlotsToDlg (DlgSetup: PRecruitMonsDlgSetup);
     procedure ApplySlotToDlg (DlgSetup: PRecruitMonsDlgSetup; SlotInd, DlgSlotInd: integer);
     procedure UpdateSlotSourceAddr (SlotInd: integer);
-    procedure SelectDlgSlot (DlgSetup: PRecruitMonsDlgSetup; SlotInd: integer);
   end; // .record TRecruitMonsDlgOpenEvent
 
   POneBasedCmdParams  = ^TOneBasedCmdParams;
@@ -186,6 +188,33 @@ begin
     TownId := (cardinal(SourceNum) - cardinal(Towns)) div sizeof(Heroes.TTown);
     result := TownId * NUM_DWELLINGS_PER_TOWN + integer((cardinal(SourceNum) - cardinal(@Towns[TownId].DwellingMons)) div sizeof(word));
   end;
+end;
+
+function GetMonCost (MonType: integer; out ResType, ResCost: integer): integer;
+var
+  i: integer;
+
+begin
+  result  := Heroes.MonInfos[MonType].CostRes[Heroes.RES_GOLD];
+  ResType := -1;
+  ResCost := 0;
+
+  for i := Heroes.RES_FIRST to Heroes.RES_LAST - 1 do begin
+    if Heroes.MonInfos[MonType].CostRes[i] <> 0 then begin
+      ResType := i;
+      ResCost := Heroes.MonInfos[MonType].CostRes[i];
+      exit;
+    end;
+  end;
+end;
+
+procedure SelectDlgSlot (DlgSetup: PRecruitMonsDlgSetup; SlotInd: integer);
+begin
+  {!} Assert(DlgSetup <> nil);
+  DlgSetup.SelectedMonSlot := SlotInd;
+  DlgSetup.SelectedMonType := DlgSetup.MonTypes[SlotInd];
+  DlgSetup.SelectedMonNum  := DlgSetup.MonNums[SlotInd];
+  DlgSetup.Cost            := GetMonCost(DlgSetup.MonTypes[SlotInd], DlgSetup.Resource, DlgSetup.ResourceCost);
 end;
 
 (* Returns true if at least single free cell is found/got *)
@@ -484,7 +513,7 @@ begin
       Self.ApplySlotToDlg(DlgSetup, i, j);
 
       if i = Self.SelectedSlot then begin
-        Self.SelectDlgSlot(DlgSetup, j);
+        SelectDlgSlot(DlgSetup, j);
       end;
 
       Inc(j);
@@ -492,7 +521,7 @@ begin
   end;
 
   if (Self.Slots[Self.SelectedSlot].MonType = -1) and (DlgSetup.MonTypes[0] <> -1) then begin
-    Self.SelectDlgSlot(DlgSetup, 0);
+    SelectDlgSlot(DlgSetup, 0);
   end;
 end; // .procedure TRecruitMonsDlgOpenEvent.ApplySlotsToDlg
 
@@ -513,62 +542,15 @@ begin
   end;
 end;
 
-function GetMonCost (MonType: integer; out ResType, ResCost: integer): integer;
-var
-  i: integer;
-
-begin
-  result  := Heroes.MonInfos[MonType].CostRes[Heroes.RES_GOLD];
-  ResType := -1;
-  ResCost := 0;
-
-  for i := Heroes.RES_FIRST to Heroes.RES_LAST - 1 do begin
-    if Heroes.MonInfos[MonType].CostRes[i] <> 0 then begin
-      ResType := i;
-      ResCost := Heroes.MonInfos[MonType].CostRes[i];
-      exit;
-    end;
-  end;
-end;
-
-procedure TRecruitMonsDlgOpenEvent.SelectDlgSlot (DlgSetup: PRecruitMonsDlgSetup; SlotInd: integer);
-begin
-  {!} Assert(DlgSetup <> nil);
-  DlgSetup.SelectedMonSlot := SlotInd;
-  DlgSetup.SelectedMonType := DlgSetup.MonTypes[SlotInd];
-  DlgSetup.SelectedMonNum  := DlgSetup.MonNums[SlotInd];
-  DlgSetup.Cost            := GetMonCost(DlgSetup.MonTypes[SlotInd], DlgSetup.Resource, DlgSetup.ResourceCost);
-end;
-
-procedure MOP_TOWN_RECRUIT_WINDOW; assembler; //экспортируемая процедура - переходник-упроститель к разделу свитча Sub_5D3640
-asm
-  MOV EDX, ECX
-  ADD EDX, 30
-  MOV ECX, [Heroes.TOWN_MANAGER]
-  PUSH EBP
-  MOV EBP,ESP
-  PUSH -1
-  PUSH $411CB6
-  PUSH EAX
-  SUB ESP,$22C
-  PUSH EBX
-  MOV EBX,ECX
-  PUSH ESI
-  PUSH EDI
-  MOV EDI,EDX
-  PUSH $5D42C4
-end;
-
 procedure Hook_OpenRecruitMonsDlg (OrigFunc: pointer; Obj: pointer; RecruitMonsDlgSetup: PRecruitMonsDlgSetup); stdcall;
 const
-  EVENT_PARAM_SELECTED_SLOT  = 0;
-  EVENT_PARAM_CLOSE_ON_BUY   = 1;
-  EVENT_PARAM_SHOW_DIALOG    = 2;
+  EVENT_PARAM_SELECTED_SLOT = 0;
+  EVENT_PARAM_DLG_FLAGS     = 1;
+  EVENT_PARAM_SHOW_DIALOG   = 2;
 
 var
-  CloseOnBuy: integer;
-  ShowDlg:    integer;
-  PrevEvent:  TRecruitMonsDlgOpenEvent;
+  ShowDlg:   integer;
+  PrevEvent: TRecruitMonsDlgOpenEvent;
 
 begin
   PrevEvent := RecruitMonsDlgOpenEvent;
@@ -587,13 +569,20 @@ begin
   RecruitMonsDlgOpenEvent.InitTargetFromDlg(RecruitMonsDlgSetup);
   RecruitMonsDlgOpenEvent.InitSlotsFromDlgSetup(RecruitMonsDlgSetup);
 
+  if RecruitMonsDlgSetup.ObjType = -1 then begin
+    // External dwelling default behavior
+    RecruitMonsDlgSetup.ObjType := DLG_FLAG_AUTO_UPDATE_ADVMAP;
+  end else if RecruitMonsDlgSetup.ObjType = Heroes.OBJTYPE_TOWN then begin
+    // Town default behavior
+    RecruitMonsDlgSetup.ObjType := DLG_FLAG_CLOSE_ON_BUY;
+  end;
+
   {!} GameExt.EraSaveEventParams;
-  CloseOnBuy := ord(RecruitMonsDlgSetup.ObjType = Heroes.OBJTYPE_TOWN);
-  Erm.AssignEventParams([RecruitMonsDlgSetup.SelectedMonSlot, CloseOnBuy, 1]);
+  Erm.AssignEventParams([RecruitMonsDlgSetup.SelectedMonSlot, RecruitMonsDlgSetup.ObjType, 1]);
   Erm.FireErmEvent(Erm.TRIGGER_OPEN_RECRUIT_DLG);
 
   RecruitMonsDlgOpenEvent.SelectedSlot := RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[Alg.ToRange(GameExt.EraEventParams[EVENT_PARAM_SELECTED_SLOT], 0, High(RecruitMonsDlgOpenEvent.Slots))];
-  CloseOnBuy                           := GameExt.EraEventParams[EVENT_PARAM_CLOSE_ON_BUY];
+  RecruitMonsDlgSetup.ObjType          := GameExt.EraEventParams[EVENT_PARAM_DLG_FLAGS] and DLG_FLAGS_ALL;
   ShowDlg                              := GameExt.EraEventParams[EVENT_PARAM_SHOW_DIALOG];
   {!} GameExt.EraRestoreEventParams;
 
@@ -603,7 +592,6 @@ begin
     RecruitMonsDlgOpenEvent.ReadOnly := true;
 
     if RecruitMonsDlgOpenEvent.HasNonEmptySlot then begin
-      RecruitMonsDlgSetup.ObjType := Utils.IfThen(CloseOnBuy <> 0, Heroes.OBJTYPE_TOWN, OBJTYPE_DUMMY);
       PatchApi.Call(PatchApi.THISCALL_, OrigFunc, [Obj, RecruitMonsDlgSetup]);
     end;
 
@@ -645,8 +633,8 @@ end;
 
 function Hook_UpdateAdvMapInRecruitMonsDlg (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 begin
-  // Update advmap if RecruitMonsDlgSetup.ObjType <> OBJTYPE_DUMMY
-  result := pinteger(Context.ESI + $48)^ <> OBJTYPE_DUMMY;
+  // Update advmap if corresponding flag is set
+  result := Utils.Flags(PRecruitMonsDlgSetup(Context.ESI).ObjType).Have(DLG_FLAG_AUTO_UPDATE_ADVMAP);
 
   if not result then begin
     Context.RetAddr := Ptr($5510E3);
@@ -703,6 +691,37 @@ begin
   Erm.FireErmEventEx(Erm.TRIGGER_RECRUIT_DLG_ACTION, [Context.ECX and $FFFF]);
 end;
 
+function Hook_AllowZeroCost (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+begin
+  result := PRecruitMonsDlgSetup(Context.EBX).Cost <> 0;
+
+  if not result then begin
+    Context.EAX := High(integer);
+  end;
+end;
+
+function Hook_AllowZeroResourceCost (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+begin
+  result := PRecruitMonsDlgSetup(Context.EBX).ResourceCost <> 0;
+
+  if not result then begin
+    Context.EAX := High(integer);
+  end;
+end;
+
+function Hook_RecruitDlgCloseOnBuy (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+var
+  Dlg: PRecruitMonsDlgSetup;
+
+begin
+  Dlg    := PRecruitMonsDlgSetup(Context.ESI);
+  result := Utils.Flags(Dlg.ObjType).DontHave(DLG_FLAG_CLOSE_ON_BUY) and (Dlg.MonTypes[1] <> -1);
+
+  if not result then begin
+    Context.RetAddr := Ptr($55121B);
+  end;
+end;
+
 function Command_RecruitDlg (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
 var
   SlotInd:        integer;
@@ -751,10 +770,10 @@ begin
     end;
 
     if result then begin
-      result := not Params[2].IsStr and (Params[2].OperGet or ((Params[2].Value.v >= 0) and (Params[2].Value.v < Heroes.NumMonstersPtr^)));
+      result := not Params[2].IsStr and (Params[2].OperGet or ((Params[2].Value.v >= -1) and (Params[2].Value.v < Heroes.NumMonstersPtr^)));
 
       if not result then begin
-        Error := Format('Invalid monsters type: %d. Valid value is 0..%d', [Params[2].Value.v, Heroes.NumMonstersPtr^ - 1]);
+        Error := Format('Invalid monsters type: %d. Valid value is -1..%d', [Params[2].Value.v, Heroes.NumMonstersPtr^ - 1]);
       end else begin
         AdvErm.ApplyParam(Params[2], @RecruitMonsDlgOpenEvent.Slots[SlotInd].MonType);
       end;
@@ -952,16 +971,133 @@ begin
   end; // .else
 end; // .function Command_RecruitDlg_Mem
 
+procedure InitRecruitMonsDlgSetup (DlgSetup: PRecruitMonsDlgSetup; TownId, DwellingId, TargetType, TargetId: integer);
+var
+  GameState:    Heroes.TGameState;
+  IsTownScreen: boolean;
+
+begin
+  {!} Assert(DlgSetup <> nil);
+  Heroes.GetGameState(GameState);
+  IsTownScreen := GameState.CurrentDlgId = Heroes.TOWN_SCREEN_DLGID;
+
+  if (TownId <> -1) and Math.InRange(DwellingId, 0, NUM_DWELLINGS_PER_TOWN - 1) then begin
+    PatchApi.Call(PatchApi.THISCALL_, Ptr($551960), [DlgSetup, @Heroes.ZvsGetTowns()[TownId], DwellingId, ord(IsTownScreen)]);
+  end else begin
+    FillChar(DlgSetup^, sizeof(DlgSetup^), 0);
+    DlgSetup.VirtTable       := Ptr($63B9BC);
+    DlgSetup._MinOne1        := -1;
+    DlgSetup._MinOne2        := -1;
+    DlgSetup.ClassName       := 'Unknown'#0;
+    DlgSetup.IsTownScreen    := ord(IsTownScreen);
+    //DlgSetup.ObjType         := Utils.IfThen(TownId <> -1, Heroes.OBJTYPE_TOWN, -1);
+    DlgSetup._One1           := 1;
+    DlgSetup.MonTypes[0]     := -1;
+    DlgSetup.MonTypes[1]     := -1;
+    DlgSetup.MonTypes[2]     := -1;
+    DlgSetup.MonTypes[3]     := -1;
+    DlgSetup.SelectedMonType := -1;
+
+    // Init timer
+    pinteger($6989E8)^ := PatchApi.Call(PatchApi.STDCALL_, Ptr($4F8970), []) + $64;
+  end; // .else
+
+  case TargetType of
+    RECRUIT_TARGET_TOWN:   DlgSetup.Target := @Heroes.ZvsGetTowns()[TargetId].GuardTypes;
+    RECRUIT_TARGET_HERO:   DlgSetup.Target := @Heroes.ZvsGetHero(TargetId).MonTypes;
+    RECRUIT_TARGET_CUSTOM: DlgSetup.Target := nil;
+  end;
+end; // .procedure InitRecruitMonsDlgSetup
+
+function Command_RecruitDlg_Open (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
+var
+{On} DlgSetup:   PRecruitMonsDlgSetup;
+     TownId:     integer;
+     DwellingId: integer;
+     TargetType: integer;
+     TargetId:   integer;
+     DlgFlags:   integer;
+     NumTowns:   integer;
+
+begin
+  DlgSetup := nil;
+  // * * * * * //
+  result := Math.InRange(NumParams, 4, 5) and AdvErm.CheckCmdParamsEx(@Params^, NumParams, [
+    AdvErm.TYPE_INT or AdvErm.ACTION_SET,
+    AdvErm.TYPE_INT or AdvErm.ACTION_SET,
+    AdvErm.TYPE_INT or AdvErm.ACTION_SET,
+    AdvErm.TYPE_INT or AdvErm.ACTION_SET,
+    AdvErm.TYPE_INT or AdvErm.ACTION_SET or AdvErm.PARAM_OPTIONAL
+  ]);
+
+  if not result then begin
+    exit;
+  end;
+
+  NumTowns := Heroes.ZvsCountTowns();
+  AdvErm.ApplyParam(Params[1], @TownId);
+
+  if (TownId <> -1) and not Math.InRange(TownId, 0, NumTowns - 1) then begin
+    result := false;
+    Error  := Format('Invalid town ID: %d. Expected 0..NUM_TOWNS - 1 or -1', [TownId]);
+    exit;
+  end;
+
+  AdvErm.ApplyParam(Params[2], @DwellingId);
+
+  if (DwellingId <> -1) and not Math.InRange(DwellingId, 0, NUM_DWELLINGS_PER_TOWN - 1) then begin
+    result := false;
+    Error  := Format('Invalid dwelling ID: %d. Expected 0..13 or -1', [DwellingId]);
+    exit;
+  end;
+
+  AdvErm.ApplyParam(Params[3], @TargetType);
+
+  if (TargetType <> -1) and not Math.InRange(TargetType, RECRUIT_TARGET_TOWN, RECRUIT_TARGET_CUSTOM) then begin
+    result := false;
+    Error  := Format('Invalid target type: %d. Expected 0..2', [TargetType]);
+    exit;
+  end;
+
+  AdvErm.ApplyParam(Params[4], @TargetId);
+
+  if
+    (TargetId <> -1) and
+    (((TargetType = RECRUIT_TARGET_TOWN) and not Math.InRange(TargetId, 0, NumTowns - 1)) or ((TargetType = RECRUIT_TARGET_HERO) and not Math.InRange(TargetId, 0, Heroes.NumHeroes^ - 1)))
+  then begin
+    result := false;
+    Error  := Format('Invalid target ID: %d. Expected valid town/hero ID or -1', [TargetId]);
+    exit;
+  end;
+
+  if NumParams >= 5 then begin
+    AdvErm.ApplyParam(Params[5], @DlgFlags);
+  end else begin
+    DlgFlags := 0;
+  end;
+
+  DlgSetup                              := Heroes.MAlloc($BC);
+  NextRecruitMonsDlgOpenEventTownId     := TownId;
+  NextRecruitMonsDlgOpenEventDwellingId := DwellingId;
+  InitRecruitMonsDlgSetup(DlgSetup, TownId, DwellingId, TargetType, TargetId);
+  DlgSetup.ObjType := DlgFlags and DLG_FLAGS_ALL;
+
+  PatchApi.Call(THISCALL_, Ptr($4B0770), [pinteger($699550)^, DlgSetup]);
+  // * * * * * //
+  Heroes.MFree(DlgSetup);
+end; // .function Command_RecruitDlg_Open
+
 function Receiver_RD (Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
 begin
   with AdvErm.WrapErmCmd('RD', CmdInfo) do begin
-    while FindNextSubcmd(['C', 'S', 'F', 'I', 'M']) do begin
+    while FindNextSubcmd(['C', 'S', 'F', 'I', 'M', 'O']) do begin
       case Cmd of
         'C': Success := Command_RecruitDlg(NumParams, @Params, Error);
         'S': Success := Command_RecruitDlg_ShiftSlots(NumParams, @Params, Error);
         'F': Success := Command_RecruitDlg_SlotIndex(NumParams, @Params, Error);
         'I': Success := Command_RecruitDlg_Info(NumParams, @Params, Error);
         'M': Success := Command_RecruitDlg_Mem(NumParams, @Params, Error);
+        'O': Success := Command_RecruitDlg_Open(NumParams, @Params, Error);
       end;
     end;
 
@@ -986,9 +1122,15 @@ begin
   ApiJack.HookCode(Ptr($5DD3C8), @Hook_TownHallMouseClick);
   ApiJack.HookCode(Ptr($550860), @Hook_RecruitDlgRecalc);
   ApiJack.HookCode(Ptr($551089), @Hook_RecruitDlgAction);
-
+  ApiJack.HookCode(Ptr($550989), @Hook_AllowZeroCost);
+  ApiJack.HookCode(Ptr($5509A4), @Hook_AllowZeroResourceCost);
+  
+  // Move close on buy logics down the code after update adv map logics
+  Core.p.WriteDataPatch(Ptr($5510B1), ['9090909090909090909090909090909090909090']);
+  ApiJack.HookCode(Ptr($5510FA), @Hook_RecruitDlgCloseOnBuy);
+  
   AdvErm.RegisterErmReceiver('RD', @Receiver_RD, AdvErm.CMD_PARAMS_CONFIG_NONE);
-end;
+end; // .procedure OnAfterWoG
 
 begin
   RecruitMonsDlgOpenEvent.Inited := false;
