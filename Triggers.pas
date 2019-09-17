@@ -96,7 +96,7 @@ begin
   EventArgs :=  Erm.POnBeforeTriggerArgs(Event.Data);
   // * * * * * //
   TriggerId := EventArgs.TriggerId;
-  
+
   GameExt.FireEvent('OnTrigger ' + SysUtils.IntToStr(TriggerId), @EventArgs.BlockErmExecution, sizeof(EventArgs.BlockErmExecution));
 
   if not EventArgs.BlockErmExecution then begin

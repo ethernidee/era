@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   SysUtils, Math, Windows,
   Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
-  Lists, StrLib,
+  Lists, StrLib, Alg,
   Core, Heroes, GameExt, Trans, RscLists, EventMan;
 
 type
@@ -257,6 +257,30 @@ type
     Params:     TErmCmdParams;
     (* ... *)
   end; // .record TErmSubCmd
+
+  PErmTrigger = ^TErmTrigger;
+  TErmTrigger = packed record
+    {n} Next:         PErmTrigger;
+        Id:           integer;
+        Name:         word;
+        NumCmds:      word;
+        Disabled:     byte;
+        PrevDisabled: byte;
+        Conditions:   TErmCmdConditions;
+        FirstCmd:     record end;
+
+    (* Returns trigger size in bytes, including all receivers *)
+    function GetSize: integer; inline;
+  end;
+
+  PTriggerFastAccessListItem = ^TTriggerFastAccessListItem;
+  TTriggerFastAccessListItem = record
+    Trigger: PErmTrigger;
+    Id:      integer;
+  end;
+
+  PTriggerFastAccessList = ^TTriggerFastAccessList;
+  TTriggerFastAccessList = array [0..high(integer) div sizeof(TTriggerFastAccessListItem) - 1] of TTriggerFastAccessListItem;
   
   TScriptMan = class
      private
@@ -527,6 +551,16 @@ var
 {O} EventTracker:    ErmTracking.TEventTracker;
     ErmErrReported:  boolean = false;
 
+    (* Binary tree in array. Fast search for first trigger with given ID *)
+    TriggerFastAccessList: PTriggerFastAccessList = nil;
+    NullTrigger:           PErmTrigger            = nil;
+    NumUniqueTriggers:     integer                = 0;
+
+
+function TErmTrigger.GetSize: integer;
+begin
+  result := sizeof(Self) + Self.NumCmds * sizeof(TErmCmd);
+end;
 
 procedure ShowErmError (const Error: string);
 begin
@@ -1776,6 +1810,367 @@ begin
   OrigFunc(Owner);
 end;
 
+(* === START: Erm optimization section === *)
+type
+  TTriggerFastAccessListSorter = class (Alg.TQuickSortAdapter)
+   private
+    fTriggerList: PTriggerFastAccessList;
+    fNumTriggers: integer;
+    fPivotItem:   TTriggerFastAccessListItem;
+
+   public
+    function  CompareItems (Ind1, Ind2: integer): integer; override;
+    procedure SwapItems (Ind1, Ind2: integer); override;
+    procedure SavePivotItem (PivotItemInd: integer); override;
+    function  CompareToPivot (Ind: integer): integer; override;
+
+    constructor Create (TriggerList: PTriggerFastAccessList; NumTriggers: integer); 
+  end;
+
+function CompareTriggerFastAccessListItems (var Item1, Item2: TTriggerFastAccessListItem): integer; inline;
+begin
+  if Item1.Id > Item2.Id then begin
+    result := +1;
+  end else if Item1.Id < Item2.Id then begin
+    result := -1;
+  end else begin
+    if cardinal(Item1.Trigger) > cardinal(Item2.Trigger) then begin
+      result := +1;
+    end else if cardinal(Item1.Trigger) < cardinal(Item2.Trigger) then begin
+      result := -1;
+    end else begin
+      result := 0;
+    end;
+  end; // .else
+end; // .function CompareTriggerFastAccessListItems
+
+constructor TTriggerFastAccessListSorter.Create (TriggerList: PTriggerFastAccessList; NumTriggers: integer);
+begin
+  {!} Assert(TriggerList <> nil);
+  {!} Assert(NumTriggers >= 0);
+  inherited Create;
+  Self.fTriggerList := TriggerList;
+  Self.fNumTriggers := NumTriggers;
+end;
+
+function TTriggerFastAccessListSorter.CompareItems (Ind1, Ind2: integer): integer;
+begin
+  result := CompareTriggerFastAccessListItems(Self.fTriggerList[Ind1], Self.fTriggerList[Ind2]);
+end;
+
+procedure TTriggerFastAccessListSorter.SwapItems (Ind1, Ind2: integer);
+var
+  TmpItem: TTriggerFastAccessListItem;
+
+begin
+  TmpItem                 := Self.fTriggerList[Ind1];
+  Self.fTriggerList[Ind1] := Self.fTriggerList[Ind2];
+  Self.fTriggerList[Ind2] := TmpItem;
+end;
+
+procedure TTriggerFastAccessListSorter.SavePivotItem (PivotItemInd: integer);
+begin
+  Self.fPivotItem := Self.fTriggerList[PivotItemInd];
+end;
+
+function TTriggerFastAccessListSorter.CompareToPivot (Ind: integer): integer;
+begin
+  result := CompareTriggerFastAccessListItems(Self.fTriggerList[Ind], Self.fPivotItem);
+end;
+
+(* Returns NullTrigger address on failure *)
+function FindFirstTrigger (Id: integer): PErmTrigger;
+var
+  Ind:        integer;
+  ListEndInd: integer;
+
+begin
+  ListEndInd := NumUniqueTriggers;
+  result     := NullTrigger;
+  //ShowMessage(Format('Id: %d. ListEndInd = %d', [Id, ListEndInd]));
+  
+  if ListEndInd = 0 then begin
+    exit;
+  end;
+
+  Ind := 0;
+
+  while (Ind < ListEndInd) and (TriggerFastAccessList[Ind].Id <> Id) do begin
+    //ShowMessage(Format('Compare event %d to %d', [Id, TriggerFastAccessList[Ind].Id]));
+    if Id < TriggerFastAccessList[Ind].Id then begin
+      Ind := Ind shl 1 + 1;
+    end else begin
+      Ind := Ind shl 1 + 2;
+    end;
+  end;
+
+  if Ind < ListEndInd then begin
+    //ShowMessage(Format('Found event %d', [Id]));
+    result := TriggerFastAccessList[Ind].Trigger;
+  end;
+end; // .function FindFirstTrigger
+
+(*
+  Main optimization is reducing CPU cache load by sorting triggers by (Id, Addr) and providing
+  fast search reordered list of triggers, used with cache-friendly binary search algorithm.
+  Summary:
+  -) Generating ERM event does not loop trough all triggers. Fast binary search + linear pass through same ID triggers instead.
+  -) Triggers are located in adjucent memory locations, which is cache friendly.
+  -) Additional memory is required O(N) for triggers reodrdering process (once) and for fast access table (constant).
+*)
+function OptimizeCompiledErm (TriggersStart: PErmTrigger; TriggersSize: integer; FreeBuf: pbyte; FreeBufSize: integer): boolean;
+var
+  NumTriggers: integer;
+
+  (* Counts ERM triggers and makes unsorted list of (Id, Addr) pairs to enable same ID triggers grouping and triggers fast search *)
+  function MakeTriggerFastAccessList: boolean;
+  var
+  {n} Trigger:            PErmTrigger;
+      FastAccessListSize: integer;
+      ListItem:           PTriggerFastAccessListItem;
+
+  begin
+    Trigger  := TriggersStart;
+    ListItem := @TriggerFastAccessList[0];
+    // * * * * * //
+    result             := true;
+    NumTriggers        := 0;
+    FastAccessListSize := 0;
+
+    while (Trigger <> nil) and (Trigger.Id <> 0) do begin
+      Inc(FastAccessListSize, sizeof(TTriggerFastAccessListItem));
+      Inc(NumTriggers);
+
+      if FastAccessListSize > FreeBufSize then begin
+        result := false;
+        exit;
+      end;
+
+      ListItem.Trigger := Trigger;
+      ListItem.Id      := Trigger.Id;
+      Trigger          := Utils.PtrOfs(Trigger, Trigger.GetSize());
+      Inc(ListItem);
+    end; // .while
+  end; // .function MakeTriggerFastAccessList
+
+  procedure SortTriggerFastAccessList;
+  var
+  {O} Sorter: TTriggerFastAccessListSorter;
+
+  begin
+    Sorter := TTriggerFastAccessListSorter.Create(TriggerFastAccessList, NumTriggers);
+    // * * * * * //
+    Alg.QuickSortEx(Sorter, 0, NumTriggers - 1);
+    // * * * * * //
+    SysUtils.FreeAndNil(Sorter);
+  end;
+
+  function MakeTriggersCopy: Utils.TArrayOfByte;
+  begin
+    SetLength(result, TriggersSize);
+    Utils.CopyMem(TriggersSize, TriggersStart, pointer(result));
+  end;
+
+  procedure CopyTriggersBackReordered (TriggersCopy: Utils.TArrayOfByte);
+  var
+      TargetTrigger:        PErmTrigger;
+  {n} CopiedTrigger:        PErmTrigger;
+      TriggersOffsetToCopy: integer;
+      TriggerListItem:      PTriggerFastAccessListItem;
+      i:                    integer;
+
+  begin
+    TargetTrigger := TriggersStart;
+    CopiedTrigger := nil;
+    // * * * * * //
+    TriggersOffsetToCopy := integer(@TriggersCopy[0]) - integer(TriggersStart);
+
+    for i := 0 to NumTriggers - 1 do begin
+      TriggerListItem         := @TriggerFastAccessList[i];
+      CopiedTrigger           := Utils.PtrOfs(TriggerListItem.Trigger, TriggersOffsetToCopy);
+      Utils.CopyMem(CopiedTrigger.GetSize(), CopiedTrigger, TargetTrigger);
+      TriggerListItem.Trigger := TargetTrigger;
+      TargetTrigger.Next      := Utils.PtrOfs(TargetTrigger, TargetTrigger.GetSize());
+      TargetTrigger           := TargetTrigger.Next;
+    end;
+
+    TargetTrigger.Next := nil;
+  end; // .procedure CopyTriggersBackReordered
+
+  procedure RemoveDuplicateIdsFromTriggerFastAccessList;
+  var
+    PrevId: integer;
+    i, j:   integer;
+
+  begin
+    PrevId := 0;
+    j      := 0;
+
+    for i := 0 to NumTriggers - 1 do begin
+      if TriggerFastAccessList[i].Id <> PrevId then begin
+        if PrevId <> 0 then begin
+          TriggerFastAccessList[i - 1].Trigger.Next := nil;
+        end;
+
+        PrevId                   := TriggerFastAccessList[i].Id;
+        TriggerFastAccessList[j] := TriggerFastAccessList[i];
+        Inc(j);
+      end;
+    end;
+
+    NumUniqueTriggers := j;
+  end; // .procedure RemoveDuplicateIdsFromTriggerFastAccessList
+
+  procedure TurnFastAccessListIntoBinaryTree;
+  type
+    TQueueItem = record
+      LeftInd:   integer;
+      RightInd:  integer;
+      CurrLevel: integer;
+    end;
+
+  var
+    ListCopy:             array of TTriggerFastAccessListItem;
+    TargetItem:           PTriggerFastAccessListItem;
+    BinTreeLevel:         integer;
+    QueueItem:            TQueueItem;
+    NewQueueItem:         TQueueItem;
+    MinChildrenForBranch: integer;
+    MiddleInd:            integer;
+    Queue:                array of TQueueItem;
+    QueueReadPos:         integer;
+    QueueWritePos:        integer;
+    QueueSize:            integer;
+
+    procedure AddToQueue (var QueueItem: TQueueItem);
+    begin
+      Queue[QueueWritePos] := QueueItem;
+      QueueWritePos        := (QueueWritePos + 1) mod Length(Queue);
+      Inc(QueueSize);
+    end;
+
+    procedure GetFromQueue (var QueueItem: TQueueItem);
+    begin
+      Dec(QueueSize);
+      QueueItem := Queue[QueueReadPos];
+
+      if QueueSize > 0 then begin
+        QueueReadPos := (QueueReadPos + 1) mod Length(Queue);
+      end else begin
+        QueueReadPos  := 0;
+        QueueWritePos := 0;
+      end;
+    end;
+
+  begin
+    TargetItem := @TriggerFastAccessList[0];
+    // * * * * * //
+    if NumUniqueTriggers <= 1 then begin
+      exit;
+    end;
+
+    // Copy original fast access trigger list
+    SetLength(ListCopy, NumUniqueTriggers);
+    Utils.CopyMem(NumUniqueTriggers * sizeof(ListCopy[0]), TriggerFastAccessList, pointer(ListCopy));
+
+    (* Initialize fixed size queue (based on circular buffer) *)
+    // It can be proved, that queue will be filled with at most N items, where N is number of items at last level of binary tree
+    BinTreeLevel := Alg.IntLog2(NumUniqueTriggers + 1);
+    SetLength(Queue, 1 shl (BinTreeLevel - 1));
+
+    QueueReadPos  := 0;
+    QueueWritePos := 0;
+    QueueSize     := 0;
+
+    with QueueItem do begin
+      LeftInd   := 0;
+      RightInd  := NumUniqueTriggers - 1;
+      CurrLevel := BinTreeLevel;
+    end;
+
+    AddToQueue(QueueItem);
+
+    // Perform graph breadth-first traversal, building binary tree in list. {See binary heap}
+    // Ex. 1 2 3 4 5 6 7 => 4 2 6 1 3 5 7
+    // This is structure is more cache friendly and has at least same speed as binary search
+    while QueueSize > 0 do begin
+      GetFromQueue(QueueItem);
+
+      // Last level - single item without children
+      if QueueItem.LeftInd = QueueItem.RightInd then begin
+        TargetItem^ := ListCopy[QueueItem.LeftInd];
+        Inc(TargetItem);
+      end
+      // [2, ...] items range
+      else begin
+        MinChildrenForBranch := 1 shl (QueueItem.CurrLevel - 2) - 1;
+        MiddleInd            := QueueItem.LeftInd + Math.Min(QueueItem.RightInd - QueueItem.LeftInd - MinChildrenForBranch, MinChildrenForBranch * 2 + 1);
+
+        TargetItem^ := ListCopy[MiddleInd];
+        Inc(TargetItem);
+
+        with NewQueueItem do begin
+          LeftInd   := QueueItem.LeftInd;
+          RightInd  := MiddleInd - 1;
+          CurrLevel := QueueItem.CurrLevel - 1;
+        end;
+
+        AddToQueue(NewQueueItem);
+
+        if QueueItem.RightInd > MiddleInd then begin
+          with NewQueueItem do begin
+            LeftInd   := MiddleInd + 1;
+            RightInd  := QueueItem.RightInd;
+            CurrLevel := QueueItem.CurrLevel - 1;
+          end;
+
+          AddToQueue(NewQueueItem);
+        end;
+      end; // .else
+    end; // .while
+  end; // .procedure TurnFastAccessListIntoBinaryTree
+
+begin
+   TriggerFastAccessList := pointer(FreeBuf);
+   NumTriggers           := 0;
+   result                := MakeTriggerFastAccessList;
+
+  if result then begin
+    SortTriggerFastAccessList;
+    CopyTriggersBackReordered(MakeTriggersCopy);
+    RemoveDuplicateIdsFromTriggerFastAccessList;
+    TurnFastAccessListIntoBinaryTree;
+  end; 
+end; // .function OptimizeCompiledErm
+
+function Hook_FindErm_SuccessEnd (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  NULL_TRIGGER_SIZE = sizeof(TErmTrigger);
+
+var
+{n} LastTrigger:   PErmTrigger;
+{n} FreeBuf:       pbyte;
+    TriggersStart: PErmTrigger;
+    TriggersSize:  integer;
+    FreeBufSize:   integer;
+
+begin
+  LastTrigger   := ppointer(Context.EBP - $1C)^;
+  TriggersStart := ZvsErmHeapPtr^;
+  TriggersSize  := Utils.IfThen(LastTrigger = nil, 0, integer(LastTrigger) - integer(TriggersStart) + LastTrigger.GetSize());
+  NullTrigger   := Utils.PtrOfs(TriggersStart, sizeof(NullTrigger^));
+  FreeBuf       := Utils.PtrOfs(TriggersStart, Utils.IfThen(LastTrigger = nil, NULL_TRIGGER_SIZE, TriggersSize + NULL_TRIGGER_SIZE));
+  FreeBufSize   := ZvsErmHeapSize^ - (integer(FreeBuf) - integer(ZvsErmHeapPtr^));
+
+  if (FreeBufSize <= 0) or not OptimizeCompiledErm(TriggersStart, TriggersSize, FreeBuf, FreeBufSize) then begin
+    ErmEnabled^ := false;
+    Heroes.ShowMessage(Trans.tr('no_memory_for_erm_optimization', ['limit', IntToStr(ZvsErmHeapSize^ div (1024 * 1024))]));
+  end;
+
+  result := true;
+end; // .function Hook_FindErm_SuccessEnd
+(* === END: Erm optimization section === *)
+
 procedure RegisterErmEventNames;
 begin
   NameTrigger(Erm.TRIGGER_BA0,  'OnBeforeBattle');
@@ -1927,12 +2322,15 @@ function Hook_ProcessErm (Context: Core.PHookContext): longbool; stdcall;
 var
 {O} YVars:     TYVars;
     EventArgs: TOnBeforeTriggerArgs;
+    TriggerId: integer;
 
 begin
   if ErmEnabled^ then begin
     YVars := TYVars.Create;
     // * * * * * //
-    if CurrErmEventID^ > Erm.TRIGGER_FU29999 then begin
+    TriggerId := CurrErmEventID^;
+
+    if TriggerId > Erm.TRIGGER_FU29999 then begin
       SetLength(YVars.Value, Length(y^));
       Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
     end;
@@ -1974,17 +2372,19 @@ begin
     end; // .asm
     
     if TrackingOpts.Enabled then begin
-      EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, CurrErmEventID^);
+      EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, TriggerId);
     end;
     
     Inc(ErmTriggerDepth);
 
-    EventArgs.TriggerId         := CurrErmEventID^;
+    EventArgs.TriggerId         := TriggerId;
     EventArgs.BlockErmExecution := false;
     EventMan.GetInstance.Fire('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
     
     if EventArgs.BlockErmExecution then begin
-      CurrErmEventID^ := TRIGGER_INVALID;
+      ppointer(Context.EBP - 4)^ := NullTrigger;
+    end else begin
+      ppointer(Context.EBP - 4)^ := FindFirstTrigger(TriggerId);
     end;
     // * * * * * //
     SysUtils.FreeAndNil(YVars);
@@ -2439,6 +2839,10 @@ begin
   Core.Hook(@Hook_ProcessErm, Core.HOOKTYPE_BRIDGE, 6, Ptr($74C819));
   Core.Hook(@Hook_ProcessErm_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($74CE2A));
 
+  // Don't start from first trigger, fast trigger search is used
+  // DELETED: cp = Heap
+  Core.p.WriteDataPatch(Ptr($74C840), ['909090909090909090']);
+
   (* Fix ERM CA:B3 bug *)
   Core.Hook(@Hook_ErmCastleBuilding, Core.HOOKTYPE_JUMP, 7, Ptr($70E8A2));
   
@@ -2502,6 +2906,9 @@ begin
 
   (* Disable default tracing of last ERM command *)
   Core.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);
+
+  (* Optimize compiled ERM *)
+  ApiJack.HookCode(Ptr($74C5A7), @Hook_FindErm_SuccessEnd);
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
