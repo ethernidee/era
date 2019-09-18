@@ -203,6 +203,7 @@ type
     CHECK_LESSEQUAL
   );
 
+  PErmCmdParam = ^TErmCmdParam;
   TErmCmdParam = packed record
     Value:    integer;
     {
@@ -255,7 +256,9 @@ type
     Code:       TGameString;
     Conditions: TErmCmdConditions;
     Params:     TErmCmdParams;
-    (* ... *)
+    Chars:      array [0..15] of char;
+    Flags:      array [0..15] of boolean;
+    Nums:       array [0..15] of integer;
   end; // .record TErmSubCmd
 
   PErmTrigger = ^TErmTrigger;
@@ -349,10 +352,6 @@ type
     TriggerId:          integer;
     BlockErmExecution:  longbool;
   end; // .record TOnBeforeTriggerArgs
-  
-  TYVars = class
-    Value: Utils.TArrayOfInt;
-  end; // .class TYVars
 
   TWoGOptions = array [CURRENT_WOG_OPTIONS..GLOBAL_WOG_OPTIONS, 0..NUM_WOG_OPTIONS - 1] of integer;
 
@@ -484,6 +483,7 @@ const
   ZvsGetErtStr:       function (StrInd: integer): pchar cdecl = Ptr($776620);
   ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
   ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): LONGBOOL cdecl = Ptr($74195D);
+  ZvsGetParamValue:   function (var Param: TErmCmdParam): integer cdecl = Ptr($72DEA5);
 
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
@@ -547,7 +547,6 @@ var
 {O} ScriptNames:     Lists.TStringList;
 {O} ErmScanner:      TextScan.TTextScanner;
 {O} ErmCmdCache:     {O} TAssocArray {OF PErmCmd};
-{O} SavedYVars:      {O} Lists.TList {OF TYVars};
 {O} EventTracker:    ErmTracking.TEventTracker;
     ErmErrReported:  boolean = false;
 
@@ -775,21 +774,8 @@ begin
 end; // .function GetTriggerReadableName
 
 procedure SetZVar (Str: pchar; const Value: string); overload;
-var
-  StrBufSize: integer;
-
 begin
-  if FALSE { Allowing texts to overwrite several z-variables is bad practice. Better provide more functional API for lua } then begin
-    if (cardinal(Str) >= cardinal(@z[1])) and (cardinal(Str) <= cardinal(@z[high(z^)])) then begin
-      StrBufSize := integer(@z[high(z^)]) - integer(Str) + sizeof(z[1]);
-    end else begin
-      StrBufSize := sizeof(z[1]);
-    end;
-  end else begin
-    StrBufSize := sizeof(z[1]);
-  end;
-
-  Utils.SetPcharValue(Str, Value, StrBufSize);
+  Utils.SetPcharValue(Str, Value, sizeof(z[1]));
 end;
 
 procedure SetZVar (Str, Value: pchar); overload;
@@ -1965,39 +1951,7 @@ var
     SysUtils.FreeAndNil(Sorter);
   end;
 
-  function MakeTriggersCopy: Utils.TArrayOfByte;
-  begin
-    SetLength(result, TriggersSize);
-    Utils.CopyMem(TriggersSize, TriggersStart, pointer(result));
-  end;
-
-  procedure CopyTriggersBackReordered (TriggersCopy: Utils.TArrayOfByte);
-  var
-      TargetTrigger:        PErmTrigger;
-  {n} CopiedTrigger:        PErmTrigger;
-      TriggersOffsetToCopy: integer;
-      TriggerListItem:      PTriggerFastAccessListItem;
-      i:                    integer;
-
-  begin
-    TargetTrigger := TriggersStart;
-    CopiedTrigger := nil;
-    // * * * * * //
-    TriggersOffsetToCopy := integer(@TriggersCopy[0]) - integer(TriggersStart);
-
-    for i := 0 to NumTriggers - 1 do begin
-      TriggerListItem         := @TriggerFastAccessList[i];
-      CopiedTrigger           := Utils.PtrOfs(TriggerListItem.Trigger, TriggersOffsetToCopy);
-      Utils.CopyMem(CopiedTrigger.GetSize(), CopiedTrigger, TargetTrigger);
-      TriggerListItem.Trigger := TargetTrigger;
-      TargetTrigger.Next      := Utils.PtrOfs(TargetTrigger, TargetTrigger.GetSize());
-      TargetTrigger           := TargetTrigger.Next;
-    end;
-
-    TargetTrigger.Next := nil;
-  end; // .procedure CopyTriggersBackReordered
-
-  procedure RemoveDuplicateIdsFromTriggerFastAccessList;
+  procedure OptimizeFastAccessListAndRelinkTriggers;
   var
     PrevId: integer;
     i, j:   integer;
@@ -2012,14 +1966,18 @@ var
           TriggerFastAccessList[i - 1].Trigger.Next := nil;
         end;
 
+        TriggerFastAccessList[i].Trigger.Next := nil;
+
         PrevId                   := TriggerFastAccessList[i].Id;
         TriggerFastAccessList[j] := TriggerFastAccessList[i];
         Inc(j);
-      end;
-    end;
+      end else begin
+        TriggerFastAccessList[i - 1].Trigger.Next := TriggerFastAccessList[i].Trigger;
+      end; // .else
+    end; // .for
 
     NumUniqueTriggers := j;
-  end; // .procedure RemoveDuplicateIdsFromTriggerFastAccessList
+  end; // .procedure OptimizeFastAccessListAndRelinkTriggers
 
   procedure TurnFastAccessListIntoBinaryTree;
   type
@@ -2137,8 +2095,7 @@ begin
 
   if result then begin
     SortTriggerFastAccessList;
-    CopyTriggersBackReordered(MakeTriggersCopy);
-    RemoveDuplicateIdsFromTriggerFastAccessList;
+    OptimizeFastAccessListAndRelinkTriggers;
     TurnFastAccessListIntoBinaryTree;
   end; 
 end; // .function OptimizeCompiledErm
@@ -2157,10 +2114,15 @@ var
 begin
   LastTrigger   := ppointer(Context.EBP - $1C)^;
   TriggersStart := ZvsErmHeapPtr^;
-  TriggersSize  := Utils.IfThen(LastTrigger = nil, 0, integer(LastTrigger) - integer(TriggersStart) + LastTrigger.GetSize());
-  NullTrigger   := Utils.PtrOfs(TriggersStart, sizeof(NullTrigger^));
-  FreeBuf       := Utils.PtrOfs(TriggersStart, Utils.IfThen(LastTrigger = nil, NULL_TRIGGER_SIZE, TriggersSize + NULL_TRIGGER_SIZE));
-  FreeBufSize   := ZvsErmHeapSize^ - (integer(FreeBuf) - integer(ZvsErmHeapPtr^));
+  TriggersSize  := 0;
+  
+  if LastTrigger <> nil then begin
+    TriggersSize := integer(LastTrigger) - integer(TriggersStart) + LastTrigger.GetSize();
+  end;
+  
+  NullTrigger := Utils.PtrOfs(TriggersStart, sizeof(NullTrigger^));
+  FreeBuf     := Utils.PtrOfs(TriggersStart, Utils.IfThen(LastTrigger = nil, NULL_TRIGGER_SIZE, TriggersSize + NULL_TRIGGER_SIZE));
+  FreeBufSize := ZvsErmHeapSize^ - (integer(FreeBuf) - integer(ZvsErmHeapPtr^));
 
   if (FreeBufSize <= 0) or not OptimizeCompiledErm(TriggersStart, TriggersSize, FreeBuf, FreeBufSize) then begin
     ErmEnabled^ := false;
@@ -2320,22 +2282,12 @@ end;
 
 function Hook_ProcessErm (Context: Core.PHookContext): longbool; stdcall;
 var
-{O} YVars:     TYVars;
-    EventArgs: TOnBeforeTriggerArgs;
-    TriggerId: integer;
+  EventArgs: TOnBeforeTriggerArgs;
+  TriggerId: integer;
 
 begin
   if ErmEnabled^ then begin
-    YVars := TYVars.Create;
-    // * * * * * //
     TriggerId := CurrErmEventID^;
-
-    if TriggerId > Erm.TRIGGER_FU29999 then begin
-      SetLength(YVars.Value, Length(y^));
-      Utils.CopyMem(sizeof(y^), @y[1], @YVars.Value[0]);
-    end;
-    
-    SavedYVars.Add(YVars); YVars := nil;
     
     (* ProcessErm - initializing v996..v1000 variables *)
     asm
@@ -2386,8 +2338,6 @@ begin
     end else begin
       ppointer(Context.EBP - 4)^ := FindFirstTrigger(TriggerId);
     end;
-    // * * * * * //
-    SysUtils.FreeAndNil(YVars);
   end; // .if
   
   result := Core.EXEC_DEF_CODE;
@@ -2395,27 +2345,18 @@ end; // .function Hook_ProcessErm
 
 function Hook_ProcessErm_End (Context: Core.PHookContext): longbool; stdcall;
 var
-{O} YVars:     TYVars;
-    TriggerId: integer;
+  TriggerId: integer;
 
 begin
   if ErmEnabled^ then begin
-    YVars := SavedYVars.Pop;
-    // * * * * * //
     TriggerId := pinteger(Context.EBP - $1A0)^;
     EventMan.GetInstance.Fire('OnAfterTrigger', @TriggerId, sizeof(TriggerId));
-    
-    if YVars.Value <> nil then begin
-      Utils.CopyMem(sizeof(y^), @YVars.Value[0], @y[1]);
-    end;
     
     Dec(ErmTriggerDepth);
 
     if TrackingOpts.Enabled then begin
       EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_END_TRIGGER, TriggerId);
     end;
-    // * * * * * //
-    SysUtils.FreeAndNil(YVars);
   end; // .if
 
   result := Core.EXEC_DEF_CODE;
@@ -2737,6 +2678,88 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_CmdElse
 
+type
+  PFuncPreservedState = ^TFuncPreservedState;
+  TFuncPreservedState = packed record
+    x: TErmXVars;
+    y: TErmYVars;
+    e: TErmEVars;
+    z: TErmNZVars;
+  end;
+
+procedure PrepareForFuncCall (PreservedState: PFuncPreservedState; FuncArgs: pinteger; FuncArgSize, NumParams: integer);
+var
+  i: integer;
+
+begin
+  PreservedState.x := x^;
+  
+  for i := 0 to NumParams - 1 do begin
+    x[i] := FuncArgs^;
+    Inc(pbyte(FuncArgs), FuncArgSize);
+  end;
+
+  PreservedState.y := y^;
+  PreservedState.e := e^;
+
+  for i := 1 to High(nz^) + 1 do begin
+    Utils.SetPcharValue(@PreservedState.z[i], @nz[i], sizeof(z[1]));
+  end;
+end;
+
+procedure RestoreAfterFuncCall (PreservedState: PFuncPreservedState; SubCmd: PErmSubCmd; NumParams: integer);
+var
+  NewX: TErmXVars;
+  i:    integer;
+
+begin
+  y^ := PreservedState.y;
+  e^ := PreservedState.e;
+
+  for i := 1 to High(nz^) + 1 do begin
+    if (pinteger(@nz[i])^ <> pinteger(@PreservedState.z[i])^) or (StrLib.ComparePchars(@nz[i], @PreservedState.z[i]) <> 0) then begin
+      Utils.SetPcharValue(@nz[i], @PreservedState.z[i], sizeof(z[1]));
+    end;
+  end;
+
+  NewX := PreservedState.x;
+
+  for i := 0 to NumParams - 1 do begin
+    // P?[smth]
+    if ((SubCmd.Params[i].ValType shr 8) and 7) = 1 then begin
+      asm int 3 end;
+      ZvsApply(@NewX[i], sizeof(integer), SubCmd, i);
+    end;
+  end;
+
+  x^ := NewX;
+end; // .procedure RestoreAfterFuncCall
+
+function Hook_FU_P (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  Cmd:            PErmCmd;
+  SubCmd:         PErmSubCmd;
+  FuncId:         integer;
+  PreservedState: PFuncPreservedState;
+  NumParams:      integer;
+
+begin
+  Cmd            := PErmCmd(ppointer(Context.EBP + $10)^);
+  SubCmd         := PErmSubCmd(ppointer(Context.EBP + $14)^);
+  FuncId         := ZvsGetParamValue(Cmd.Params[0]);
+  PreservedState := PFuncPreservedState(Context.EBP - $17C4);
+  NumParams      := pinteger(Context.EBP + $0C)^;
+  ShowMessage(Format('Cmd: %s. SubCmd: %s. FuncId: %d. NumParams: %d', [Cmd.CmdId.Name, copy(pchar(utils.ptrofs(SubCmd.Code.Value, -20))+'', 1, 40), FuncId, NumParams]));
+  // * * * * * //
+  PrepareForFuncCall(PreservedState, @SubCmd.Nums[0], sizeof(SubCmd.Nums[0]), NumParams);
+  FireErmEvent(FuncId);
+  RestoreAfterFuncCall(PreservedState, SubCmd, NumParams);
+  ShowMessage('OK');
+
+  Context.RetAddr := Ptr($72D19E);
+  result := false;
+end; // .function Hook_FU_P
+
 function Hook_FU_P_RetValue (C: Core.PHookContext): longbool; stdcall;
 var
 {U} OldXVars: PErmXVars;
@@ -2907,8 +2930,16 @@ begin
   (* Disable default tracing of last ERM command *)
   Core.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);
 
-  (* Optimize compiled ERM *)
+  (* Optimize compiled ERM by storing direct address of command handler in command itself *)
   ApiJack.HookCode(Ptr($74C5A7), @Hook_FindErm_SuccessEnd);
+
+  (* Triggers preserve and restore positive e/y-vars instead of negative ones *)
+  Core.p.WriteDataPatch(Ptr($74C906 + 3), ['%d', y]);
+  Core.p.WriteDataPatch(Ptr($74C946 + 3), ['%d', e]);
+  Core.p.WriteDataPatch(Ptr($74CDC4 + 3), ['%d', y]);
+  Core.p.WriteDataPatch(Ptr($74CE04 + 3), ['%d', e]);
+
+  ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
@@ -2968,7 +2999,6 @@ begin
   );
   IsWoG^      :=  true;
   ScriptNames :=  Lists.NewSimpleStrList;
-  SavedYVars  :=  Lists.NewStrictList(TYVars);
   
   EventMan.GetInstance.On('OnBeforeWoG',              OnBeforeWoG);
   EventMan.GetInstance.On('OnAfterWoG',               OnAfterWoG);
