@@ -2778,25 +2778,6 @@ begin
   result          := false;
 end; // .function Hook_FU_P
 
-function Hook_FU_P_RetValue (C: Core.PHookContext): longbool; stdcall;
-var
-{U} OldXVars: PErmXVars;
-    Transfer: integer;
-    i:        integer;
-  
-begin
-  OldXVars := Ptr(C.EBP - $15E0);
-  
-  for i := Low(x^) to High(x^) do begin
-    Transfer    := x[i];
-    x[i]        := OldXVars[i];
-    OldXVars[i] := Transfer;
-  end;
-
-  C.RetAddr := Ptr($74CA64);
-  result    := Core.EXEC_DEF_CODE;
-end; // .function Hook_FU_P_RetValue
-
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
@@ -2927,11 +2908,6 @@ begin
   (* Fix MR:N in !?MR1 !?MR2 *)
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
 
-  (* Allow !!FU:P?x[n] syntax. *)
-  //Core.ApiHook(@Hook_FU_P_RetValue, Core.HOOKTYPE_BRIDGE, Ptr($72D04A));
-  //Core.p.WriteDataPatch(Ptr($72D0A0), ['8D849520EAFFFF']);
-  //Core.p.WriteDataPatch(Ptr($72D0B2), ['E9E70000009090909090']);
-
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
   Core.ApiHook(@Hook_MError,  Core.HOOKTYPE_BRIDGE, Ptr($71236A));
@@ -2951,17 +2927,14 @@ begin
   (* Optimize compiled ERM by storing direct address of command handler in command itself *)
   ApiJack.HookCode(Ptr($74C5A7), @Hook_FindErm_SuccessEnd);
 
-  (* Triggers preserve and restore positive e/y-vars instead of negative ones *)
+  (* New triggers local variables management *)
   ApiJack.HookCode(Ptr($74C88A), @Hook_ProcessErm_SaveVars);
   ApiJack.HookCode(Ptr($74CD3D), @Hook_ProcessErm_RestoreVars);
 
   // Allocate space on stack for extra trigger state
   Core.p.WriteDataPatch(Ptr($74C819 + 2), ['%d', -PROCESS_ERM_NEW_FRAME_BORDER]);
-  // Core.p.WriteDataPatch(Ptr($74C906 + 3), ['%d', y]);
-  // Core.p.WriteDataPatch(Ptr($74C946 + 3), ['%d', e]);
-  // Core.p.WriteDataPatch(Ptr($74CDC4 + 3), ['%d', y]);
-  // Core.p.WriteDataPatch(Ptr($74CE04 + 3), ['%d', e]);
 
+  // Rewrite FU:P implementation
   ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
 
   (* Enable ERM tracking and pre-command initialization *)
