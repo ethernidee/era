@@ -253,7 +253,7 @@ type
   PErmSubCmd = ^TErmSubCmd;
   TErmSubCmd = packed record
     Pos:        integer;
-    Code:       TGameString;
+    Code:       TErmString;
     Conditions: TErmCmdConditions;
     Params:     TErmCmdParams;
     Chars:      array [0..15] of char;
@@ -311,32 +311,31 @@ type
       property Scripts: RscLists.TResourceList read fScripts;
     end; // .class TScriptMan
 
+  PErmVVars      = ^TErmVVars;
+  TErmVVars      = array [1..10000] of integer;
+  PWVars         = ^TWVars;
+  TWVars         = array [0..255, 1..200] of integer;
+  TErmZVar       = array [0..511] of char;
+  PErmZVars      = ^TErmZVars;
+  TErmZVars      = array [1..1000] of TErmZVar;
+  PErmNZVars     = ^TErmNZVars;
+  TErmNZVars     = array [1..10] of TErmZVar;
+  PErmYVars      = ^TErmYVars;
+  TErmYVars      = array [1..100] of integer;
+  PErmNYVars     = ^TErmNYVars;
+  TErmNYVars     = array [1..100] of integer;
+  PErmXVars      = ^TErmXVars;
+  TErmXVars      = array [1..16] of integer;
+  PErmFlags      = ^TErmFlags;
+  TErmFlags      = array [1..1000] of boolean;
+  PErmEVars      = ^TErmEVars;
+  TErmEVars      = array [1..100] of single;
+  PErmNEVars     = ^TErmNEVars;
+  TErmNEVars     = array [1..100] of single;
+  PErmQuickVars  = ^TErmQuickVars;
+  TErmQuickVars  = array [0..14] of integer;
   PZvsTriggerIfs = ^TZvsTriggerIfs;
-  TZvsTriggerIfs = array [0..9] of shortint;
-  
-  PErmVVars = ^TErmVVars;
-  TErmVVars = array [1..10000] of integer;
-  PWVars    = ^TWVars;
-  TWVars    = array [0..255, 1..200] of integer;
-  TErmZVar  = array [0..511] of char;
-  PErmZVars = ^TErmZVars;
-  TErmZVars = array [1..1000] of TErmZVar;
-  PErmNZVars = ^TErmNZVars;
-  TErmNZVars = array [1..10] of TErmZVar;
-  PErmYVars = ^TErmYVars;
-  TErmYVars = array [1..100] of integer;
-  PErmNYVars = ^TErmNYVars;
-  TErmNYVars = array [1..100] of integer;
-  PErmXVars = ^TErmXVars;
-  TErmXVars = array [1..16] of integer;
-  PErmFlags = ^TErmFlags;
-  TErmFlags = array [1..1000] of boolean;
-  PErmEVars = ^TErmEVars;
-  TErmEVars = array [1..100] of single;
-  PErmNEVars = ^TErmNEVars;
-  TErmNEVars = array [1..100] of single;
-  PErmQuickVars = ^TErmQuickVars;
-  TErmQuickVars = array [0..14] of integer;
+  TZvsTriggerIfs = array [0..10] of shortint;
 
   TZvsLoadErmScript = function (ScriptId: integer): integer; cdecl;
   TZvsLoadErmTxt    = function (IsNewLoad: integer): integer; cdecl;
@@ -555,6 +554,11 @@ var
     NullTrigger:           PErmTrigger            = nil;
     NumUniqueTriggers:     integer                = 0;
 
+    // Each trigger saves x-vars to RetXVars before restoring previous values on exit.
+    // ArgXVars are copied to x on trigger start after saving previous x-values.
+    ArgXVars: TErmXVars;
+    RetXVars: TErmXVars;
+
 
 function TErmTrigger.GetSize: integer;
 begin
@@ -571,14 +575,14 @@ begin
   result  :=  true;
   
   case c of
-    '+', '-': ValType :=  ValNum;
-    '0'..'9': ValType :=  ValNum;
-    'f'..'t': ValType :=  ValQuick;
-    'v':      ValType :=  ValV;
-    'w':      ValType :=  ValW;
-    'x':      ValType :=  ValX;
-    'y':      ValType :=  ValY;
-    'z':      ValType :=  ValZ;
+    '+', '-': ValType := ValNum;
+    '0'..'9': ValType := ValNum;
+    'f'..'t': ValType := ValQuick;
+    'v':      ValType := ValV;
+    'w':      ValType := ValW;
+    'x':      ValType := ValX;
+    'y':      ValType := ValY;
+    'z':      ValType := ValZ;
   else
     result := false;
     ShowMessage('Invalid ERM value type: "' + c + '"');
@@ -857,7 +861,7 @@ var
         result := ReadNum(Arg.Value);
         
         if result then begin
-          Arg.ValType := ORD(IndType) shl 4 + ORD(ValType);
+          Arg.ValType := ord(IndType) shl 4 + ord(ValType);
         end;
       end;
     end; // .if
@@ -2280,6 +2284,17 @@ begin
   end;
 end; 
 
+type
+  PTriggerExtraPreservedState = ^TTriggerExtraPreservedState;
+  TTriggerExtraPreservedState = packed record
+    x: TErmXVars;
+    z: TErmNZVars;
+  end;
+
+const
+  PROCESS_ERM_ORIG_FRAME_BORDER = -$344;
+  PROCESS_ERM_NEW_FRAME_BORDER  = PROCESS_ERM_ORIG_FRAME_BORDER - sizeof(TTriggerExtraPreservedState);
+
 function Hook_ProcessErm (Context: Core.PHookContext): longbool; stdcall;
 var
   EventArgs: TOnBeforeTriggerArgs;
@@ -2339,9 +2354,57 @@ begin
       ppointer(Context.EBP - 4)^ := FindFirstTrigger(TriggerId);
     end;
   end; // .if
-  
-  result := Core.EXEC_DEF_CODE;
+
+  result := true;
 end; // .function Hook_ProcessErm
+
+function Hook_ProcessErm_SaveVars (Context: Core.PHookContext): longbool; stdcall;
+var
+  SavedExtraState: PTriggerExtraPreservedState;
+  i:               integer;
+
+begin
+  SavedExtraState := Ptr(Context.EBP + PROCESS_ERM_NEW_FRAME_BORDER);
+  // * * * * * //
+  PErmYVars(Context.EBP - $340)^      := y^;
+  FillChar(y^, sizeof(y^), #0);
+  PErmEVars(Context.EBP - $198)^      := e^;
+  FillChar(e^, sizeof(e^), #0);
+  SavedExtraState.x                   := x^;
+  x^                                  := ArgXVars;
+  PZvsTriggerIfs(Context.EBP - $1AC)^ := ZvsTriggerIfs^;
+  FillChar(ZvsTriggerIfs^, sizeof(ZvsTriggerIfs^), #$FF);
+
+  for i := 1 to High(nz^) + 1 do begin
+    Utils.SetPcharValue(@SavedExtraState.z[i], @nz[i], sizeof(z[1]));
+    pinteger(@nz[i])^ := 0;
+  end;
+
+  Context.RetAddr := Ptr($74C956);
+  result          := false;
+end; // .function Hook_ProcessErm_SaveVars
+
+function Hook_ProcessErm_RestoreVars (Context: Core.PHookContext): longbool; stdcall;
+var
+  SavedExtraState: PTriggerExtraPreservedState;
+  i:               integer;
+
+begin
+  SavedExtraState := Ptr(Context.EBP + PROCESS_ERM_NEW_FRAME_BORDER);
+  // * * * * * //
+  y^             := PErmYVars(Context.EBP - $340)^;
+  e^             := PErmEVars(Context.EBP - $198)^;
+  RetXVars       := x^;
+  x^             := SavedExtraState.x;
+  ZvsTriggerIfs^ := PZvsTriggerIfs(Context.EBP - $1AC)^;
+
+  for i := 1 to High(nz^) + 1 do begin
+    Utils.SetPcharValue(@nz[i], @SavedExtraState.z[i], sizeof(z[1]));
+  end;
+
+  Context.RetAddr := Ptr($74CE0D);
+  result          := false;
+end; // .function Hook_ProcessErm_RestoreVars
 
 function Hook_ProcessErm_End (Context: Core.PHookContext): longbool; stdcall;
 var
@@ -2678,86 +2741,41 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_CmdElse
 
-type
-  PFuncPreservedState = ^TFuncPreservedState;
-  TFuncPreservedState = packed record
-    x: TErmXVars;
-    y: TErmYVars;
-    e: TErmEVars;
-    z: TErmNZVars;
-  end;
-
-procedure PrepareForFuncCall (PreservedState: PFuncPreservedState; FuncArgs: pinteger; FuncArgSize, NumParams: integer);
+procedure ApplyFuncByRefRes (SubCmd: PErmSubCmd; NumParams: integer);
 var
   i: integer;
 
 begin
-  PreservedState.x := x^;
-  
   for i := 0 to NumParams - 1 do begin
-    x[i] := FuncArgs^;
-    Inc(pbyte(FuncArgs), FuncArgSize);
-  end;
-
-  PreservedState.y := y^;
-  PreservedState.e := e^;
-
-  for i := 1 to High(nz^) + 1 do begin
-    Utils.SetPcharValue(@PreservedState.z[i], @nz[i], sizeof(z[1]));
+    if ((SubCmd.Params[i].ValType shr 8) and 7) = 1 then begin
+      ZvsApply(@RetXVars[i + 1], sizeof(integer), SubCmd, i);
+    end;
   end;
 end;
 
-procedure RestoreAfterFuncCall (PreservedState: PFuncPreservedState; SubCmd: PErmSubCmd; NumParams: integer);
-var
-  NewX: TErmXVars;
-  i:    integer;
-
-begin
-  y^ := PreservedState.y;
-  e^ := PreservedState.e;
-
-  for i := 1 to High(nz^) + 1 do begin
-    if (pinteger(@nz[i])^ <> pinteger(@PreservedState.z[i])^) or (StrLib.ComparePchars(@nz[i], @PreservedState.z[i]) <> 0) then begin
-      Utils.SetPcharValue(@nz[i], @PreservedState.z[i], sizeof(z[1]));
-    end;
-  end;
-
-  NewX := PreservedState.x;
-
-  for i := 0 to NumParams - 1 do begin
-    // P?[smth]
-    if ((SubCmd.Params[i].ValType shr 8) and 7) = 1 then begin
-      asm int 3 end;
-      ZvsApply(@NewX[i], sizeof(integer), SubCmd, i);
-    end;
-  end;
-
-  x^ := NewX;
-end; // .procedure RestoreAfterFuncCall
-
 function Hook_FU_P (Context: ApiJack.PHookContext): longbool; stdcall;
 var
-  Cmd:            PErmCmd;
-  SubCmd:         PErmSubCmd;
-  FuncId:         integer;
-  PreservedState: PFuncPreservedState;
-  NumParams:      integer;
+  Cmd:       PErmCmd;
+  SubCmd:    PErmSubCmd;
+  FuncId:    integer;
+  NumParams: integer;
+  i:         integer;
 
 begin
-  Cmd            := PErmCmd(ppointer(Context.EBP + $10)^);
-  SubCmd         := PErmSubCmd(ppointer(Context.EBP + $14)^);
-  FuncId         := ZvsGetParamValue(Cmd.Params[0]);
-  PreservedState := PFuncPreservedState(Context.EBP - $17C4);
-  NumParams      := pinteger(Context.EBP + $0C)^;
-  ShowMessage(Format('Cmd: %s. SubCmd: %s. FuncId: %d. NumParams: %d', [Cmd.CmdId.Name, copy(pchar(utils.ptrofs(SubCmd.Code.Value, -20))+'', 1, 40), FuncId, NumParams]));
+  Cmd       := PErmCmd(ppointer(Context.EBP + $10)^);
+  SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
+  FuncId    := ZvsGetParamValue(Cmd.Params[0]);
+  NumParams := pinteger(Context.EBP + $0C)^;
   // * * * * * //
-  PrepareForFuncCall(PreservedState, @SubCmd.Nums[0], sizeof(SubCmd.Nums[0]), NumParams);
+  for i := 0 to NumParams - 1 do begin
+    ArgXVars[i + 1] := SubCmd.Nums[i];
+  end;
+
   FireErmEvent(FuncId);
-  RestoreAfterFuncCall(PreservedState, SubCmd, NumParams);
-  ShowMessage('OK');
+  ApplyFuncByRefRes(SubCmd, NumParams);
 
   Context.RetAddr := Ptr($72D19E);
-  result := false;
+  result          := false;
 end; // .function Hook_FU_P
 
 function Hook_FU_P_RetValue (C: Core.PHookContext): longbool; stdcall;
@@ -2859,7 +2877,7 @@ begin
   Core.p.WriteDataPatch(Ptr($74C6FC), ['9090']);
 
   (* ERM OnAnyTrigger *)
-  Core.Hook(@Hook_ProcessErm, Core.HOOKTYPE_BRIDGE, 6, Ptr($74C819));
+  Core.Hook(@Hook_ProcessErm, Core.HOOKTYPE_BRIDGE, 6, Ptr($74C81F));
   Core.Hook(@Hook_ProcessErm_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($74CE2A));
 
   // Don't start from first trigger, fast trigger search is used
@@ -2910,9 +2928,9 @@ begin
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
 
   (* Allow !!FU:P?x[n] syntax. *)
-  Core.ApiHook(@Hook_FU_P_RetValue, Core.HOOKTYPE_BRIDGE, Ptr($72D04A));
-  Core.p.WriteDataPatch(Ptr($72D0A0), ['8D849520EAFFFF']);
-  Core.p.WriteDataPatch(Ptr($72D0B2), ['E9E70000009090909090']);
+  //Core.ApiHook(@Hook_FU_P_RetValue, Core.HOOKTYPE_BRIDGE, Ptr($72D04A));
+  //Core.p.WriteDataPatch(Ptr($72D0A0), ['8D849520EAFFFF']);
+  //Core.p.WriteDataPatch(Ptr($72D0B2), ['E9E70000009090909090']);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
@@ -2934,10 +2952,15 @@ begin
   ApiJack.HookCode(Ptr($74C5A7), @Hook_FindErm_SuccessEnd);
 
   (* Triggers preserve and restore positive e/y-vars instead of negative ones *)
-  Core.p.WriteDataPatch(Ptr($74C906 + 3), ['%d', y]);
-  Core.p.WriteDataPatch(Ptr($74C946 + 3), ['%d', e]);
-  Core.p.WriteDataPatch(Ptr($74CDC4 + 3), ['%d', y]);
-  Core.p.WriteDataPatch(Ptr($74CE04 + 3), ['%d', e]);
+  ApiJack.HookCode(Ptr($74C88A), @Hook_ProcessErm_SaveVars);
+  ApiJack.HookCode(Ptr($74CD3D), @Hook_ProcessErm_RestoreVars);
+
+  // Allocate space on stack for extra trigger state
+  Core.p.WriteDataPatch(Ptr($74C819 + 2), ['%d', -PROCESS_ERM_NEW_FRAME_BORDER]);
+  // Core.p.WriteDataPatch(Ptr($74C906 + 3), ['%d', y]);
+  // Core.p.WriteDataPatch(Ptr($74C946 + 3), ['%d', e]);
+  // Core.p.WriteDataPatch(Ptr($74CDC4 + 3), ['%d', y]);
+  // Core.p.WriteDataPatch(Ptr($74CE04 + 3), ['%d', e]);
 
   ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
 
