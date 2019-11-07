@@ -821,6 +821,7 @@ begin
   
   case Cmd of
     'F': result := SN_F(NumParams, Params, Error);
+    'Q': Erm.QuitTriggerFlag := true;
     
     'M':
       begin

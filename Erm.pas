@@ -42,7 +42,7 @@ const
   SCRIPT_IN_MAP   = 2;
 
   AltScriptsPath: pchar     = Ptr($2730F68);
-  CurrErmEventID: pinteger  = Ptr($27C1950);
+  CurrErmEventId: pinteger  = Ptr($27C1950);
 
   (* Trigger if-else-then *)
   ZVS_TRIGGER_IF_TRUE     = 1;
@@ -442,6 +442,9 @@ const
   ZvsPlayerIsHuman:           plongbool              = Ptr($793C80);
   ZvsAllowDefMouseReaction:   plongbool              = Ptr($A4AAFC);
   ZvsMouseEventInfo:          Heroes.PMouseEventInfo = Ptr($8912A8);
+  ZvsEventX:                  pinteger               = Ptr($8885FC);
+  ZvsEventY:                  pinteger               = Ptr($888600);
+  ZvsEventZ:                  pinteger               = Ptr($888604);
   IsWoG:                      plongbool              = Ptr($803288);
   WoGOptions:                 ^TWoGOptions           = Ptr($2771920);
   ErmEnabled:                 plongbool              = Ptr($27F995C);
@@ -464,7 +467,7 @@ const
   MonNamesSpecialtyTableBack: Utils.PEndlessPcharArr = Ptr($A88E78);
 
   (* WoG funcs *)
-  ZvsProcessCmd:      procedure (Cmd: PErmCmd) cdecl = Ptr($741DF0);
+  ZvsProcessCmd:      procedure (Cmd: PErmCmd; Dummy: integer = 0; IsPostInstr: longbool = false) cdecl = Ptr($741DF0);
   ZvsFindErm:         Utils.TProcedure  = Ptr($749955);
   ZvsClearErtStrings: Utils.TProcedure  = Ptr($7764F2);
   ZvsClearErmScripts: Utils.TProcedure  = Ptr($750191);
@@ -498,6 +501,7 @@ var
     MonNamesTablesBack: array [0..2] of Utils.PEndlessPcharArr;
 
     ErmCmdOptimizer: procedure (Cmd: PErmCmd) = nil;
+    QuitTriggerFlag: boolean = false;
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -523,8 +527,10 @@ procedure ExtractErm; stdcall;
 function  AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
 procedure AssignEventParams (const Params: array of integer);
 procedure FireErmEventEx (EventId: integer; const Params: array of integer);
+
 (* Returns true if default reaction is allowed *)
 function  FireMouseEvent (TriggerId: integer; MouseEventInfo: Heroes.PMouseEventInfo): boolean;
+
 function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 
 (*  Up to 16 arguments  *)
@@ -2284,6 +2290,212 @@ begin
   end;
 end; 
 
+procedure ProcessErm;
+const
+  (* Ifs state *)
+  STATE_TRUE     = 1;
+  STATE_FALSE    = 0;
+  STATE_INACTIVE = 2;
+
+  (* ERM commands *)
+  CMD_IF = $6669;
+  CMD_EL = $6C65;
+  CMD_EN = $6E65;
+
+var
+  EventX:       integer;
+  EventY:       integer;
+  EventZ:       integer;
+  EventArgs:    TOnBeforeTriggerArgs;
+  TriggerId:    integer;
+  StartTrigger: PErmTrigger;
+  Trigger:      PErmTrigger;
+  SavedY:       TErmYVars;
+  SavedE:       TErmEVars;
+  SavedX:       TErmXVars;
+  SavedZ:       TErmNZVars;
+  Ifs:          array [0..31] of byte;
+  IfsLevel:     integer;
+  Cmd:          PErmCmd;
+  CmdId:        TErmCmdId;
+  i:            integer;
+
+  procedure SetTriggerQuickVarsAndFlags;
+  begin
+    f[999] := Heroes.IsThisPcTurn();
+
+    // Really the meaning of ZvsPlayerIsHuman is overloaded and cannot be trusted without looking at ERM help
+    if ZvsPlayerIsHuman^ then begin
+      f[1000] := not ZvsIsAi(Heroes.GetCurrentPlayer());
+    end else begin
+      f[1000] := false;
+    end;
+
+    v[998]  := EventX;
+    v[999]  := EventY;
+    v[1000] := EventZ;
+  end; // .procedure SetTriggerQuickVarsAndFlags
+
+  procedure SaveVars;
+  var
+    i: integer;
+
+  begin
+    SavedY      := y^;
+    FillChar(y^, sizeof(y^), #0);
+    SavedE      := e^;
+    FillChar(e^, sizeof(e^), #0);
+    SavedX      := x^;
+    x^          := ArgXVars;
+
+    for i := 1 to High(nz^) do begin
+      Utils.SetPcharValue(@SavedZ[i], @nz[i], sizeof(z[1]));
+      pinteger(@nz[i])^ := 0;
+    end;
+  end; // .procedure SaveVars
+
+  procedure RestoreVars;
+  var
+    i: integer;
+
+  begin
+    y^       := SavedY;
+    e^       := SavedE;
+    RetXVars := x^;
+    x^       := SavedX;
+
+    for i := 1 to High(nz^) do begin
+      Utils.SetPcharValue(@nz[i], @SavedZ[i], sizeof(z[1]));
+    end;
+  end; // .procedure RestoreVars
+
+label
+  AfterTriggers, TriggersProcessed;
+
+begin
+  StartTrigger := nil;
+  Trigger      := nil;
+  // * * * * * //
+  if not ErmEnabled^ then begin
+    exit;
+  end;
+
+  // Remember global variables, which may change
+  TriggerId := CurrErmEventId^;
+  EventX    := ZvsEventX^;
+  EventY    := ZvsEventY^;
+  EventZ    := ZvsEventZ^;
+
+  SetTriggerQuickVarsAndFlags;
+  IfsLevel := -1;
+  
+  if TrackingOpts.Enabled then begin
+    EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, TriggerId);
+  end;
+
+  SaveVars;  
+  Inc(ErmTriggerDepth);
+
+  EventArgs.TriggerId         := TriggerId;
+  EventArgs.BlockErmExecution := false;
+  EventMan.GetInstance.Fire('OnBeforeTrigger', @EventArgs, sizeof(EventArgs));
+  
+  if EventArgs.BlockErmExecution then begin
+    StartTrigger := NullTrigger;
+  end else begin
+    StartTrigger := FindFirstTrigger(TriggerId);
+  end;
+
+  if StartTrigger.Id <> 0 then begin
+    while true do begin
+      Trigger := StartTrigger;
+
+      while (Trigger <> nil) and (Trigger.Id <> 0) do begin
+        if (Trigger.NumCmds > 0) and (Trigger.Disabled = 0) then begin
+          ZvsBreakTrigger^ := false;
+          QuitTriggerFlag  := false;
+
+          if not ZvsCheckFlags(@Trigger.Conditions) then begin
+            for i := 0 to Trigger.NumCmds - 1 do begin
+              if not ErmEnabled^ then begin
+                goto AfterTriggers;
+              end;
+
+              Cmd   := Utils.PtrOfs(@Trigger.FirstCmd, i * sizeof(TErmCmd));
+              CmdId := Cmd.CmdId;
+
+              if CmdId.Id = CMD_IF then begin
+                Inc(IfsLevel);
+
+                if IfsLevel > High(Ifs) then begin
+                  ShowErmError('"if" - too many IFs (>32)');
+                  goto AfterTriggers;
+                end;
+
+                // Active IF
+                if (IfsLevel = 0) or (Ifs[IfsLevel - 1] = STATE_TRUE) then begin
+                  Ifs[IfsLevel] := ord(not ZvsCheckFlags(@Cmd.Conditions));
+                end
+                // Inactive IF
+                else begin
+                  Ifs[IfsLevel] := STATE_INACTIVE;
+                end;
+              end else if CmdId.Id = CMD_EL then begin
+                if IfsLevel < 0 then begin
+                  ShowErmError('"el" - no IF for ELSE');
+                  goto AfterTriggers;
+                end;
+
+                if Ifs[IfsLevel] = STATE_TRUE then begin
+                  Ifs[IfsLevel] := STATE_INACTIVE;
+                end else if Ifs[IfsLevel] = STATE_FALSE then begin
+                  Ifs[IfsLevel] := ord(not ZvsCheckFlags(@Cmd.Conditions));
+                end;
+              end else if CmdId.Id = CMD_EN then begin
+                if IfsLevel < 0 then begin
+                  ShowErmError('"en" - no IF for ENDIF');
+                  goto AfterTriggers;
+                end;
+
+                Dec(IfsLevel);
+              end else if ((IfsLevel < 0) or (Ifs[IfsLevel] = STATE_TRUE)) and not ZvsCheckFlags(@Cmd.Conditions) then begin
+                ZvsProcessCmd(Cmd);
+
+                if ZvsBreakTrigger^ then begin
+                  ZvsBreakTrigger^ := false;
+                  break;
+                end else if QuitTriggerFlag then begin
+                  QuitTriggerFlag := false;
+                  goto TriggersProcessed;
+                end;
+              end; // .else
+            end; // .for
+          end; // .if
+        end; // .if
+
+        Trigger := Trigger.Next;
+      end; // .while
+
+      TriggersProcessed:
+
+      // Cycle handling here
+      break;
+    end; // .while
+
+    AfterTriggers:
+  end; // .if
+
+  EventMan.GetInstance.Fire('OnAfterTrigger', @TriggerId, sizeof(TriggerId));
+  
+  Dec(ErmTriggerDepth);
+
+  if TrackingOpts.Enabled then begin
+    EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_END_TRIGGER, TriggerId);
+  end;
+
+  RestoreVars;
+end; // .procedure ProcessErm
+
 type
   PTriggerExtraPreservedState = ^TTriggerExtraPreservedState;
   TTriggerExtraPreservedState = packed record
@@ -2302,7 +2514,7 @@ var
 
 begin
   if ErmEnabled^ then begin
-    TriggerId := CurrErmEventID^;
+    TriggerId := CurrErmEventId^;
     
     (* ProcessErm - initializing v996..v1000 variables *)
     asm
@@ -2858,8 +3070,9 @@ begin
   Core.p.WriteDataPatch(Ptr($74C6FC), ['9090']);
 
   (* ERM OnAnyTrigger *)
-  Core.Hook(@Hook_ProcessErm, Core.HOOKTYPE_BRIDGE, 6, Ptr($74C81F));
-  Core.Hook(@Hook_ProcessErm_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($74CE2A));
+  Core.ApiHook(@ProcessErm, Core.HOOKTYPE_JUMP, Ptr($74C816));
+  //Core.Hook(@Hook_ProcessErm, Core.HOOKTYPE_BRIDGE, 6, Ptr($74C81F));
+  //Core.Hook(@Hook_ProcessErm_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($74CE2A));
 
   // Don't start from first trigger, fast trigger search is used
   // DELETED: cp = Heap
