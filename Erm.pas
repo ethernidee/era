@@ -32,6 +32,17 @@ const
   COND_AND   = 0;
   COND_OR    = 1;
 
+  (* ERM param check type *)
+  // 0=nothing, 1?, 2=, 3<>, 4>, 5<, 6>=, 7<=
+  PARAM_CHECK_NONE          = 0;
+  PARAM_CHECK_GET           = 1;
+  PARAM_CHECK_EQUAL         = 2;
+  PARAM_CHECK_NOT_EQUAL     = 3;
+  PARAM_CHECK_GREATER       = 4;
+  PARAM_CHECK_LOWER         = 5;
+  PARAM_CHECK_GREATER_EQUAL = 6;
+  PARAM_CHECK_LOWER_EQUAL   = 7;
+
   ERM_CMD_MAX_PARAMS_NUM = 16;
   MIN_ERM_SCRIPT_SIZE    = Length('ZVSE'#13#10);
   LINE_END_MARKER        = #10;
@@ -212,6 +223,10 @@ type
     [3 bits]  CheckType:        TErmCheckType;
     }
     ValType:  integer;
+
+    function GetType: integer; inline;
+    function GetIndexedPartType: integer; inline;
+    function GetCheckType: integer; inline;
   end; // .record TErmCmdParam
 
   TErmString = packed record
@@ -495,6 +510,7 @@ const
   ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
   ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): LONGBOOL cdecl = Ptr($74195D);
   ZvsGetParamValue:   function (var Param: TErmCmdParam): integer cdecl = Ptr($72DEA5);
+  ZvsReparseParam:    function (var Param: TErmCmdParam): integer cdecl = Ptr($72D573);
 
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
@@ -574,6 +590,21 @@ var
     ArgXVars: TErmXVars;
     RetXVars: TErmXVars;
 
+
+function TErmCmdParam.GetType: integer;
+begin
+  result := Self.ValType and $0F;
+end;
+
+function TErmCmdParam.GetIndexedPartType: integer;
+begin
+  result := (Self.ValType shr 4) and $0F;
+end;
+
+function TErmCmdParam.GetCheckType: integer;
+begin
+  result := (Self.ValType shr 8) and $07;
+end;
 
 function TErmTrigger.GetSize: integer;
 begin
@@ -2300,13 +2331,6 @@ begin
 end; 
 
 procedure ProcessErm;
-type
-  TTriggerQuickVars = record
-    Flag1: boolean;
-    Flags: array [996..1000] of boolean;
-    V:     array [997..1000] of integer;
-  end;
-
 const
   (* Ifs state *)
   STATE_TRUE     = 1;
@@ -2329,7 +2353,6 @@ var
   Trigger:          PErmTrigger;
   EventManager:     TEventManager;
   HasEventHandlers: longbool;
-  SavedQuickVars:   TTriggerQuickVars;
   SavedY:           TErmYVars;
   SavedE:           TErmEVars;
   SavedX:           TErmXVars;
@@ -2425,6 +2448,9 @@ begin
   Inc(ErmTriggerDepth);
   StartTrigger := FindFirstTrigger(TriggerId);
 
+  LoopCallback                := TriggerLoopCallback;
+  TriggerLoopCallback.Handler := nil;
+
   NumericEventName := 'OnTrigger ' + SysUtils.IntToStr(TriggerId);
   HumanEventName   := Erm.GetTriggerReadableName(TriggerId);
   HasEventHandlers := (StartTrigger.Id <> 0) or EventManager.HasEventHandlers(NumericEventName) or EventManager.HasEventHandlers(HumanEventName);
@@ -2432,11 +2458,10 @@ begin
   if HasEventHandlers then begin
     SaveVars;
 
-    LoopCallback := TriggerLoopCallback;
-    EventX       := ZvsEventX^;
-    EventY       := ZvsEventY^;
-    EventZ       := ZvsEventZ^;
-    IfsLevel     := -1;
+    EventX   := ZvsEventX^;
+    EventY   := ZvsEventY^;
+    EventZ   := ZvsEventZ^;
+    IfsLevel := -1;
 
     SetTriggerQuickVarsAndFlags;
 
@@ -2863,7 +2888,7 @@ var
 
 begin
   for i := 0 to NumParams - 1 do begin
-    if ((SubCmd.Params[i].ValType shr 8) and 7) = 1 then begin
+    if SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET then begin
       ZvsApply(@RetXVars[i + 1], sizeof(integer), SubCmd, i);
     end;
   end;
@@ -2893,6 +2918,59 @@ begin
   Context.RetAddr := Ptr($72D19E);
   result          := false;
 end; // .function Hook_FU_P
+
+type
+  TLoopContext = record
+    EndValue: integer;
+    Step:     integer;
+  end;
+
+function DO_P_Callback (var Data: TLoopContext): boolean;
+begin
+  Inc(x[16], Data.Step);
+
+  result := ((Data.Step >= 0) and (x[16] <= Data.EndValue)) or ((Data.Step < 0) and (x[16] >= Data.EndValue));
+end;
+
+function DO_P (NumParams: integer; Cmd: PErmCmd; SubCmd: PErmSubCmd): boolean;
+var
+  FuncId:      integer;
+  LoopContext: TLoopContext;
+  CheckType:   integer;
+  i:           integer;
+
+begin
+  FuncId               := ZvsGetParamValue(Cmd.Params[0]);
+  ArgXVars[16]         := ZvsGetParamValue(Cmd.Params[1]);
+  LoopContext.EndValue := ZvsGetParamValue(Cmd.Params[2]);
+  LoopContext.Step     := ZvsGetParamValue(Cmd.Params[3]);
+  result               := true;
+
+  // Initialize x-paramaters
+  for i := 1 to Math.Min(15, NumParams) do begin
+    ArgXVars[i] := SubCmd.Nums[i - 1];
+  end;
+
+  if ((LoopContext.Step >= 0) and (ArgXVars[16] <= LoopContext.EndValue)) or ((LoopContext.Step < 0) and (ArgXVars[16] >= LoopContext.EndValue)) then begin
+    // Install trigger loop callback
+    TriggerLoopCallback.Handler := @DO_P_Callback;
+    TriggerLoopCallback.Data    := @LoopContext;
+
+    FireErmEvent(FuncId);
+  end;
+
+  ApplyFuncByRefRes(SubCmd, NumParams);
+end; // .function DO_P
+
+function Hook_DO_P (CmdChar: char; NumParams: integer; Cmd: PErmCmd; SubCmd: PErmSubCmd): integer; cdecl;
+begin
+  if CmdChar = 'P' then begin
+    result := ord(DO_P(NumParams, Cmd, SubCmd));
+  end else begin
+    ShowErmError('!!DO - wrong command');
+    result := 0;
+  end;
+end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
@@ -3037,6 +3115,9 @@ begin
 
   // Rewrite FU:P implementation
   ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
+
+  // Rewrite FU:P implementation
+  Core.ApiHook(@Hook_DO_P, Core.HOOKTYPE_JUMP, Ptr($72D79C));
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
