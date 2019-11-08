@@ -219,9 +219,6 @@ begin
 end; // .function Hook_SetHotseatHeroName
 
 function Hook_PeekMessageA (Context: Core.PHookContext): LONGBOOL; stdcall;
-var
-  GameState: Heroes.TGameState;
-
 begin
   Inc(CpuPatchCounter, CpuTargetLevel);
 
@@ -232,7 +229,7 @@ begin
   end;
 
   result := Core.EXEC_DEF_CODE;
-end; // .function Hook_PeekMessageA
+end;
 
 function New_Zvslib_GetPrivateProfileStringA
 (

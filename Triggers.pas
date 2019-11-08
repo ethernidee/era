@@ -86,24 +86,6 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end;
 
-procedure OnBeforeTrigger (Event: GameExt.PEvent); stdcall;
-var
-{U} EventArgs: Erm.POnBeforeTriggerArgs;
-    TriggerId: integer;
-
-begin
-  {!} Assert(Event <> nil);
-  EventArgs :=  Erm.POnBeforeTriggerArgs(Event.Data);
-  // * * * * * //
-  TriggerId := EventArgs.TriggerId;
-
-  GameExt.FireEvent('OnTrigger ' + SysUtils.IntToStr(TriggerId), @EventArgs.BlockErmExecution, sizeof(EventArgs.BlockErmExecution));
-
-  if not EventArgs.BlockErmExecution then begin
-    GameExt.FireEvent(Erm.GetTriggerReadableName(TriggerId), @EventArgs.BlockErmExecution, sizeof(EventArgs.BlockErmExecution));
-  end;
-end; // .procedure OnBeforeTrigger
-
 function MainWndProc (hWnd, Msg, wParam, lParam: integer): LONGBOOL; stdcall;
 const
   WM_KEYDOWN          = $100;
@@ -424,5 +406,4 @@ end; // .procedure OnAfterWoG
 
 begin
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
-  EventMan.GetInstance.On('OnBeforeTrigger', OnBeforeTrigger);
 end.

@@ -61,6 +61,7 @@ type
 
     procedure On (const EventName: string; Handler: TEventHandler);
     procedure Fire (const EventName: string; {n} EventData: pointer = nil; DataSize: integer = 0);
+    function  HasEventHandlers (const EventName: string): boolean;
     procedure DumpEventList (const FilePath: string);
   end; // .class TEventManager
 
@@ -154,6 +155,16 @@ begin
     end;
   end;
 end; // .procedure TEventManager.Fire
+
+function TEventManager.HasEventHandlers (const EventName: string): boolean;
+var
+{U} EventInfo: TEventInfo;
+
+begin
+  EventInfo := Self.fEvents[EventName];
+  // * * * * * //
+  result := (EventInfo <> nil) and (EventInfo.GetNumHandlers() > 0);
+end;
 
 procedure TEventManager.DumpEventList (const FilePath: string);
 var
