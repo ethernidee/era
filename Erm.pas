@@ -284,6 +284,15 @@ type
 
   PTriggerFastAccessList = ^TTriggerFastAccessList;
   TTriggerFastAccessList = array [0..high(integer) div sizeof(TTriggerFastAccessListItem) - 1] of TTriggerFastAccessListItem;
+
+  (* If result is true, event handlers execution must be repeated *)
+  TTriggerLoopHandler = function ({OUn} Data: pointer): boolean;
+  
+  PTriggerLoopCallback = ^TTriggerLoopCallback;
+  TTriggerLoopCallback = record
+  {n} Handler: TTriggerLoopHandler;
+      Data:    pointer;
+  end;
   
   TScriptMan = class
      private
@@ -500,8 +509,9 @@ var
     MonNamesTables:     array [0..2] of Utils.PEndlessPcharArr;
     MonNamesTablesBack: array [0..2] of Utils.PEndlessPcharArr;
 
-    ErmCmdOptimizer: procedure (Cmd: PErmCmd) = nil;
-    QuitTriggerFlag: boolean = false;
+    ErmCmdOptimizer:     procedure (Cmd: PErmCmd) = nil;
+    QuitTriggerFlag:     boolean = false;
+    TriggerLoopCallback: TTriggerLoopCallback;
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -539,7 +549,6 @@ procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 
 (***) implementation (***)
 uses PatchApi, Stores, AdvErm, ErmTracking;
-
 
 const
   ERM_CMD_CACHE_LIMIT = 30000;
@@ -2327,6 +2336,7 @@ var
   SavedZ:           TErmNZVars;
   SavedF:           array [996..1000] of boolean;
   SavedV:           array [997..1000] of integer;
+  LoopCallback:     TTriggerLoopCallback;
   Ifs:              array [0..31] of byte;
   IfsLevel:         integer;
   Cmd:              PErmCmd;
@@ -2422,10 +2432,11 @@ begin
   if HasEventHandlers then begin
     SaveVars;
 
-    EventX   := ZvsEventX^;
-    EventY   := ZvsEventY^;
-    EventZ   := ZvsEventZ^;
-    IfsLevel := -1;
+    LoopCallback := TriggerLoopCallback;
+    EventX       := ZvsEventX^;
+    EventY       := ZvsEventY^;
+    EventZ       := ZvsEventZ^;
+    IfsLevel     := -1;
 
     SetTriggerQuickVarsAndFlags;
 
@@ -2433,91 +2444,91 @@ begin
       EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, TriggerId);
     end;
 
-    EventManager.Fire(NumericEventName, @TriggerId, sizeof(TriggerId));
-    EventManager.Fire(HumanEventName, @TriggerId, sizeof(TriggerId));
+    // Repeat executing all triggers with specified ID, unless TriggerLoopCallback is not set or returns false
+    while true do begin
+      EventManager.Fire(NumericEventName, @TriggerId, sizeof(TriggerId));
+      EventManager.Fire(HumanEventName, @TriggerId, sizeof(TriggerId));
 
-    if StartTrigger.Id <> 0 then begin
-      // Repeat executing all triggers with specified ID, unless TriggerLoopCallback is not set or returns false
-      while true do begin
-        Trigger := StartTrigger;
+      Trigger := StartTrigger;
 
-        // Loop through all triggers with specified ID
-        while (Trigger <> nil) and (Trigger.Id <> 0) do begin
-          // Execute only active triggers with commands
-          if (Trigger.NumCmds > 0) and (Trigger.Disabled = 0) then begin
-            ZvsBreakTrigger^ := false;
-            QuitTriggerFlag  := false;
+      // Loop through all triggers with specified ID
+      while (Trigger <> nil) and (Trigger.Id <> 0) do begin
+        // Execute only active triggers with commands
+        if (Trigger.NumCmds > 0) and (Trigger.Disabled = 0) then begin
+          ZvsBreakTrigger^ := false;
+          QuitTriggerFlag  := false;
 
-            if not ZvsCheckFlags(@Trigger.Conditions) then begin
-              for i := 0 to Trigger.NumCmds - 1 do begin
-                if not ErmEnabled^ then begin
+          if not ZvsCheckFlags(@Trigger.Conditions) then begin
+            for i := 0 to Trigger.NumCmds - 1 do begin
+              if not ErmEnabled^ then begin
+                goto AfterTriggers;
+              end;
+
+              Cmd   := Utils.PtrOfs(@Trigger.FirstCmd, i * sizeof(TErmCmd));
+              CmdId := Cmd.CmdId;
+
+              if CmdId.Id = CMD_IF then begin
+                Inc(IfsLevel);
+
+                if IfsLevel > High(Ifs) then begin
+                  ShowErmError('"if" - too many IFs (>32)');
                   goto AfterTriggers;
                 end;
 
-                Cmd   := Utils.PtrOfs(@Trigger.FirstCmd, i * sizeof(TErmCmd));
-                CmdId := Cmd.CmdId;
+                // Active IF
+                if (IfsLevel = 0) or (Ifs[IfsLevel - 1] = STATE_TRUE) then begin
+                  Ifs[IfsLevel] := ord(not ZvsCheckFlags(@Cmd.Conditions));
+                end
+                // Inactive IF
+                else begin
+                  Ifs[IfsLevel] := STATE_INACTIVE;
+                end;
+              end else if CmdId.Id = CMD_EL then begin
+                if IfsLevel < 0 then begin
+                  ShowErmError('"el" - no IF for ELSE');
+                  goto AfterTriggers;
+                end;
 
-                if CmdId.Id = CMD_IF then begin
-                  Inc(IfsLevel);
+                if Ifs[IfsLevel] = STATE_TRUE then begin
+                  Ifs[IfsLevel] := STATE_INACTIVE;
+                end else if Ifs[IfsLevel] = STATE_FALSE then begin
+                  Ifs[IfsLevel] := ord(not ZvsCheckFlags(@Cmd.Conditions));
+                end;
+              end else if CmdId.Id = CMD_EN then begin
+                if IfsLevel < 0 then begin
+                  ShowErmError('"en" - no IF for ENDIF');
+                  goto AfterTriggers;
+                end;
 
-                  if IfsLevel > High(Ifs) then begin
-                    ShowErmError('"if" - too many IFs (>32)');
-                    goto AfterTriggers;
-                  end;
+                Dec(IfsLevel);
+              end else if ((IfsLevel < 0) or (Ifs[IfsLevel] = STATE_TRUE)) and not ZvsCheckFlags(@Cmd.Conditions) then begin
+                ZvsProcessCmd(Cmd);
 
-                  // Active IF
-                  if (IfsLevel = 0) or (Ifs[IfsLevel - 1] = STATE_TRUE) then begin
-                    Ifs[IfsLevel] := ord(not ZvsCheckFlags(@Cmd.Conditions));
-                  end
-                  // Inactive IF
-                  else begin
-                    Ifs[IfsLevel] := STATE_INACTIVE;
-                  end;
-                end else if CmdId.Id = CMD_EL then begin
-                  if IfsLevel < 0 then begin
-                    ShowErmError('"el" - no IF for ELSE');
-                    goto AfterTriggers;
-                  end;
-
-                  if Ifs[IfsLevel] = STATE_TRUE then begin
-                    Ifs[IfsLevel] := STATE_INACTIVE;
-                  end else if Ifs[IfsLevel] = STATE_FALSE then begin
-                    Ifs[IfsLevel] := ord(not ZvsCheckFlags(@Cmd.Conditions));
-                  end;
-                end else if CmdId.Id = CMD_EN then begin
-                  if IfsLevel < 0 then begin
-                    ShowErmError('"en" - no IF for ENDIF');
-                    goto AfterTriggers;
-                  end;
-
-                  Dec(IfsLevel);
-                end else if ((IfsLevel < 0) or (Ifs[IfsLevel] = STATE_TRUE)) and not ZvsCheckFlags(@Cmd.Conditions) then begin
-                  ZvsProcessCmd(Cmd);
-
-                  if ZvsBreakTrigger^ then begin
-                    ZvsBreakTrigger^ := false;
-                    break;
-                  end else if QuitTriggerFlag then begin
-                    QuitTriggerFlag := false;
-                    goto TriggersProcessed;
-                  end;
-                end; // .else
-              end; // .for
-            end; // .if
+                if ZvsBreakTrigger^ then begin
+                  ZvsBreakTrigger^ := false;
+                  break;
+                end else if QuitTriggerFlag then begin
+                  QuitTriggerFlag := false;
+                  goto TriggersProcessed;
+                end;
+              end; // .else
+            end; // .for
           end; // .if
+        end; // .if
 
-          Trigger := Trigger.Next;
-        end; // .while
-
-        TriggersProcessed:
-
-        // Cycle handling here
-        break;
+        Trigger := Trigger.Next;
       end; // .while
 
-      AfterTriggers:
-    end; // .if
-  end; // .if
+      TriggersProcessed:
+
+      // Loop handling
+      if (@LoopCallback.Handler = nil) or not LoopCallback.Handler(LoopCallback.Data) then begin
+        break;
+      end;
+    end; // .while
+  end; // .if HasEventHandlers
+
+  AfterTriggers:
   
   Dec(ErmTriggerDepth);
 

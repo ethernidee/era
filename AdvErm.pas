@@ -225,6 +225,325 @@ begin
   GameExt.EraReleaseServiceParams(Params);
 end;
 
+(* CallProc *) {Вызывает внешнюю функцию. PParams указывает на начало массива параметров. v1 содержит результат}
+// procedure CallProc(Addr: integer; Convention: integer; PParams: pointer; NumParams: integer); stdcall; assembler;
+// const
+//   ParamOffset = sizeof(General.TServiceParam); // Смещение до следующего параметра в массиве параметров
+
+// var
+//   SavedEsp:   integer;  // Сохранённое состояние стёка
+//   IsFloatRes: longbool;
+  
+// asm
+//   MOV IsFloatRes, 0
+//   CMP Convention, CONVENTION_FLOAT
+//   JB @@IntConvention
+// @@FloatConvetion:
+//   MOV IsFloatRes, 1
+//   SUB Convention, CONVENTION_FLOAT
+// @@IntConvention:
+//   // Сохранили регистр EBX
+//   PUSH EBX
+//   // Сохранили состояние стёка в EBP
+//   MOV SavedEsp, ESP
+//   // Если параметров у функции нет, то сразу вызываем её
+//   MOV ECX, NumParams
+//   TEST ECX, ECX
+//   JZ @@CallProc
+//   // EBX = Convention
+//   MOV EBX, Convention
+//   // EDX указывает на первый параметр
+//   MOV EDX, PParams
+//   // Обрабатываем соглашение pascal отдельно от других
+//   TEST EBX, EBX
+//   JNZ @@NotPascalConversion
+// @@PascalConversion:
+//   // Цикл вталкивания аргументов в стёк
+//   @@PascalLoop:
+//     PUSH DWORD [EDX]
+//     ADD EDX, ParamOffset
+//     Dec ECX
+//     JNZ @@PascalLoop
+//   JMP @@CallProc
+// @@NotPascalConversion:
+//   // Перерасчитываем кол-во аргументов для вталкивания в стёк
+//   Dec EBX
+//   SUB ECX, EBX
+//   // ...И если аргументы поместились в регистры, то вталкивать в стёк ничего не нужно
+//   JZ @@InitThisOrFastCall
+//   JS @@InitThisOrFastCall
+//   // Иначе вталкиваем аргументы в стёк в обратном порядке
+//   ADD ECX, EBX
+//   PUSH ECX
+//   (* WARNING! TServiceParam size used *)
+//   shl ECX, 4
+//   //LEA ECX, [ECX + ECX * 3]
+//   LEA EDX, [EDX + ECX - ParamOffset]
+//   POP ECX
+//   SUB ECX, EBX
+//   @@CdeclLoop:
+//     PUSH DWORD [EDX]
+//     SUB EDX, ParamOffset
+//     Dec ECX
+//     JNZ @@CdeclLoop
+//   @@InitThisOrFastCall:
+//   // Инициализируем аргументы для ThisCall и FastCall
+//   MOV ECX, PParams
+//   MOV EDX, [ECX+ParamOffset]
+//   MOV ECX, [ECX]
+// @@CallProc:
+//   // Вызываем процедуру
+//   MOV EAX, Addr
+//   CALL EAX
+//   // Сохраняем  результат
+//   CMP IsFloatRes, 1
+//   JNE @@IntRes
+// @@FloatRes:
+//   FST DWORD [$A48F18]
+//   JMP @@Ret
+// @@IntRes:
+//   MOV DWORD [General.C_VAR_ERM_V], EAX
+// @@Ret:
+//   // Восстанавливаем указатель стёка и сохранённые регистры
+//   MOV ESP, SavedEsp
+//   POP EBX
+//   // RET
+// end; // .procedure CallProc
+
+(* Service *) {Команды ЕРМ, реализуемые фреймворком "Эра"}
+{
+function Service(Ebp: integer): longbool;
+const
+  PtrStackMes   = $14;  // + Указатель на структуру _Mes_, что используется в ProcessErm
+  PtrCmdLen     = $268; // + // Указатель на размер/смещение команды в функции ProcessCmd 
+  PtrStackCmdN  = $730; // + Указатель на номер команды в данном триггере. ProcessErm
+  PtrTrigger    = $8C8; // + Указатель на структуру текущего триггера. ProcessErm
+  PtrEventId    = $72C; // + Указатель на ID текущего события
+  
+  (* контанты для функции CheckServiceParams *)
+  STR   = true;   // Параметр является строкой
+  NUM   = false;  // Параметр - числовое значение
+  GETV  = true;   // Синтаксис GET
+  SETV  = false;  //Синтаксис set
+
+type
+  TMes = record
+    Offset: integer; // смещение до подкоманды в команде
+    Ptr: pchar; // указатель на текст команды
+  end; // .record Mes
+  
+  PCmd = ^TCmd;
+  TCmd = record
+    Next: PCmd;
+    Event: integer;
+  end; // .record TCmd
+  
+var
+  Mes:        ^TMes; // Указатель на структуру TMes
+  BaseCmdStr: pchar;
+  CmdStr:     pchar; // Строка команды
+  Cmd:        char; // Символ команды
+  CmdLen:     integer; // Длина команды
+  CmdN:       pinteger; // Указатель на номер текущей команды в триггере
+  Trigger:    PCmd; // Текущий триггер
+  Len:        integer; // Длина внешней строки текста типа pchar
+  NumParams:  integer;
+  Params:     General.TServiceParams;
+  Err:        pchar;
+  i:          integer;
+
+
+begin
+  result:=true; // По умолчанию Эра обрабатывает все команды
+  integer(Mes):=pinteger(Ebp+PtrStackMes)^; // Получили указатель на структуру TMes
+  integer(CmdStr):=pinteger(integer(Mes)+4)^; // Получили указатель на строку с командой
+  CmdN:=pinteger(Ebp+PtrStackCmdN); // Указатель на номер команды в триггере
+  Cmd:=CmdStr^; // Получили сам символ команды
+  // Если это стандартная, то пусть её обрабатывает оригинальный обработчик
+  if (Cmd = 'P') or (Cmd = 'S') then begin
+    result:=false; exit;
+  end; // .if
+  BaseCmdStr  :=  CmdStr;
+  while CmdStr^ <> ';' do begin
+    Cmd:=CmdStr^;
+    CmdLen:=GetServiceParams(CmdStr, NumParams, Params); // Парсим параметры, а заодно получаем истинный размер строки команды
+    // Если парсинг был неудачным, значит в параметрах ошибка. Выведем сообщение и корректно выйдем из функции
+    if CmdLen = -1 then begin
+      ShowErmError(Lang.Str[Lang.Str_Error_Service_Params]);
+      CmdN^:=2000000000;
+      exit;
+    end; // .if
+    // Установим реальный размер строки параметров для ProcessCmd, иначе она будет ещё не раз вызывать нашу функцию, считая каждый символ командой
+    // Пошло выполнение отдельных команд
+    case Cmd of 
+      'G': begin
+        // PARAMS: CmdN: integer
+        if not General.CheckServiceParams(NumParams, Params, [NUM, SETV]) then begin
+          ShowErmError(Lang.Str[Lang.Str_Error_Service_G]);
+          CmdN^:=2000000000;
+          exit;
+        end; // .if
+        CmdN^:=Params[0].Value - 1;
+      end; // .switch G
+      // 'C': begin
+      //   if (NumParams = 2) then begin
+      //     // PARAMS: TriggerAddr: pointer; CmdN: integer;
+      //     if not General.CheckServiceParams(NumParams, Params, [NUM, SETV, NUM, SETV]) then begin
+      //       ShowErmError(Lang.Str[Lang.Str_Error_Service_C]);
+      //       CmdN^:=2000000000;
+      //       exit;
+      //     end; // .if
+      //     Inc(General.ServiceCallStack.Pos);
+      //     General.ServiceCallStack.Stack[General.ServiceCallStack.Pos].Trigger:=pinteger(Ebp+PtrTrigger)^;
+      //     General.ServiceCallStack.Stack[General.ServiceCallStack.Pos].CmdN:=CmdN^;
+      //     pinteger(Ebp+PtrTrigger)^:=Params[0].Value;
+      //     pinteger(Ebp+PtrStackCmdN)^:=Params[1].Value-1;
+      //   end // .if
+      //   else if (NumParams = 3) then begin
+      //     // PARAMS: nil; TriggerID: integer; ?Res: integer; 
+      //     if
+      //       (not General.CheckServiceParams(NumParams, Params, [NUM, SETV, NUM, SETV, NUM, GETV])) or
+      //       (Params[0].Value <> 0)
+      //     then begin
+      //       ShowErmError(Lang.Str[Lang.Str_Error_Service_C]);
+      //       CmdN^:=2000000000;
+      //       exit;
+      //     end; // .if
+      //     pinteger(Params[2].Value)^:=GetFuncTriggerAddr(Params[1].Value);
+      //   end // .elseif
+      //   else begin
+      //     ShowErmError(Lang.Str[Lang.Str_Error_Service_C]);
+      //     CmdN^:=2000000000;
+      //     exit;
+      //   end; // .else
+      // end; // .switch C
+      // 'R': begin
+      //   // PARAMS: (NO)
+      //   if NumParams <> 0 then begin
+      //     ShowErmError(Lang.Str[Lang.Str_Error_Service_R]);
+      //     CmdN^:=2000000000;
+      //     exit;
+      //   end; // .if
+      //   pinteger(Ebp+PtrTrigger)^:=General.ServiceCallStack.Stack[General.ServiceCallStack.Pos].Trigger;
+      //   pinteger(Ebp+PtrStackCmdN)^:=General.ServiceCallStack.Stack[General.ServiceCallStack.Pos].CmdN;
+      //   Dec(General.ServiceCallStack.Pos);
+      // end; // .switch R
+      // 'Q': begin
+      //   // PARAMS: (NO)
+      //   if NumParams <> 0 then begin
+      //     ShowErmError(Lang.Str[Lang.Str_Error_Service_Q]);
+      //     CmdN^:=2000000000;
+      //     exit;
+      //   end; // .if
+      //   pinteger(Ebp+PtrEventId)^:=2000000000;
+      //   CmdN^:=2000000000;
+      // end; // .switch Q
+      'E': begin
+        // PARAMS: Addr: pointer; Convention: integer; Params: ANY...
+        if
+          (NumParams < 0) or
+          not (General.CheckServiceParams(2, Params, [NUM, SETV, NUM, SETV])) or
+          (Params[0].Value = 0) or
+          not (Params[1].Value in [General.C_ERA_CALLCONV_PASCAL..General.C_ERA_CALLCONV_FASTCALL + CONVENTION_FLOAT])
+        then begin
+          ShowErmError(Lang.Str[Lang.Str_Error_Service_E]);
+          CmdN^:=2000000000;
+          exit;
+        end; // .if
+        
+        CallProc
+        (
+          Params[0].Value, // Addr
+          Params[1].Value, // Convention
+          @Params[2].Value, // PParams
+          NumParams - 2 // NumParams
+        ); // CallProc
+      end; // .switch E
+      'A': begin
+        // PARAMS: hDll: integer; ProcName: string; ?Res: integer;
+        if not General.CheckServiceParams(NumParams, Params, [NUM, SETV, STR, SETV, NUM, GETV]) then begin
+          ShowErmError(Lang.Str[Lang.Str_Error_Service_A]);
+          CmdN^:=2000000000;
+          exit;
+        end; // .if
+        pinteger(Params[2].Value)^:=integer(Windows.GetProcAddress(Params[0].Value, pchar(Params[1].Value)));
+      end; // .switch A
+      'L': begin
+        // PARAMS: DllName: string; ?Res: integer;
+        if not General.CheckServiceParams(NumParams, Params, [STR, SETV, NUM, GETV]) then begin
+          ShowErmError(Lang.Str[Lang.Str_Error_Service_L]);
+          CmdN^:=2000000000;
+          exit;
+        end; // .if
+        pinteger(Params[1].Value)^:=integer(Windows.LoadLibrary(pchar(Params[0].Value)));
+      end; // .switch L
+      'X': begin
+        if NumParams > (High(General.EventParams)+1) then begin
+          ShowErmError(Lang.Str[Lang.Str_Error_Service_X]);
+          CmdN^:=2000000000;
+          exit;
+        end; // .if
+        for i:=0 to NumParams - 1 do begin
+          if Params[i].Get then begin
+            if Params[i].IsString then begin
+              Len:=Strings.StrLen(pointer(General.EventParams[i]));
+              if Len>0 then begin
+                Windows.CopyMemory(pointer(Params[i].Value), pointer(General.EventParams[i]), Len+1);
+              end // .if
+              else begin
+                pchar(Params[i].Value)^:=#0;
+              end; // .else
+            end // .if
+            else begin
+              pinteger(Params[i].Value)^:=General.EventParams[i];
+            end; // .else
+          end // .if
+          else begin
+            General.ModifyWithParam(@General.EventParams[i], @Params[i]);
+          end; // .else
+        end; // .for
+      end; // .switch X
+    else
+      if not ExtendedEraService(Cmd, NumParams, @Params, Err) then begin
+        ShowErmError(Err);
+      end; // .if
+    end; // .case Cmd
+    Inc(integer(CmdStr), CmdLen);
+  end; // .while
+  
+  pinteger(Ebp+PtrCmdLen)^:=integer(CmdStr) - integer(BaseCmdStr);
+end; // .function Service
+}
+
+(* Asm_Service *) {Переходник к высокоуровневой процедуре ядра Service}
+// procedure Asm_Service; assembler; {$FRAME-}
+// asm
+//   // Сохраним регистры
+//   PUSHAD
+//   // Вызываем высокоуровневую функцию Service
+//   PUSH EBP
+//   CALL Service
+//   // Если результат отрицательный - значит выполняем действие по умолчанию
+//   TEST EAX, EAX
+//   JNZ @@QuitCmdSN
+// @@ExecCmdSN:
+//   // Восстановим регистры
+//   POPAD
+//   // Выполним старый код
+//   MOV AL, byte [EBP+$8]
+//   MOV byte [EBP-$0C], AL
+//   // И возвратим управление оригинальной функции
+//   PUSH $774FB0
+//   RET
+// @@QuitCmdSN:
+//   // ...Service вернула положительный результат, значит нужно корректно выйти из оригинальной функции
+//   // Восстановим регистры
+//   POPAD
+//   // И выйдем
+//   PUSH $77519F
+//   // RET
+// end; // .procedure Asm_Service
+
 function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
 begin
   {!} Assert(CmdName <> nil);
