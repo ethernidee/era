@@ -137,7 +137,7 @@ type
   end; // .record TRecruitMonsDlgOpenEvent
 
   POneBasedCmdParams  = ^TOneBasedCmdParams;
-  TOneBasedCmdParams  = array [1..24] of GameExt.TServiceParam;
+  TOneBasedCmdParams  = array [1..24] of AdvErm.TServiceParam;
 
 var
   ZvsRecruitMonsDlgSetupPtr: ^PRecruitMonsDlgSetup = Ptr($836A18);
@@ -544,9 +544,9 @@ end;
 
 procedure Hook_OpenRecruitMonsDlg (OrigFunc: pointer; Obj: pointer; RecruitMonsDlgSetup: PRecruitMonsDlgSetup); stdcall;
 const
-  EVENT_PARAM_SELECTED_SLOT = 0;
-  EVENT_PARAM_DLG_FLAGS     = 1;
-  EVENT_PARAM_SHOW_DIALOG   = 2;
+  EVENT_PARAM_SELECTED_SLOT = 1;
+  EVENT_PARAM_DLG_FLAGS     = 2;
+  EVENT_PARAM_SHOW_DIALOG   = 3;
 
 var
   ShowDlg:   integer;
@@ -577,14 +577,12 @@ begin
     RecruitMonsDlgSetup.ObjType := DLG_FLAG_CLOSE_ON_BUY;
   end;
 
-  {!} GameExt.EraSaveEventParams;
   Erm.AssignEventParams([RecruitMonsDlgSetup.SelectedMonSlot, RecruitMonsDlgSetup.ObjType, 1]);
   Erm.FireErmEvent(Erm.TRIGGER_OPEN_RECRUIT_DLG);
 
-  RecruitMonsDlgOpenEvent.SelectedSlot := RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[Alg.ToRange(GameExt.EraEventParams[EVENT_PARAM_SELECTED_SLOT], 0, High(RecruitMonsDlgOpenEvent.Slots))];
-  RecruitMonsDlgSetup.ObjType          := GameExt.EraEventParams[EVENT_PARAM_DLG_FLAGS] and DLG_FLAGS_ALL;
-  ShowDlg                              := GameExt.EraEventParams[EVENT_PARAM_SHOW_DIALOG];
-  {!} GameExt.EraRestoreEventParams;
+  RecruitMonsDlgOpenEvent.SelectedSlot := RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[Alg.ToRange(Erm.RetXVars[EVENT_PARAM_SELECTED_SLOT], 0, High(RecruitMonsDlgOpenEvent.Slots))];
+  RecruitMonsDlgSetup.ObjType          := Erm.RetXVars[EVENT_PARAM_DLG_FLAGS] and DLG_FLAGS_ALL;
+  ShowDlg                              := Erm.RetXVars[EVENT_PARAM_SHOW_DIALOG];
 
   if ShowDlg <> 0 then begin
     RecruitMonsDlgOpenEvent.RememberOrigMonParams;
@@ -661,9 +659,9 @@ end;
 
 function Hook_RecruitDlgRecalc (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 const
-  EVENT_PARAM_COST          = 0;
-  EVENT_PARAM_RESOURCE      = 1;
-  EVENT_PARAM_RESOURCE_COST = 2;
+  EVENT_PARAM_COST          = 1;
+  EVENT_PARAM_RESOURCE      = 2;
+  EVENT_PARAM_RESOURCE_COST = 3;
 
 var
   DlgSetup: PRecruitMonsDlgSetup;
@@ -673,13 +671,11 @@ begin
   // * * * * * //
   result := true;
 
-  {!} GameExt.EraSaveEventParams;
   Erm.AssignEventParams([DlgSetup.Cost, DlgSetup.Resource, DlgSetup.ResourceCost]);
   Erm.FireErmEvent(Erm.TRIGGER_RECRUIT_DLG_RECALC);
-  DlgSetup.Cost         := GameExt.EraEventParams[EVENT_PARAM_COST];
-  DlgSetup.Resource     := Alg.ToRange(GameExt.EraEventParams[EVENT_PARAM_RESOURCE], 0, Heroes.RES_LAST);
-  DlgSetup.ResourceCost := GameExt.EraEventParams[EVENT_PARAM_RESOURCE_COST];
-  {!} GameExt.EraRestoreEventParams;
+  DlgSetup.Cost         := Erm.RetXVars[EVENT_PARAM_COST];
+  DlgSetup.Resource     := Alg.ToRange(Erm.RetXVars[EVENT_PARAM_RESOURCE], 0, Heroes.RES_LAST);
+  DlgSetup.ResourceCost := Erm.RetXVars[EVENT_PARAM_RESOURCE_COST];
 end; // .function Hook_RecruitDlgRecalc
 
 function Hook_RecruitDlgAction (Context: ApiJack.PHookContext): LONGBOOL; stdcall;

@@ -27,9 +27,9 @@ type
       );
       
       TRACKEDEVENT_START_TRIGGER, TRACKEDEVENT_END_TRIGGER: (
-        v:   array [997..1000] of integer;
-        f:   array [Erm.ERM_FLAG_NETWORK_BATTLE..Erm.ERM_FLAG_HUMAN_VISITOR_OR_REAL_BATTLE] of byte;
-        SnX: GameExt.TEraEventParams;
+        v: array [997..1000] of integer;
+        f: array [Erm.ERM_FLAG_NETWORK_BATTLE..Erm.ERM_FLAG_HUMAN_VISITOR_OR_REAL_BATTLE] of byte;
+        x: Erm.TErmXVars;
       );
   end; // .record TTrackedEvent
   
@@ -132,7 +132,7 @@ begin
     
     Utils.CopyMem(sizeof(Rec.v), @v[low(Rec.v)], @Rec.v);
     Utils.CopyMem(sizeof(Rec.f), @f[low(Rec.f)], @Rec.f);
-    Utils.CopyMem(sizeof(Rec.SnX), GameExt.EraEventParams, @Rec.SnX);
+    Utils.CopyMem(sizeof(Rec.x), @Erm.x[1], @Rec.x);
   end; // .if
 end; // .procedure TEventTracker.TrackTrigger
 
@@ -203,9 +203,9 @@ var
 
       Write(']');
 
-      LastNonZeroSnxInd := high(Event.SnX);
+      LastNonZeroSnxInd := high(Event.x);
 
-      while (LastNonZeroSnxInd >= 0) and (Event.SnX[LastNonZeroSnxInd] = 0) do begin
+      while (LastNonZeroSnxInd >= 0) and (Event.x[LastNonZeroSnxInd] = 0) do begin
         dec(LastNonZeroSnxInd);
       end;
 
@@ -213,11 +213,11 @@ var
         Write(', sn:x = [');
 
         for j := 0 to LastNonZeroSnxInd do begin
-          if j > low(Event.SnX) then begin
+          if j > low(Event.x) then begin
             Write(', ');
           end;
 
-          Write(SysUtils.IntToStr(integer(Event.SnX[j])));
+          Write(SysUtils.IntToStr(integer(Event.x[j])));
         end;
 
         Write(']');

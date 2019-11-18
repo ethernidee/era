@@ -263,7 +263,7 @@ end;
 
 function Hook_SaveGame (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
-  PARAM_SAVEGAME_NAME = 0;
+  PARAM_SAVEGAME_NAME = 1;
 
 var
 {U} OldSavegameName:  pchar;
@@ -273,22 +273,18 @@ var
 begin
   OldSavegameName := PPOINTER(Context.EBP + 8)^;
   SavegameName    := nil;
-  // * * * * * //
-  GameExt.EraSaveEventParams;
-  
-  GameExt.EraEventParams[PARAM_SAVEGAME_NAME] := integer(OldSavegameName);
+  // * * * * * //  
+  Erm.ArgXVars[PARAM_SAVEGAME_NAME] := integer(OldSavegameName);
   ZvsErmTriggerBeforeSave;
-  SavegameName    := Ptr(GameExt.EraEventParams[PARAM_SAVEGAME_NAME]);
+  SavegameName    := Ptr(Erm.RetXVars[PARAM_SAVEGAME_NAME]);
   SavegameNameLen := SysUtils.StrLen(SavegameName);
   
   if SavegameName <> OldSavegameName then begin
     Utils.CopyMem(SavegameNameLen + 1, SavegameName, OldSavegameName);
-    PINTEGER(Context.EBP + 12)^ := -1;
+    pinteger(Context.EBP + 12)^ := -1;
   end;
   
-  GameExt.EraRestoreEventParams;
-  
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end; // .function Hook_SaveGame
 
 function Hook_SaveGameWrite (Context: Core.PHookContext): LONGBOOL; stdcall;
@@ -341,7 +337,7 @@ begin
   end; // .with 
   
   // Default code
-  if PINTEGER(Context.EBP - 4)^ = 0 then begin
+  if pinteger(Context.EBP - 4)^ = 0 then begin
     Context.RetAddr := Ptr($704EF2);
   end else begin
     Context.RetAddr := Ptr($704F10);
@@ -396,7 +392,7 @@ begin
   Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_READ, []);
   
   // default code
-  if PINTEGER(Context.EBP - $14)^ = 0 then begin
+  if pinteger(Context.EBP - $14)^ = 0 then begin
     Context.RetAddr := Ptr($7051BE);
   end else begin
     Context.RetAddr := Ptr($7051DC);

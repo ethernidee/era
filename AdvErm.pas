@@ -43,6 +43,12 @@ const
   MODIFIER_DIV    = 4;
   MODIFIER_CONCAT = 5;
 
+  (* Era function call conventions *)
+  ERA_CALLCONV_PASCAL           = 0;
+  ERA_CALLCONV_CDECL_OR_STDCALL = 1;
+  ERA_CALLCONV_THISCALL         = 2;
+  ERA_CALLCONV_FASTCALL         = 3;
+
   (* ERM additional commands parameter config *)
   CMD_PARAMS_CONFIG_NONE                     = 0;
   CMD_PARAMS_CONFIG_SINGLE_INT               = 1;
@@ -57,10 +63,29 @@ const
   ERM_MEMORY_DUMP_FILE = GameExt.DEBUG_DIR + '\erm memory dump.txt';
 
 type
-  (* IMPORT *)
+  (* Import *)
   TDict    = DataLib.TDict;
   TObjDict = DataLib.TObjDict;
   TString  = TypeWrappers.TString;
+
+  TServiceParamValue = packed record
+    case byte of
+      0: (v:  integer);
+      1: (p:  pointer);
+      2: (pc: pchar);
+  end;
+
+  PServiceParam = ^TServiceParam;
+  TServiceParam = record
+    IsStr:         longbool;
+    OperGet:       longbool;
+    Value:         TServiceParamValue;
+    StrValue:      string;
+    ParamModifier: integer;
+  end;
+
+  PServiceParams = ^TServiceParams;
+  TServiceParams = array[0..23] of TServiceParam;
 
   (* Params index starts from 1 *)
   TCommandHandler = function (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
@@ -90,7 +115,7 @@ type
     Error:      string;
     NumParams:  integer;
     _ParamsLen: integer;
-    Params:     GameExt.TServiceParams;
+    Params:     TServiceParams;
 
     function  FindNextSubcmd (AllowedSubcmds: Utils.TCharSet): boolean;
     procedure Cleanup;
@@ -156,6 +181,295 @@ var
     CurrentMp3Track:   string;
 
 
+function ErmVarToStr (VarType: char; Ind: integer; var Res: string): boolean;
+begin
+  result := true;
+  
+  case VarType of
+    'V': begin
+      result := (Ind >= Low(Erm.v^)) and (Ind <= High(Erm.v^));
+      
+      if result then begin
+        Res := SysUtils.IntToStr(Erm.v[Ind]);
+      end;
+    end;
+
+    'W': begin
+      result := (Ind >= 1) and (Ind <= 200) and (Erm.ErmCurrHero <> nil);
+      
+      if result then begin
+        Res := SysUtils.IntToStr(Erm.w[Erm.ErmCurrHero.Id, Ind]);
+      end;
+    end;
+
+    'X': begin
+      result := (Ind >= Low(Erm.x^)) and (Ind <= High(Erm.x^));
+      
+      if result then begin
+        Res := SysUtils.IntToStr(Erm.x[Ind]);
+      end;
+    end;
+
+    'Y': begin
+      result := ((Ind >= Low(Erm.y^)) and (Ind <= High(Erm.y^))) or ((-Ind >= Low(Erm.ny^)) and (-Ind <= High(Erm.ny^)));
+      
+      if result then begin
+        if Ind > 0 then begin
+          Res := SysUtils.IntToStr(Erm.y[Ind]);
+        end else begin
+          Res := SysUtils.IntToStr(Erm.ny^[-Ind]);
+        end;
+      end;
+    end;
+
+    'E': begin
+      result := ((Ind >= Low(Erm.e^)) and (Ind <= High(Erm.e^))) or ((-Ind >= Low(Erm.ne^)) and (-Ind <= High(Erm.ne^)));
+      
+      if result then begin
+        if Ind > 0 then begin
+          Res := SysUtils.FloatToStr(Erm.e^[Ind]);
+        end else begin
+          Res := SysUtils.FloatToStr(Erm.ne^[-Ind]);
+        end;
+      end;
+    end;
+
+    'Z': begin
+      result := (Ind >= -High(Erm.nz^)) and (Ind <> 0);
+      
+      if result then begin
+        if Ind > 1000 then begin
+          Res := ZvsGetErtStr(Ind);
+        end else if Ind > 0 then begin
+          Res := pchar(@Erm.z[Ind]);
+        end else begin
+          Res := pchar(@Erm.nz^[-Ind]);
+        end;
+      end;
+    end;
+  else
+    result := false;
+  end; // .switch VarType
+end; // .function ErmVarToStr
+
+function ErmVarToServiceParam (VarType: char; Ind: integer; var ServiceParam: TServiceParam): boolean;
+begin
+  result             := true;
+  ServiceParam.IsStr := false;
+  
+  case VarType of
+    'v': begin
+      result := (Ind >= Low(Erm.v^)) and (Ind <= High(Erm.v^));
+      
+      if result then begin
+        ServiceParam.Value.v := Erm.v[Ind];
+      end else begin
+        Erm.ShowErmError('v-index is out of range 1..10000');
+      end;
+    end;
+
+    'w': begin
+      result := (Ind >= 1) and (Ind <= 200) and (Erm.ErmCurrHero <> nil);
+      
+      if result then begin
+        ServiceParam.Value.v := Erm.w[Erm.ErmCurrHero.Id, Ind];
+      end else begin
+        Erm.ShowErmError('w-index is out of range 1..200');
+      end;
+    end;
+
+    'x': begin
+      result := (Ind >= Low(Erm.x^)) and (Ind <= High(Erm.x^));
+      
+      if result then begin
+        ServiceParam.Value.v := Erm.x[Ind];
+      end else begin
+        Erm.ShowErmError('x-index is out of range 1..16');
+      end;
+    end;
+
+    'y': begin
+      result := ((Ind >= Low(Erm.y^)) and (Ind <= High(Erm.y^))) or ((-Ind >= Low(Erm.ny^)) and (-Ind <= High(Erm.ny^)));
+      
+      if result then begin
+        if Ind > 0 then begin
+          ServiceParam.Value.v := Erm.y[Ind];
+        end else begin
+          ServiceParam.Value.v := Erm.ny[-Ind];
+        end;
+      end else begin
+        Erm.ShowErmError('y-index is out of range -100..-1, 1..100');
+      end;
+    end;
+
+    'e': begin
+      result := ((Ind >= Low(Erm.e^)) and (Ind <= High(Erm.e^))) or ((-Ind >= Low(Erm.ne^)) and (-Ind <= High(Erm.ne^)));
+      
+      if result then begin
+        if Ind > 0 then begin
+          ServiceParam.Value.v := pinteger(@Erm.e[Ind])^;
+        end else begin
+          ServiceParam.Value.v := pinteger(@Erm.ne[-Ind])^;
+        end;
+      end else begin
+        Erm.ShowErmError('e-index is out of range -100..-1, 1..100');
+      end;
+    end;
+
+    'z': begin
+      result := (Ind >= -High(Erm.nz^)) and (Ind <> 0);
+      
+      if result then begin
+        if Ind > 1000 then begin
+          ServiceParam.StrValue := ZvsGetErtStr(Ind);
+        end else if Ind > 0 then begin
+          ServiceParam.StrValue := pchar(@Erm.z[Ind]);
+        end else begin
+          ServiceParam.StrValue := pchar(@Erm.nz[-Ind]);
+        end;
+
+        ServiceParam.Value.pc := pchar(ServiceParam.StrValue);
+        ServiceParam.IsStr    := true;
+      end; // .if
+    end; // .case
+  else
+    result := false;
+  end; // .switch VarType
+end; // .function ErmVarToServiceParam
+
+function GetServiceParams (Cmd: pchar; var NumParams: integer; var Params: TServiceParams): integer;
+var
+  PCmd:          Utils.PEndlessCharArr;
+  ParType:       char;
+  ParValue:      integer;
+  StartPos:      integer;
+  Pos:           integer;
+  CharPos:       integer;
+  StrLen:        integer;
+  IndStr:        string;
+  SingleDSyntax: boolean;
+
+begin
+  PCmd      := pointer(Cmd);
+  NumParams := 0;
+  Pos       := 1;
+
+  while not (PCmd[Pos] in [';', ' ']) do begin
+    SingleDSyntax                   := false;
+    Params[NumParams].ParamModifier := NO_MODIFIER;
+
+    // Detect command type: GET or SET
+    if PCmd[Pos] = '?' then begin
+      Params[NumParams].OperGet := true;
+      Inc(Pos);
+    end else begin
+      Params[NumParams].OperGet := false;
+
+      if PCmd[Pos] = 'd' then begin
+        Inc(Pos);
+
+        case PCmd[Pos] of
+          '+': begin Params[NumParams].ParamModifier := MODIFIER_ADD; Inc(Pos); end;
+          '-': begin Params[NumParams].ParamModifier := MODIFIER_SUB; Inc(Pos); end;
+          '*': begin Params[NumParams].ParamModifier := MODIFIER_MUL; Inc(Pos); end;
+          ':': begin Params[NumParams].ParamModifier := MODIFIER_DIV; Inc(Pos); end;
+          '&': begin Params[NumParams].ParamModifier := MODIFIER_CONCAT; Inc(Pos); end;
+        else
+          Params[NumParams].ParamModifier := MODIFIER_ADD;
+          SingleDSyntax                   := true;
+        end; // .switch
+      end; // .if
+    end; // .else
+
+    if PCmd[Pos] = '^' then begin
+      Inc(Pos);
+      StartPos := Pos;
+      
+      while PCmd[Pos] <> '^' do begin
+        Inc(Pos);
+      end;
+      
+      StrLen                     := Pos - StartPos;
+      Params[NumParams].IsStr    := true;
+      SetString(Params[NumParams].StrValue, pchar(@PCmd[StartPos]), StrLen);
+      Params[NumParams].Value.pc := pchar(Params[NumParams].StrValue);
+      Inc(Pos);
+      
+      if StrLib.FindChar('%', Params[NumParams].StrValue, CharPos) then begin
+        Params[NumParams].Value.pc := Erm.ZvsInterpolateStr(pchar(Params[NumParams].StrValue));
+        Params[NumParams].StrValue := Params[NumParams].Value.pc;
+      end;
+    end else begin
+      // Get parameter type: z, v, x, y or constant
+      ParType := PCmd[Pos];
+
+      if (ParType in [';', '/', ' ']) and SingleDSyntax then begin
+        Params[NumParams].IsStr   := false;
+        Params[NumParams].Value.v := 0;
+      end else begin
+        if ParType in ['-', '+', '0'..'9'] then begin
+          ParType := #0;
+        end else begin
+          Inc(Pos);
+        end;
+        
+        // Remember parameter start position
+        StartPos := Pos;
+        
+        while not(PCmd[Pos] in [';', '/', ' ']) do begin
+          Inc(Pos);
+        end;
+
+        ParValue := 0;
+
+        if ParType in ['f'..'t'] then begin
+          ParValue := ord(ParType) - ord('f');
+        end else begin
+          SetString(IndStr, pchar(@PCmd[StartPos]), Pos - StartPos);
+          
+          try
+            ParValue := SysUtils.StrToInt(IndStr);
+          except
+            result := -1; exit;
+          end;
+        end;
+        
+        // Literal values are handled, now handle variables
+        if ParType in ['f'..'t'] then begin
+          ParValue                := Erm.QuickVars[ParValue];
+          Params[NumParams].IsStr := false;
+        end else if ParType <> #0 then begin
+          if not ErmVarToServiceParam(ParType, ParValue, Params[NumParams]) then begin
+            result := -1;
+            exit;
+          end;
+        end else begin
+          Params[NumParams].IsStr   := false;
+          Params[NumParams].Value.v := ParValue;
+        end;
+
+        if (Params[NumParams].IsStr and not(Params[NumParams].ParamModifier in [NO_MODIFIER, MODIFIER_CONCAT])) or
+           (not Params[NumParams].IsStr and (Params[NumParams].ParamModifier = MODIFIER_CONCAT))
+        then begin
+          result := -1; exit;
+        end;
+      end; // .else
+    end; // .else
+
+    if PCmd[Pos] = '/' then begin
+      Inc(Pos);
+    end;
+
+    Inc(NumParams);
+  end; // .while
+  
+  while PCmd[Pos] = ' ' do begin
+    Inc(Pos);
+  end;
+  
+  result := Pos;
+end; // .function GetServiceParams
+
 (* Returns Era/kernel32 API function address by name. Caches positive results *)
 function GetCombinedApiAddr (const ApiName: string): {n} pointer;
 begin
@@ -214,336 +528,6 @@ begin
   AdditionalCmds[NumAdditionalCmds].Handler := nil;
 end;
 
-(* Parameters must be either reused or filled with zeroes before function call *)
-function GetServiceParams (Cmd: pchar; var NumParams: integer; var {O} Params: TServiceParams): integer;
-begin
-  result := GameExt.EraGetServiceParams(Cmd, NumParams, Params);
-end;
-
-procedure ReleaseServiceParams ({O} var Params: TServiceParams); stdcall;
-begin
-  GameExt.EraReleaseServiceParams(Params);
-end;
-
-(* CallProc *) {Вызывает внешнюю функцию. PParams указывает на начало массива параметров. v1 содержит результат}
-// procedure CallProc(Addr: integer; Convention: integer; PParams: pointer; NumParams: integer); stdcall; assembler;
-// const
-//   ParamOffset = sizeof(General.TServiceParam); // Смещение до следующего параметра в массиве параметров
-
-// var
-//   SavedEsp:   integer;  // Сохранённое состояние стёка
-//   IsFloatRes: longbool;
-  
-// asm
-//   MOV IsFloatRes, 0
-//   CMP Convention, CONVENTION_FLOAT
-//   JB @@IntConvention
-// @@FloatConvetion:
-//   MOV IsFloatRes, 1
-//   SUB Convention, CONVENTION_FLOAT
-// @@IntConvention:
-//   // Сохранили регистр EBX
-//   PUSH EBX
-//   // Сохранили состояние стёка в EBP
-//   MOV SavedEsp, ESP
-//   // Если параметров у функции нет, то сразу вызываем её
-//   MOV ECX, NumParams
-//   TEST ECX, ECX
-//   JZ @@CallProc
-//   // EBX = Convention
-//   MOV EBX, Convention
-//   // EDX указывает на первый параметр
-//   MOV EDX, PParams
-//   // Обрабатываем соглашение pascal отдельно от других
-//   TEST EBX, EBX
-//   JNZ @@NotPascalConversion
-// @@PascalConversion:
-//   // Цикл вталкивания аргументов в стёк
-//   @@PascalLoop:
-//     PUSH DWORD [EDX]
-//     ADD EDX, ParamOffset
-//     Dec ECX
-//     JNZ @@PascalLoop
-//   JMP @@CallProc
-// @@NotPascalConversion:
-//   // Перерасчитываем кол-во аргументов для вталкивания в стёк
-//   Dec EBX
-//   SUB ECX, EBX
-//   // ...И если аргументы поместились в регистры, то вталкивать в стёк ничего не нужно
-//   JZ @@InitThisOrFastCall
-//   JS @@InitThisOrFastCall
-//   // Иначе вталкиваем аргументы в стёк в обратном порядке
-//   ADD ECX, EBX
-//   PUSH ECX
-//   (* WARNING! TServiceParam size used *)
-//   shl ECX, 4
-//   //LEA ECX, [ECX + ECX * 3]
-//   LEA EDX, [EDX + ECX - ParamOffset]
-//   POP ECX
-//   SUB ECX, EBX
-//   @@CdeclLoop:
-//     PUSH DWORD [EDX]
-//     SUB EDX, ParamOffset
-//     Dec ECX
-//     JNZ @@CdeclLoop
-//   @@InitThisOrFastCall:
-//   // Инициализируем аргументы для ThisCall и FastCall
-//   MOV ECX, PParams
-//   MOV EDX, [ECX+ParamOffset]
-//   MOV ECX, [ECX]
-// @@CallProc:
-//   // Вызываем процедуру
-//   MOV EAX, Addr
-//   CALL EAX
-//   // Сохраняем  результат
-//   CMP IsFloatRes, 1
-//   JNE @@IntRes
-// @@FloatRes:
-//   FST DWORD [$A48F18]
-//   JMP @@Ret
-// @@IntRes:
-//   MOV DWORD [General.C_VAR_ERM_V], EAX
-// @@Ret:
-//   // Восстанавливаем указатель стёка и сохранённые регистры
-//   MOV ESP, SavedEsp
-//   POP EBX
-//   // RET
-// end; // .procedure CallProc
-
-(* Service *) {Команды ЕРМ, реализуемые фреймворком "Эра"}
-{
-function Service(Ebp: integer): longbool;
-const
-  PtrStackMes   = $14;  // + Указатель на структуру _Mes_, что используется в ProcessErm
-  PtrCmdLen     = $268; // + // Указатель на размер/смещение команды в функции ProcessCmd 
-  PtrStackCmdN  = $730; // + Указатель на номер команды в данном триггере. ProcessErm
-  PtrTrigger    = $8C8; // + Указатель на структуру текущего триггера. ProcessErm
-  PtrEventId    = $72C; // + Указатель на ID текущего события
-  
-  (* контанты для функции CheckServiceParams *)
-  STR   = true;   // Параметр является строкой
-  NUM   = false;  // Параметр - числовое значение
-  GETV  = true;   // Синтаксис GET
-  SETV  = false;  //Синтаксис set
-
-type
-  TMes = record
-    Offset: integer; // смещение до подкоманды в команде
-    Ptr: pchar; // указатель на текст команды
-  end; // .record Mes
-  
-  PCmd = ^TCmd;
-  TCmd = record
-    Next: PCmd;
-    Event: integer;
-  end; // .record TCmd
-  
-var
-  Mes:        ^TMes; // Указатель на структуру TMes
-  BaseCmdStr: pchar;
-  CmdStr:     pchar; // Строка команды
-  Cmd:        char; // Символ команды
-  CmdLen:     integer; // Длина команды
-  CmdN:       pinteger; // Указатель на номер текущей команды в триггере
-  Trigger:    PCmd; // Текущий триггер
-  Len:        integer; // Длина внешней строки текста типа pchar
-  NumParams:  integer;
-  Params:     General.TServiceParams;
-  Err:        pchar;
-  i:          integer;
-
-
-begin
-  result:=true; // По умолчанию Эра обрабатывает все команды
-  integer(Mes):=pinteger(Ebp+PtrStackMes)^; // Получили указатель на структуру TMes
-  integer(CmdStr):=pinteger(integer(Mes)+4)^; // Получили указатель на строку с командой
-  CmdN:=pinteger(Ebp+PtrStackCmdN); // Указатель на номер команды в триггере
-  Cmd:=CmdStr^; // Получили сам символ команды
-  // Если это стандартная, то пусть её обрабатывает оригинальный обработчик
-  if (Cmd = 'P') or (Cmd = 'S') then begin
-    result:=false; exit;
-  end; // .if
-  BaseCmdStr  :=  CmdStr;
-  while CmdStr^ <> ';' do begin
-    Cmd:=CmdStr^;
-    CmdLen:=GetServiceParams(CmdStr, NumParams, Params); // Парсим параметры, а заодно получаем истинный размер строки команды
-    // Если парсинг был неудачным, значит в параметрах ошибка. Выведем сообщение и корректно выйдем из функции
-    if CmdLen = -1 then begin
-      ShowErmError(Lang.Str[Lang.Str_Error_Service_Params]);
-      CmdN^:=2000000000;
-      exit;
-    end; // .if
-    // Установим реальный размер строки параметров для ProcessCmd, иначе она будет ещё не раз вызывать нашу функцию, считая каждый символ командой
-    // Пошло выполнение отдельных команд
-    case Cmd of 
-      'G': begin
-        // PARAMS: CmdN: integer
-        if not General.CheckServiceParams(NumParams, Params, [NUM, SETV]) then begin
-          ShowErmError(Lang.Str[Lang.Str_Error_Service_G]);
-          CmdN^:=2000000000;
-          exit;
-        end; // .if
-        CmdN^:=Params[0].Value - 1;
-      end; // .switch G
-      // 'C': begin
-      //   if (NumParams = 2) then begin
-      //     // PARAMS: TriggerAddr: pointer; CmdN: integer;
-      //     if not General.CheckServiceParams(NumParams, Params, [NUM, SETV, NUM, SETV]) then begin
-      //       ShowErmError(Lang.Str[Lang.Str_Error_Service_C]);
-      //       CmdN^:=2000000000;
-      //       exit;
-      //     end; // .if
-      //     Inc(General.ServiceCallStack.Pos);
-      //     General.ServiceCallStack.Stack[General.ServiceCallStack.Pos].Trigger:=pinteger(Ebp+PtrTrigger)^;
-      //     General.ServiceCallStack.Stack[General.ServiceCallStack.Pos].CmdN:=CmdN^;
-      //     pinteger(Ebp+PtrTrigger)^:=Params[0].Value;
-      //     pinteger(Ebp+PtrStackCmdN)^:=Params[1].Value-1;
-      //   end // .if
-      //   else if (NumParams = 3) then begin
-      //     // PARAMS: nil; TriggerID: integer; ?Res: integer; 
-      //     if
-      //       (not General.CheckServiceParams(NumParams, Params, [NUM, SETV, NUM, SETV, NUM, GETV])) or
-      //       (Params[0].Value <> 0)
-      //     then begin
-      //       ShowErmError(Lang.Str[Lang.Str_Error_Service_C]);
-      //       CmdN^:=2000000000;
-      //       exit;
-      //     end; // .if
-      //     pinteger(Params[2].Value)^:=GetFuncTriggerAddr(Params[1].Value);
-      //   end // .elseif
-      //   else begin
-      //     ShowErmError(Lang.Str[Lang.Str_Error_Service_C]);
-      //     CmdN^:=2000000000;
-      //     exit;
-      //   end; // .else
-      // end; // .switch C
-      // 'R': begin
-      //   // PARAMS: (NO)
-      //   if NumParams <> 0 then begin
-      //     ShowErmError(Lang.Str[Lang.Str_Error_Service_R]);
-      //     CmdN^:=2000000000;
-      //     exit;
-      //   end; // .if
-      //   pinteger(Ebp+PtrTrigger)^:=General.ServiceCallStack.Stack[General.ServiceCallStack.Pos].Trigger;
-      //   pinteger(Ebp+PtrStackCmdN)^:=General.ServiceCallStack.Stack[General.ServiceCallStack.Pos].CmdN;
-      //   Dec(General.ServiceCallStack.Pos);
-      // end; // .switch R
-      // 'Q': begin
-      //   // PARAMS: (NO)
-      //   if NumParams <> 0 then begin
-      //     ShowErmError(Lang.Str[Lang.Str_Error_Service_Q]);
-      //     CmdN^:=2000000000;
-      //     exit;
-      //   end; // .if
-      //   pinteger(Ebp+PtrEventId)^:=2000000000;
-      //   CmdN^:=2000000000;
-      // end; // .switch Q
-      'E': begin
-        // PARAMS: Addr: pointer; Convention: integer; Params: ANY...
-        if
-          (NumParams < 0) or
-          not (General.CheckServiceParams(2, Params, [NUM, SETV, NUM, SETV])) or
-          (Params[0].Value = 0) or
-          not (Params[1].Value in [General.C_ERA_CALLCONV_PASCAL..General.C_ERA_CALLCONV_FASTCALL + CONVENTION_FLOAT])
-        then begin
-          ShowErmError(Lang.Str[Lang.Str_Error_Service_E]);
-          CmdN^:=2000000000;
-          exit;
-        end; // .if
-        
-        CallProc
-        (
-          Params[0].Value, // Addr
-          Params[1].Value, // Convention
-          @Params[2].Value, // PParams
-          NumParams - 2 // NumParams
-        ); // CallProc
-      end; // .switch E
-      'A': begin
-        // PARAMS: hDll: integer; ProcName: string; ?Res: integer;
-        if not General.CheckServiceParams(NumParams, Params, [NUM, SETV, STR, SETV, NUM, GETV]) then begin
-          ShowErmError(Lang.Str[Lang.Str_Error_Service_A]);
-          CmdN^:=2000000000;
-          exit;
-        end; // .if
-        pinteger(Params[2].Value)^:=integer(Windows.GetProcAddress(Params[0].Value, pchar(Params[1].Value)));
-      end; // .switch A
-      'L': begin
-        // PARAMS: DllName: string; ?Res: integer;
-        if not General.CheckServiceParams(NumParams, Params, [STR, SETV, NUM, GETV]) then begin
-          ShowErmError(Lang.Str[Lang.Str_Error_Service_L]);
-          CmdN^:=2000000000;
-          exit;
-        end; // .if
-        pinteger(Params[1].Value)^:=integer(Windows.LoadLibrary(pchar(Params[0].Value)));
-      end; // .switch L
-      'X': begin
-        if NumParams > (High(General.EventParams)+1) then begin
-          ShowErmError(Lang.Str[Lang.Str_Error_Service_X]);
-          CmdN^:=2000000000;
-          exit;
-        end; // .if
-        for i:=0 to NumParams - 1 do begin
-          if Params[i].Get then begin
-            if Params[i].IsString then begin
-              Len:=Strings.StrLen(pointer(General.EventParams[i]));
-              if Len>0 then begin
-                Windows.CopyMemory(pointer(Params[i].Value), pointer(General.EventParams[i]), Len+1);
-              end // .if
-              else begin
-                pchar(Params[i].Value)^:=#0;
-              end; // .else
-            end // .if
-            else begin
-              pinteger(Params[i].Value)^:=General.EventParams[i];
-            end; // .else
-          end // .if
-          else begin
-            General.ModifyWithParam(@General.EventParams[i], @Params[i]);
-          end; // .else
-        end; // .for
-      end; // .switch X
-    else
-      if not ExtendedEraService(Cmd, NumParams, @Params, Err) then begin
-        ShowErmError(Err);
-      end; // .if
-    end; // .case Cmd
-    Inc(integer(CmdStr), CmdLen);
-  end; // .while
-  
-  pinteger(Ebp+PtrCmdLen)^:=integer(CmdStr) - integer(BaseCmdStr);
-end; // .function Service
-}
-
-(* Asm_Service *) {Переходник к высокоуровневой процедуре ядра Service}
-// procedure Asm_Service; assembler; {$FRAME-}
-// asm
-//   // Сохраним регистры
-//   PUSHAD
-//   // Вызываем высокоуровневую функцию Service
-//   PUSH EBP
-//   CALL Service
-//   // Если результат отрицательный - значит выполняем действие по умолчанию
-//   TEST EAX, EAX
-//   JNZ @@QuitCmdSN
-// @@ExecCmdSN:
-//   // Восстановим регистры
-//   POPAD
-//   // Выполним старый код
-//   MOV AL, byte [EBP+$8]
-//   MOV byte [EBP-$0C], AL
-//   // И возвратим управление оригинальной функции
-//   PUSH $774FB0
-//   RET
-// @@QuitCmdSN:
-//   // ...Service вернула положительный результат, значит нужно корректно выйти из оригинальной функции
-//   // Восстановим регистры
-//   POPAD
-//   // И выйдем
-//   PUSH $77519F
-//   // RET
-// end; // .procedure Asm_Service
-
 function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
 begin
   {!} Assert(CmdName <> nil);
@@ -590,7 +574,6 @@ end; // .function TErmCmdWrapper.FindNextSubcmd
 procedure TErmCmdWrapper.Cleanup;
 begin
   Self.Error := '';
-  ReleaseServiceParams(Self.Params);
 end;
 
 function TErmCmdWrapper.GetCmdResult: integer;
@@ -639,8 +622,8 @@ var
 begin
   {!} Assert(Params <> nil);
   {!} Assert(not ODD(Length(Checks)));
-  result  :=  true;
-  i       :=  0;
+  result := true;
+  i      := 0;
   
   while result and (i <= High(Checks)) do begin
     result  :=
@@ -683,9 +666,9 @@ function GetSlotItemsCount (Slot: TSlot): integer;
 begin
   {!} Assert(Slot <> nil);
   if Slot.ItemsType = INT_VAR then begin
-    result  :=  Length(Slot.IntItems);
+    result := Length(Slot.IntItems);
   end else begin
-    result  :=  Length(Slot.StrItems);
+    result := Length(Slot.StrItems);
   end;
 end;
 
@@ -703,9 +686,9 @@ end;
 function NewSlot (ItemsCount: integer; ItemsType: TVarType; IsTemp: boolean): TSlot;
 begin
   {!} Assert(ItemsCount >= 0);
-  result            :=  TSlot.Create;
-  result.ItemsType  :=  ItemsType;
-  result.IsTemp     :=  IsTemp;
+  result           := TSlot.Create;
+  result.ItemsType := ItemsType;
+  result.IsTemp    := IsTemp;
   
   SetSlotItemsCount(ItemsCount, result);
 end;
@@ -713,11 +696,11 @@ end;
 function GetSlot (SlotN: integer; out {U} Slot: TSlot; out Error: string): boolean;
 begin
   {!} Assert(Slot = nil);
-  Slot    :=  Slots[Ptr(SlotN)];
-  result  :=  Slot <> nil;
+  Slot   := Slots[Ptr(SlotN)];
+  result := Slot <> nil;
   
   if not result then begin
-    Error :=  'Slot #' + SysUtils.IntToStr(SlotN) + ' does not exist.';
+    Error := 'Slot #' + SysUtils.IntToStr(SlotN) + ' does not exist.';
   end;
 end;
 
@@ -731,8 +714,8 @@ begin
     end;
   end;
   
-  Slots[Ptr(FreeSlotN)] :=  NewSlot(ItemsCount, ItemsType, IsTemp);
-  result                :=  FreeSlotN;
+  Slots[Ptr(FreeSlotN)] := NewSlot(ItemsCount, ItemsType, IsTemp);
+  result                := FreeSlotN;
   Dec(FreeSlotN);
   
   if FreeSlotN > 0 then begin
@@ -1061,7 +1044,7 @@ end;
 
 type
   PStdcallFuncArgs = ^TStdcallFuncArgs;
-  TStdcallFuncArgs = array [0..High(GameExt.TServiceParams)] of integer;
+  TStdcallFuncArgs = array [0..High(TServiceParams)] of integer;
 
 function CallStdcallFunc (Addr: pointer; Args: PStdcallFuncArgs; NumArgs: integer): integer; assembler; stdcall;
 asm
@@ -1110,14 +1093,7 @@ begin
   end; // .else
 end; // .function SN_F
 
-function ExtendedEraService
-(
-      Cmd:        char;
-      NumParams:  integer;
-      Params:     PServiceParams;
-  out Err:        pchar
-): boolean;
-
+function ExtendedEraService (Cmd: char; NumParams: integer; Params: PServiceParams; out Err: pchar): boolean;
 var
 {U} Slot:               TSlot;
 {U} AssocVarValue:      TAssocVar;
@@ -1132,8 +1108,8 @@ var
     MapSize: integer;
 
 begin
-  Slot          :=  nil;
-  AssocVarValue :=  nil;
+  Slot          := nil;
+  AssocVarValue := nil;
   // * * * * * //
   result := true;
   Error  := 'Invalid command parameters';
@@ -1202,12 +1178,12 @@ begin
                     (not Params[2].OperGet) and
                     (not Params[2].IsStr)   and
                     Math.InRange(Params[2].Value.v, 0, GetSlotItemsCount(Slot) - 1);
-                  
+
                   if result then begin
                     if Slot.ItemsType = INT_VAR then begin
-                      PPOINTER(Params[1].Value.v)^  :=  @Slot.IntItems[Params[2].Value.v];
+                      ppointer(Params[1].Value.v)^ := @Slot.IntItems[Params[2].Value.v];
                     end else begin
-                      PPOINTER(Params[1].Value.v)^  :=  pointer(Slot.StrItems[Params[2].Value.v]);
+                      ppointer(Params[1].Value.v)^ := pointer(Slot.StrItems[Params[2].Value.v]);
                     end;
                   end;
                 end else begin
@@ -1226,7 +1202,7 @@ begin
                             Ptr(Slot.IntItems[Params[1].Value.v])
                           );
                         end else begin
-                          pinteger(Params[2].Value.v)^  :=  Slot.IntItems[Params[1].Value.v];
+                          pinteger(Params[2].Value.v)^ := Slot.IntItems[Params[1].Value.v];
                         end;
                       end else begin
                         Windows.LStrCpy
@@ -1254,7 +1230,7 @@ begin
                             );
                           end; // .else
                         end else begin
-                          Slot.IntItems[Params[1].Value.v]  :=  Params[2].Value.v;
+                          Slot.IntItems[Params[1].Value.v] := Params[2].Value.v;
                         end; // .else
                       end else begin
                         if Params[2].Value.v = 0 then begin
@@ -1275,7 +1251,7 @@ begin
             end; // .case 3
           4:
             begin
-              result  :=  CheckCmdParams
+              result := CheckCmdParams
               (
                 Params,
                 [
@@ -1296,7 +1272,7 @@ begin
               
               if result then begin
                 if Params[0].Value.v = SPEC_SLOT then begin
-                  Erm.v[1]  :=  AllocSlot
+                  Erm.v[1] := AllocSlot
                   (
                     Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP
                   );
@@ -1309,8 +1285,8 @@ begin
               end; // .if
             end; // .case 4
         else
-          result  :=  false;
-          Error   :=  'Invalid number of command parameters';
+          result := false;
+          Error  := 'Invalid number of command parameters';
         end; // .switch NumParams
       end; // .case "M"
     'K':
@@ -1319,10 +1295,10 @@ begin
           // C(str)/?(len)
           2:
             begin
-              result  :=  (not Params[0].OperGet) and (not Params[1].IsStr) and (Params[1].OperGet);
+              result := (not Params[0].OperGet) and (not Params[1].IsStr) and (Params[1].OperGet);
               
               if result then begin
-                pinteger(Params[1].Value.v)^  :=  SysUtils.StrLen(pointer(Params[0].Value.v));
+                pinteger(Params[1].Value.v)^ := SysUtils.StrLen(pointer(Params[0].Value.v));
               end;
             end; // .case 2
           // C(str)/(ind)/[?](strchar)
@@ -1337,8 +1313,8 @@ begin
               
               if result then begin
                 if Params[2].OperGet then begin
-                  pchar(Params[2].Value.v)^     :=  PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v];
-                  pchar(Params[2].Value.v + 1)^ :=  #0;
+                  pchar(Params[2].Value.v)^     := PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v];
+                  pchar(Params[2].Value.v + 1)^ := #0;
                 end else begin
                   PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v] :=  pchar(Params[2].Value.v)^;
                 end;
@@ -1356,8 +1332,8 @@ begin
               end;
             end; // .case 4
         else
-          result  :=  false;
-          Error   :=  'Invalid number of command parameters';
+          result := false;
+          Error  := 'Invalid number of command parameters';
         end; // .switch NumParams
       end; // .case "K"
     'W':
@@ -1398,7 +1374,7 @@ begin
                 if Params[1].OperGet then begin
                   if Params[1].IsStr then begin
                     if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
-                      pchar(Params[1].Value.v)^ :=  #0;
+                      pchar(Params[1].Value.v)^ := #0;
                     end else begin
                       Erm.SetZVar(Params[1].Value.pc, AssocVarValue.StrValue);
                     end;
@@ -1521,10 +1497,10 @@ var
     i:        integer;
   
 begin
-  SlotN :=  0;
-  Slot  :=  nil;
+  SlotN := 0;
+  Slot  := nil;
   // * * * * * //
-  NumSlots  :=  Slots.ItemCount;
+  NumSlots := Slots.ItemCount;
   Stores.WriteSavegameSection(sizeof(NumSlots), @NumSlots, SLOTS_SAVE_SECTION);
   
   Slots.BeginIterate;
@@ -1534,7 +1510,7 @@ begin
     Stores.WriteSavegameSection(sizeof(Slot.ItemsType), @Slot.ItemsType, SLOTS_SAVE_SECTION);
     Stores.WriteSavegameSection(sizeof(Slot.IsTemp), @Slot.IsTemp, SLOTS_SAVE_SECTION);
     
-    NumItems  :=  GetSlotItemsCount(Slot);
+    NumItems := GetSlotItemsCount(Slot);
     Stores.WriteSavegameSection(sizeof(NumItems), @NumItems, SLOTS_SAVE_SECTION);
     
     if (NumItems > 0) and not Slot.IsTemp then begin
@@ -1546,7 +1522,7 @@ begin
         );
       end else begin
         for i:=0 to NumItems - 1 do begin
-          StrLen  :=  Length(Slot.StrItems[i]);
+          StrLen := Length(Slot.StrItems[i]);
           Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
           
           if StrLen > 0 then begin
@@ -1556,8 +1532,8 @@ begin
       end; // .else
     end; // .if
     
-    SlotN :=  0;
-    Slot  :=  nil;
+    SlotN := 0;
+    Slot  := nil;
   end; // .while
   
   Slots.EndIterate;
@@ -1579,7 +1555,7 @@ begin
   AssocMem.BeginIterate;
   
   while AssocMem.IterateNext(AssocVarName, pointer(AssocVarValue)) do begin
-    StrLen  :=  Length(AssocVarName);
+    StrLen := Length(AssocVarName);
     Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
     Stores.WriteSavegameSection(StrLen, pointer(AssocVarName), ASSOC_SAVE_SECTION);
     
@@ -1590,7 +1566,7 @@ begin
       ASSOC_SAVE_SECTION
     );
     
-    StrLen  :=  Length(AssocVarValue.StrValue);
+    StrLen := Length(AssocVarValue.StrValue);
     Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
     Stores.WriteSavegameSection(StrLen, pointer(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
     
@@ -1652,8 +1628,8 @@ var
     y:          integer;
 
 begin
-  Slot      :=  nil;
-  NumSlots  :=  0;
+  Slot     := nil;
+  NumSlots := 0;
   // * * * * * //
   Slots.Clear;
   Stores.ReadSavegameSection(sizeof(NumSlots), @NumSlots, SLOTS_SAVE_SECTION);
@@ -1665,8 +1641,8 @@ begin
     
     Stores.ReadSavegameSection(sizeof(NumItems), @NumItems, SLOTS_SAVE_SECTION);
     
-    Slot              :=  NewSlot(NumItems, ItemsType, IsTempSlot);
-    Slots[Ptr(SlotN)] :=  Slot;
+    Slot              := NewSlot(NumItems, ItemsType, IsTempSlot);
+    Slots[Ptr(SlotN)] := Slot;
     SetSlotItemsCount(NumItems, Slot);
     
     if not IsTempSlot and (NumItems > 0) then begin
@@ -1697,8 +1673,8 @@ var
     i:              integer;
   
 begin
-  AssocVarValue :=  nil;
-  NumVars       :=  0;
+  AssocVarValue := nil;
+  NumVars       := 0;
   // * * * * * //
   AssocMem.Clear;
   Stores.ReadSavegameSection(sizeof(NumVars), @NumVars, ASSOC_SAVE_SECTION);
@@ -1722,7 +1698,7 @@ begin
     Stores.ReadSavegameSection(StrLen, pointer(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
     
     if (AssocVarValue.IntValue <> 0) or (AssocVarValue.StrValue <> '') then begin
-      AssocMem[AssocVarName]  :=  AssocVarValue; AssocVarValue  :=  nil;
+      AssocMem[AssocVarName] := AssocVarValue; AssocVarValue := nil;
     end else begin
       SysUtils.FreeAndNil(AssocVarValue);
     end;

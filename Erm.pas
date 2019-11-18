@@ -168,8 +168,8 @@ const
   ZvsProcessErm:        Utils.TProcedure = Ptr($74C816);
   ZvsErmError:          procedure ({n} FileName: pchar; Line: integer; ErrStr: pchar) cdecl = Ptr($712333);
   ZvsIsErmError:        pinteger  = Ptr($2772744);
-  ZvsBreakTrigger:      PLONGBOOL = Ptr($27F9A40);
-  ZvsErmErrorsDisabled: PLONGBOOL = Ptr($2772740);
+  ZvsBreakTrigger:      plongbool = Ptr($27F9A40);
+  ZvsErmErrorsDisabled: plongbool = Ptr($2772740);
   ZvsErmHeapPtr:        ppointer  = Ptr($27F9548);
   ZvsErmHeapSize:       pinteger  = Ptr($27F9958);
 
@@ -508,7 +508,7 @@ const
   ZvsIsAi:            function (Owner: integer): boolean cdecl = Ptr($711828);
   ZvsGetErtStr:       function (StrInd: integer): pchar cdecl = Ptr($776620);
   ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
-  ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): LONGBOOL cdecl = Ptr($74195D);
+  ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): longbool cdecl = Ptr($74195D);
   ZvsGetParamValue:   function (var Param: TErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsReparseParam:    function (var Param: TErmCmdParam): integer cdecl = Ptr($72D573);
 
@@ -528,6 +528,11 @@ var
     ErmCmdOptimizer:     procedure (Cmd: PErmCmd) = nil;
     QuitTriggerFlag:     boolean = false;
     TriggerLoopCallback: TTriggerLoopCallback;
+
+    // Each trigger saves x-vars to RetXVars before restoring previous values on exit.
+    // ArgXVars are copied to x on trigger start after saving previous x-values.
+    ArgXVars: TErmXVars;
+    RetXVars: TErmXVars;
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -562,6 +567,8 @@ function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 (*  Up to 16 arguments  *)
 procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 
+function ErmCurrHero: {n} Heroes.PHero; inline;
+
 
 (***) implementation (***)
 uses PatchApi, Stores, AdvErm, ErmTracking;
@@ -584,11 +591,6 @@ var
     TriggerFastAccessList: PTriggerFastAccessList = nil;
     NullTrigger:           PErmTrigger            = nil;
     NumUniqueTriggers:     integer                = 0;
-
-    // Each trigger saves x-vars to RetXVars before restoring previous values on exit.
-    // ArgXVars are copied to x on trigger start after saving previous x-values.
-    ArgXVars: TErmXVars;
-    RetXVars: TErmXVars;
 
 
 function TErmCmdParam.GetType: integer;
@@ -1021,7 +1023,7 @@ begin
   ScriptMan.LoadScriptsFromSavedGame;
 end;
 
-function Hook_LoadErtFile (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_LoadErtFile (Context: Core.PHookContext): longbool; stdcall;
 const
   ARG_FILENAME = 2;
 
@@ -1790,7 +1792,7 @@ begin
   ErmErrReported := true;
 end; // .procedure ReportErmError
 
-function Hook_MError (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_MError (Context: Core.PHookContext): longbool; stdcall;
 begin
   ReportErmError(ppchar(Context.EBP + 16)^, ErmErrCmdPtr^);
   Context.RetAddr := Ptr($712483);
@@ -2271,25 +2273,23 @@ var
   i: integer;
 
 begin
-  {!} Assert(Length(Params) <= Length(GameExt.EraEventParams^), 'Cannot fire ERM event with so many arguments: ' + SysUtils.IntToStr(length(Params)));
+  {!} Assert(Length(Params) <= Length(ArgXVars), 'Cannot fire ERM event with so many arguments: ' + SysUtils.IntToStr(length(Params)));
   
   for i := 0 to High(Params) do begin
-    EraEventParams[i] := Params[i];
+    ArgXVars[i + 1] := Params[i];
   end;
 end;
 
 procedure FireErmEventEx (EventId: integer; const Params: array of integer);
 begin
-  GameExt.EraSaveEventParams;
   AssignEventParams(Params);
   FireErmEvent(EventId);
-  GameExt.EraRestoreEventParams;
 end;
 
 function FireMouseEvent (TriggerId: integer; MouseEventInfo: Heroes.PMouseEventInfo): boolean;
 var
   PrevMouseEventInfo:    Heroes.TMouseEventInfo;
-  PrevEnableDefReaction: LONGBOOL;
+  PrevEnableDefReaction: longbool;
 
 begin
   {!} Assert(MouseEventInfo <> nil);
@@ -2316,15 +2316,15 @@ begin
   end;
 end;
 
-function ErmCurrHero: {n} pointer;
+function ErmCurrHero: {n} Heroes.PHero;
 begin
-  result := PPOINTER($27F9970)^;
+  result := ppointer($27F9970)^;
 end;
 
 function ErmCurrHeroInd: integer; // or -1
 begin
   if ErmCurrHero <> nil then begin
-    result := pinteger(Utils.PtrOfs(ErmCurrHero, $1A))^;
+    result := ErmCurrHero.Id;
   end else begin
     result := -1;
   end;
@@ -2576,7 +2576,7 @@ begin
   result         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_FindErm_BeforeMainLoop (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_FindErm_BeforeMainLoop (Context: Core.PHookContext): longbool; stdcall;
 const
   GLOBAL_EVENT_SIZE = 52;
 
@@ -2594,7 +2594,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_FindErm_BeforeMainLoop
 
-function Hook_FindErm_ZeroHeap (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_FindErm_ZeroHeap (Context: Core.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - $354)^ := ZvsErmHeapSize^;
   Windows.VirtualFree(ZvsErmHeapPtr^, ZvsErmHeapSize^, Windows.MEM_DECOMMIT);
@@ -2608,7 +2608,7 @@ var
   _NumMapScripts:    integer;
   _NumGlobalScripts: integer;
 
-function Hook_FindErm_AfterMapScripts (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_FindErm_AfterMapScripts (Context: Core.PHookContext): longbool; stdcall;
 const
   GLOBAL_EVENT_SIZE = 52;
 
@@ -2919,6 +2919,20 @@ begin
   result          := false;
 end; // .function Hook_FU_P
 
+function OnFuncCalledRemotely (FuncId: integer; Args: Utils.PEndlessIntArr; NumArgs: integer): integer; cdecl;
+var
+  i: integer;
+
+begin
+  for i := 0 to NumArgs - 1 do begin
+    ArgXVars[i + 1] := Args[i];
+  end;
+
+  FireErmEvent(FuncId);
+
+  result := 1;
+end;
+
 type
   TLoopContext = record
     EndValue: integer;
@@ -2936,7 +2950,6 @@ function DO_P (NumParams: integer; Cmd: PErmCmd; SubCmd: PErmSubCmd): boolean;
 var
   FuncId:      integer;
   LoopContext: TLoopContext;
-  CheckType:   integer;
   i:           integer;
 
 begin
@@ -3116,7 +3129,10 @@ begin
   // Rewrite FU:P implementation
   ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
 
-  // Rewrite FU:P implementation
+  (* Rewrite ZVS Call_Function / remote function call handling *)
+  Core.ApiHook(@OnFuncCalledRemotely, Core.HOOKTYPE_JUMP, Ptr($72D1D1));
+
+  // Rewrite DO:P implementation
   Core.ApiHook(@Hook_DO_P, Core.HOOKTYPE_JUMP, Ptr($72D79C));
 
   (* Enable ERM tracking and pre-command initialization *)
