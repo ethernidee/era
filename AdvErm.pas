@@ -615,23 +615,6 @@ begin
   end; // .else
 end;
 
-(* DEPRECATED. Use CheckCmdParamsEx instead *)
-function CheckCmdParams (Params: PServiceParams; const Checks: array of boolean): boolean;
-var
-  i:  integer;
-
-begin
-  {!} Assert(Params <> nil);
-  {!} Assert(not ODD(Length(Checks)));
-  result := true;
-  i      := 0;
-  
-  while result and (i <= High(Checks)) do begin
-    result := (Params[i shr 1].IsStr = Checks[i]) and (Params[i shr 1].OperGet = Checks[i + 1]);
-    i      :=  i + 2;
-  end;
-end; // .function CheckCmdParams
-
 function CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
 var
   i: integer;
@@ -1020,7 +1003,7 @@ end; // .function SN_T
 
 function SN_R (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 begin
-  result := (NumParams = 2) and CheckCmdParams(Params, [IS_STR, OPER_SET, IS_STR, OPER_SET]);
+  result := (NumParams = 2) and CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_SET]);
 
   if not result then begin
     Error := 'Invalid command syntax. Valid syntax is !!SN:R^original resource name^/^new resource name^';
@@ -1031,7 +1014,7 @@ end;
 
 function SN_I (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 begin
-  result := (NumParams = 2) and CheckCmdParams(Params, [IS_STR, OPER_SET, IS_STR, OPER_GET]);
+  result := (NumParams = 2) and CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_GET]);
 
   if not result then begin
     Error := 'Invalid command syntax. Valid syntax is !!SN:Iz#/?z#';
@@ -1127,7 +1110,7 @@ begin
           // M(Slot); delete specified slot
           1:
             begin
-              result := CheckCmdParams(Params, [not IS_STR, not OPER_GET]) and (Params[0].Value.v <> SPEC_SLOT);
+              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET]) and (Params[0].Value.v <> SPEC_SLOT);
               
               if result then begin
                 Slots.DeleteItem(Ptr(Params[0].Value.v));
@@ -1136,10 +1119,7 @@ begin
           // M(Slot)/[?]ItemsCount; analog of SetLength/Length
           2:
             begin
-              result  :=
-                CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
-                (not Params[1].IsStr)                               and
-                (Params[1].OperGet or (Params[1].Value.v >= 0));
+              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT]) and (Params[1].OperGet or (Params[1].Value.v >= 0));
 
               if result then begin          
                 if Params[1].OperGet then begin
@@ -1165,10 +1145,7 @@ begin
           // M(Slot)/(VarN)/[?](Value) or M(Slot)/?addr/(VarN)
           3:
             begin
-              result  :=
-                CheckCmdParams(Params, [not IS_STR, not OPER_GET])  and
-                GetSlot(Params[0].Value.v, Slot, Error)               and
-                (not Params[1].IsStr);
+              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT]) and GetSlot(Params[0].Value.v, Slot, Error);
               
               if result then begin
                 if Params[1].OperGet then begin
@@ -1249,20 +1226,7 @@ begin
             end; // .case 3
           4:
             begin
-              result := CheckCmdParams
-              (
-                Params,
-                [
-                  not IS_STR,
-                  not OPER_GET,
-                  not IS_STR,
-                  not OPER_GET,
-                  not IS_STR,
-                  not OPER_GET,
-                  not IS_STR,
-                  not OPER_GET
-                ]
-              ) and
+              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]) and
               (Params[0].Value.v >= SPEC_SLOT)                        and
               (Params[1].Value.v >= 0)                                and
               Math.InRange(Params[2].Value.v, 0, ORD(High(TVarType))) and
@@ -1270,17 +1234,11 @@ begin
               
               if result then begin
                 if Params[0].Value.v = SPEC_SLOT then begin
-                  Erm.v[1] := AllocSlot
-                  (
-                    Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP
-                  );
+                  Erm.v[1] := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP);
                 end else begin
-                  Slots[Ptr(Params[0].Value.v)] :=  NewSlot
-                  (
-                    Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP
-                  );
-                end; // .else
-              end; // .if
+                  Slots[Ptr(Params[0].Value.v)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP);
+                end;
+              end;
             end; // .case 4
         else
           result := false;
@@ -2242,7 +2200,7 @@ begin
   if result then begin
     // MP:P^track name^/[DontTrackPosition = 0 or 1]/[Loop = 0 or 1];
     if NumParams = 3 then begin
-      result := CheckCmdParams(Params, [IS_STR, OPER_SET, IS_INT, OPER_SET, IS_INT, OPER_SET]);
+      result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]);
 
       if result then begin
         Heroes.ChangeMp3Theme(Params[0].Value.pc, Params[1].Value.v <> 0, Params[2].Value.v <> 0);
@@ -2250,7 +2208,7 @@ begin
     end
     // MP:P0/[pause = 0, resume = 1]
     else begin
-      result := CheckCmdParams(Params, [IS_INT, OPER_SET, IS_INT, OPER_SET]) and Math.InRange(Params[1].Value.v, 0, 1);
+      result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]) and Math.InRange(Params[1].Value.v, 0, 1);
 
       if result then begin
         if Params[1].Value.v = 0 then begin
@@ -2265,7 +2223,7 @@ end; // .function MP_P
 
 function MP_C (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 begin
-  result := (NumParams = 1) and CheckCmdParams(Params, [IS_STR, OPER_GET]);
+  result := (NumParams = 1) and CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_GET]);
 
   if result then begin
     Windows.LStrCpy(Params[0].Value.pc, pchar(CurrentMp3Track));
