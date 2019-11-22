@@ -95,7 +95,7 @@ type
   TSourceAllocationCell = record
         SourceId:   integer;
     {n} SourceAddr: pword;    // nil means empty cell
-        Disposable: LONGBOOL;
+        Disposable: longbool;
   end;
 
   TRecruitMonsDlgOpenEvent = record
@@ -600,28 +600,28 @@ begin
   RecruitMonsDlgOpenEvent := PrevEvent;
 end; // .procedure Hook_OpenRecruitMonsDlg
 
-function Hook_OpenTownDwelling (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_OpenTownDwelling (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := (pcardinal(Context.EBX + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.EDI;
   result                                := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OpenTownHallDwelling (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_OpenTownHallDwelling (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := (pcardinal(pcardinal(Heroes.TOWN_MANAGER)^ + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.ESI;
   result                                := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OpenTownHordeDwelling (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_OpenTownHordeDwelling (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := (pcardinal(Context.EBX + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := pbyte(pbyte(pinteger(pinteger(Heroes.TOWN_MANAGER)^ + $38)^ + 4)^ * 2 + Context.EDI + integer(GameExt.GetRealAddr(Ptr($68A3A2))))^;
   result                                := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OpenTownDwellingFromKingdomOverview (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_OpenTownDwellingFromKingdomOverview (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := (cardinal(Context.EAX) - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.EDI;
@@ -629,7 +629,7 @@ begin
   result                                := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_UpdateAdvMapInRecruitMonsDlg (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_UpdateAdvMapInRecruitMonsDlg (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   // Update advmap if corresponding flag is set
   result := Utils.Flags(PRecruitMonsDlgSetup(Context.ESI).ObjType).Have(DLG_FLAG_AUTO_UPDATE_ADVMAP);
@@ -639,7 +639,7 @@ begin
   end;
 end;
 
-function Hook_RecruitMonsDlgMouseClick (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_RecruitMonsDlgMouseClick (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   result := Erm.FireMouseEvent(Erm.TRIGGER_RECRUIT_DLG_MOUSE_CLICK, Ptr(Context.EBX));
 
@@ -648,7 +648,7 @@ begin
   end;
 end;
 
-function Hook_TownHallMouseClick (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_TownHallMouseClick (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   result := Erm.FireMouseEvent(Erm.TRIGGER_TOWN_HALL_MOUSE_CLICK, Ptr(Context.EBX));
 
@@ -657,7 +657,7 @@ begin
   end;
 end;
 
-function Hook_RecruitDlgRecalc (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_RecruitDlgRecalc (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   EVENT_PARAM_COST          = 1;
   EVENT_PARAM_RESOURCE      = 2;
@@ -678,7 +678,7 @@ begin
   DlgSetup.ResourceCost := Erm.RetXVars[EVENT_PARAM_RESOURCE_COST];
 end; // .function Hook_RecruitDlgRecalc
 
-function Hook_RecruitDlgAction (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_RecruitDlgAction (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   EVENT_PARAM_NUM_RECRUITED_MONS = 0;
 
@@ -687,7 +687,7 @@ begin
   Erm.FireErmEventEx(Erm.TRIGGER_RECRUIT_DLG_ACTION, [Context.ECX and $FFFF]);
 end;
 
-function Hook_AllowZeroCost (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_AllowZeroCost (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   result := PRecruitMonsDlgSetup(Context.EBX).Cost <> 0;
 
@@ -696,7 +696,7 @@ begin
   end;
 end;
 
-function Hook_AllowZeroResourceCost (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_AllowZeroResourceCost (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   result := PRecruitMonsDlgSetup(Context.EBX).ResourceCost <> 0;
 
@@ -705,7 +705,7 @@ begin
   end;
 end;
 
-function Hook_RecruitDlgCloseOnBuy (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_RecruitDlgCloseOnBuy (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   Dlg: PRecruitMonsDlgSetup;
 
@@ -1084,8 +1084,11 @@ begin
 end; // .function Command_RecruitDlg_Open
 
 function Receiver_RD (Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
+var
+  CmdWrapper: AdvErm.TErmCmdWrapper;
+
 begin
-  with AdvErm.WrapErmCmd('RD', CmdInfo) do begin
+  with AdvErm.WrapErmCmd('RD', CmdInfo, CmdWrapper)^ do begin
     while FindNextSubcmd(['C', 'S', 'F', 'I', 'M', 'O']) do begin
       case Cmd of
         'C': Success := Command_RecruitDlg(NumParams, @Params, Error);

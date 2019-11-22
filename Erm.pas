@@ -591,6 +591,7 @@ var
     TriggerFastAccessList: PTriggerFastAccessList = nil;
     NullTrigger:           PErmTrigger            = nil;
     NumUniqueTriggers:     integer                = 0;
+    CompiledErmOptimized:  boolean                = false;
 
 
 function TErmCmdParam.GetType: integer;
@@ -1923,6 +1924,11 @@ var
   ListEndInd: integer;
 
 begin
+  if not CompiledErmOptimized then begin
+    result := ZvsErmHeapPtr^;
+    exit;
+  end;
+
   ListEndInd := NumUniqueTriggers;
   result     := NullTrigger;
   //ShowMessage(Format('Id: %d. ListEndInd = %d', [Id, ListEndInd]));
@@ -2149,8 +2155,15 @@ begin
     SortTriggerFastAccessList;
     OptimizeFastAccessListAndRelinkTriggers;
     TurnFastAccessListIntoBinaryTree;
+    CompiledErmOptimized := true;
   end; 
 end; // .function OptimizeCompiledErm
+
+function Hook_FindErm_Start (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  CompiledErmOptimized := false;
+  result               := true;
+end;
 
 function Hook_FindErm_SuccessEnd (Context: ApiJack.PHookContext): longbool; stdcall;
 const
@@ -2476,10 +2489,10 @@ begin
 
       Trigger := StartTrigger;
 
-      // Loop through all triggers with specified ID
+      // Loop through all triggers with specified ID / through all triggers in instructions phase
       while (Trigger <> nil) and (Trigger.Id <> 0) do begin
         // Execute only active triggers with commands
-        if (Trigger.NumCmds > 0) and (Trigger.Disabled = 0) then begin
+        if (Trigger.Id = TriggerId) and (Trigger.NumCmds > 0) and (Trigger.Disabled = 0) then begin
           ZvsBreakTrigger^ := false;
           QuitTriggerFlag  := false;
 
@@ -3122,6 +3135,9 @@ begin
 
   (* Disable default tracing of last ERM command *)
   Core.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);
+
+  (* Prepare for ERM parsing *)
+  ApiJack.HookCode(Ptr($749974), @Hook_FindErm_Start);
 
   (* Optimize compiled ERM by storing direct address of command handler in command itself *)
   ApiJack.HookCode(Ptr($74C5A7), @Hook_FindErm_SuccessEnd);

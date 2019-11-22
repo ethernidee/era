@@ -106,6 +106,7 @@ type
     StrValue: string;
   end; // .class TAssocVar
 
+  PErmCmdWrapper = ^TErmCmdWrapper;
   TErmCmdWrapper = record
     Success:    boolean;
     CmdInfo:    Erm.PErmSubCmd;
@@ -126,7 +127,7 @@ type
 procedure ResetMemory;
 function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
 procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
-function  WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
+function  WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
 procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: integer = sizeof(Erm.TErmZVar));
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
 function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
@@ -528,24 +529,24 @@ begin
   AdditionalCmds[NumAdditionalCmds].Handler := nil;
 end;
 
-function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd): TErmCmdWrapper;
+function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
 begin
   {!} Assert(CmdName <> nil);
   {!} Assert(CmdInfo <> nil);
-  CmdInfo.Pos    := 0;
-  result.CmdInfo := CmdInfo;
-  result.CmdName := CmdName;
+  CmdInfo.Pos     := 0;
+  Wrapper.CmdInfo := CmdInfo;
+  Wrapper.CmdName := CmdName;
+  result          := @Wrapper;
 
-  with result do begin
+  with Wrapper do begin
     Success    := true;
     CmdPtr     := @CmdInfo.Code.Value[0];
     Cmd        := CmdPtr^;
     Error      := 'Invalid command parameters';
     NumParams  := 0;
     _ParamsLen := 0;
-    FillChar(Params, sizeof(Params), 0);
   end;
-end;
+end; // .function WrapErmCm
 
 function TErmCmdWrapper.FindNextSubcmd (AllowedSubcmds: Utils.TCharSet): boolean;
 begin
@@ -573,7 +574,7 @@ end; // .function TErmCmdWrapper.FindNextSubcmd
 
 procedure TErmCmdWrapper.Cleanup;
 begin
-  Self.Error := '';
+  // May be necessary again in the future in case of code optimization and manual cleaup
 end;
 
 function TErmCmdWrapper.GetCmdResult: integer;
@@ -626,11 +627,8 @@ begin
   i      := 0;
   
   while result and (i <= High(Checks)) do begin
-    result  :=
-      (Params[i shr 1].IsStr  = Checks[i])  and
-      (Params[i shr 1].OperGet = Checks[i + 1]);
-    
-    i :=  i + 2;
+    result := (Params[i shr 1].IsStr = Checks[i]) and (Params[i shr 1].OperGet = Checks[i + 1]);
+    i      :=  i + 2;
   end;
 end; // .function CheckCmdParams
 
@@ -2314,8 +2312,11 @@ begin
 end;
 
 function New_Mp3_Receiver (OrigFunc: pointer; Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: PErmSubCmd): integer; stdcall;
+var
+  CmdWrapper: TErmCmdWrapper;
+
 begin
-  with WrapErmCmd('MP', CmdInfo) do begin
+  with WrapErmCmd('MP', CmdInfo, CmdWrapper)^ do begin
     while FindNextSubcmd(['P', 'C', 'S', 'R']) do begin
       case Cmd of
         'P': begin Success := MP_P(NumParams, @Params, Error); end;
