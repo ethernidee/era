@@ -264,7 +264,11 @@ begin
       result := (Ind >= Low(Erm.v^)) and (Ind <= High(Erm.v^));
       
       if result then begin
-        ServiceParam.Value.v := Erm.v[Ind];
+        if ServiceParam.OperGet then begin
+          ServiceParam.Value.p := @Erm.v[Ind];
+        end else begin
+          ServiceParam.Value.v := Erm.v[Ind];
+        end;
       end else begin
         Erm.ShowErmError('v-index is out of range 1..10000');
       end;
@@ -274,7 +278,11 @@ begin
       result := (Ind >= 1) and (Ind <= 200) and (Erm.ErmCurrHero <> nil);
       
       if result then begin
-        ServiceParam.Value.v := Erm.w[Erm.ErmCurrHero.Id, Ind];
+        if ServiceParam.OperGet then begin
+          ServiceParam.Value.p := @Erm.w[Erm.ErmCurrHero.Id, Ind];
+        end else begin
+          ServiceParam.Value.v := Erm.w[Erm.ErmCurrHero.Id, Ind];
+        end;
       end else begin
         Erm.ShowErmError('w-index is out of range 1..200');
       end;
@@ -284,7 +292,11 @@ begin
       result := (Ind >= Low(Erm.x^)) and (Ind <= High(Erm.x^));
       
       if result then begin
-        ServiceParam.Value.v := Erm.x[Ind];
+        if ServiceParam.OperGet then begin
+          ServiceParam.Value.p := @Erm.x[Ind];
+        end else begin
+          ServiceParam.Value.v := Erm.x[Ind];
+        end;
       end else begin
         Erm.ShowErmError('x-index is out of range 1..16');
       end;
@@ -295,9 +307,13 @@ begin
       
       if result then begin
         if Ind > 0 then begin
-          ServiceParam.Value.v := Erm.y[Ind];
+          ServiceParam.Value.p := @Erm.y[Ind];
         end else begin
-          ServiceParam.Value.v := Erm.ny[-Ind];
+          ServiceParam.Value.p := @Erm.ny[-Ind];
+        end;
+
+        if not ServiceParam.OperGet then begin
+          ServiceParam.Value.v := pinteger(ServiceParam.Value.p)^;
         end;
       end else begin
         Erm.ShowErmError('y-index is out of range -100..-1, 1..100');
@@ -309,9 +325,13 @@ begin
       
       if result then begin
         if Ind > 0 then begin
-          ServiceParam.Value.v := pinteger(@Erm.e[Ind])^;
+          ServiceParam.Value.p := @Erm.e[Ind];
         end else begin
-          ServiceParam.Value.v := pinteger(@Erm.ne[-Ind])^;
+          ServiceParam.Value.p := @Erm.ne[-Ind];
+        end;
+
+        if not ServiceParam.OperGet then begin
+          ServiceParam.Value.v := pinteger(ServiceParam.Value.p)^;
         end;
       end else begin
         Erm.ShowErmError('e-index is out of range -100..-1, 1..100');
@@ -323,15 +343,14 @@ begin
       
       if result then begin
         if Ind > 1000 then begin
-          ServiceParam.StrValue := ZvsGetErtStr(Ind);
+          ServiceParam.Value.pc := ZvsGetErtStr(Ind);
         end else if Ind > 0 then begin
-          ServiceParam.StrValue := pchar(@Erm.z[Ind]);
+          ServiceParam.Value.pc := pchar(@Erm.z[Ind]);
         end else begin
-          ServiceParam.StrValue := pchar(@Erm.nz[-Ind]);
+          ServiceParam.Value.pc := pchar(@Erm.nz[-Ind]);
         end;
 
-        ServiceParam.Value.pc := pchar(ServiceParam.StrValue);
-        ServiceParam.IsStr    := true;
+        ServiceParam.IsStr := true;
       end; // .if
     end; // .case
   else
@@ -398,8 +417,8 @@ begin
       Inc(Pos);
       
       if StrLib.FindChar('%', Params[NumParams].StrValue, CharPos) then begin
-        Params[NumParams].Value.pc := Erm.ZvsInterpolateStr(pchar(Params[NumParams].StrValue));
-        Params[NumParams].StrValue := Params[NumParams].Value.pc;
+        Params[NumParams].StrValue := Erm.ZvsInterpolateStr(pchar(Params[NumParams].StrValue));
+        Params[NumParams].Value.pc := pchar(Params[NumParams].StrValue);
       end;
     end else begin
       // Get parameter type: z, v, x, y or constant
@@ -547,8 +566,6 @@ asm
   POP EBX
   // RET
 end; // .procedure CallProc
-
-
 
 (* Returns Era/kernel32 API function address by name. Caches positive results *)
 function GetCombinedApiAddr (const ApiName: string): {n} pointer;
@@ -1094,7 +1111,7 @@ end; // .function SN_T
 
 function SN_R (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 begin
-  result := (NumParams = 2) and CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_SET]);
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_SET]);
 
   if not result then begin
     Error := 'Invalid command syntax. Valid syntax is !!SN:R^original resource name^/^new resource name^';
@@ -1105,7 +1122,7 @@ end;
 
 function SN_I (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 begin
-  result := (NumParams = 2) and CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_GET]);
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_GET]);
 
   if not result then begin
     Error := 'Invalid command syntax. Valid syntax is !!SN:Iz#/?z#';
@@ -1164,6 +1181,27 @@ begin
     end;
   end; // .else
 end; // .function SN_F
+
+function SN_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
+var
+  CmdWrapper: TErmCmdWrapper;
+
+begin
+  with WrapErmCmd('SN', CmdInfo, CmdWrapper)^ do begin
+    while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F']) do begin
+      case Cmd of
+        //'P': begin Success := SN_P(NumParams, @Params, Error); end;
+        'H': begin Success := SN_H(NumParams, @Params, Error); end;
+        'T': begin Success := SN_T(NumParams, @Params, Error); end;
+        'I': begin Success := SN_I(NumParams, @Params, Error); end;
+        'F': begin Success := SN_F(NumParams, @Params, Error); end;
+      end;
+    end;
+
+    result := GetCmdResult;
+    Cleanup;
+  end;
+end; // .function SN_Receiver
 
 function ExtendedEraService (Cmd: char; NumParams: integer; Params: PServiceParams; out Err: pchar): boolean;
 var
@@ -2412,6 +2450,7 @@ end; // .function New_Mp3_Trigger
 
 procedure RegisterCommands;
 begin
+  RegisterErmReceiver('SN', @SN_Receiver, CMD_PARAMS_CONFIG_NONE);
   RegisterErmReceiver('MP', @New_Mp3_Receiver, CMD_PARAMS_CONFIG_NONE);
 end;
 

@@ -16,6 +16,9 @@ type
   (* Import *)
   TEventHandler = EventMan.TEventHandler;
 
+  PErmXVars = ^TErmXVars;
+  TErmXVars = array [1..16] of integer;
+
 
 (***) implementation (***)
 
@@ -218,6 +221,16 @@ begin
   result := ApiJack.HookCode(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch));
 end;
 
+function GetArgXVars: PErmXVars; stdcall;
+begin
+  result := @Erm.ArgXVars;
+end;
+
+function GetRetXVars: PErmXVars; stdcall;
+begin
+  result := @Erm.RetXVars;
+end;
+
 exports
   Ask,
   ClearIniCache,
@@ -233,7 +246,9 @@ exports
   GameExt.GenerateDebugInfo,
   GameExt.GetRealAddr,
   GameExt.RedirectMemoryBlock,
+  GetArgXVars,
   GetButtonID,
+  GetRetXVars,
   GetVersion,
   GlobalRedirectFile,
   Heroes.GetGameState,
