@@ -48,6 +48,7 @@ const
   ERA_CALLCONV_CDECL_OR_STDCALL = 1;
   ERA_CALLCONV_THISCALL         = 2;
   ERA_CALLCONV_FASTCALL         = 3;
+  ERA_CALLCONV_FLOAT_RES        = 4;
 
   (* ERM additional commands parameter config *)
   CMD_PARAMS_CONFIG_NONE                     = 0;
@@ -90,7 +91,7 @@ type
   (* Params index starts from 1 *)
   TCommandHandler = function (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 
-  TErmCmdHandler = function (Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: Erm.PErmSubCmd): integer cdecl;
+  TErmCmdHandler = function (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer cdecl;
 
   TVarType = (INT_VAR, STR_VAR);
   
@@ -471,6 +472,84 @@ begin
   result := Pos;
 end; // .function GetServiceParams
 
+procedure CallProc (Addr: integer; Convention: integer; PParams: pointer; NumParams: integer); stdcall; assembler;
+const
+  SERVICE_PARAM_SIZE = sizeof(TServiceParam); // Offset to the next parameter in parameters array
+
+var
+  SavedEsp: integer;
+  
+asm
+  CMP Convention, ERA_CALLCONV_FLOAT_RES
+  JB @@IntConvention
+@@FloatConvetion:
+  SUB Convention, ERA_CALLCONV_FLOAT_RES
+@@IntConvention:
+  PUSH EBX
+  MOV SavedEsp, ESP
+
+  // Execute function without parameters immediately
+  MOV ECX, NumParams
+  TEST ECX, ECX
+  JZ @@CallFunc
+
+  MOV EBX, Convention
+  MOV EDX, PParams
+  
+  // Handle Pascal convention separately
+  TEST EBX, EBX
+  JNZ @@NotPascalConversion
+@@PascalConversion:
+  @@PascalLoop:
+    PUSH DWORD [EDX]
+    ADD EDX, SERVICE_PARAM_SIZE
+    DEC ECX
+    JNZ @@PascalLoop
+  JMP @@CallFunc
+@@NotPascalConversion:
+  // Recalculate number of arguments for pushing into stack
+  DEC EBX
+  SUB ECX, EBX
+  
+  // ...And if all arguments are will be stored in registers, no need to use stack at all
+  JZ @@InitThisOrFastCall
+  JS @@InitThisOrFastCall
+  
+  // Otherwise push arguments in stack in reversed order
+  ADD ECX, EBX
+  PUSH ECX
+  IMUL ECX, ECX, SERVICE_PARAM_SIZE
+  LEA EDX, [EDX + ECX - SERVICE_PARAM_SIZE]
+  POP ECX
+  SUB ECX, EBX
+
+  @@CdeclLoop:
+    PUSH DWORD [EDX]
+    SUB EDX, SERVICE_PARAM_SIZE
+    DEC ECX
+    JNZ @@CdeclLoop
+  @@InitThisOrFastCall:
+  
+  // Initialize ThisCall and FastCall arguments
+  MOV ECX, PParams
+  MOV EDX, [ECX + SERVICE_PARAM_SIZE]
+  MOV ECX, [ECX]
+@@CallFunc:
+  // Calling function
+  MOV EAX, Addr
+  CALL EAX
+
+  // Save result in both v1 and e1
+  FST DWORD [$A48F18]
+  MOV DWORD [$887668], EAX
+
+  MOV ESP, SavedEsp
+  POP EBX
+  // RET
+end; // .procedure CallProc
+
+
+
 (* Returns Era/kernel32 API function address by name. Caches positive results *)
 function GetCombinedApiAddr (const ApiName: string): {n} pointer;
 begin
@@ -513,21 +592,33 @@ end;
 procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
 var
   CmdId: Erm.TErmCmdId;
+  i:     integer;
 
 begin
   {!} Assert(Length(Cmd) = 2, 'Cannot register invalid ERM receiver: ' + Cmd);
   {!} Assert(@Handler <> nil);
-  {!} Assert(NumAdditionalCmds + 1 <= High(AdditionalCmds), 'Cannot register more ERM receivers');
-  CmdId.Name[0]                                  := Cmd[1];
-  CmdId.Name[1]                                  := Cmd[2];
-  AdditionalCmds[NumAdditionalCmds].Id.Id        := CmdId.Id;
-  AdditionalCmds[NumAdditionalCmds].Handler      := Handler;
-  AdditionalCmds[NumAdditionalCmds].ParamsConfig := ParamsConfig;
+  CmdId.Name[0] := Cmd[1];
+  CmdId.Name[1] := Cmd[2];
 
-  Inc(NumAdditionalCmds);
+  i := 0;
+
+  while (i < NumAdditionalCmds) and (AdditionalCmds[i].Id.Id <> CmdId.Id) do begin
+    Inc(i);
+  end;
+
+  {!} Assert(i <= High(AdditionalCmds), 'Cannot register more ERM receivers');
+  
+  AdditionalCmds[i].Id.Id        := CmdId.Id;
+  AdditionalCmds[i].Handler      := Handler;
+  AdditionalCmds[i].ParamsConfig := ParamsConfig;
+
+  if i >= NumAdditionalCmds then begin
+    Inc(NumAdditionalCmds);
+  end;
+
   AdditionalCmds[NumAdditionalCmds].Id.Id   := 0;
   AdditionalCmds[NumAdditionalCmds].Handler := nil;
-end;
+end; // .procedure RegisterErmReceiver
 
 function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
 begin
@@ -2163,13 +2254,6 @@ begin
   DumpErmMemory(ERM_MEMORY_DUMP_FILE);
 end;
 
-procedure OnBeforeWoG (Event: PEvent); stdcall;
-begin
-  (*Core.p.WriteLoHook($74B6B2, @HookFindErm_NewReceivers);*)
-  (* Custom ERM memory dump *)
-  Core.ApiHook(@Hook_DumpErmVars, Core.HOOKTYPE_BRIDGE, @Erm.ZvsDumpErmVars);
-end;
-
 function New_ZvsSaveMP3 (OrigFunc: pointer): integer; stdcall;
 begin
   Heroes.GzipWrite(4, pchar('-MP3'));
@@ -2269,7 +2353,7 @@ begin
   end;
 end;
 
-function New_Mp3_Receiver (OrigFunc: pointer; Cmd: char; NumParams: integer; Dummy: integer; CmdInfo: PErmSubCmd): integer; stdcall;
+function New_Mp3_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
 var
   CmdWrapper: TErmCmdWrapper;
 
@@ -2328,28 +2412,13 @@ end; // .function New_Mp3_Trigger
 
 procedure RegisterCommands;
 begin
-  // ...
+  RegisterErmReceiver('MP', @New_Mp3_Receiver, CMD_PARAMS_CONFIG_NONE);
 end;
 
-procedure OnAfterWoG (Event: PEvent); stdcall;
+procedure OnBeforeWoG (Event: PEvent); stdcall;
 begin
-  (* SN:H for adventure map object hints *)
-  Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
-
-  (* ERM MP3 trigger/receivers remade *)
-  // Make WoG ResetMP3, SaveMP3, LoadMP3 doing nothing
-  Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
-  ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
-  ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
-
-  // Disable MP3Start WoG hook
-  Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
-
-  // Replace MP3 receiver
-  ApiJack.StdSplice(Ptr($774A8C), @New_Mp3_Receiver, CONV_CDECL, 4);
-
-  // Add new !?MP trigger
-  ApiJack.StdSplice(Ptr($59AFB0), @New_Mp3_Trigger, CONV_THISCALL, 3);
+  (* Custom ERM memory dump *)
+  Core.ApiHook(@Hook_DumpErmVars, Core.HOOKTYPE_BRIDGE, @Erm.ZvsDumpErmVars);
 
   (* ERM direct call by hanlder instead of cmd linear scan implementation *)
   // Allocate additional local variable for FindErm. CmdHandler: TErmCmdHandler; absolute (EBP - $6C8)
@@ -2368,18 +2437,39 @@ begin
   Core.p.WriteDataPatch(Ptr($7493A3), ['8B4D088B898002000085C90F84310300008D8500FDFFFF508B4508508B45F0508A85E3FCFFFF50FFD183C41085C00F8498000000EB6290909090909090' +
                                        '90909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090']);
 
-  // Relocate ERM_Additions list
+  (* Relocate ERM_Additions list *)
   Utils.CopyMem(NumAdditionalCmds * sizeof(TErmAdditionalCmd), Ptr($798AD8), @AdditionalCmds);
   AdditionalCmds[NumAdditionalCmds].Id.Id := 0;
   GameExt.RedirectMemoryBlock(Ptr($798AD8), (NumAdditionalCmds + 1) * sizeof(TErmAdditionalCmd), @AdditionalCmds);
-  // Core.p.WriteDataPatch(Ptr($7493C7 + 3), ['%d', @AdditionalCmds]); Overwritten by patch
-  // Core.p.WriteDataPatch(Ptr($7493DD + 3), ['%d', @AdditionalCmds]); Overwritten by patch
+  // [OFF] Core.p.WriteDataPatch(Ptr($7493C7 + 3), ['%d', @AdditionalCmds]); Overwritten by patch
+  // [OFF] Core.p.WriteDataPatch(Ptr($7493DD + 3), ['%d', @AdditionalCmds]); Overwritten by patch
   Core.p.WriteDataPatch(Ptr($74BC8E + 3), ['%d', @AdditionalCmds]);
   Core.p.WriteDataPatch(Ptr($74BCA4 + 3), ['%d', @AdditionalCmds]);
-  // Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
-  // Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
+  // [OFF] Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
+  // [OFF] Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
   Core.p.WriteDataPatch(Ptr($74BCE9 + 2), ['%d', @AdditionalCmds[0].ParamsConfig]);
   Core.p.WriteDataPatch(Ptr($74C1AE + 2), ['%d', @@AdditionalCmds[0].Handler]); // Patched command
+
+  (* Register/overwrite ERM receivers *)
+  RegisterCommands;
+end;
+
+procedure OnAfterWoG (Event: PEvent); stdcall;
+begin
+  (* SN:H for adventure map object hints *)
+  Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
+
+  (* ERM MP3 trigger/receivers remade *)
+  // Make WoG ResetMP3, SaveMP3, LoadMP3 doing nothing
+  Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
+  ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
+  ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
+
+  // Disable MP3Start WoG hook
+  Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
+
+  // Add new !?MP trigger
+  ApiJack.StdSplice(Ptr($59AFB0), @New_Mp3_Trigger, CONV_THISCALL, 3);
 end; // .procedure OnAfterWoG
 
 procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
