@@ -82,7 +82,7 @@ type
     IsStr:         longbool;
     OperGet:       longbool;
     Value:         TServiceParamValue;
-    StrValue:      string;
+    //StrValue:      string;
     ParamModifier: integer;
   end;
 
@@ -97,16 +97,27 @@ type
   TVarType = (INT_VAR, STR_VAR);
   
   TSlot = class
-    ItemsType:  TVarType;
-    IsTemp:     boolean;
-    IntItems:   array of integer;
-    StrItems:   array of string;
-  end; // .class TSlot
+    ItemsType: TVarType;
+    IsTemp:    boolean;
+    IntItems:  array of integer;
+    StrItems:  array of string;
+  end;
   
   TAssocVar = class
     IntValue: integer;
     StrValue: string;
-  end; // .class TAssocVar
+  end;
+
+  (* Fast temp memory allocator for ERM inline strings storage during commands execution *)
+  TServiceMemAllocator = record
+    BufPos: integer;
+    Buf:    array [0..1000000 - 1] of char;
+
+    procedure Init;
+    procedure AllocPage;
+    function  AllocStr (StrLen: integer): pchar;
+    procedure FreePage;
+  end;
 
   PErmCmdWrapper = ^TErmCmdWrapper;
   TErmCmdWrapper = record
@@ -176,6 +187,40 @@ var
     CurrentMp3Track:     string;
     CurrentSoundNameBuf: PSoundNameBuffer = nil;
 
+    ServiceMemAllocator: TServiceMemAllocator;
+
+
+procedure TServiceMemAllocator.Init;
+begin
+  Self.BufPos                       := 0;
+  pinteger(@Self.Buf[Self.BufPos])^ := 0;
+end;
+
+procedure TServiceMemAllocator.AllocPage;
+begin
+  Inc(Self.BufPos, sizeof(integer));
+  {!} Assert(Self.BufPos + sizeof(integer) < sizeof(Self.Buf), 'TServiceMemAllocator.AllocPage failed. No space in buffer');
+  pinteger(@Self.Buf[Self.BufPos])^ := 0;
+end;
+
+function TServiceMemAllocator.AllocStr (StrLen: integer): pchar;
+var
+  PageSize: integer;
+
+begin
+  Inc(StrLen);
+  result   := @Self.Buf[Self.BufPos];
+  PageSize := pinteger(@Self.Buf[Self.BufPos])^ + StrLen;
+  Inc(Self.BufPos, StrLen);
+  {!} Assert(Self.BufPos + sizeof(integer) < sizeof(Self.Buf), 'TServiceMemAllocator.AllocStr failed. No space in buffer');
+  pinteger(@Self.Buf[Self.BufPos])^ := PageSize;
+end;
+
+procedure TServiceMemAllocator.FreePage;
+begin
+  {!} Assert(Self.BufPos > 0, 'TServiceMemAllocator.FreePage failed. No page allocated');
+  Dec(Self.BufPos, pinteger(@Self.Buf[Self.BufPos])^ + sizeof(integer));
+end;
 
 function ErmVarToStr (VarType: char; Ind: integer; var Res: string): boolean;
 begin
@@ -400,20 +445,30 @@ begin
       Inc(Pos);
       StartPos := Pos;
       
-      while PCmd[Pos] <> '^' do begin
+      while not (PCmd[Pos] in ['^', #0]) do begin
         Inc(Pos);
       end;
-      
-      StrLen                     := Pos - StartPos;
-      Params[NumParams].IsStr    := true;
-      SetString(Params[NumParams].StrValue, pchar(@PCmd[StartPos]), StrLen);
-      Params[NumParams].Value.pc := pchar(Params[NumParams].StrValue);
-      Inc(Pos);
-      
-      if StrLib.FindChar('%', Params[NumParams].StrValue, CharPos) then begin
-        Params[NumParams].StrValue := Erm.ZvsInterpolateStr(pchar(Params[NumParams].StrValue));
-        Params[NumParams].Value.pc := pchar(Params[NumParams].StrValue);
+
+      if PCmd[Pos] = #0 then begin
+        result := -1;
+        exit;
       end;
+      
+      StrLen                  := Pos - StartPos;
+      Params[NumParams].IsStr := true;
+      PCmd[Pos]               := #0;
+
+      if SysUtils.StrScan(@PCmd[StartPos], '%') <> nil then begin
+        Params[NumParams].Value.pc := Erm.ZvsInterpolateStr(@PCmd[StartPos]);
+        StrLen := Windows.LStrLen(Params[NumParams].Value.pc);
+        Params[NumParams].Value.pc := LStrCpy(ServiceMemAllocator.AllocStr(StrLen), Params[NumParams].Value.pc);
+      end else begin
+        Params[NumParams].Value.pc := ServiceMemAllocator.AllocStr(StrLen);
+        Utils.CopyMem(StrLen, pchar(@PCmd[StartPos]), Params[NumParams].Value.pc);
+      end;
+      
+      PCmd[Pos] := '^';
+      Inc(Pos);
     end else begin
       // Get parameter type: z, v, x, y or constant
       ParType := PCmd[Pos];
@@ -653,6 +708,7 @@ function TErmCmdWrapper.FindNextSubcmd (AllowedSubcmds: Utils.TCharSet): boolean
 begin
   // Skip parameters and subcommand from previous call
   if Self.Success and (Self._ParamsLen > 0) then begin
+    ServiceMemAllocator.FreePage;
     Inc(Self.CmdPtr, Self._ParamsLen);
     Inc(Self.CmdInfo.Pos, Self._ParamsLen);
     Self._ParamsLen := 0;
@@ -668,6 +724,7 @@ begin
     if not Self.Success then begin
       Error := 'Unknown command "!!' + Self.CmdName + ':' + Self.Cmd + '"';
     end else begin
+      ServiceMemAllocator.AllocPage;
       Self._ParamsLen := GetServiceParams(Self.CmdPtr, Self.NumParams, Self.Params);
       Self.Success    := Self._ParamsLen <> -1;
     end;
