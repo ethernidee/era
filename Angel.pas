@@ -144,7 +144,7 @@ asm
   ADD ECX, EBX
   PUSH ECX
   
-  IMUL ECX, ECX, SERVICE_PARAM_SIZE
+  IMUL ECX, ECX, sizeof(TServiceParam)
 
   LEA EDX, [EDX + ECX - SERVICE_PARAM_SIZE]
   POP ECX
@@ -252,7 +252,7 @@ begin
     result  :=  false;
   end; // .switch VarType
 end; // .function GetVarStrValue
-
+xxx
 function FindChar (c: char; const Str: string; var Pos: integer): boolean;
 var
   Len:  integer;

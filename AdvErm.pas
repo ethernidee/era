@@ -6,7 +6,7 @@ AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Math, Crypto, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack,
+  Windows, SysUtils, Math, Crypto, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack, Alg,
   PatchApi, Core, GameExt, Erm, Stores, Triggers, Heroes, Lodman, Trans, EventMan;
 
 const
@@ -73,7 +73,8 @@ type
     case byte of
       0: (v:  integer);
       1: (p:  pointer);
-      2: (pc: pchar);
+      2: (pi: pinteger);
+      3: (pc: pchar);
   end;
 
   PServiceParam = ^TServiceParam;
@@ -124,6 +125,9 @@ type
     function  GetCmdResult: integer;
   end; // .record TErmCmdWrapper
 
+  PSoundNameBuffer = ^TSoundNameBuffer;
+  TSoundNameBuffer = array [0..255] of char;
+
 
 procedure ResetMemory;
 function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
@@ -133,19 +137,9 @@ procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: int
 procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
 function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
 
-function ExtendedEraService
-(
-      Cmd:        char;
-      NumParams:  integer;
-      Params:     PServiceParams;
-  out Err:        pchar
-): boolean; stdcall;
 
 var
 {O} AssocMem: {O} AssocArrays.TAssocArray {OF TAssocVar};
-
-exports
-  ExtendedEraService;
 
   
 (***) implementation (***)
@@ -177,10 +171,10 @@ var
 {O} Hints:      {O} TDict {of [O] TObjDict of TString};
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
     FreeSlotN:  integer = SPEC_SLOT - 1;
-    ErrBuf:     array [0..255] of char;
 
-    Mp3TriggerContext: PMp3TriggerContext = nil;
-    CurrentMp3Track:   string;
+    Mp3TriggerContext:   PMp3TriggerContext = nil;
+    CurrentMp3Track:     string;
+    CurrentSoundNameBuf: PSoundNameBuffer = nil;
 
 
 function ErmVarToStr (VarType: char; Ind: integer; var Res: string): boolean;
@@ -258,7 +252,7 @@ function ErmVarToServiceParam (VarType: char; Ind: integer; var ServiceParam: TS
 begin
   result             := true;
   ServiceParam.IsStr := false;
-  
+
   case VarType of
     'v': begin
       result := (Ind >= Low(Erm.v^)) and (Ind <= High(Erm.v^));
@@ -461,8 +455,7 @@ begin
           Params[NumParams].IsStr := false;
         end else if ParType <> #0 then begin
           if not ErmVarToServiceParam(ParType, ParValue, Params[NumParams]) then begin
-            result := -1;
-            exit;
+            result := -1; exit;
           end;
         end else begin
           Params[NumParams].IsStr   := false;
@@ -670,6 +663,7 @@ begin
   if result then begin
     Self.Cmd     := Self.CmdPtr^;
     Self.Success := Self.Cmd in AllowedSubcmds;
+    result       := Self.Success;
 
     if not Self.Success then begin
       Error := 'Unknown command "!!' + Self.CmdName + ':' + Self.Cmd + '"';
@@ -1109,125 +1103,25 @@ begin
   result := true;
 end; // .function SN_T
 
-function SN_R (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
-begin
-  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_SET]);
-
-  if not result then begin
-    Error := 'Invalid command syntax. Valid syntax is !!SN:R^original resource name^/^new resource name^';
-  end else begin
-    Lodman.RedirectFile(Params[0].Value.pc, Params[1].Value.pc);
-  end;
-end;
-
-function SN_I (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
-begin
-  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_GET]);
-
-  if not result then begin
-    Error := 'Invalid command syntax. Valid syntax is !!SN:Iz#/?z#';
-  end else begin
-    Erm.SetZVar(Params[1].Value.pc, Erm.ZvsInterpolateStr(Params[0].Value.pc));
-  end;
-end;
-
-type
-  PStdcallFuncArgs = ^TStdcallFuncArgs;
-  TStdcallFuncArgs = array [0..High(TServiceParams)] of integer;
-
-function CallStdcallFunc (Addr: pointer; Args: PStdcallFuncArgs; NumArgs: integer): integer; assembler; stdcall;
-asm
-  mov ecx, NumArgs
-  mov edx, Args
-  mov eax, NumArgs
-  lea edx, [edx + eax * 4]
-@push_params:
-  test ecx, ecx
-  jz @push_params_end
-  sub edx, 4
-  push [edx]
-  dec ecx
-  jmp @push_params
-@push_params_end:
-  mov eax, Addr
-  call eax
-end;
-
-function SN_F (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+function ExtendedEraService (Cmd: char; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
-    ApiName: string;
-{n} ApiFunc: pointer;
-    ApiArgs: TStdcallFuncArgs;
-    i:       integer;
-
-begin
-  result := (NumParams >= 1) and not Params[0].OperGet and Params[0].IsStr;
-
-  if not result then begin
-    Error := 'Invalid command syntax. Valid syntax is !!SN:F^API function name^/possible parameters...';
-  end else begin
-    ApiName := Params[0].Value.pc;
-    ApiFunc := GetCombinedApiAddr(ApiName);
-    result  := ApiFunc <> nil;
-
-    if not result then begin
-      Error := 'Unknown Era/Kernel32 API function: "' + ApiName + '"';
-    end else begin
-      for i := 1 to NumParams do begin
-        ApiArgs[i - 1] := Params[i].Value.v;
-      end;
-      
-      Erm.v[1] := CallStdcallFunc(ApiFunc, @ApiArgs, NumParams - 1);
-    end;
-  end; // .else
-end; // .function SN_F
-
-function SN_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
-var
-  CmdWrapper: TErmCmdWrapper;
-
-begin
-  with WrapErmCmd('SN', CmdInfo, CmdWrapper)^ do begin
-    while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F']) do begin
-      case Cmd of
-        //'P': begin Success := SN_P(NumParams, @Params, Error); end;
-        'H': begin Success := SN_H(NumParams, @Params, Error); end;
-        'T': begin Success := SN_T(NumParams, @Params, Error); end;
-        'I': begin Success := SN_I(NumParams, @Params, Error); end;
-        'F': begin Success := SN_F(NumParams, @Params, Error); end;
-      end;
-    end;
-
-    result := GetCmdResult;
-    Cleanup;
-  end;
-end; // .function SN_Receiver
-
-function ExtendedEraService (Cmd: char; NumParams: integer; Params: PServiceParams; out Err: pchar): boolean;
-var
-{U} Slot:               TSlot;
-{U} AssocVarValue:      TAssocVar;
-    AssocVarName:       string;
-    Error:              string;
-    StrLen:             integer;
-    NewSlotItemsCount:  integer;
-    GameState:          TGameState;
-
-{U} Tile:    Heroes.PMapTile;
-    Coords:  Heroes.TMapCoords;
-    MapSize: integer;
+{U} Slot:              TSlot;
+{U} AssocVarValue:     TAssocVar;
+    AssocVarName:      string;
+    StrLen:            integer;
+    NewSlotItemsCount: integer;
+    GameState:         TGameState;
+{U} Tile:              Heroes.PMapTile;
+    Coords:            Heroes.TMapCoords;
+    MapSize:           integer;
 
 begin
   Slot          := nil;
   AssocVarValue := nil;
   // * * * * * //
   result := true;
-  Error  := 'Invalid command parameters';
   
-  case Cmd of
-    'F': result := SN_F(NumParams, Params, Error);
-    'Q': Erm.QuitTriggerFlag := true;
-    
+  case Cmd of  
     'M':
       begin
         case NumParams of
@@ -1321,18 +1215,10 @@ begin
                           if Params[2].ParamModifier = MODIFIER_CONCAT then begin
                             StrLen := SysUtils.StrLen(pchar(Slot.IntItems[Params[1].Value.v]));
                             
-                            Windows.LStrCpy
-                            (
-                              Utils.PtrOfs(Ptr(Slot.IntItems[Params[1].Value.v]), StrLen),
-                              Ptr(Params[2].Value.v)
-                            );
+                            Windows.LStrCpy(Utils.PtrOfs(Ptr(Slot.IntItems[Params[1].Value.v]), StrLen), Ptr(Params[2].Value.v));
                           end else begin
-                            Windows.LStrCpy
-                            (
-                              Ptr(Slot.IntItems[Params[1].Value.v]),
-                              Ptr(Params[2].Value.v)
-                            );
-                          end; // .else
+                            Windows.LStrCpy(Ptr(Slot.IntItems[Params[1].Value.v]), Ptr(Params[2].Value.v));
+                          end;
                         end else begin
                           Slot.IntItems[Params[1].Value.v] := Params[2].Value.v;
                         end; // .else
@@ -1342,8 +1228,7 @@ begin
                         end;
                         
                         if Params[2].ParamModifier = MODIFIER_CONCAT then begin
-                          Slot.StrItems[Params[1].Value.v] := Slot.StrItems[Params[1].Value.v] +
-                                                            pchar(Params[2].Value.v);
+                          Slot.StrItems[Params[1].Value.v] := Slot.StrItems[Params[1].Value.v] + pchar(Params[2].Value.v);
                         end else begin
                           Slot.StrItems[Params[1].Value.v] := pchar(Params[2].Value.v);
                         end;
@@ -1358,7 +1243,7 @@ begin
               result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]) and
               (Params[0].Value.v >= SPEC_SLOT)                        and
               (Params[1].Value.v >= 0)                                and
-              Math.InRange(Params[2].Value.v, 0, ORD(High(TVarType))) and
+              Math.InRange(Params[2].Value.v, 0, ord(High(TVarType))) and
               ((Params[3].Value.v = IS_TEMP) or (Params[3].Value.v = NOT_TEMP));
               
               if result then begin
@@ -1511,8 +1396,7 @@ begin
       begin
         // O?$/?$/?$
         if NumParams = 3 then begin
-          result := Params[0].OperGet and Params[1].OperGet and Params[2].OperGet and
-                    not Params[0].IsStr and not Params[1].IsStr and not Params[2].IsStr;
+          result := Params[0].OperGet and Params[1].OperGet and Params[2].OperGet and not Params[0].IsStr and not Params[1].IsStr and not Params[2].IsStr;
 
           if result then begin
             Coords[0] := pinteger(Params[0].Value.v)^;
@@ -1540,22 +1424,234 @@ begin
           Error  := 'Invalid number of command parameters';
         end; // .else
       end; // .case "O"
-
-    'T': result := SN_T(NumParams, Params, Error);
-    'H': result := SN_H(NumParams, Params, Error);
-    'R': result := SN_R(NumParams, Params, Error);
-    'I': result := SN_I(NumParams, Params, Error);
   else
     result := false;
     Error  := 'Unknown command "' + Cmd +'".';
   end; // .switch Cmd
-  
-  if not result then begin
-    Error :=  'Error executing Era command SN:' + Cmd + ':'#13#10 + Error;
-    Utils.CopyMem(Length(Error) + 1, pointer(Error), @ErrBuf);
-    Err := @ErrBuf;
-  end;
 end; // .function ExtendedEraService
+
+function SN_R (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_SET]);
+
+  if not result then begin
+    Error := 'Invalid command syntax. Valid syntax is !!SN:R^original resource name^/^new resource name^';
+  end else begin
+    Lodman.RedirectFile(Params[0].Value.pc, Params[1].Value.pc);
+  end;
+end;
+
+function SN_I (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_STR or ACTION_GET]);
+
+  if not result then begin
+    Error := 'Invalid command syntax. Valid syntax is !!SN:Iz#/?z#';
+  end else begin
+    Erm.SetZVar(Params[1].Value.pc, Erm.ZvsInterpolateStr(Params[0].Value.pc));
+  end;
+end;
+
+type
+  PStdcallFuncArgs = ^TStdcallFuncArgs;
+  TStdcallFuncArgs = array [0..High(TServiceParams)] of integer;
+
+function CallStdcallFunc (Addr: pointer; Args: PStdcallFuncArgs; NumArgs: integer): integer; assembler; stdcall;
+asm
+  mov ecx, NumArgs
+  mov edx, Args
+  mov eax, NumArgs
+  lea edx, [edx + eax * 4]
+@push_params:
+  test ecx, ecx
+  jz @push_params_end
+  sub edx, 4
+  push [edx]
+  dec ecx
+  jmp @push_params
+@push_params_end:
+  mov eax, Addr
+  call eax
+end;
+
+function SN_F (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+var
+    ApiName: string;
+{n} ApiFunc: pointer;
+    ApiArgs: TStdcallFuncArgs;
+    i:       integer;
+
+begin
+  result := (NumParams >= 1) and not Params[0].OperGet and Params[0].IsStr;
+
+  if not result then begin
+    Error := 'Invalid command syntax. Valid syntax is !!SN:F^API function name^/possible parameters...';
+  end else begin
+    ApiName := Params[0].Value.pc;
+    ApiFunc := GetCombinedApiAddr(ApiName);
+    result  := ApiFunc <> nil;
+
+    if not result then begin
+      Error := 'Unknown Era/Kernel32 API function: "' + ApiName + '"';
+    end else begin
+      for i := 1 to NumParams do begin
+        ApiArgs[i - 1] := Params[i].Value.v;
+      end;
+      
+      Erm.v[1] := CallStdcallFunc(ApiFunc, @ApiArgs, NumParams - 1);
+    end;
+  end; // .else
+end; // .function SN_F
+
+function SN_P (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET]);
+
+  if result then begin
+    Heroes.PlaySound(Params[0].Value.pc);
+  end;
+end;
+
+function SN_S (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR]);
+
+  if result then begin
+    result := CurrentSoundNameBuf <> nil;
+
+    if not result then begin
+      Error := 'Cannot use SN:S outside of SN trigger';
+    end else if Params[0].OperGet then begin
+      Erm.SetZVar(Params[0].Value.pc, pchar(CurrentSoundNameBuf));
+    end else begin
+      Utils.SetPcharValue(pchar(CurrentSoundNameBuf), Params[0].Value.pc, sizeof(CurrentSoundNameBuf^));
+    end;
+  end;
+end;
+
+function SN_E (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]) and (Params[0].Value.v <> 0) and
+            Alg.InRange(Params[1].Value.v, ERA_CALLCONV_PASCAL, ERA_CALLCONV_FASTCALL + ERA_CALLCONV_FLOAT_RES);
+
+  if result then begin
+    CallProc(Params[0].Value.v, Params[1].Value.v, @Params[2].Value.v, NumParams - 2);
+  end;
+end;
+
+function SN_L (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_INT or ACTION_GET]);
+
+  if result then begin
+    Params[1].Value.pi^ := Windows.LoadLibraryA(Params[0].Value.pc);
+  end;
+end;
+
+function SN_A (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_STR or ACTION_SET, TYPE_INT or ACTION_GET]) and (Params[0].Value.v <> 0);
+
+  if result then begin
+    Params[2].Value.pi^ := integer(Windows.GetProcAddress(Windows.THandle(Params[0].Value.v), Params[1].Value.pc));
+  end;
+end;
+
+function SN_X (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+var
+  i: integer;
+
+begin
+  result := NumParams <= High(Erm.x^);
+
+  if result then begin
+    for i := 0 to NumParams - 1 do begin
+      if Params[i].OperGet then begin
+        if Params[i].IsStr then begin
+          Erm.SetZVar(Params[i].Value.pc, pchar(Erm.x[i + 1]));
+        end else begin
+          Params[i].Value.pi^ := Erm.x[i + 1];
+        end;
+      end else begin
+        if Params[i].IsStr then begin
+          Erm.x[i + 1] := Params[i].Value.v;
+        end else begin
+          ModifyWithIntParam(Erm.x[i + 1], Params[i]);
+        end;
+      end; // .else
+    end; // .for
+  end; // .if
+end; // .function SN_X
+
+// 'X': begin
+//   if NumParams > (High(General.EventParams)+1) then begin
+//     ShowErmError(Lang.Str[Lang.Str_Error_Service_X]);
+//     CmdN^:=2000000000;
+//     exit;
+//   end; // .if
+//   for i:=0 to NumParams - 1 do begin
+//     if Params[i].Get then begin
+//       if Params[i].IsString then begin
+//         Len:=Strings.StrLen(pointer(General.EventParams[i]));
+//         if Len>0 then begin
+//           Windows.CopyMemory(pointer(Params[i].Value), pointer(General.EventParams[i]), Len+1);
+//         end // .if
+//         else begin
+//           pchar(Params[i].Value)^:=#0;
+//         end; // .else
+//       end // .if
+//       else begin
+//         pinteger(Params[i].Value)^:=General.EventParams[i];
+//       end; // .else
+//     end // .if
+//     else begin
+//       General.ModifyWithParam(@General.EventParams[i], @Params[i]);
+//     end; // .else
+//   end; // .for
+// end; // .switch X
+
+function SN_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
+var
+  CmdWrapper: TErmCmdWrapper;
+
+begin
+  with WrapErmCmd('SN', CmdInfo, CmdWrapper)^ do begin
+    while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O']) do begin
+      case Cmd of
+        'G': begin
+          Success := (Erm.CurrentTriggerCmdIndPtr <> nil) and (NumParams = 1) and not Params[0].OperGet and not Params[0].IsStr and (Params[0].Value.v >= 0) and (Params[0].Value.v < High(integer));
+
+          if Success then begin
+            Erm.CurrentTriggerCmdIndPtr^ := Params[0].Value.v;
+          end;
+        end;
+
+        'Q': begin
+          Erm.QuitTriggerFlag := true;
+        end;
+        
+        'X': begin Success := SN_X(NumParams, @Params, Error); end;
+        'L': begin Success := SN_L(NumParams, @Params, Error); end;
+        'A': begin Success := SN_A(NumParams, @Params, Error); end;
+        'E': begin Success := SN_E(NumParams, @Params, Error); end;
+        'P': begin Success := SN_P(NumParams, @Params, Error); end;
+        'S': begin Success := SN_S(NumParams, @Params, Error); end;
+        'H': begin Success := SN_H(NumParams, @Params, Error); end;
+        'T': begin Success := SN_T(NumParams, @Params, Error); end;
+        'I': begin Success := SN_I(NumParams, @Params, Error); end;
+        'R': begin Success := SN_R(NumParams, @Params, Error); end;
+        'F': begin Success := SN_F(NumParams, @Params, Error); end;
+        
+        'M', 'K', 'W', 'D', 'O': begin
+          Success := ExtendedEraService(Cmd, NumParams, @Params, Error);
+        end;
+      end;
+    end;
+
+    result := GetCmdResult;
+    Cleanup;
+  end;
+end; // .function SN_Receiver
 
 procedure ResetMemory;
 begin
@@ -1889,6 +1985,21 @@ begin
   LoadSlots;
   LoadAssocMem;
   LoadHints;
+end;
+
+function Hook_PlaySound (OrigFunc: pointer; SoundName: pchar; Arg2, Arg3: integer): integer; stdcall;
+var
+  Buf:              TSoundNameBuffer;
+  PrevSoundNameBuf: PSoundNameBuffer;
+
+begin
+  PrevSoundNameBuf := CurrentSoundNameBuf;
+  // * * * * * //
+  Utils.SetPcharValue(@Buf, SoundName, sizeof(Buf));
+  CurrentSoundNameBuf := @Buf;
+  Erm.FireErmEvent(Erm.TRIGGER_SN);
+  result              := PatchApi.Call(FASTCALL_, OrigFunc, [@Buf, Arg2, Arg3]);
+  CurrentSoundNameBuf := PrevSoundNameBuf;
 end;
 
 function Hook_ZvsCheckObjHint (C: Core.PHookContext): longbool; stdcall;
@@ -2509,6 +2620,9 @@ begin
 
   // Add new !?MP trigger
   ApiJack.StdSplice(Ptr($59AFB0), @New_Mp3_Trigger, CONV_THISCALL, 3);
+
+  (* Make !?SN use always new unique buffer *)
+  ApiJack.StdSplice(Ptr($59A890), @Hook_PlaySound, ApiJack.CONV_FASTCALL, 3);
 end; // .procedure OnAfterWoG
 
 procedure OnBeforeErmInstructions (Event: PEvent); stdcall;

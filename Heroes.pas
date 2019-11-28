@@ -799,6 +799,8 @@ procedure ChangeMp3Theme (const Mp3TrackName: string; DontTrackPos: boolean = fa
 
 procedure PauseMp3Theme;
 procedure ResumeMp3Theme;
+procedure PlaySound (FileName: pchar); stdcall; overload;
+procedure PlaySound (FileName: string); overload;
 
 
 (***) implementation (***)
@@ -1409,6 +1411,22 @@ end;
 procedure ResumeMp3Theme;
 begin
   PatchApi.Call(THISCALL_, Ptr($59AF00), [pinteger(SOUND_MANAGER)^]);
+end;
+
+procedure PlaySound (FileName: pchar); stdcall; overload;
+begin
+  asm
+    mov ecx, FileName
+    mov edx, -1
+    push 3
+    mov eax, $59A890
+    call eax
+  end;
+end;
+
+procedure PlaySound (FileName: string); overload;
+begin
+  PlaySound(pchar(FileName));
 end;
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;

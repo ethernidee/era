@@ -525,9 +525,10 @@ var
     MonNamesTables:     array [0..2] of Utils.PEndlessPcharArr;
     MonNamesTablesBack: array [0..2] of Utils.PEndlessPcharArr;
 
-    ErmCmdOptimizer:     procedure (Cmd: PErmCmd) = nil;
-    QuitTriggerFlag:     boolean = false;
-    TriggerLoopCallback: TTriggerLoopCallback;
+    ErmCmdOptimizer:         procedure (Cmd: PErmCmd) = nil;
+    CurrentTriggerCmdIndPtr: pinteger = nil;
+    QuitTriggerFlag:         boolean = false;
+    TriggerLoopCallback:     TTriggerLoopCallback;
 
     // Each trigger saves x-vars to RetXVars before restoring previous values on exit.
     // ArgXVars are copied to x on trigger start after saving previous x-values.
@@ -2356,28 +2357,29 @@ const
   CMD_EN = $6E65;
 
 var
-  NumericEventName: string;
-  HumanEventName:   string;
-  EventX:           integer;
-  EventY:           integer;
-  EventZ:           integer;
-  TriggerId:        integer;
-  StartTrigger:     PErmTrigger;
-  Trigger:          PErmTrigger;
-  EventManager:     TEventManager;
-  HasEventHandlers: longbool;
-  SavedY:           TErmYVars;
-  SavedE:           TErmEVars;
-  SavedX:           TErmXVars;
-  SavedZ:           TErmNZVars;
-  SavedF:           array [996..1000] of boolean;
-  SavedV:           array [997..1000] of integer;
-  LoopCallback:     TTriggerLoopCallback;
-  Ifs:              array [0..31] of byte;
-  IfsLevel:         integer;
-  Cmd:              PErmCmd;
-  CmdId:            TErmCmdId;
-  i:                integer;
+  PrevTriggerCmdIndPtr: pinteger;
+  NumericEventName:     string;
+  HumanEventName:       string;
+  EventX:               integer;
+  EventY:               integer;
+  EventZ:               integer;
+  TriggerId:            integer;
+  StartTrigger:         PErmTrigger;
+  Trigger:              PErmTrigger;
+  EventManager:         TEventManager;
+  HasEventHandlers:     longbool;
+  SavedY:               TErmYVars;
+  SavedE:               TErmEVars;
+  SavedX:               TErmXVars;
+  SavedZ:               TErmNZVars;
+  SavedF:               array [996..1000] of boolean;
+  SavedV:               array [997..1000] of integer;
+  LoopCallback:         TTriggerLoopCallback;
+  Ifs:                  array [0..31] of byte;
+  IfsLevel:             integer;
+  Cmd:                  PErmCmd;
+  CmdId:                TErmCmdId;
+  i:                    integer;
 
   procedure SetTriggerQuickVarsAndFlags;
   begin
@@ -2482,6 +2484,9 @@ begin
       EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, TriggerId);
     end;
 
+    PrevTriggerCmdIndPtr    := CurrentTriggerCmdIndPtr;
+    CurrentTriggerCmdIndPtr := @i;
+
     // Repeat executing all triggers with specified ID, unless TriggerLoopCallback is not set or returns false
     while true do begin
       EventManager.Fire(NumericEventName, @TriggerId, sizeof(TriggerId));
@@ -2497,7 +2502,9 @@ begin
           QuitTriggerFlag  := false;
 
           if not ZvsCheckFlags(@Trigger.Conditions) then begin
-            for i := 0 to Trigger.NumCmds - 1 do begin
+            i := 0;
+
+            while i < Trigger.NumCmds do begin
               if not ErmEnabled^ then begin
                 goto AfterTriggers;
               end;
@@ -2550,7 +2557,9 @@ begin
                   goto TriggersProcessed;
                 end;
               end; // .else
-            end; // .for
+
+              Inc(i);
+            end; // .while
           end; // .if
         end; // .if
 
@@ -2564,6 +2573,8 @@ begin
         break;
       end;
     end; // .while
+
+    CurrentTriggerCmdIndPtr := PrevTriggerCmdIndPtr;
   end; // .if HasEventHandlers
 
   AfterTriggers:
@@ -2576,6 +2587,8 @@ begin
     end;
 
     RestoreVars;
+  end else begin
+    RetXVars := ArgXVars;
   end;
 end; // .procedure ProcessErm
 
