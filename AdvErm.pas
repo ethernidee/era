@@ -1583,33 +1583,6 @@ begin
   end; // .if
 end; // .function SN_X
 
-// 'X': begin
-//   if NumParams > (High(General.EventParams)+1) then begin
-//     ShowErmError(Lang.Str[Lang.Str_Error_Service_X]);
-//     CmdN^:=2000000000;
-//     exit;
-//   end; // .if
-//   for i:=0 to NumParams - 1 do begin
-//     if Params[i].Get then begin
-//       if Params[i].IsString then begin
-//         Len:=Strings.StrLen(pointer(General.EventParams[i]));
-//         if Len>0 then begin
-//           Windows.CopyMemory(pointer(Params[i].Value), pointer(General.EventParams[i]), Len+1);
-//         end // .if
-//         else begin
-//           pchar(Params[i].Value)^:=#0;
-//         end; // .else
-//       end // .if
-//       else begin
-//         pinteger(Params[i].Value)^:=General.EventParams[i];
-//       end; // .else
-//     end // .if
-//     else begin
-//       General.ModifyWithParam(@General.EventParams[i], @Params[i]);
-//     end; // .else
-//   end; // .for
-// end; // .switch X
-
 function SN_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
 var
   CmdWrapper: TErmCmdWrapper;
@@ -1622,7 +1595,7 @@ begin
           Success := (Erm.CurrentTriggerCmdIndPtr <> nil) and (NumParams = 1) and not Params[0].OperGet and not Params[0].IsStr and (Params[0].Value.v >= 0) and (Params[0].Value.v < High(integer));
 
           if Success then begin
-            Erm.CurrentTriggerCmdIndPtr^ := Params[0].Value.v;
+            Erm.CurrentTriggerCmdIndPtr^ := Params[0].Value.v - 1;
           end;
         end;
 
