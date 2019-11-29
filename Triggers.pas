@@ -338,16 +338,22 @@ const
   PARAM_SECOND_HERO_ID     = 2;
   PARAM_ENABLE_INTERACTION = 3;
 
+var
+  SecondHeroId: integer;
+
 begin
+  SecondHeroId                           := Hero2IndPtr^;
   Erm.ArgXVars[PARAM_FIRST_HERO_ID]      := Hero1.Id;
-  Erm.ArgXVars[PARAM_SECOND_HERO_ID]     := Hero2IndPtr^;
+  Erm.ArgXVars[PARAM_SECOND_HERO_ID]     := SecondHeroId;
   Erm.ArgXVars[PARAM_ENABLE_INTERACTION] := 1;
   Erm.FireErmEvent(Erm.TRIGGER_BEFOREHEROINTERACT);
 
   if Erm.RetXVars[PARAM_ENABLE_INTERACTION] <> 0 then begin
     result := PatchApi.Call(THISCALL_, OrigFunc, [Unk1, Hero1, Hero2IndPtr, Unk2, Unk3]);
+    Erm.FireErmEventEx(Erm.TRIGGER_AFTERHEROINTERACT, [Hero1.Id, SecondHeroId]);
   end else begin
     result := 0;
+    Erm.FireErmEventEx(Erm.TRIGGER_AFTERHEROINTERACT, [Hero1.Id, SecondHeroId]);
   end;
 end;
 
