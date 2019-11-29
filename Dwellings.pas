@@ -548,11 +548,19 @@ const
   EVENT_PARAM_DLG_FLAGS     = 2;
   EVENT_PARAM_SHOW_DIALOG   = 3;
 
+  RECRUIT_DLG_VIRT_TABLE = pointer($640C80);
+
 var
   ShowDlg:   integer;
   PrevEvent: TRecruitMonsDlgOpenEvent;
 
 begin
+  // The same procedure is called at least for Recruid Dialog and Hero Meeting Screen, thus we need to handle them separately
+  if RecruitMonsDlgSetup.VirtTable <> RECRUIT_DLG_VIRT_TABLE then begin
+    PatchApi.Call(PatchApi.THISCALL_, OrigFunc, [Obj, RecruitMonsDlgSetup]);
+    exit;
+  end;
+
   PrevEvent := RecruitMonsDlgOpenEvent;
   
   Inc(RecruitMonsDlgOpenEventAutoId);
