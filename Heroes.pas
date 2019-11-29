@@ -579,9 +579,9 @@ type
                                                   // +14 dd - SetUp s karty
     PlSetUp:      integer;                        // dd +0 s karty
     SpPoints:     word;                           // +18  dw    = bally zaklinanij
-    Number:       integer;                        // +1A  dd    = nomer podtipa (konkretnyj geroj)
-    Id:           integer;                        // +1E  dd    = Id
-    Owner:        char;                           // +22  db    = nozyain (czvet)
+    Id:           integer;                        // +1A  dd    = nomer podtipa (konkretnyj geroj)
+    BadFood:      integer;                        // +1E  dd    = BAD FOOD marker
+    Owner:        char;                           // +22  db    = xozyain (czvet)
     Name:         array [0..12] of char;          // +23  db*D  = imya,0
     Spec:         integer;                        // +30  dd    = str[8] str=(*[67CD08])[nomer podtipa *5C]
     Pic:          byte;                           // +34  db    = nomer kartinki
