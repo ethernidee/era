@@ -236,7 +236,7 @@ begin
   end;
 end; // .function Hook_EnterChat
 
-procedure ClearChatBox; ASSEMBLER;
+procedure ClearChatBox; assembler;
 asm
   PUSH ESI
   MOV ESI, ECX
@@ -332,6 +332,25 @@ begin
   end;
 end;
 
+function Hook_OnHeroesInteraction (OrigFunc: pointer; Unk1: integer; Hero1: Heroes.PHero; Hero2IndPtr: pinteger; Unk2, Unk3: integer): integer; stdcall;
+const
+  PARAM_FIRST_HERO_ID      = 1;
+  PARAM_SECOND_HERO_ID     = 2;
+  PARAM_ENABLE_INTERACTION = 3;
+
+begin
+  Erm.ArgXVars[PARAM_FIRST_HERO_ID]      := Hero1.Id;
+  Erm.ArgXVars[PARAM_SECOND_HERO_ID]     := Hero2IndPtr^;
+  Erm.ArgXVars[PARAM_ENABLE_INTERACTION] := 1;
+  Erm.FireErmEvent(Erm.TRIGGER_BEFOREHEROINTERACT);
+
+  if Erm.RetXVars[PARAM_ENABLE_INTERACTION] <> 0 then begin
+    result := PatchApi.Call(THISCALL_, OrigFunc, [Unk1, Hero1, Hero2IndPtr, Unk2, Unk3]);
+  end else begin
+    result := 0;
+  end;
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -362,6 +381,9 @@ begin
 
   (* Kingdom Overview mouse click *)
   ApiJack.HookCode(Ptr($521E50), @Hook_KingdomOverviewMouseClick);
+
+  (* OnBeforeHeroInteraction trigger *)
+  ApiJack.StdSplice(Ptr($4A2470), @Hook_OnHeroesInteraction, ApiJack.CONV_THISCALL, 5);
 end; // .procedure OnAfterWoG
 
 begin
