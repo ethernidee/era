@@ -212,6 +212,7 @@ begin
   result   := @Self.Buf[Self.BufPos];
   PageSize := pinteger(@Self.Buf[Self.BufPos])^ + StrLen;
   Inc(Self.BufPos, StrLen);
+  Self.Buf[Self.BufPos - 1] := #0;
   {!} Assert(Self.BufPos + sizeof(integer) < sizeof(Self.Buf), 'TServiceMemAllocator.AllocStr failed. No space in buffer');
   pinteger(@Self.Buf[Self.BufPos])^ := PageSize;
 end;
