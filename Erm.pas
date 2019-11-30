@@ -2186,9 +2186,10 @@ begin
     TriggersSize := integer(LastTrigger) - integer(TriggersStart) + LastTrigger.GetSize();
   end;
   
-  NullTrigger := Utils.PtrOfs(TriggersStart, sizeof(NullTrigger^));
-  FreeBuf     := Utils.PtrOfs(TriggersStart, Utils.IfThen(LastTrigger = nil, NULL_TRIGGER_SIZE, TriggersSize + NULL_TRIGGER_SIZE));
-  FreeBufSize := ZvsErmHeapSize^ - (integer(FreeBuf) - integer(ZvsErmHeapPtr^));
+  NullTrigger    := Utils.PtrOfs(TriggersStart, TriggersSize);
+  NullTrigger.Id := 0;
+  FreeBuf        := Utils.PtrOfs(TriggersStart, Utils.IfThen(LastTrigger = nil, NULL_TRIGGER_SIZE, TriggersSize + NULL_TRIGGER_SIZE));
+  FreeBufSize    := ZvsErmHeapSize^ - (integer(FreeBuf) - integer(ZvsErmHeapPtr^));
 
   if (FreeBufSize <= 0) or not OptimizeCompiledErm(TriggersStart, TriggersSize, FreeBuf, FreeBufSize) then begin
     ErmEnabled^ := false;
