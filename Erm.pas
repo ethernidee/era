@@ -157,7 +157,8 @@ const
   TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK = 77027;
   TRIGGER_RECRUIT_DLG_RECALC           = 77028;
   TRIGGER_RECRUIT_DLG_ACTION           = 77029;
-  {!} LAST_ERA_TRIGGER                 = TRIGGER_RECRUIT_DLG_ACTION;
+  TRIGGER_LOAD_HERO_SCREEN             = 77030;
+  {!} LAST_ERA_TRIGGER                 = TRIGGER_LOAD_HERO_SCREEN;
   
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -568,7 +569,9 @@ function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 (*  Up to 16 arguments  *)
 procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 
-function ErmCurrHero: {n} Heroes.PHero; inline;
+(* Set/Get current hero *)
+function ErmCurrHero (NewInd: integer = -1): {n} Heroes.PHero; overload;
+function ErmCurrHero ({n} NewHero: PHero): {n} Heroes.PHero; overload;
 
 
 (***) implementation (***)
@@ -783,6 +786,7 @@ begin
     {*} Erm.TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK: result := 'OnKingdomOverviewMouseClick';
     {*} Erm.TRIGGER_RECRUIT_DLG_RECALC:           result := 'OnRecruitDlgRecalc';
     {*} Erm.TRIGGER_RECRUIT_DLG_ACTION:           result := 'OnRecruitDlgAction';
+    {*} Erm.TRIGGER_LOAD_HERO_SCREEN:             result := 'OnLoadHeroScreen';
     (* END Era Triggers *)
   else
     if EventID >= Erm.TRIGGER_OB_POS then begin
@@ -2281,6 +2285,7 @@ begin
   NameTrigger(Erm.TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK, 'OnKingdomOverviewMouseClick');
   NameTrigger(Erm.TRIGGER_RECRUIT_DLG_RECALC,           'OnRecruitDlgRecalc');
   NameTrigger(Erm.TRIGGER_RECRUIT_DLG_ACTION,           'OnRecruitDlgAction');
+  NameTrigger(Erm.TRIGGER_LOAD_HERO_SCREEN,             'OnLoadHeroScreen');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
@@ -2331,9 +2336,18 @@ begin
   end;
 end;
 
-function ErmCurrHero: {n} Heroes.PHero;
+function ErmCurrHero (NewInd: integer = -1): {n} Heroes.PHero; overload;
 begin
-  result := ppointer($27F9970)^;
+  if NewInd <> -1 then begin
+    result := ppointer($27F9970)^;
+  end else begin
+    ppointer($27F9970)^ := Heroes.ZvsGetHero(NewInd);
+  end;
+end;
+
+function ErmCurrHero ({n} NewHero: PHero): {n} Heroes.PHero; overload;
+begin
+  ppointer($27F9970)^ := NewHero;
 end;
 
 function ErmCurrHeroInd: integer; // or -1

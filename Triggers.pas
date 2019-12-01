@@ -363,6 +363,53 @@ begin
   result := true;
 end;
 
+function Hook_ShowHeroScreen (OrigFunc: pointer; HeroInd, Unk1, Unk2: integer): integer; stdcall;
+begin
+  Erm.ErmCurrHero(HeroInd);
+  Erm.FireErmEvent(Erm.TRIGGER_OPEN_HEROSCREEN);
+  result := PatchApi.Call(THISCALL_, OrigFunc, [HeroInd, Unk1, Unk2]);
+  Erm.ErmCurrHero(HeroInd);
+  Erm.FireErmEvent(Erm.TRIGGER_CLOSE_HEROSCREEN);
+end;
+
+function Hook_UpdateHeroScreen (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  Erm.ErmCurrHero(Heroes.PHero(ppointer($698B70)^));
+  Erm.FireErmEvent(Erm.TRIGGER_LOAD_HERO_SCREEN);
+  result := true;
+end;
+
+function Hook_Battle_StackObtainsTurn (OrigFunc: pointer; CombatManager: pointer; Side, StackInd: integer): integer; stdcall;
+const
+  PARAM_SIDE      = 1;
+  PARAM_STACK_IND = 2;
+
+  MAX_STACKS_PER_SIDE = 21;
+
+var
+  NewSide:     integer;
+  NewStackInd: integer;
+
+begin
+  Erm.FireErmEventEx(Erm.TRIGGER_STACK_OBTAINS_TURN, [Side, StackInd]);
+  NewSide     := Erm.RetXVars[PARAM_SIDE];
+  NewStackInd := Erm.RetXVars[PARAM_STACK_IND];
+  
+  if (NewSide >= 0) and (NewSide <= 1) then begin
+    Side := NewSide;
+  end else begin
+    ShowMessage('OnBattleStackObtainsTurn: invalid side, set in event handler. Expected 0..1. Got: ' + IntToStr(NewSide));
+  end;
+
+  if (NewStackInd >= 0) and (NewStackInd < MAX_STACKS_PER_SIDE) then begin
+    StackInd := NewStackInd;
+  end else begin
+    ShowMessage('OnBattleStackObtainsTurn: invalid new stack index, set in event handler. Expected: 0..20. Got: = ' + IntToStr(NewStackInd));
+  end;
+ 
+  result := PatchApi.Call(THISCALL_, OrigFunc, [CombatManager, Side, StackInd]);
+end; // .function Hook_Battle_StackObtainsTurn
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -399,6 +446,15 @@ begin
 
   (* OnAfterSaveGame trigger *)
   ApiJack.HookCode(Ptr($4BEDBE), @Hook_SaveGame_After);
+
+  (* Hero screen Enter/Exit triggers *)
+  ApiJack.StdSplice(Ptr($4E1A70), @Hook_ShowHeroScreen, ApiJack.CONV_THISCALL, 3);
+
+  (* Add OnLoadHeroScreen event *)
+  ApiJack.HookCode(Ptr($4E1CC0), @Hook_UpdateHeroScreen);
+
+  (* OnBattleStackObtainsTurn event *)
+  ApiJack.StdSplice(Ptr($464F10), @Hook_Battle_StackObtainsTurn, ApiJack.CONV_THISCALL, 3);
 end; // .procedure OnAfterWoG
 
 begin
