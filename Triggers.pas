@@ -357,6 +357,12 @@ begin
   end;
 end;
 
+function Hook_SaveGame_After (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  Erm.FireErmEvent(Erm.TRIGGER_AFTER_SAVE_GAME);
+  result := true;
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -390,6 +396,9 @@ begin
 
   (* OnBeforeHeroInteraction trigger *)
   ApiJack.StdSplice(Ptr($4A2470), @Hook_OnHeroesInteraction, ApiJack.CONV_THISCALL, 5);
+
+  (* OnAfterSaveGame trigger *)
+  ApiJack.HookCode(Ptr($4BEDBE), @Hook_SaveGame_After);
 end; // .procedure OnAfterWoG
 
 begin
