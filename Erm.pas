@@ -467,9 +467,9 @@ const
   ZvsPlayerIsHuman:           plongbool              = Ptr($793C80);
   ZvsAllowDefMouseReaction:   plongbool              = Ptr($A4AAFC);
   ZvsMouseEventInfo:          Heroes.PMouseEventInfo = Ptr($8912A8);
-  ZvsEventX:                  pinteger               = Ptr($8885FC);
-  ZvsEventY:                  pinteger               = Ptr($888600);
-  ZvsEventZ:                  pinteger               = Ptr($888604);
+  ZvsEventX:                  pinteger               = Ptr($27F9964);
+  ZvsEventY:                  pinteger               = Ptr($27F9968);
+  ZvsEventZ:                  pinteger               = Ptr($27F996C);
   IsWoG:                      plongbool              = Ptr($803288);
   WoGOptions:                 ^TWoGOptions           = Ptr($2771920);
   ErmEnabled:                 plongbool              = Ptr($27F995C);
