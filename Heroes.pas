@@ -187,22 +187,24 @@ type
   PValue  = ^TValue;
   TValue  = packed record
     case byte of
-      0:  (v:   integer);
-      1:  (p:   pointer);
-      2:  (pc:  pchar);
-  end; // .record TValue
+      0: (v:  integer);
+      1: (p:  pointer);
+      2: (pc: pchar);
+      3: (b:  byte);
+      4: (w:  word);
+  end;
 
   PTxtFile  = ^TTxtFile;
   TTxtFile  = packed record
     Dummy:    array [0..$17] of byte;
     RefCount: integer;
     (* Dummy *)
-  end; // .record TTxtFile
+  end;
   
-  PLod  = ^TLod;
-  TLod  = packed record
+  PLod = ^TLod;
+  TLod = packed record
     Dummy: array [0..399] of byte;
-  end; // .record TLod
+  end;
 
   PBasicString = ^TBasicString;
   TBasicString = packed record
@@ -230,7 +232,7 @@ type
   PMapTile = ^TMapTile;
   TMapTile = packed record
     _0: array [1..38] of byte;
-  end; // .record TMapTile
+  end;
 
   PMapTiles = ^TMapTiles;
   TMapTiles = array [0..255 * 255 * 2 - 1] of TMapTile;
@@ -243,7 +245,7 @@ type
     _0:              array [1..80] of byte;
     RootDlgIdPtr:    ppinteger;
     CurrentDlgIdPtr: ppinteger;
-  end; // .record TAdvManager
+  end;
 
   (* Events are stored in random order, except events for the same day *)
   PGlobalEvent = ^TGlobalEvent;
@@ -766,6 +768,7 @@ function  GetCurrentPlayer: integer;
 function  IsThisPcTurn: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
 procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
+function  StackProp (StackInd: integer; PropOfs: integer): PValue;
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
 function  GetStackIdByPos (StackPos: integer): integer;
 procedure RedrawHeroMeetingScreen;
@@ -1277,6 +1280,11 @@ begin
   end;
 end; // .function GetBattleCellStackId
 
+function StackProp (StackInd: integer; PropOfs: integer): PValue; inline;
+begin
+  result := Utils.PtrOfs(ppointer(COMBAT_MANAGER)^, 21708 + 1352 * StackInd + PropOfs);
+end;
+
 function GetStackIdByPos (StackPos: integer): integer;
 type
   PStackField = ^TStackField;
@@ -1286,13 +1294,7 @@ type
 
 const
   NO_STACK  = -1;
-
   STACK_POS = $38;
-
-  function Stacks (Ind: integer; FieldOfs: integer): PStackField; inline;
-  begin
-    result := Utils.PtrOfs(PPOINTER(COMBAT_MANAGER)^, 21708 + 1352 * Ind + FieldOfs);
-  end;
 
 var
   i: integer;
@@ -1301,10 +1303,10 @@ begin
   result := NO_STACK;
 
   for i := 0 to NUM_BATTLE_STACKS - 1 do begin
-    if Stacks(i, STACK_POS).v = StackPos then begin
+    if StackProp(i, STACK_POS).v = StackPos then begin
       result := i;
 
-      if Stacks(i, STACK_NUM).v > 0 then begin
+      if StackProp(i, STACK_NUM).v > 0 then begin
         exit;
       end;
     end;

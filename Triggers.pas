@@ -384,7 +384,7 @@ const
   PARAM_SIDE      = 1;
   PARAM_STACK_IND = 2;
 
-  MAX_STACKS_PER_SIDE = 21;
+  MAX_STACKS_PER_SIDE = Heroes.NUM_BATTLE_STACKS div 2;
 
 var
   NewSide:     integer;
@@ -409,6 +409,32 @@ begin
  
   result := PatchApi.Call(THISCALL_, OrigFunc, [CombatManager, Side, StackInd]);
 end; // .function Hook_Battle_StackObtainsTurn
+
+var
+  DisableRegen: boolean;
+
+function Hook_BattleRegeneratePhase (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  COMBAT_MON_RECORD_SIZE = 1352;
+
+  PARAM_STACK_IND      = 1;
+  PARAM_MON_STRUCT_PTR = 2;
+  PARAM_DISABLE_REGEN  = 3;
+
+var
+  StackInd: integer;
+
+begin
+  StackInd     := (Context.ECX - integer(Heroes.StackProp(0, 0))) div COMBAT_MON_RECORD_SIZE;
+  Erm.FireErmEventEx(Erm.TRIGGER_REGENERATE_PHASE, [StackInd, Context.ECX, 0]);
+  DisableRegen := Erm.RetXVars[PARAM_DISABLE_REGEN] <> 0;
+  result       := true;
+end;
+
+function Hook_BattleDoRegenerate (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  result := not DisableRegen;
+end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
@@ -455,6 +481,10 @@ begin
 
   (* OnBattleStackObtainsTurn event *)
   ApiJack.StdSplice(Ptr($464F10), @Hook_Battle_StackObtainsTurn, ApiJack.CONV_THISCALL, 3);
+
+  (* OnBattleRegeneratePhase event *)
+  ApiJack.HookCode(Ptr($446B50), @Hook_BattleRegeneratePhase);
+  ApiJack.HookCode(Ptr($446BD6), @Hook_BattleDoRegenerate);
 end; // .procedure OnAfterWoG
 
 begin
