@@ -2384,6 +2384,7 @@ var
   EventManager:         TEventManager;
   HasEventHandlers:     longbool;
   SavedY:               TErmYVars;
+  SavedNY:              TErmNYVars;
   SavedE:               TErmEVars;
   SavedX:               TErmXVars;
   SavedZ:               TErmNZVars;
@@ -2417,8 +2418,14 @@ var
     i: integer;
 
   begin
-    SavedY      := y^;
+    SavedY := y^;
     FillChar(y^, sizeof(y^), #0);
+
+    if (TriggerId < TRIGGER_FU1) or (TriggerId > TRIGGER_FU29999) then begin
+      SavedNY := ny^;
+      FillChar(ny^, sizeof(ny^), #0);
+    end;
+
     SavedE      := e^;
     FillChar(e^, sizeof(e^), #0);
     SavedX      := x^;
@@ -2443,7 +2450,12 @@ var
     i: integer;
 
   begin
-    y^       := SavedY;
+    y^ := SavedY;
+    
+    if (TriggerId < TRIGGER_FU1) or (TriggerId > TRIGGER_FU29999) then begin
+      ny^ := SavedNY;
+    end;
+
     e^       := SavedE;
     RetXVars := x^;
     x^       := SavedX;

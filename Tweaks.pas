@@ -17,7 +17,7 @@ type
 const
   // f (Value: pchar; MaxResLen: integer; DefValue, Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsReadStrIni  = Ptr($773A46);
-  // f (Res: PINTEGER; DefValue: integer; Key, SectionName, FileName: pchar): integer; cdecl;
+  // f (Res: pinteger; DefValue: integer; Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsReadIntIni  = Ptr($7739D1);
   // f (Value: pchar; Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsWriteStrIni = Ptr($773B34);
@@ -67,7 +67,7 @@ threadvar
 
 function Hook_ReadIntIni
 (
-  Res:          PINTEGER;
+  Res:          pinteger;
   DefValue:     integer;
   Key:          pchar;
   SectionName:  pchar;
@@ -261,7 +261,7 @@ begin
 end; // .function New_Zvslib_GetPrivateProfileStringA
 
 procedure ReadGameSettings;
-  procedure ReadInt (const Key: string; Res: PINTEGER);
+  procedure ReadInt (const Key: string; Res: pinteger);
   var
     StrValue: string;
     Value:    integer;
@@ -374,7 +374,7 @@ begin
 end; // .procedure ReadGameSettings
 
 procedure WriteGameSettings;
-  procedure WriteInt (const Key: string; Value: PINTEGER); 
+  procedure WriteInt (const Key: string; Value: pinteger); 
   begin
     Ini.WriteStrToIni
     (
@@ -443,7 +443,7 @@ end; // .procedure WriteGameSettings
 function Hook_GetHostByName (Hook: PatchApi.THiHook; Name: pchar): WinSock.PHostEnt; stdcall;
 type
   PEndlessPIntArr = ^TEndlessPIntArr;
-  TEndlessPIntArr = array [0..MAXLONGINT div 4 - 1] of PINTEGER;
+  TEndlessPIntArr = array [0..MAXLONGINT div 4 - 1] of pinteger;
   
 var
 {U} HostEnt:  WinSock.PHostEnt;
@@ -487,63 +487,63 @@ end; // .function Hook_GetHostByName
 
 function Hook_UN_C (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  PPOINTER(Context.EBP - $0C)^  :=  GameExt.GetRealAddr(PPOINTER(Context.EBP - $0C)^);
-  result  :=  Core.EXEC_DEF_CODE;
+  ppointer(Context.EBP - $0C)^ := GameExt.GetRealAddr(ppointer(Context.EBP - $0C)^);
+  result                       := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  Context.EBX :=  ZvsAppliedDamage^;
-  result      :=  Core.EXEC_DEF_CODE;
+  Context.EBX := ZvsAppliedDamage^;
+  result      := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Esi (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  Context.ESI :=  ZvsAppliedDamage^;
-  result      :=  Core.EXEC_DEF_CODE;
+  Context.ESI := ZvsAppliedDamage^;
+  result      := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  Context.ESI                 :=  ZvsAppliedDamage^;
-  PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
-  result                      :=  Core.EXEC_DEF_CODE;
+  Context.ESI                 := ZvsAppliedDamage^;
+  pinteger(Context.EBP + $8)^ := ZvsAppliedDamage^;
+  result                      := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  PINTEGER(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
+  pinteger(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX                    := ZvsAppliedDamage^;
-  PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
+  pinteger(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  PINTEGER(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
+  pinteger(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Local4 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  PINTEGER(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
+  pinteger(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Local8 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  PINTEGER(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
+  pinteger(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ApplyDamage_Local13 (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  PINTEGER(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
+  pinteger(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
   result                          := Core.EXEC_DEF_CODE;
 end;
 
@@ -552,34 +552,34 @@ const
   NEW_WOG_VERSION = 400;
   
 begin
-  PINTEGER(Context.EBP - $0C)^  :=  NEW_WOG_VERSION;
-  PINTEGER(Context.EBP - $24)^  :=  GameExt.ERA_VERSION_INT;
-  result                        :=  not Core.EXEC_DEF_CODE;
+  pinteger(Context.EBP - $0C)^ := NEW_WOG_VERSION;
+  pinteger(Context.EBP - $24)^ := GameExt.ERA_VERSION_INT;
+  result                       := not Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
-  MIN_NUM_TOKENS  = 2;
-  TOKEN_LODNAME   = 0;
-  TOKEN_DEFNAME   = 1;
+  MIN_NUM_TOKENS = 2;
+  TOKEN_LODNAME  = 0;
+  TOKEN_DEFNAME  = 1;
   
-  EBP_ARG_IMAGE_TEMPLATE  = 16;
+  EBP_ARG_IMAGE_TEMPLATE = 16;
 
 var
-  ImageSettings:  string;
-  Tokens:         StrLib.TArrayOfStr;
-  LodName:        string;
+  ImageSettings: string;
+  Tokens:        StrLib.TArrayOfStr;
+  LodName:       string;
   
 begin
-  ImageSettings :=  PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^;
-  Tokens        :=  StrLib.Explode(ImageSettings, ';');
+  ImageSettings := PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^;
+  Tokens        := StrLib.Explode(ImageSettings, ';');
 
   if
     (Length(Tokens) >= MIN_NUM_TOKENS)  and
     (FindFileLod(Tokens[TOKEN_DEFNAME], LodName))
   then begin
-    Tokens[TOKEN_LODNAME] :=  SysUtils.ExtractFileName(LodName);
-    ZvsLibImageTemplate   :=  StrLib.Join(Tokens, ';');
+    Tokens[TOKEN_LODNAME] := SysUtils.ExtractFileName(LodName);
+    ZvsLibImageTemplate   := StrLib.Join(Tokens, ';');
     PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^ :=  pchar(ZvsLibImageTemplate);
   end;
   
@@ -593,14 +593,14 @@ const
   EBP_LOCAL_GAME_PATH = 16;
 
 begin
-  ZvsLibGamePath  :=  SysUtils.ExtractFileDir(ParamStr(0));
+  ZvsLibGamePath  := SysUtils.ExtractFileDir(ParamStr(0));
   {!} Assert(Length(ZvsLibGamePath) > 0);
   // Increase string ref count for C++ Builder AnsiString
-  Inc(PINTEGER(Utils.PtrOfs(pointer(ZvsLibGamePath), -8))^);
+  Inc(pinteger(Utils.PtrOfs(pointer(ZvsLibGamePath), -8))^);
   
   PPCHAR(Context.EBP - EBP_LOCAL_GAME_PATH)^ :=  pchar(ZvsLibGamePath);
-  Context.RetAddr :=  Utils.PtrOfs(Context.RetAddr, 486);
-  result          :=  not Core.EXEC_DEF_CODE;
+  Context.RetAddr := Utils.PtrOfs(Context.RetAddr, 486);
+  result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsLib_ExtractDef_GetGamePath
 
 function Hook_ZvsPlaceMapObject (Hook: PatchApi.THiHook; x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; stdcall;
@@ -958,24 +958,24 @@ begin
   end;
   
   (* Remove duplicate ResetAll call *)
-  PINTEGER($7055BF)^ :=  integer($90909090);
+  pinteger($7055BF)^ :=  integer($90909090);
   PBYTE($7055C3)^    :=  $90;
   
   (* Optimize zvslib1.dll ini handling *)
   Zvslib1Handle   :=  Windows.GetModuleHandle('zvslib1.dll');
   Addr            :=  Zvslib1Handle + 1666469;
-  Addr            :=  PINTEGER(Addr + PINTEGER(Addr)^ + 6)^;
+  Addr            :=  pinteger(Addr + pinteger(Addr)^ + 6)^;
   NewAddr         :=  @New_Zvslib_GetPrivateProfileStringA;
   Core.WriteAtCode(sizeof(NewAddr), @NewAddr, pointer(Addr));
   
   (* Redirect reading/writing game settings to ini *)
   // No saving settings after reading them
-  PBYTE($50B964)^     :=  $C3;
-  PINTEGER($50B965)^  :=  integer($90909090);
+  PBYTE($50B964)^    := $C3;
+  pinteger($50B965)^ := integer($90909090);
   
-  PPOINTER($50B920)^  :=  Ptr(integer(@ReadGameSettings) - $50B924);
-  PPOINTER($50BA2F)^  :=  Ptr(integer(@WriteGameSettings) - $50BA33);
-  PPOINTER($50C371)^  :=  Ptr(integer(@WriteGameSettings) - $50C375);
+  ppointer($50B920)^ := Ptr(integer(@ReadGameSettings) - $50B924);
+  ppointer($50BA2F)^ := Ptr(integer(@WriteGameSettings) - $50BA33);
+  ppointer($50C371)^ := Ptr(integer(@WriteGameSettings) - $50C375);
   
   (* Fix game version to enable map generator *)
   Heroes.GameVersion^ :=  Heroes.SOD_AND_AB;
