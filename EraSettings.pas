@@ -110,6 +110,8 @@ begin
     VfsImport.SetLoggingProc(@VfsLogger);
   end;
 
+  Erm.ErmLegacySupport := GetOptBoolValue('ErmLegacySupport', false);
+
   with Erm.TrackingOpts do begin
     Enabled := GetDebugOpt('Debug.TrackErm');
 

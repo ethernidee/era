@@ -545,6 +545,8 @@ var
     IgnoreRealTimeTimers: boolean;
   end;
 
+  ErmLegacySupport: boolean = false;
+
 
 procedure SetZVar (Str: pchar; const Value: string); overload;
 procedure SetZVar (Str, Value: pchar); overload;
@@ -2419,21 +2421,17 @@ var
 
   begin
     SavedY := y^;
-    FillChar(y^, sizeof(y^), #0);
 
     if (TriggerId < TRIGGER_FU1) or (TriggerId > TRIGGER_FU29999) then begin
       SavedNY := ny^;
-      FillChar(ny^, sizeof(ny^), #0);
     end;
 
-    SavedE      := e^;
-    FillChar(e^, sizeof(e^), #0);
-    SavedX      := x^;
-    x^          := ArgXVars;
+    SavedE := e^;
+    SavedX := x^;
+    x^     := ArgXVars;
 
     for i := 1 to High(nz^) do begin
       Utils.SetPcharValue(@SavedZ[i], @nz[i], sizeof(z[1]));
-      pinteger(@nz[i])^ := 0;
     end;
 
     for i := Low(SavedF) to High(SavedF) do begin
@@ -2444,6 +2442,21 @@ var
       SavedV[i] := v[i];
     end;
   end; // .procedure SaveVars
+
+  procedure ResetLocalVars;
+  var
+    i: integer;
+
+  begin
+    FillChar(y^, sizeof(y^), #0);
+    FillChar(ny^, sizeof(ny^), #0);
+    FillChar(e^, sizeof(e^), #0);
+
+    for i := 1 to High(nz^) do begin
+      Utils.SetPcharValue(@SavedZ[i], @nz[i], sizeof(z[1]));
+      pinteger(@nz[i])^ := 0;
+    end;
+  end;
 
   procedure RestoreVars;
   var
@@ -2500,6 +2513,10 @@ begin
   if HasEventHandlers then begin
     SaveVars;
 
+    if not ErmLegacySupport then begin
+      ResetLocalVars;
+    end;
+
     EventX   := ZvsEventX^;
     EventY   := ZvsEventY^;
     EventZ   := ZvsEventZ^;
@@ -2529,6 +2546,10 @@ begin
           QuitTriggerFlag  := false;
 
           if not ZvsCheckFlags(@Trigger.Conditions) then begin
+            if ErmLegacySupport then begin
+              ResetLocalVars;
+            end;
+
             i := 0;
 
             while i < Trigger.NumCmds do begin
