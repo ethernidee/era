@@ -2399,6 +2399,7 @@ begin
     Line(CHR(ORD('f') + i) + ' = ' + IntToStr(Erm.QuickVars[i]));
   end;
   
+  DumpVars('Vars x1..x16', 'x', INT_VAR, @Erm.x[1], 16, 1);
   DumpVars('Vars y1..y100', 'y', INT_VAR, @Erm.y[1], 100, 1);
   DumpVars('Vars y-1..y-100', 'y-', INT_VAR, @Erm.ny[1], 100, 1);
   DumpVars('Vars z-1..z-10', 'z-', STR_VAR, @Erm.nz[1], 10, 1);

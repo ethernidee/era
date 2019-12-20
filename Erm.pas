@@ -572,7 +572,7 @@ function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 
 (* Set/Get current hero *)
-function ErmCurrHero (NewInd: integer = -1): {n} Heroes.PHero; overload;
+function ErmCurrHero (NewInd: integer = Low(integer)): {n} Heroes.PHero; overload;
 function ErmCurrHero ({n} NewHero: PHero): {n} Heroes.PHero; overload;
 
 
@@ -1791,9 +1791,9 @@ begin
     Question := Format('%s'#10'Location: %s:%d:%d', [Question, ScriptName, Line, LinePos]);
   end;
   
-  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10'Continue without saving ERM memory dump?';
+  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10'Save ERM memory dump?';
   
-  if not Ask(Question) then begin
+  if Ask(Question) then begin
     ZvsDumpErmVars(pchar(Error), ErrCmd);
   end;
 
@@ -2338,9 +2338,9 @@ begin
   end;
 end;
 
-function ErmCurrHero (NewInd: integer = -1): {n} Heroes.PHero; overload;
+function ErmCurrHero (NewInd: integer = Low(integer)): {n} Heroes.PHero; overload;
 begin
-  if NewInd <> -1 then begin
+  if NewInd = Low(integer) then begin
     result := ppointer($27F9970)^;
   end else begin
     ppointer($27F9970)^ := Heroes.ZvsGetHero(NewInd);
@@ -2422,7 +2422,7 @@ var
   begin
     SavedY := y^;
 
-    if (TriggerId < TRIGGER_FU1) or (TriggerId > TRIGGER_FU29999) then begin
+    if ErmLegacySupport and ((TriggerId < TRIGGER_FU1) or (TriggerId > TRIGGER_FU29999)) then begin
       SavedNY := ny^;
     end;
 
@@ -2449,12 +2449,12 @@ var
 
   begin
     FillChar(y^, sizeof(y^), #0);
-    FillChar(ny^, sizeof(ny^), #0);
     FillChar(e^, sizeof(e^), #0);
 
-    for i := 1 to High(nz^) do begin
-      Utils.SetPcharValue(@SavedZ[i], @nz[i], sizeof(z[1]));
-      pinteger(@nz[i])^ := 0;
+    if not ErmLegacySupport or (TriggerId < TRIGGER_FU1) or (TriggerId > TRIGGER_FU29999) then begin
+      for i := 1 to High(nz^) do begin
+        pinteger(@nz[i])^ := 0;
+      end;
     end;
   end;
 
@@ -2465,7 +2465,7 @@ var
   begin
     y^ := SavedY;
     
-    if (TriggerId < TRIGGER_FU1) or (TriggerId > TRIGGER_FU29999) then begin
+    if ErmLegacySupport and ((TriggerId < TRIGGER_FU1) or (TriggerId > TRIGGER_FU29999)) then begin
       ny^ := SavedNY;
     end;
 
@@ -2512,10 +2512,7 @@ begin
   
   if HasEventHandlers then begin
     SaveVars;
-
-    if not ErmLegacySupport then begin
-      ResetLocalVars;
-    end;
+    ResetLocalVars;
 
     EventX   := ZvsEventX^;
     EventY   := ZvsEventY^;
@@ -2546,8 +2543,9 @@ begin
           QuitTriggerFlag  := false;
 
           if not ZvsCheckFlags(@Trigger.Conditions) then begin
-            if ErmLegacySupport then begin
-              ResetLocalVars;
+            // For classic WoG non-function triggers only
+            if ErmLegacySupport and ((TriggerId < 0) or ((TriggerId >= TRIGGER_TM1) and (TriggerId <= TRIGGER_TL4)) or (TriggerId >= TRIGGER_OB_POS)) then begin
+              FillChar(ny^, sizeof(ny^), #0);
             end;
 
             i := 0;
