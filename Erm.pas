@@ -2517,7 +2517,6 @@ begin
     EventX   := ZvsEventX^;
     EventY   := ZvsEventY^;
     EventZ   := ZvsEventZ^;
-    IfsLevel := -1;
 
     SetTriggerQuickVarsAndFlags;
 
@@ -2539,6 +2538,7 @@ begin
       while (Trigger <> nil) and (Trigger.Id <> 0) do begin
         // Execute only active triggers with commands
         if (Trigger.Id = TriggerId) and (Trigger.NumCmds > 0) and (Trigger.Disabled = 0) then begin
+          IfsLevel         := -1;
           ZvsBreakTrigger^ := false;
           QuitTriggerFlag  := false;
 
