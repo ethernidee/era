@@ -226,7 +226,7 @@ begin
   NamedColors['Yellow']               :=  Ptr(Color32To16($FFFF00));
   NamedColors['YellowGreen']          :=  Ptr(Color32To16($9ACD32));
   NamedColors['r']                    :=  Ptr(Color32To16($F2223E));
-  NamedColors['g']                    :=  Ptr(Color32To16($FFFE794));
+  NamedColors['g']                    :=  Ptr(Color32To16($FFE794));
   NamedColors['b']                    :=  NamedColors['Blue'];
   NamedColors['y']                    :=  NamedColors['Yellow'];
   NamedColors['w']                    :=  NamedColors['White'];

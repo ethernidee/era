@@ -464,7 +464,7 @@ const
   ZvsTriggerIfs:              PZvsTriggerIfs         = Ptr($A46D18);
   ZvsTriggerIfsDepth:         pbyte                  = Ptr($A46D22);
   ZvsChestsEnabled:           ^TZvsCheckEnabled      = Ptr($27F99B0);
-  ZvsPlayerIsHuman:           plongbool              = Ptr($793C80);
+  ZvsGmAiFlags:               pinteger               = Ptr($793C80);
   ZvsAllowDefMouseReaction:   plongbool              = Ptr($A4AAFC);
   ZvsMouseEventInfo:          Heroes.PMouseEventInfo = Ptr($8912A8);
   ZvsEventX:                  pinteger               = Ptr($27F9964);
@@ -1851,7 +1851,7 @@ end; // .function Hook_FindErm_SkipUntil2
 
 procedure Hook_RunTimer (OrigFunc: TZvsRunTimer; Owner: integer); stdcall;
 begin
-  ZvsPlayerIsHuman^ := not ZvsIsAi(Owner);
+  ZvsGmAiFlags^ := ord(not ZvsIsAi(Owner));
   FireErmEvent(TRIGGER_DAILY_TIMER);
   OrigFunc(Owner);
 end;
@@ -2340,11 +2340,11 @@ end;
 
 function ErmCurrHero (NewInd: integer = Low(integer)): {n} Heroes.PHero; overload;
 begin
-  if NewInd = Low(integer) then begin
-    result := ppointer($27F9970)^;
-  end else begin
+  if NewInd <> Low(integer) then begin
     ppointer($27F9970)^ := Heroes.ZvsGetHero(NewInd);
   end;
+
+  result := ppointer($27F9970)^;
 end;
 
 function ErmCurrHero ({n} NewHero: PHero): {n} Heroes.PHero; overload;
@@ -2403,11 +2403,11 @@ var
   begin
     f[999] := Heroes.IsThisPcTurn();
 
-    // Really the meaning of ZvsPlayerIsHuman is overloaded and cannot be trusted without looking at ERM help
-    if ZvsPlayerIsHuman^ then begin
-      f[1000] := not ZvsIsAi(Heroes.GetCurrentPlayer());
+    // Really the meaning of ZvsGmAiFlags is overloaded and cannot be trusted without looking at ERM help
+    if ZvsGmAiFlags^ >= 0 then begin
+      f[1000] := ZvsGmAiFlags^ <> 0;
     end else begin
-      f[1000] := false;
+      f[1000] := not ZvsIsAi(Heroes.GetCurrentPlayer());
     end;
 
     v[998]  := EventX;
@@ -3226,7 +3226,7 @@ begin
   ZvsTriggerIfs               := GameExt.GetRealAddr(ZvsTriggerIfs);
   ZvsTriggerIfsDepth          := GameExt.GetRealAddr(ZvsTriggerIfsDepth);
   ZvsChestsEnabled            := GameExt.GetRealAddr(ZvsChestsEnabled);
-  ZvsPlayerIsHuman            := GameExt.GetRealAddr(ZvsPlayerIsHuman);
+  ZvsGmAiFlags                := GameExt.GetRealAddr(ZvsGmAiFlags);
   IsWoG                       := GameExt.GetRealAddr(IsWoG);
   WoGOptions                  := GameExt.GetRealAddr(WoGOptions);
   ErmEnabled                  := GameExt.GetRealAddr(ErmEnabled);

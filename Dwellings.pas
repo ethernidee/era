@@ -61,10 +61,10 @@ type
     PlayAnimation:   integer; // +52, 0 or 1. 0 means some controls inactive and def animation frozen. Can be changed any time
     _Unk1:           array [0..3] of integer;
     ObjType:         integer; // +72 OBJTYPE_TOWN for Town (CloseOnBuy=true, no advmap update), -1 for any other (CloseOnBuy=false, advmap update). Converted to DLG_FLAG_XXX set
-    _Unk4:           integer;
-    SelectedMonType: integer;
-    SelectedMonNum:  pword;
-    SelectedMonSlot: integer;
+    _Unk4:           integer; // +76
+    SelectedMonType: integer; // +80
+    SelectedMonNum:  pword;   // +84
+    SelectedMonSlot: integer; // +88
     MonTypes:        array [0..3] of integer; // +92
     MonNums:         array [0..3] of pword;
     _Unk2:           array [0..7] of byte;
@@ -141,7 +141,7 @@ type
 
 var
   ZvsRecruitMonsDlgSetupPtr: ^PRecruitMonsDlgSetup = Ptr($836A18);
-  ZvsTownManagerPtr:      ppointer           = Ptr($83A86C);
+  ZvsTownManagerPtr:         ppointer              = Ptr($83A86C);
   
   RecruitMonsDlgOpenEvent:               TRecruitMonsDlgOpenEvent;
   RecruitMonsDlgOpenEventAutoId:         integer = 0;
@@ -588,7 +588,7 @@ begin
   Erm.AssignEventParams([RecruitMonsDlgSetup.SelectedMonSlot, RecruitMonsDlgSetup.ObjType, 1]);
   Erm.FireErmEvent(Erm.TRIGGER_OPEN_RECRUIT_DLG);
 
-  RecruitMonsDlgOpenEvent.SelectedSlot := RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[Alg.ToRange(Erm.RetXVars[EVENT_PARAM_SELECTED_SLOT], 0, High(RecruitMonsDlgOpenEvent.Slots))];
+  RecruitMonsDlgOpenEvent.SelectedSlot := Math.Max(0, RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[Alg.ToRange(Erm.RetXVars[EVENT_PARAM_SELECTED_SLOT], 0, High(RecruitMonsDlgOpenEvent.Slots))]);
   RecruitMonsDlgSetup.ObjType          := Erm.RetXVars[EVENT_PARAM_DLG_FLAGS] and DLG_FLAGS_ALL;
   ShowDlg                              := Erm.RetXVars[EVENT_PARAM_SHOW_DIALOG];
 
@@ -989,18 +989,19 @@ begin
     PatchApi.Call(PatchApi.THISCALL_, Ptr($551960), [DlgSetup, @Heroes.ZvsGetTowns()[TownId], DwellingId, ord(IsTownScreen)]);
   end else begin
     FillChar(DlgSetup^, sizeof(DlgSetup^), 0);
-    DlgSetup.VirtTable       := Ptr($63B9BC);
+    DlgSetup.VirtTable       := Ptr($640C80);
     DlgSetup._MinOne1        := -1;
     DlgSetup._MinOne2        := -1;
     DlgSetup.ClassName       := 'Unknown'#0;
     DlgSetup.IsTownScreen    := ord(IsTownScreen);
-    //DlgSetup.ObjType         := Utils.IfThen(TownId <> -1, Heroes.OBJTYPE_TOWN, -1);
+    //DlgSetup.ObjType       := Utils.IfThen(TownId <> -1, Heroes.OBJTYPE_TOWN, -1);
     DlgSetup._One1           := 1;
     DlgSetup.MonTypes[0]     := -1;
     DlgSetup.MonTypes[1]     := -1;
     DlgSetup.MonTypes[2]     := -1;
     DlgSetup.MonTypes[3]     := -1;
     DlgSetup.SelectedMonType := -1;
+    DlgSetup.SelectedMonSlot := 0;
 
     // Init timer
     pinteger($6989E8)^ := PatchApi.Call(PatchApi.STDCALL_, Ptr($4F8970), []) + $64;

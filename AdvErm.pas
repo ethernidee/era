@@ -1562,11 +1562,22 @@ begin
 end; // .function SN_F
 
 function SN_P (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+var
+  FileName: pchar;
+
 begin
-  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET]);
+  result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET]);
 
   if result then begin
-    Heroes.PlaySound(Params[0].Value.pc);
+    if Params[0].IsStr then begin
+      FileName := Params[0].Value.pc;
+    end else if Math.InRange(Params[0].Value.v, 1, 1000) then begin
+      FileName := @Erm.z[Params[0].Value.v];
+    end else begin
+      FileName := Erm.ZvsGetErtStr(Params[0].Value.v);
+    end;
+
+    Heroes.PlaySound(FileName);
   end;
 end;
 
@@ -2029,7 +2040,7 @@ begin
   Utils.SetPcharValue(@Buf, SoundName, sizeof(Buf));
   CurrentSoundNameBuf := @Buf;
   Erm.FireErmEvent(Erm.TRIGGER_SN);
-  result              := PatchApi.Call(FASTCALL_, OrigFunc, [@Buf, Arg2, Arg3]);
+  result              := PatchApi.Call(FASTCALL_, OrigFunc, [Utils.IfThen(Buf[0] <> #0, @Buf, nil), Arg2, Arg3]);
   CurrentSoundNameBuf := PrevSoundNameBuf;
 end;
 
@@ -2654,6 +2665,7 @@ begin
   ApiJack.StdSplice(Ptr($59AFB0), @New_Mp3_Trigger, CONV_THISCALL, 3);
 
   (* Make !?SN use always new unique buffer *)
+  Core.p.WriteDataPatch(Ptr($59A893), ['A1E0926900']);
   ApiJack.StdSplice(Ptr($59A890), @Hook_PlaySound, ApiJack.CONV_FASTCALL, 3);
 end; // .procedure OnAfterWoG
 
