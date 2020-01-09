@@ -365,16 +365,16 @@ end;
 
 function Hook_ShowHeroScreen (OrigFunc: pointer; HeroInd, Unk1, Unk2: integer): integer; stdcall;
 begin
-  Erm.ErmCurrHero(HeroInd);
+  Erm.SetErmCurrHero(HeroInd);
   Erm.FireErmEvent(Erm.TRIGGER_OPEN_HEROSCREEN);
   result := PatchApi.Call(THISCALL_, OrigFunc, [HeroInd, Unk1, Unk2]);
-  Erm.ErmCurrHero(HeroInd);
+  Erm.SetErmCurrHero(HeroInd);
   Erm.FireErmEvent(Erm.TRIGGER_CLOSE_HEROSCREEN);
 end;
 
 function Hook_UpdateHeroScreen (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
-  Erm.ErmCurrHero(Heroes.PHero(ppointer($698B70)^));
+  Erm.SetErmCurrHero(Heroes.PHero(ppointer($698B70)^));
   Erm.FireErmEvent(Erm.TRIGGER_LOAD_HERO_SCREEN);
   result := true;
 end;

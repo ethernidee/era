@@ -237,10 +237,10 @@ begin
     end;
 
     'W': begin
-      result := (Ind >= 1) and (Ind <= 200) and (Erm.ErmCurrHero <> nil);
+      result := (Ind >= 1) and (Ind <= 200) and (Erm.GetErmCurrHero <> nil);
       
       if result then begin
-        Res := SysUtils.IntToStr(Erm.w[Erm.ErmCurrHero.Id, Ind]);
+        Res := SysUtils.IntToStr(Erm.w[Erm.GetErmCurrHero.Id, Ind]);
       end;
     end;
 
@@ -315,13 +315,13 @@ begin
     end;
 
     'w': begin
-      result := (Ind >= 1) and (Ind <= 200) and (Erm.ErmCurrHero <> nil);
+      result := (Ind >= 1) and (Ind <= 200) and (Erm.GetErmCurrHero <> nil);
       
       if result then begin
         if ServiceParam.OperGet then begin
-          ServiceParam.Value.p := @Erm.w[Erm.ErmCurrHero.Id, Ind];
+          ServiceParam.Value.p := @Erm.w[Erm.GetErmCurrHero.Id, Ind];
         end else begin
-          ServiceParam.Value.v := Erm.w[Erm.ErmCurrHero.Id, Ind];
+          ServiceParam.Value.v := Erm.w[Erm.GetErmCurrHero.Id, Ind];
         end;
       end else begin
         Erm.ShowErmError('w-index is out of range 1..200');

@@ -572,8 +572,10 @@ function  FindErmCmdBeginning ({n} CmdPtr: pchar): {n} pchar;
 procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 
 (* Set/Get current hero *)
-function ErmCurrHero (NewInd: integer = Low(integer)): {n} Heroes.PHero; overload;
-function ErmCurrHero ({n} NewHero: PHero): {n} Heroes.PHero; overload;
+procedure SetErmCurrHero (NewInd: integer); overload;
+procedure SetErmCurrHero ({n} NewHero: Heroes.PHero); overload;
+function  GetErmCurrHero: {n} Heroes.PHero;
+function  GetErmCurrHeroInd: integer; // or -1
 
 
 (***) implementation (***)
@@ -2338,24 +2340,30 @@ begin
   end;
 end;
 
-function ErmCurrHero (NewInd: integer = Low(integer)): {n} Heroes.PHero; overload;
+procedure SetErmCurrHero (NewInd: integer); overload;
 begin
-  if NewInd <> Low(integer) then begin
-    ppointer($27F9970)^ := Heroes.ZvsGetHero(NewInd);
-  end;
-
-  result := ppointer($27F9970)^;
+  ppointer($27F9970)^ := Heroes.ZvsGetHero(NewInd);
 end;
 
-function ErmCurrHero ({n} NewHero: PHero): {n} Heroes.PHero; overload;
+procedure SetErmCurrHero ({n} NewHero: Heroes.PHero); overload;
 begin
   ppointer($27F9970)^ := NewHero;
 end;
 
-function ErmCurrHeroInd: integer; // or -1
+function GetErmCurrHero: {n} Heroes.PHero;
 begin
-  if ErmCurrHero <> nil then begin
-    result := ErmCurrHero.Id;
+  result := ppointer($27F9970)^;
+end;
+
+function GetErmCurrHeroInd: integer; // or -1
+var
+{n} Hero: Heroes.PHero;
+
+begin
+  Hero := GetErmCurrHero;
+
+  if Hero <> nil then begin
+    result := Hero.Id;
   end else begin
     result := -1;
   end;
