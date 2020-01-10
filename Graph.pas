@@ -25,7 +25,7 @@ type
   TPngObject = PngImage.TPngObject;
 
   TImageType = (IMG_UNKNOWN, IMG_BMP, IMG_JPG, IMG_PNG);
-  TResizeAlg = (ALG_NO_RESIZE, ALG_STRETCH, ALG_CONTAIN, ALG_DOWNSCALE, ALG_UPSCALE, ALG_COVER, ALG_FILL);
+  TResizeAlg = (ALG_NO_RESIZE = 0, ALG_STRETCH = 1, ALG_CONTAIN = 2, ALG_DOWNSCALE = 3, ALG_UPSCALE = 4, ALG_COVER = 5, ALG_FILL = 6);
 
   TDimensionsDetectionType = (USE_IMAGE_VALUES, CALC_PROPORTIONALLY);
 
@@ -225,7 +225,6 @@ end;
 function ResizeBmp24 ({OU} Image: TBitmap; NewWidth, NewHeight, MaxWidth, MaxHeight: integer; ResizeAlg: TResizeAlg; FreeOriginal: boolean): {O} TBitmap;
 var
   DimensionsDetectionType: TDimensionsDetectionType;
-  ImageRatio:              TImageRatio;
   NeedsScaling:            boolean;
   Width:                   double;
   Height:                  double;
@@ -242,6 +241,8 @@ begin
 
   if ResizeAlg = ALG_FILL then begin
     DimensionsDetectionType := USE_IMAGE_VALUES;
+  end else if ResizeAlg = ALG_COVER then begin
+    ResizeAlg := ALG_STRETCH;
   end;
 
   DetectMissingDimensions(Image, NewWidth, NewHeight, DimensionsDetectionType);
@@ -549,13 +550,10 @@ function LoadImageAsPcx16 (FilePath:  string;      PcxName:   string  = '';
                            MaxWidth:  integer = 0; MaxHeight: integer = 0;
                            ResizeAlg: TResizeAlg = ALG_DOWNSCALE): {OU} Heroes.PPcx16Item;
 var
-{O}  Bmp:               TBitmap;
-{Un} CachedItem:        Heroes.PPcx16Item;
-{On} Pcx24:             Heroes.PPcx24Item;
-     NewSize:           TImageSize;
-     UseAutoNaming:     boolean;
-     IsUnsizedNameFree: boolean;
-     IsSizedNameFree:   boolean;
+{O}  Bmp:           TBitmap;
+{Un} CachedItem:    Heroes.PPcx16Item;
+{On} Pcx24:         Heroes.PPcx24Item;
+     UseAutoNaming: boolean;
 
 begin
   Bmp        := nil;

@@ -166,7 +166,7 @@ begin
   result      := Externalize(Translation);
 end; // .function tr
 
-function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height: integer): {OU} Heroes.PPcx16Item; stdcall;
+function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height, MaxWidth, MaxHeight, ResizeAlg: integer): {OU} Heroes.PPcx16Item; stdcall;
 begin
   if FilePath = nil then begin
     FilePath := pchar('');
@@ -176,7 +176,12 @@ begin
     PcxName := pchar('');
   end;
 
-  result := Graph.LoadImageAsPcx16(FilePath, PcxName, Width, Height);
+  if (ResizeAlg < ord(Low(Graph.TResizeAlg))) or (ResizeAlg > ord(High(Graph.TResizeAlg))) then begin
+    Core.NotifyError('Invalid ResizeAlg argument for LoadImageAsPcx16: ' + SysUtils.IntToStr(ResizeAlg));
+    ResizeAlg := ord(Graph.ALG_DOWNSCALE);
+  end;
+
+  result := Graph.LoadImageAsPcx16(FilePath, PcxName, Width, Height, MaxWidth, MaxHeight, TResizeAlg(ResizeAlg));
 end;
 
 procedure ShowMessage (Mes: pchar); stdcall;
