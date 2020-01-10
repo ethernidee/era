@@ -251,6 +251,7 @@ exports
   GetRetXVars,
   GetVersion,
   GlobalRedirectFile,
+  Graph.DecRef,
   Heroes.GetGameState,
   Heroes.LoadTxt,
   HookCode,

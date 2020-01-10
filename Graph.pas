@@ -3,7 +3,7 @@
 (***)  interface  (***)
 
 uses
-  SysUtils, Graphics, Jpeg, Types, PngImage, Utils, Core,
+  SysUtils, Math, Graphics, Jpeg, Types, PngImage, Utils, Core, Alg,
   Heroes, GameExt, EventMan;
 
 const
@@ -25,6 +25,9 @@ type
   TPngObject = PngImage.TPngObject;
 
   TImageType = (IMG_UNKNOWN, IMG_BMP, IMG_JPG, IMG_PNG);
+  TResizeAlg = (ALG_NO_RESIZE, ALG_STRETCH, ALG_CONTAIN, ALG_DOWNSCALE, ALG_UPSCALE, ALG_COVER, ALG_FILL);
+
+  TDimensionsDetectionType = (USE_IMAGE_VALUES, CALC_PROPORTIONALLY);
 
   PColor24 = ^TColor24;
   TColor24 = packed record
@@ -50,12 +53,17 @@ type
 function  LoadImage (const FilePath: string): {n} TGraphic;
 
 (* Fast bitmap scaling. Input bitmap is forced to be 24 bit. *)
-function ResizeBmp24 ({OU} Image: TBitmap; NewWidth, NewHeight: integer; FreeOriginal: boolean): {O} TBitmap;
+function ResizeBmp24 ({OU} Image: TBitmap; NewWidth, NewHeight, MaxWidth, MaxHeight: integer; ResizeAlg: TResizeAlg; FreeOriginal: boolean): {O} TBitmap;
 
 (* ©Charles Hacker, adapted by ethernidee. Input bitmap is forced to be 24 bit. *)
 function  SmoothResizeBmp24 ({OU} abmp: TBitmap; NewWidth, NewHeight: integer; FreeOriginal: boolean): {O} TBitmap;
 
-function LoadImageAsPcx16 (FilePath: string; PcxName: string = ''; Width: integer = AUTO_WIDTH; Height: integer = AUTO_HEIGHT): {OU} Heroes.PPcx16Item;
+function LoadImageAsPcx16 (FilePath:  string;      PcxName:   string  = '';
+                           Width:     integer = 0; Height:    integer = 0;
+                           MaxWidth:  integer = 0; MaxHeight: integer = 0;
+                           ResizeAlg: TResizeAlg = ALG_DOWNSCALE): {OU} Heroes.PPcx16Item;
+
+procedure DecRef (Resource: Heroes.PBinaryTreeItem); stdcall;
 
 
 (***)  implementation  (***)
@@ -172,6 +180,139 @@ begin
   result.Height := Height / Width;
 end;
 
+procedure DetectMissingDimensions (Image: TBitmap; var Width, Height: integer; DetectionType: TDimensionsDetectionType);
+begin
+  if (Width = AUTO_WIDTH) or (Height = AUTO_HEIGHT) then begin
+    if (Width = AUTO_WIDTH) and (Height = AUTO_HEIGHT) then begin
+      Width  := Image.Width;
+      Height := Image.Height;
+    end else begin
+      case DetectionType of
+        USE_IMAGE_VALUES: begin
+          if Width = AUTO_WIDTH then begin
+            Width  := Image.Width;
+          end else begin
+            Height := Image.Height;
+          end;
+        end;
+
+        CALC_PROPORTIONALLY: begin
+          if Width = AUTO_WIDTH then begin
+            Width  := round(Height * (Image.Width / Image.Height));
+          end else begin
+            Height := round(Width * (Image.Height / Image.Width));
+          end;
+        end;
+      end; // .switch
+    end; // .else
+  end; // .if  
+end; // .procedure DetectMissingDimensions
+
+procedure ApplyMinMaxDimensionConstraints (var Width, Height: integer; MinWidth, MinHeight, MaxWidth, MaxHeight: integer);
+begin
+  if MaxWidth = AUTO_WIDTH then begin
+    MaxWidth := Width;
+  end;
+
+  if MaxHeight = AUTO_HEIGHT then begin
+    MaxHeight := Height;
+  end;
+
+  Width  := Alg.ToRange(Width,  MinWidth,  MaxWidth);
+  Height := Alg.ToRange(Height, MinHeight, MaxHeight);
+end;
+
+function ResizeBmp24 ({OU} Image: TBitmap; NewWidth, NewHeight, MaxWidth, MaxHeight: integer; ResizeAlg: TResizeAlg; FreeOriginal: boolean): {O} TBitmap;
+var
+  DimensionsDetectionType: TDimensionsDetectionType;
+  ImageRatio:              TImageRatio;
+  NeedsScaling:            boolean;
+  Width:                   double;
+  Height:                  double;
+
+begin
+  // Treat negative constraints and dimensions as AUTO
+  MaxWidth  := Math.Max(0, MaxWidth);
+  MaxHeight := Math.Max(0, MaxHeight);
+  NewWidth  := Math.Max(0, NewWidth);
+  NewHeight := Math.Max(0, NewHeight);
+
+  // Convert AUTO dimensions into real
+  DimensionsDetectionType := CALC_PROPORTIONALLY;
+
+  if ResizeAlg = ALG_FILL then begin
+    DimensionsDetectionType := USE_IMAGE_VALUES;
+  end;
+
+  DetectMissingDimensions(Image, NewWidth, NewHeight, DimensionsDetectionType);
+  // End
+  
+  ApplyMinMaxDimensionConstraints(NewWidth, NewHeight, 1, 1, MaxWidth, MaxHeight);
+
+  if (Image.Width = NewWidth) and (Image.Height = NewHeight) then begin
+    ResizeAlg := ALG_NO_RESIZE;
+  end;
+
+  if FreeOriginal and (ResizeAlg = ALG_NO_RESIZE) then begin
+    result := Image; Image := nil;
+  end else begin
+    result             := TBitmap.Create;
+    result.PixelFormat := pf24bit;
+
+    case ResizeAlg of
+      ALG_NO_RESIZE: begin
+        result.SetSize(NewWidth, NewHeight);
+        result.Canvas.Draw(0, 0, Image);
+      end;
+
+      ALG_STRETCH: begin
+        result.SetSize(NewWidth, NewHeight);
+        result.Canvas.StretchDraw(Rect(0, 0, NewWidth, NewHeight), Image);
+      end;
+
+      ALG_CONTAIN, ALG_UPSCALE, ALG_DOWNSCALE: begin
+        NeedsScaling := (ResizeAlg  = ALG_CONTAIN)                                                                 or
+                        ((ResizeAlg = ALG_DOWNSCALE) and ((Image.Width > NewWidth) or (Image.Height > NewHeight))) or
+                        ((ResizeAlg = ALG_UPSCALE)   and ((Image.Width < NewWidth) and (Image.Height < NewHeight)));
+
+        if NeedsScaling then begin
+          // Fit to box width
+          Width  := NewWidth;
+          Height := NewWidth * Image.Height / Image.Width;
+
+          // Fit to box height
+          if Height > NewHeight then begin
+            Width  := Width * NewHeight / Height;
+            Height := NewHeight;
+          end;
+
+          // Get final rounded width/height
+          NewWidth  := round(Width);
+          NewHeight := round(height);
+          ApplyMinMaxDimensionConstraints(NewWidth, NewHeight, 1, 1, MaxWidth, MaxHeight);
+          
+          result.SetSize(NewWidth, NewHeight);
+          result.Canvas.StretchDraw(Rect(0, 0, NewWidth, NewHeight), Image);
+        end else begin
+          FreeAndNil(result);
+          result := Image; Image := nil;
+        end; // .else
+      end; // .case ALG_CONTAIN, ALG_UPSCALE, ALG_DOWNSCALE
+
+      ALG_FILL: begin
+        result.SetSize(NewWidth, NewHeight);
+        result.Canvas.Brush.Bitmap := Image;
+        result.Canvas.FillRect(Rect(0, 0, NewWidth, NewHeight));
+        result.Canvas.Brush.Bitmap := nil;
+      end;
+    end; // .switch ResizeAlg
+  end; // .else
+
+  if FreeOriginal then begin
+    FreeAndNil(Image);
+  end;
+end; // .procedure ResizeBmp24
+
 function GetScaledBmp24Size (Image: TBitmap; NewWidth, NewHeight: integer): TImageSize;
 var
   OldWidth:   integer;
@@ -210,27 +351,6 @@ begin
   result.Width  := NewWidth;
   result.Height := NewHeight;
 end; // .function GetScaledBmp24Size
-
-function ResizeBmp24 ({OU} Image: TBitmap; NewWidth, NewHeight: integer; FreeOriginal: boolean): {O} TBitmap;
-var
-  NewImageSize: TImageSize;
-
-begin
-  NewImageSize := GetScaledBmp24Size(Image, NewWidth, NewHeight);
-  // * * * * * //
-  if FreeOriginal and (Image.Width = NewWidth) and (Image.Height = NewHeight) then begin
-    result := Image; Image := nil;
-  end else begin
-    result             := TBitmap.Create;
-    result.PixelFormat := pf24bit;
-    result.SetSize(NewImageSize.Width, NewImageSize.Height);
-    result.Canvas.StretchDraw(Rect(0, 0, NewImageSize.Width, NewImageSize.Height), Image);
-
-    if FreeOriginal then begin
-      FreeAndNil(Image);
-    end;
-  end; // .else
-end; // .procedure ResizeBmp24
 
 function SmoothResizeBmp24 ({OU} abmp: TBitmap; NewWidth, NewHeight: integer; FreeOriginal: boolean): {O} TBitmap;
 var
@@ -394,7 +514,7 @@ var
 {U} BmpPixels:       PColor24;
 {U} PcxPixels:       pword;
     PcxScanlineSize: integer;
-    x, y:            integer;
+    y:               integer;
 
 begin
   ValidateBmp24(Image);
@@ -417,14 +537,17 @@ begin
   end;
 end; // .function Bmp24ToPcx24
 
-(* Loads Pcx16 resource with rescaling support. Values <= 0 are considered 'auto'. If it's possible, images are scaled proportionally.
+(* Loads Pcx16 resource with rescaling support. Values <= 0 are considered 'auto'. Image scaling depends on chosen algorithm.
    Resource name (name in binary resource tree) can be either fixed or automatic. Pass empty PcxName for automatic name.
    If PcxName exceeds 12 characters, it's replaced with valid unique name. Check name field of result.
    If resource is already registered and has proper format, it's returned with RefCount increased.
    Result image dimensions may differ from requested if fixed PcxName is specified. Use automatic naming
    to load image of desired size for sure.
    Default image is returned in case of missing file and user is notified. *)
-function LoadImageAsPcx16 (FilePath: string; PcxName: string = ''; Width: integer = AUTO_WIDTH; Height: integer = AUTO_HEIGHT): {OU} Heroes.PPcx16Item;
+function LoadImageAsPcx16 (FilePath:  string;      PcxName:   string  = '';
+                           Width:     integer = 0; Height:    integer = 0;
+                           MaxWidth:  integer = 0; MaxHeight: integer = 0;
+                           ResizeAlg: TResizeAlg = ALG_DOWNSCALE): {OU} Heroes.PPcx16Item;
 var
 {O}  Bmp:               TBitmap;
 {Un} CachedItem:        Heroes.PPcx16Item;
@@ -439,14 +562,13 @@ begin
   CachedItem := nil;
   result     := nil;
   // * * * * * //
+  UseAutoNaming := PcxName = '';
 
-  UseAutoNaming     := PcxName = '';
-  IsUnsizedNameFree := true;
-  IsSizedNameFree   := true;
-  FilePath          := SysUtils.ExpandFileName(FilePath);
+  if UseAutoNaming then begin
+    PcxName := Heroes.ResourceNamer.GenerateUniqueResourceName();
+  end;
 
-  // Fixed name is used, item must be absent in resource tree or have pcx24 format.
-  // Cached item is used even if dimensions are different from desired.
+  // Search fixed named resource in cache. It must be absent or be pcx16
   if not UseAutoNaming then begin
     PcxName := Heroes.ResourceNamer.GetResourceName(PcxName);
 
@@ -455,86 +577,31 @@ begin
       result := CachedItem;
       result.IncRef();
     end;
-  end
-  // Auto naming is used
-  else begin
-    // No size is forced, form name without dimensions and search for pcx16 only in cache
-    if (Width <= 0) and (Height <= 0) then begin
-      PcxName    := Heroes.ResourceNamer.GetResourceName(FilePath);
-      CachedItem := nil;
+  end;
 
-      if Heroes.ResourceTree.FindItem(PcxName, Heroes.PBinaryTreeItem(CachedItem)) and (CachedItem.IsPcx16()) then begin
-        result := CachedItem;
-        result.IncRef();
-      end;
-
-      IsUnsizedNameFree := IsUnsizedNameFree and (CachedItem = nil);
-    end
-    // Fixed dimensions are specified, look for exact sized pcx16 result in cache
-    else if (Width > 0) and (Height > 0) then begin
-      PcxName    := Heroes.ResourceNamer.GetResourceName(Format('%s:%dx%d', [FilePath, Width, Height]));
-      CachedItem := nil;
-
-      if Heroes.ResourceTree.FindItem(PcxName, Heroes.PBinaryTreeItem(CachedItem)) and (CachedItem.IsPcx16()) and (CachedItem.Width = Width) and (CachedItem.Height = Height) then begin
-        result := CachedItem;
-        result.IncRef();
-      end;
-
-      IsSizedNameFree := IsSizedNameFree and (CachedItem = nil);
-    end; // .elseif
-  end; // .else
-
-  // All initial cache queries failed, need to load image from file to get extra information
+  // Cache miss, load image from file
   if result = nil then begin
-    Bmp     := LoadImageAsBmp24(FilePath);
-    NewSize := GetScaledBmp24Size(Bmp, Width, Height);
-
-    // Query cache for exact sized pcx24 in case of autonaming
-    if UseAutoNaming then begin
-      PcxName    := Heroes.ResourceNamer.GetResourceName(Format('%s:%dx%d', [FilePath, NewSize.Width, NewSize.Height]));
-      CachedItem := nil;
-
-      if Heroes.ResourceTree.FindItem(PcxName, Heroes.PBinaryTreeItem(CachedItem)) and (CachedItem.IsPcx24()) and (CachedItem.Width = NewSize.Width) and (CachedItem.Height = NewSize.Height) then begin
-        result := CachedItem;
-        result.IncRef();
-      end;
-
-      IsSizedNameFree := IsSizedNameFree and (CachedItem = nil);
-    end;  // .if
-  end; // .if
-
-  // Image is loaded, but all possible cache queries failed
-  if result = nil then begin
-    // Form final image name in cache, if necessary
-    if UseAutoNaming then begin
-      if (Width <= 0) and (Height <= 0) and IsUnsizedNameFree then begin
-        PcxName := Heroes.ResourceNamer.GetResourceName(FilePath);
-      end else if IsSizedNameFree then begin
-        PcxName := Heroes.ResourceNamer.GetResourceName(Format('%s:%dx%d', [FilePath, NewSize.Width, NewSize.Height]));
-      end else begin
-        PcxName := Heroes.ResourceNamer.GenerateUniqueResourceName();
-      end;
-    end;
-
-    // Perform image scaling if necessary
-    if (Bmp.Width <> NewSize.Width) or (Bmp.Height <> NewSize.Height) then begin
-      Bmp := ResizeBmp24(Bmp, NewSize.Width, NewSize.Height, FREE_ORIGINAL_BMP);
-    end;
-    
+    FilePath := SysUtils.ExpandFileName(FilePath);
+    Bmp      := ResizeBmp24(LoadImageAsBmp24(FilePath), Width, Height, MaxWidth, MaxHeight, ResizeAlg, FREE_ORIGINAL_BMP);
+  
     // Perform image conversion and resource insertion
     Pcx24  := Bmp24ToPcx24(Bmp, PcxName);
     result := Heroes.TPcx16ItemStatic.Create(PcxName, Bmp.Width, Bmp.Height);
     Pcx24.DrawToPcx16(0, 0, Bmp.Width, Bmp.Height, result, 0, 0);
     Pcx24.Destruct;
-    //result := pointer(Pcx24);
 
+    // Register item in resources binary tree and increase reference counter
     result.IncRef();
     Heroes.ResourceTree.AddItem(result);
   end; // .if
-
   // * * * * * //
   FreeAndNil(Bmp);
 end; // .function LoadImageAsPcx16
+
+procedure DecRef (Resource: Heroes.PBinaryTreeItem); stdcall;
+begin
+  Resource.DecRef;
+end;
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 var
@@ -542,7 +609,7 @@ var
 
 begin
   (* testing *)
-  pic := LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
+  pic := LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600, 400, 300, ALG_CONTAIN);
 end;
 
 begin
