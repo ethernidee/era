@@ -319,10 +319,6 @@ type
     // _Dlg_* dlg;       // + 0x132FC
     // _byte_ field_13300[3564];
   end; // .TCombatManager
-
-  TCastleManager = packed record
-
-  end; // .TCastleManager
   
   PScreenPcx16  = ^TScreenPcx16;
   TScreenPcx16  = packed record
@@ -711,6 +707,12 @@ type
   TTowns = packed array [0..999] of TTown;
   PTowns = ^TTowns;
 
+  PTownManager = ^TTownManager;
+  TTownManager = packed record
+    Unk1: array [0..$38 - 1] of byte;
+    Town: PTown;
+  end;
+
 const
   MAlloc: TMAlloc = Ptr($617492);
   MFree:  TMFree  = Ptr($60B0F0);
@@ -764,6 +766,7 @@ function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
 function  IsLocalGame: boolean;
 function  IsNetworkGame: boolean;
+function  GetTownManager: PTownManager;
 function  GetCurrentPlayer: integer;
 function  IsThisPcTurn: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
@@ -1209,6 +1212,11 @@ end;
 function IsNetworkGame: boolean;
 begin
   result := (GameType^ <> GAMETYPE_SINGLE) and (GameType^ <> GAMETYPE_HOTSEAT);
+end;
+
+function GetTownManager: PTownManager;
+begin
+  result := ppointer(TOWN_MANAGER)^;
 end;
 
 function GetCurrentPlayer: integer;

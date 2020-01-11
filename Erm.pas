@@ -159,7 +159,14 @@ const
   TRIGGER_RECRUIT_DLG_ACTION           = 77029;
   TRIGGER_LOAD_HERO_SCREEN             = 77030;
   TRIGGER_BUILD_TOWN_BUILDING          = 77031;
-  {!} LAST_ERA_TRIGGER                 = TRIGGER_BUILD_TOWN_BUILDING;
+  TRIGGER_OPEN_TOWN_SCREEN            = 77032;
+  TRIGGER_CLOSE_TOWN_SCREEN            = 77033;
+  TRIGGER_SWITCH_TOWN_SCREEN           = 77034;
+  TRIGGER_PRE_TOWN_SCREEN              = 77035;
+  TRIGGER_POST_TOWN_SCREEN             = 77036;
+  TRIGGER_PRE_HEROSCREEN               = 77037;
+  TRIGGER_POST_HEROSCREEN              = 77038;
+  {!} LAST_ERA_TRIGGER                 = TRIGGER_POST_HEROSCREEN;
   
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -731,8 +738,8 @@ begin
     {*} Erm.TRIGGER_SN:       result :=  'OnSoundPlay';
     {*} Erm.TRIGGER_MG0:      result :=  'OnBeforeAdventureMagic';
     {*} Erm.TRIGGER_MG1:      result :=  'OnAfterAdventureMagic';
-    {*} Erm.TRIGGER_TH0:      result :=  'OnEnterTown';
-    {*} Erm.TRIGGER_TH1:      result :=  'OnLeaveTown';
+    {*} Erm.TRIGGER_TH0:      result :=  'OnEnterTownHall';
+    {*} Erm.TRIGGER_TH1:      result :=  'OnLeaveTownHall';
     {*} Erm.TRIGGER_IP0:      result :=  'OnBeforeBattleBeforeDataSend';
     {*} Erm.TRIGGER_IP1:      result :=  'OnBeforeBattleAfterDataReceived';
     {*} Erm.TRIGGER_IP2:      result :=  'OnAfterBattleBeforeDataSend';
@@ -793,6 +800,13 @@ begin
     {*} Erm.TRIGGER_RECRUIT_DLG_ACTION:           result := 'OnRecruitDlgAction';
     {*} Erm.TRIGGER_LOAD_HERO_SCREEN:             result := 'OnLoadHeroScreen';
     {*} Erm.TRIGGER_BUILD_TOWN_BUILDING:          result := 'OnBuildTownBuilding';
+    {*} Erm.TRIGGER_OPEN_TOWN_SCREEN:             result := 'OnOpenTownScreen';
+    {*} Erm.TRIGGER_CLOSE_TOWN_SCREEN:            result := 'OnCloseTownScreen';
+    {*} Erm.TRIGGER_SWITCH_TOWN_SCREEN:           result := 'OnSwitchTownScreen';
+    {*} Erm.TRIGGER_PRE_TOWN_SCREEN:              result := 'OnPreTownScreen';
+    {*} Erm.TRIGGER_POST_TOWN_SCREEN:             result := 'OnPostTownScreen';
+    {*} Erm.TRIGGER_PRE_HEROSCREEN:               result := 'OnPreHeroScreen';
+    {*} Erm.TRIGGER_POST_HEROSCREEN:              result := 'OnPostHeroScreen';
     (* END Era Triggers *)
   else
     if EventID >= Erm.TRIGGER_OB_POS then begin
@@ -2236,8 +2250,8 @@ begin
   NameTrigger(Erm.TRIGGER_SN,   'OnSoundPlay');
   NameTrigger(Erm.TRIGGER_MG0,  'OnBeforeAdventureMagic');
   NameTrigger(Erm.TRIGGER_MG1,  'OnAfterAdventureMagic');
-  NameTrigger(Erm.TRIGGER_TH0,  'OnEnterTown');
-  NameTrigger(Erm.TRIGGER_TH1,  'OnLeaveTown');
+  NameTrigger(Erm.TRIGGER_TH0,  'OnEnterTownHall');
+  NameTrigger(Erm.TRIGGER_TH1,  'OnLeaveTownHall');
   NameTrigger(Erm.TRIGGER_IP0,  'OnBeforeBattleBeforeDataSend');
   NameTrigger(Erm.TRIGGER_IP1,  'OnBeforeBattleAfterDataReceived');
   NameTrigger(Erm.TRIGGER_IP2,  'OnAfterBattleBeforeDataSend');
@@ -2293,6 +2307,13 @@ begin
   NameTrigger(Erm.TRIGGER_RECRUIT_DLG_ACTION,           'OnRecruitDlgAction');
   NameTrigger(Erm.TRIGGER_LOAD_HERO_SCREEN,             'OnLoadHeroScreen');
   NameTrigger(Erm.TRIGGER_BUILD_TOWN_BUILDING,          'OnBuildTownBuilding');
+  NameTrigger(Erm.TRIGGER_OPEN_TOWN_SCREEN,             'OnOpenTownScreen');
+  NameTrigger(Erm.TRIGGER_CLOSE_TOWN_SCREEN,            'OnCloseTownScreen');
+  NameTrigger(Erm.TRIGGER_SWITCH_TOWN_SCREEN,           'OnSwitchTownScreen');
+  NameTrigger(Erm.TRIGGER_PRE_TOWN_SCREEN,              'OnPreTownScreen');
+  NameTrigger(Erm.TRIGGER_POST_TOWN_SCREEN,             'OnPostTownScreen');
+  NameTrigger(Erm.TRIGGER_PRE_HEROSCREEN,               'OnPreHeroScreen');
+  NameTrigger(Erm.TRIGGER_POST_HEROSCREEN,              'OnPostHeroScreen');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);

@@ -363,19 +363,48 @@ begin
   result := true;
 end;
 
+var
+  PrevHeroScreenHeroInd: integer = -1;
+
 function Hook_ShowHeroScreen (OrigFunc: pointer; HeroInd: integer; ViewOnly: boolean; Unk1, Unk2: integer): integer; stdcall;
+var
+  SavedPrevHeroScreenHeroInd: integer;
+
 begin
+  SavedPrevHeroScreenHeroInd := PrevHeroScreenHeroInd;
+  PrevHeroScreenHeroInd      := -1;
+
   Erm.SetErmCurrHero(HeroInd);
-  Erm.FireErmEvent(Erm.TRIGGER_OPEN_HEROSCREEN);
+  Erm.FireErmEventEx(Erm.TRIGGER_OPEN_HEROSCREEN, [HeroInd]);
+  
   result := PatchApi.Call(FASTCALL_, OrigFunc, [HeroInd, ord(ViewOnly), Unk1, Unk2]);
+  
   Erm.SetErmCurrHero(HeroInd);
-  Erm.FireErmEvent(Erm.TRIGGER_CLOSE_HEROSCREEN);
+  Erm.FireErmEventEx(Erm.TRIGGER_POST_HEROSCREEN, [PrevHeroScreenHeroInd]);
+  
+  PrevHeroScreenHeroInd := SavedPrevHeroScreenHeroInd;
+  Erm.SetErmCurrHero(HeroInd);
+  Erm.FireErmEventEx(Erm.TRIGGER_CLOSE_HEROSCREEN, [HeroInd]);
 end;
 
 function Hook_UpdateHeroScreen (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  HeroInd: integer;
+
 begin
-  Erm.SetErmCurrHero(Heroes.PHero(ppointer($698B70)^));
-  Erm.FireErmEvent(Erm.TRIGGER_LOAD_HERO_SCREEN);
+  HeroInd := Heroes.PHero(ppointer($698B70)^).Id;
+
+  if PrevHeroScreenHeroInd <> -1 then begin
+    Erm.FireErmEventEx(Erm.TRIGGER_POST_HEROSCREEN, [PrevHeroScreenHeroInd]);
+    PrevHeroScreenHeroInd := -1;
+  end;
+
+  Erm.SetErmCurrHero(HeroInd);
+  Erm.FireErmEventEx(Erm.TRIGGER_LOAD_HERO_SCREEN, [HeroInd]);
+
+  PrevHeroScreenHeroInd := HeroInd;
+  Erm.FireErmEventEx(Erm.TRIGGER_PRE_HEROSCREEN, [HeroInd]);
+  
   result := true;
 end;
 
@@ -446,6 +475,45 @@ begin
   result := PatchApi.Call(THISCALL_, OrigFunc, [Town, BuildingId, Unk1, Unk2]);
 end;
 
+var
+  PrevTownScreenId: integer = -1;
+
+function Hook_EnterTownScreen (OrigFunc: pointer; DlgManager, TownDlg: pointer): integer; stdcall;
+var
+  TownId: integer;
+
+begin
+  TownId := Heroes.GetTownManager.Town.Id;
+  
+  Erm.FireErmEventEx(Erm.TRIGGER_OPEN_TOWN_SCREEN, [TownId]);
+  PrevTownScreenId := TownId;
+  Erm.FireErmEventEx(Erm.TRIGGER_PRE_TOWN_SCREEN, [TownId]);
+  
+  result := PatchApi.Call(THISCALL_, OrigFunc, [DlgManager, TownDlg]);
+  
+  Erm.FireErmEventEx(Erm.TRIGGER_POST_TOWN_SCREEN, [PrevTownScreenId]);
+  PrevTownScreenId := -1;
+  Erm.FireErmEventEx(Erm.TRIGGER_CLOSE_TOWN_SCREEN, [TownId]);
+end;
+
+function Hook_SwitchTownScreen (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  TownId: integer;
+
+begin
+  TownId := Heroes.GetTownManager.Town.Id;
+  Erm.FireErmEventEx(Erm.TRIGGER_SWITCH_TOWN_SCREEN, [TownId]);
+
+  if PrevTownScreenId <> -1 then begin
+    Erm.FireErmEventEx(Erm.TRIGGER_POST_TOWN_SCREEN, [PrevTownScreenId]);
+  end;
+
+  PrevTownScreenId := TownId;
+  Erm.FireErmEventEx(Erm.TRIGGER_PRE_TOWN_SCREEN, [TownId]);
+
+  result := true;
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -496,8 +564,14 @@ begin
   ApiJack.HookCode(Ptr($446B50), @Hook_BattleRegeneratePhase);
   ApiJack.HookCode(Ptr($446BD6), @Hook_BattleDoRegenerate);
 
-  (* OnBuild event *)
+  (* OnBuildTownBuilding event *)
   ApiJack.StdSplice(Ptr($5BF1E0), @Hook_BuildTownBuilding, ApiJack.CONV_THISCALL, 4);
+
+  (* OnEnterTownScreen event *)
+  ApiJack.StdSplice(Ptr($4B09D0), @Hook_EnterTownScreen, ApiJack.CONV_THISCALL, 2);
+
+  (* OnEnterTownScreen event *)
+  ApiJack.HookCode(Ptr($5D4709), @Hook_SwitchTownScreen);
 end; // .procedure OnAfterWoG
 
 begin
