@@ -624,8 +624,8 @@ end;
 
 function Hook_OpenTownHordeDwelling (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
-  NextRecruitMonsDlgOpenEventTownId     := (pcardinal(Context.EBX + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
-  NextRecruitMonsDlgOpenEventDwellingId := pbyte(pbyte(pinteger(pinteger(Heroes.TOWN_MANAGER)^ + $38)^ + 4)^ * 2 + Context.EDI + integer(GameExt.GetRealAddr(Ptr($68A3A2))))^;
+  NextRecruitMonsDlgOpenEventTownId     := Heroes.GetTownManager.Town.Id;
+  NextRecruitMonsDlgOpenEventDwellingId := pbyte(Heroes.GetTownManager.Town.TownType * 2 + Context.EDI + integer(GameExt.GetRealAddr(Ptr($68A3A2))))^;
   result                                := Core.EXEC_DEF_CODE;
 end;
 

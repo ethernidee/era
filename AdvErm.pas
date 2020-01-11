@@ -393,6 +393,14 @@ begin
         ServiceParam.IsStr := true;
       end; // .if
     end; // .case
+
+    'f'..'t': begin
+      if ServiceParam.OperGet then begin
+        ServiceParam.Value.p := @Erm.QuickVars[Ind];
+      end else begin
+        ServiceParam.Value.v := Erm.QuickVars[Ind];
+      end;
+    end;
   else
     result := false;
   end; // .switch VarType
@@ -506,10 +514,7 @@ begin
         end;
         
         // Literal values are handled, now handle variables
-        if ParType in ['f'..'t'] then begin
-          ParValue                := Erm.QuickVars[ParValue];
-          Params[NumParams].IsStr := false;
-        end else if ParType <> #0 then begin
+        if ParType <> #0 then begin
           if not ErmVarToServiceParam(ParType, ParValue, Params[NumParams]) then begin
             result := -1; exit;
           end;
