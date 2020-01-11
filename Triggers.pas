@@ -363,11 +363,11 @@ begin
   result := true;
 end;
 
-function Hook_ShowHeroScreen (OrigFunc: pointer; HeroInd, Unk1, Unk2: integer): integer; stdcall;
+function Hook_ShowHeroScreen (OrigFunc: pointer; HeroInd: integer; ViewOnly: boolean; Unk1, Unk2: integer): integer; stdcall;
 begin
   Erm.SetErmCurrHero(HeroInd);
   Erm.FireErmEvent(Erm.TRIGGER_OPEN_HEROSCREEN);
-  result := PatchApi.Call(THISCALL_, OrigFunc, [HeroInd, Unk1, Unk2]);
+  result := PatchApi.Call(FASTCALL_, OrigFunc, [HeroInd, ord(ViewOnly), Unk1, Unk2]);
   Erm.SetErmCurrHero(HeroInd);
   Erm.FireErmEvent(Erm.TRIGGER_CLOSE_HEROSCREEN);
 end;
@@ -436,6 +436,16 @@ begin
   result := not DisableRegen;
 end;
 
+function Hook_BuildTownBuilding (OrigFunc: pointer; Town: Heroes.PTown; BuildingId, Unk1, Unk2: integer): integer; stdcall;
+const
+  PARAM_TOWN_ID     = 1;
+  PARAM_BUILDING_ID = 2;
+
+begin
+  Erm.FireErmEventEx(Erm.TRIGGER_BUILD_TOWN_BUILDING, [Town.Id, BuildingId]);
+  result := PatchApi.Call(THISCALL_, OrigFunc, [Town, BuildingId, Unk1, Unk2]);
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -474,7 +484,7 @@ begin
   ApiJack.HookCode(Ptr($4BEDBE), @Hook_SaveGame_After);
 
   (* Hero screen Enter/Exit triggers *)
-  ApiJack.StdSplice(Ptr($4E1A70), @Hook_ShowHeroScreen, ApiJack.CONV_THISCALL, 3);
+  ApiJack.StdSplice(Ptr($4E1A70), @Hook_ShowHeroScreen, ApiJack.CONV_FASTCALL, 4);
 
   (* Add OnLoadHeroScreen event *)
   ApiJack.HookCode(Ptr($4E1CC0), @Hook_UpdateHeroScreen);
@@ -485,6 +495,9 @@ begin
   (* OnBattleRegeneratePhase event *)
   ApiJack.HookCode(Ptr($446B50), @Hook_BattleRegeneratePhase);
   ApiJack.HookCode(Ptr($446BD6), @Hook_BattleDoRegenerate);
+
+  (* OnBuild event *)
+  ApiJack.StdSplice(Ptr($5BF1E0), @Hook_BuildTownBuilding, ApiJack.CONV_THISCALL, 4);
 end; // .procedure OnAfterWoG
 
 begin

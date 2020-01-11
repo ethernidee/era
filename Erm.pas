@@ -158,7 +158,8 @@ const
   TRIGGER_RECRUIT_DLG_RECALC           = 77028;
   TRIGGER_RECRUIT_DLG_ACTION           = 77029;
   TRIGGER_LOAD_HERO_SCREEN             = 77030;
-  {!} LAST_ERA_TRIGGER                 = TRIGGER_LOAD_HERO_SCREEN;
+  TRIGGER_BUILD_TOWN_BUILDING          = 77031;
+  {!} LAST_ERA_TRIGGER                 = TRIGGER_BUILD_TOWN_BUILDING;
   
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -791,6 +792,7 @@ begin
     {*} Erm.TRIGGER_RECRUIT_DLG_RECALC:           result := 'OnRecruitDlgRecalc';
     {*} Erm.TRIGGER_RECRUIT_DLG_ACTION:           result := 'OnRecruitDlgAction';
     {*} Erm.TRIGGER_LOAD_HERO_SCREEN:             result := 'OnLoadHeroScreen';
+    {*} Erm.TRIGGER_BUILD_TOWN_BUILDING:          result := 'OnBuildTownBuilding';
     (* END Era Triggers *)
   else
     if EventID >= Erm.TRIGGER_OB_POS then begin
@@ -2290,6 +2292,7 @@ begin
   NameTrigger(Erm.TRIGGER_RECRUIT_DLG_RECALC,           'OnRecruitDlgRecalc');
   NameTrigger(Erm.TRIGGER_RECRUIT_DLG_ACTION,           'OnRecruitDlgAction');
   NameTrigger(Erm.TRIGGER_LOAD_HERO_SCREEN,             'OnLoadHeroScreen');
+  NameTrigger(Erm.TRIGGER_BUILD_TOWN_BUILDING,          'OnBuildTownBuilding');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
