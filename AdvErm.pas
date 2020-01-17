@@ -551,12 +551,15 @@ const
 
 var
   SavedEsp: integer;
+  IsIntRes: integer;
   
 asm
+  MOV IsIntRes, 1
   CMP Convention, ERA_CALLCONV_FLOAT_RES
   JB @@IntConvention
 @@FloatConvetion:
   SUB Convention, ERA_CALLCONV_FLOAT_RES
+  MOV IsIntRes, 0
 @@IntConvention:
   PUSH EBX
   MOV SavedEsp, ESP
@@ -612,10 +615,16 @@ asm
   MOV EAX, Addr
   CALL EAX
 
-  // Save result in both v1 and e1
-  FST DWORD [$A48F18]
+  CMP IsIntRes, 1
+  JNE @@FloatRes
+  // Set v1
   MOV DWORD [$887668], EAX
+  JMP @@Ret
+@@FloatRes:
+  // Set e1
+  FST DWORD [$A48F18]
 
+@@Ret:
   MOV ESP, SavedEsp
   POP EBX
   // RET

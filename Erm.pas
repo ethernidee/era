@@ -489,7 +489,7 @@ const
   HeroSpecSettingsTable:      PHeroSpecSettingsTable = Ptr($A49BC0);
   SecSkillSettingsTable:      PSecSkillSettingsTable = Ptr($899410);
   SecSkillNamesBack:          Heroes.PSecSkillNames  = Ptr($A89190);
-  SecSkillDescsBack:          Heroes.PSecSkillDescs  = Ptr($A46BC4);
+  SecSkillDescsBack:          Heroes.PSecSkillDescs  = Ptr($A46BC8);
   SecSkillTextsBack:          Heroes.PSecSkillTexts  = Ptr($A490A8);
   MonNamesSettingsTable:      PMonNamesSettingsTable = Ptr($A48440);
   MonNamesSingularTable:      Utils.PEndlessPcharArr = Ptr($7C8240);
@@ -1189,11 +1189,7 @@ var
 
   procedure DeclareLabel (const LabelName: string);
   begin
-    if Labels[LabelName] = nil then begin
-      Labels[LabelName] := Ptr(CmdN + 1);
-    end else begin
-      ShowError(Scanner.Pos, 'Duplicate label "' + LabelName + '"');
-    end;
+    Labels[LabelName] := Ptr(CmdN + 1);
   end;
 
   procedure ParseLabel (Scope: TScope);

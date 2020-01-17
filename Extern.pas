@@ -204,6 +204,11 @@ begin
   result := GameExt.ERA_VERSION_STR;
 end;
 
+function GetVersionNum: integer; stdcall;
+begin
+  result := GameExt.ERA_VERSION_INT;
+end;
+
 function Splice (OrigFunc, HandlerFunc: pointer; CallingConv: integer; NumArgs: integer; {n} CustomParam: pinteger; {n} AppliedPatch: ppointer): pointer; stdcall;
 begin
   {!} Assert((CallingConv >= ord(ApiJack.CONV_FIRST)) and (CallingConv <= ord(ApiJack.CONV_LAST)), Format('Splice: Invalid calling convention: %d', [CallingConv]));
@@ -255,6 +260,7 @@ exports
   GetButtonID,
   GetRetXVars,
   GetVersion,
+  GetVersionNum,
   GlobalRedirectFile,
   Graph.DecRef,
   Heroes.GetGameState,
