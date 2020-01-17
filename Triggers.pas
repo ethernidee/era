@@ -479,22 +479,29 @@ var
   PrevTownScreenId: integer = -1;
 
 function Hook_EnterTownScreen (OrigFunc: pointer; DlgManager, TownDlg: pointer): integer; stdcall;
+const
+  TOWN_DLG_CONSTRUCTOR = $643730;
+
 var
   TownId: integer;
 
 begin
-  TownId := Heroes.GetTownManager.Town.Id;
-  
-  Erm.FireErmEventEx(Erm.TRIGGER_OPEN_TOWN_SCREEN, [TownId]);
-  PrevTownScreenId := TownId;
-  Erm.FireErmEventEx(Erm.TRIGGER_PRE_TOWN_SCREEN, [TownId]);
-  
-  result := PatchApi.Call(THISCALL_, OrigFunc, [DlgManager, TownDlg]);
-  
-  Erm.FireErmEventEx(Erm.TRIGGER_POST_TOWN_SCREEN, [PrevTownScreenId]);
-  PrevTownScreenId := -1;
-  Erm.FireErmEventEx(Erm.TRIGGER_CLOSE_TOWN_SCREEN, [TownId]);
-end;
+  if pinteger(TownDlg)^ <> TOWN_DLG_CONSTRUCTOR then begin
+    result := PatchApi.Call(THISCALL_, OrigFunc, [DlgManager, TownDlg]);
+  end else begin
+    TownId := Heroes.GetTownManager.Town.Id;
+    
+    Erm.FireErmEventEx(Erm.TRIGGER_OPEN_TOWN_SCREEN, [TownId]);
+    PrevTownScreenId := TownId;
+    Erm.FireErmEventEx(Erm.TRIGGER_PRE_TOWN_SCREEN, [TownId]);
+    
+    result := PatchApi.Call(THISCALL_, OrigFunc, [DlgManager, TownDlg]);
+    
+    Erm.FireErmEventEx(Erm.TRIGGER_POST_TOWN_SCREEN, [PrevTownScreenId]);
+    PrevTownScreenId := -1;
+    Erm.FireErmEventEx(Erm.TRIGGER_CLOSE_TOWN_SCREEN, [TownId]);
+  end;
+end; // .function Hook_EnterTownScreen
 
 function Hook_SwitchTownScreen (Context: ApiJack.PHookContext): longbool; stdcall;
 var
