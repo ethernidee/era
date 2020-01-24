@@ -77,13 +77,19 @@ type
       3: (pc: pchar);
   end;
 
-  PServiceParam = ^TServiceParam;
+  PServiceParam            = ^TServiceParam;
+  TServiceParamStrReturner = procedure (Param: PServiceParam; Str: pointer; StrLen: integer);
+  TServiceParamIntReturner = procedure (Param: PServiceParam; Value: integer);
+
   TServiceParam = record
     IsStr:         longbool;
     OperGet:       longbool;
     Value:         TServiceParamValue;
-    //StrValue:      string;
+    ValReturner:   pointer;
     ParamModifier: integer;
+
+    procedure RetStr ({n} Str: pointer; StrLen: integer = -1);
+    procedure RetInt (Value: integer); inline;
   end;
 
   PServiceParams = ^TServiceParams;
@@ -221,6 +227,63 @@ procedure TServiceMemAllocator.FreePage;
 begin
   {!} Assert(Self.BufPos > 0, 'TServiceMemAllocator.FreePage failed. No page allocated');
   Dec(Self.BufPos, pinteger(@Self.Buf[Self.BufPos])^ + sizeof(integer));
+end;
+
+procedure TServiceParam.RetStr ({n} Str: pointer; StrLen: integer = -1);
+begin
+  if (Str = nil) or (StrLen = 0) then begin
+    TServiceParamStrReturner(Self.ValReturner)(@Self, pchar(#0), 0);
+  end else if StrLen < 0 then begin
+    TServiceParamStrReturner(Self.ValReturner)(@Self, Str, Windows.LStrLen(Str));
+  end else begin
+    TServiceParamStrReturner(Self.ValReturner)(@Self, Str, StrLen);
+  end;
+end;
+
+procedure TServiceParam.RetInt (Value: integer);
+begin
+  TServiceParamIntReturner(Self.ValReturner)(@Self, Value);
+end;
+
+procedure ErmIntReturner (Param: PServiceParam; Value: integer);
+begin
+  Param.Value.pi^ := Value;
+end;
+
+procedure AssocIntReturner (Param: PServiceParam; Value: integer);
+var
+{Un} AssocVarValue: TAssocVar;
+
+begin
+  AssocVarValue := TAssocVar(AssocMem[Param.Value.pc]);
+  // * * * * * //
+  if AssocVarValue = nil then begin
+    AssocVarValue            := TAssocVar.Create;
+    AssocMem[Param.Value.pc] := AssocVarValue;
+  end;
+
+  AssocVarValue.IntValue := Value;
+end;
+
+procedure ZVarStrReturner (Param: PServiceParam; Str: pointer; StrLen: integer);
+begin
+  Utils.CopyMem(Math.Min(sizeof(TErmZVar) - 1, StrLen) + 1, Str, Param.Value.pc);
+end;
+
+procedure AssocStrReturner (Param: PServiceParam; Str: pointer; StrLen: integer);
+var
+{Un} AssocVarValue: TAssocVar;
+
+begin
+  {!} Assert(Utils.IsValidBuf(Str, StrLen));
+  AssocVarValue := TAssocVar(AssocMem[Param.Value.pc]);
+  // * * * * * //
+  if AssocVarValue = nil then begin
+    AssocVarValue            := TAssocVar.Create;
+    AssocMem[Param.Value.pc] := AssocVarValue;
+  end;
+
+  System.SetString(AssocVarValue.StrValue, pchar(Str), StrLen);
 end;
 
 function ErmVarToStr (VarType: char; Ind: integer; var Res: string): boolean;
@@ -416,7 +479,9 @@ var
   CharPos:       integer;
   StrLen:        integer;
   IndStr:        string;
-  SingleDSyntax: boolean;
+  SingleDSyntax: longbool;
+  AssocVarUsed:  longbool;
+  AssocVarValue: TAssocVar;
 
 begin
   PCmd      := pointer(Cmd);
@@ -450,7 +515,15 @@ begin
       end; // .if
     end; // .else
 
-    if PCmd[Pos] = '^' then begin
+    if (PCmd[Pos] = '^') or ((PCmd[Pos] in ['s', 'i']) and (PCmd[Pos + 1] = '^')) then begin
+      Params[NumParams].IsStr := true;
+      AssocVarUsed            := PCmd[Pos] <> '^';
+
+      if AssocVarUsed then begin
+        Params[NumParams].IsStr := PCmd[Pos] = 's';
+        Inc(Pos);
+      end;
+      
       Inc(Pos);
       StartPos := Pos;
       
@@ -463,9 +536,8 @@ begin
         exit;
       end;
       
-      StrLen                  := Pos - StartPos;
-      Params[NumParams].IsStr := true;
-      PCmd[Pos]               := #0;
+      StrLen    := Pos - StartPos;
+      PCmd[Pos] := #0;
 
       if SysUtils.StrScan(@PCmd[StartPos], '%') <> nil then begin
         Params[NumParams].Value.pc := Erm.ZvsInterpolateStr(@PCmd[StartPos]);
@@ -478,6 +550,35 @@ begin
       
       PCmd[Pos] := '^';
       Inc(Pos);
+
+      // Get and interpret associative var
+      if AssocVarUsed then begin
+        if Params[NumParams].OperGet then begin
+          if Params[NumParams].IsStr then begin
+            Params[NumParams].ValReturner := @AssocStrReturner;
+          end else begin
+            Params[NumParams].ValReturner := @ErmIntReturner;
+          end;
+        end else begin
+          AssocVarValue := TAssocVar(AssocMem[Params[NumParams].Value.pc]);
+
+          if Params[NumParams].IsStr then begin
+            if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
+              Params[NumParams].Value.pc := #0;
+            end else begin
+              StrLen                     := Length(AssocVarValue.StrValue);
+              Params[NumParams].Value.pc := ServiceMemAllocator.AllocStr(StrLen);
+              Utils.CopyMem(StrLen, pchar(AssocVarValue.StrValue), Params[NumParams].Value.pc);
+            end;
+          end else begin
+            if AssocVarValue = nil then begin
+              Params[NumParams].Value.v := 0;
+            end else begin
+              Params[NumParams].Value.v := AssocVarValue.IntValue;
+            end;
+          end; // .else
+        end; // .else
+      end; // .if
     end else begin
       // Get parameter type: z, v, x, y or constant
       ParType := PCmd[Pos];
@@ -1778,39 +1879,26 @@ end; // .procedure SaveSlots
 
 procedure SaveAssocMem;
 var
-{U} AssocVarValue:  TAssocVar;
-    AssocVarName:   string;
-    NumVars:        integer;
-    StrLen:         integer;
+{U} AssocVarValue: TAssocVar;
+    AssocVarName:  string;
   
 begin
   AssocVarValue :=  nil;
   // * * * * * //
-  NumVars :=  AssocMem.ItemCount;
-  Stores.WriteSavegameSection(sizeof(NumVars), @NumVars, ASSOC_SAVE_SECTION);
-  
-  AssocMem.BeginIterate;
-  
-  while AssocMem.IterateNext(AssocVarName, pointer(AssocVarValue)) do begin
-    StrLen := Length(AssocVarName);
-    Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
-    Stores.WriteSavegameSection(StrLen, pointer(AssocVarName), ASSOC_SAVE_SECTION);
-    
-    Stores.WriteSavegameSection
-    (
-      sizeof(AssocVarValue.IntValue),
-      @AssocVarValue.IntValue,
-      ASSOC_SAVE_SECTION
-    );
-    
-    StrLen := Length(AssocVarValue.StrValue);
-    Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
-    Stores.WriteSavegameSection(StrLen, pointer(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
-    
-    AssocVarValue :=  nil;
-  end; // .while
-  
-  AssocMem.EndIterate;
+  with Stores.NewRider(ASSOC_SAVE_SECTION) do begin
+    WriteInt(AssocMem.ItemCount);
+
+    AssocMem.BeginIterate;
+
+    while AssocMem.IterateNext(AssocVarName, pointer(AssocVarValue)) do begin
+      WriteStr(AssocVarName);
+      WriteInt(AssocVarValue.IntValue);
+      WriteStr(AssocVarValue.StrValue);
+      AssocVarValue := nil;
+    end;
+
+    AssocMem.EndIterate;
+  end; // .with
 end; // .procedure SaveAssocMem
 
 procedure SaveHints;
@@ -1903,43 +1991,29 @@ end; // .procedure LoadSlots
 
 procedure LoadAssocMem;
 var
-{O} AssocVarValue:  TAssocVar;
-    AssocVarName:   string;
-    NumVars:        integer;
-    StrLen:         integer;
-    i:              integer;
+{O} AssocVarValue: TAssocVar;
+    AssocVarName:  string;
+    i:             integer;
   
 begin
   AssocVarValue := nil;
-  NumVars       := 0;
   // * * * * * //
   AssocMem.Clear;
-  Stores.ReadSavegameSection(sizeof(NumVars), @NumVars, ASSOC_SAVE_SECTION);
-  
-  for i:=0 to NumVars - 1 do begin
-    AssocVarValue :=  TAssocVar.Create;
-    
-    Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
-    SetLength(AssocVarName, StrLen);
-    Stores.ReadSavegameSection(StrLen, pointer(AssocVarName), ASSOC_SAVE_SECTION);
-    
-    Stores.ReadSavegameSection
-    (
-      sizeof(AssocVarValue.IntValue),
-      @AssocVarValue.IntValue,
-      ASSOC_SAVE_SECTION
-    );
-    
-    Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, ASSOC_SAVE_SECTION);
-    SetLength(AssocVarValue.StrValue, StrLen);
-    Stores.ReadSavegameSection(StrLen, pointer(AssocVarValue.StrValue), ASSOC_SAVE_SECTION);
-    
-    if (AssocVarValue.IntValue <> 0) or (AssocVarValue.StrValue <> '') then begin
-      AssocMem[AssocVarName] := AssocVarValue; AssocVarValue := nil;
-    end else begin
-      SysUtils.FreeAndNil(AssocVarValue);
-    end;
-  end; // .for
+
+  with Stores.NewRider(ASSOC_SAVE_SECTION) do begin
+    for i := 0 to ReadInt - 1 do begin
+      AssocVarValue          := TAssocVar.Create;
+      AssocVarName           := ReadStr;
+      AssocVarValue.IntValue := ReadInt;
+      AssocVarValue.StrValue := ReadStr;     
+
+      if (AssocVarValue.IntValue <> 0) or (AssocVarValue.StrValue <> '') then begin
+        AssocMem[AssocVarName] := AssocVarValue; AssocVarValue := nil;
+      end else begin
+        SysUtils.FreeAndNil(AssocVarValue);
+      end;
+    end; // .for
+  end;  
 end; // .procedure LoadAssocMem
 
 procedure LoadHints;

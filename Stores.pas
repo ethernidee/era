@@ -18,10 +18,12 @@ type
 
   // Cached I/O for sections
   IRider = interface
-    procedure Write (Size: integer; {n} Addr: PBYTE);
+    procedure Write (Size: integer; {n} Addr: pbyte);
+    procedure WriteByte (Value: byte);
     procedure WriteInt (Value: integer);
     procedure WriteStr (const Str: string);
-    function  Read (Size: integer; {n} Addr: PBYTE): integer;
+    function  Read (Size: integer; {n} Addr: pbyte): integer;
+    function  ReadByte: byte;
     function  ReadInt: integer;
     function  ReadStr: string;
     procedure Flush;
@@ -59,14 +61,21 @@ type
     constructor Create (const aSectionName: string);
     destructor  Destroy; override;
 
-    procedure Write (Size: integer; {n} Addr: PBYTE);
+    procedure Write (Size: integer; {n} Addr: pbyte);
+    procedure WriteByte (Value: byte);
     procedure WriteInt (Value: integer);
     procedure WriteStr (const Str: string);
-    function  Read (Size: integer; {n} Addr: PBYTE): integer;
+    function  Read (Size: integer; {n} Addr: pbyte): integer;
+
+    // if nothing to read, returns 0
+    function  ReadByte: byte;
+    
     // if nothing to read, returns 0
     function  ReadInt: integer;
+    
     // if nothing to read, return ''
     function  ReadStr: string;
+    
     procedure Flush;
     
    private
@@ -144,7 +153,7 @@ begin
   Flush;
 end;
 
-procedure TRider.Write (Size: integer; {n} Addr: PBYTE);
+procedure TRider.Write (Size: integer; {n} Addr: pbyte);
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Size));
   if Size > 0 then begin
@@ -164,6 +173,11 @@ begin
     end;
   end; // .if
 end; // .procedure TRider.Write
+
+procedure TRider.WriteByte (Value: byte);
+begin
+  Write(sizeof(Value), @Value);
+end;
 
 procedure TRider.WriteInt (Value: integer);
 begin
@@ -189,7 +203,7 @@ begin
   fWritingBufPos := 0;
 end;
 
-function TRider.Read (Size: integer; {n} Addr: PBYTE): integer;
+function TRider.Read (Size: integer; {n} Addr: pbyte): integer;
 var
   NumBytesToCopy: integer;
 
@@ -229,6 +243,16 @@ begin
     end; // .if
   end; // .if
 end; // .procedure TRider.Read
+
+function TRider.ReadByte: byte;
+var
+  NumBytesRead: integer;
+
+begin
+  result       := 0;
+  NumBytesRead := Read(sizeof(result), @result);
+  {!} Assert((NumBytesRead = sizeof(result)) or (NumBytesRead = 0));
+end;
 
 function TRider.ReadInt: integer;
 var
