@@ -15,12 +15,6 @@ const
   
   IS_TEMP   = 0;
   NOT_TEMP  = 1;
-  
-  (* DEPRECATED *)
-  IS_STR    = true;
-  IS_INT    = false;
-  OPER_GET  = true;
-  OPER_SET  = false;
 
   (* For CheckCmdParamsEx *)
   TYPE_INT       = 1;
@@ -88,7 +82,8 @@ type
     ValReturner:   pointer;
     ParamModifier: integer;
 
-    procedure RetStr ({n} Str: pchar; StrLen: integer = -1);
+    procedure RetPchar ({n} Str: pchar; StrLen: integer = -1);
+    procedure RetStr (const Str: string);
     procedure RetInt (Value: integer); inline;
   end;
 
@@ -151,7 +146,8 @@ function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
 procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
 function  WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
 procedure ApplyIntParam (var Param: TServiceParam; var Dest: integer);
-procedure ApplyStrParam (var Param: TServiceParam; Buf: pchar; BufSize: integer);
+procedure AssignPcharFromParam (var Param: TServiceParam; {n} Buf: pchar; BufSize: integer);
+procedure AssignStrFromParam (var Param: TServiceParam; var Str: string);
 function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
 
 
@@ -229,14 +225,23 @@ begin
   Dec(Self.BufPos, pinteger(@Self.Buf[Self.BufPos])^ + sizeof(integer));
 end;
 
-procedure TServiceParam.RetStr ({n} Str: pchar; StrLen: integer = -1);
+procedure TServiceParam.RetPchar ({n} Str: pchar; StrLen: integer = -1);
 begin
   if (Str = nil) or (StrLen = 0) then begin
-    TServiceParamStrReturner(Self.ValReturner)(@Self, pchar(#0), 0);
+    TServiceParamStrReturner(Self.ValReturner)(@Self, pchar(''), 0);
   end else if StrLen < 0 then begin
     TServiceParamStrReturner(Self.ValReturner)(@Self, Str, Windows.LStrLen(Str));
   end else begin
     TServiceParamStrReturner(Self.ValReturner)(@Self, Str, StrLen);
+  end;
+end;
+
+procedure TServiceParam.RetStr (const Str: string);
+begin
+  if (Str = '') or (Str[1] = #0) then begin
+    TServiceParamStrReturner(Self.ValReturner)(@Self, pchar(''), 0);
+  end else begin
+    TServiceParamStrReturner(Self.ValReturner)(@Self, pchar(Str), Length(Str));
   end;
 end;
 
@@ -556,7 +561,7 @@ begin
           if Params[NumParams].IsStr then begin
             Params[NumParams].ValReturner := @AssocStrReturner;
           end else begin
-            Params[NumParams].ValReturner := @ErmIntReturner;
+            Params[NumParams].ValReturner := @AssocIntReturner;
           end;
         end else begin
           AssocVarValue := TAssocVar(AssocMem[Params[NumParams].Value.pc]);
@@ -630,6 +635,14 @@ begin
         end;
       end; // .else
     end; // .else
+
+    if not AssocVarUsed then begin
+      if Params[NumParams].IsStr then begin
+        Params[NumParams].ValReturner := @ZVarStrReturner;
+      end else begin
+        Params[NumParams].ValReturner := @ErmIntReturner;
+      end;
+    end;
 
     if PCmd[Pos] = '/' then begin
       Inc(Pos);
@@ -863,22 +876,37 @@ end;
 
 procedure ApplyIntParam (var Param: TServiceParam; var Dest: integer);
 begin
-  case Param.ParamModifier of 
-    NO_MODIFIER:  Dest := Param.Value.v;
-    MODIFIER_ADD: Dest := Dest + Param.Value.v;
-    MODIFIER_SUB: Dest := Dest - Param.Value.v;
-    MODIFIER_MUL: Dest := Dest * Param.Value.v;
-    MODIFIER_DIV: Dest := Dest div Param.Value.v;
+  if Param.OperGet then begin
+    Param.RetInt(Dest);
+  end else begin
+    case Param.ParamModifier of 
+      NO_MODIFIER:  Dest := Param.Value.v;
+      MODIFIER_ADD: Dest := Dest + Param.Value.v;
+      MODIFIER_SUB: Dest := Dest - Param.Value.v;
+      MODIFIER_MUL: Dest := Dest * Param.Value.v;
+      MODIFIER_DIV: Dest := Dest div Param.Value.v;
+    end;
   end;
 end;
 
-procedure ApplyStrParam (var Param: TServiceParam; Buf: pchar; BufSize: integer);
+procedure AssignPcharFromParam (var Param: TServiceParam; {n} Buf: pchar; BufSize: integer);
 begin
   {!} Assert(Utils.IsValidBuf(Buf, BufSize));
+  {!} Assert(not Param.OperGet);
   if Param.ParamModifier <> MODIFIER_CONCAT then begin
     Utils.SetPcharValue(Buf, Param.Value.pc, BufSize);
   end else begin
     StrLib.Concat(Buf, BufSize, Buf, -1, Param.Value.pc, -1);
+  end;
+end;
+
+procedure AssignStrFromParam (var Param: TServiceParam; var Str: string);
+begin
+  {!} Assert(not Param.OperGet);
+  if Param.ParamModifier <> MODIFIER_CONCAT then begin
+    Str := Param.Value.pc;
+  end else begin
+    Str := Str + Param.Value.pc;
   end;
 end;
 
@@ -924,10 +952,15 @@ procedure SetSlotItemsCount (NewNumItems: integer; Slot: TSlot);
 begin
   {!} Assert(NewNumItems >= 0);
   {!} Assert(Slot <> nil);
+
   if Slot.ItemsType = INT_VAR then begin
-    SetLength(Slot.IntItems, NewNumItems);
+    if NewNumItems <> Length(Slot.IntItems) then begin
+      SetLength(Slot.IntItems, NewNumItems);
+    end;
   end else begin
-    SetLength(Slot.StrItems, NewNumItems);
+    if NewNumItems <> Length(Slot.StrItems) then begin
+      SetLength(Slot.StrItems, NewNumItems);
+    end;
   end;
 end;
 
@@ -989,6 +1022,7 @@ var
     HintRaw:     pchar;
     Code:        integer;
     DeleteHint:  boolean;
+    Str:         string;
 
     ObjType:    integer;
     ObjSubtype: integer;
@@ -1012,11 +1046,11 @@ var
       StrValue := TString(Section[Ptr(Code)]);
 
       if StrValue = nil then begin
-        StrValue           := TString.Create(Params[HintParamN].Value.pc);
-        Section[Ptr(Code)] := StrValue;
-      end else begin
-        StrValue.Value := Params[HintParamN].Value.pc;
+        StrValue           := TString.Create('');
+        Section[Ptr(Code)] := StrValue;     
       end;
+
+      AssignStrFromParam(Params[HintParamN], StrValue.Value);
 
       result := pchar(StrValue.Value);
     end; // .else
@@ -1064,13 +1098,7 @@ begin
                 Code := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
 
                 if Params[3].OperGet then begin
-                  StrValue := Section[Ptr(Code)];
-
-                  if StrValue = nil then begin
-                    Params[3].RetStr('', 0);
-                  end else begin
-                    Params[3].RetStr(pchar(StrValue.Value), Length(StrValue.Value));
-                  end;
+                  Params[3].RetStr(TString.ToString(Section[Ptr(Code)]));
                 end else begin
                   UpdateHint(3);
                 end;
@@ -1093,9 +1121,9 @@ begin
                   StrValue := Section[Ptr(Code)];                 
                   
                   if StrValue = nil then begin
-                    Params[4].RetStr('', 0);
+                    Params[4].RetStr('');
                   end else begin
-                    Params[4].RetStr(pchar(StrValue.Value), Length(StrValue.Value));
+                    Params[4].RetStr(StrValue.Value);
                   end;
                 end else begin
                   UpdateHint(4);
@@ -1118,7 +1146,7 @@ begin
               
               if result then begin
                 if Params[3].OperGet then begin
-                  Params[3].RetStr(Erm.HeroSpecsTable[Hero].Descr[NameType]);
+                  Params[3].RetPchar(Erm.HeroSpecsTable[Hero].Descr[NameType]);
                 end else begin
                   Code    := Hero or (NameType shl 8);
                   HintRaw := UpdateHint(3);
@@ -1148,7 +1176,7 @@ begin
               
               if result then begin
                 if Params[3].OperGet then begin
-                  Params[3].RetStr(Heroes.SecSkillTexts[Skill].Texts[NameType]);
+                  Params[3].RetPchar(Heroes.SecSkillTexts[Skill].Texts[NameType]);
                 end else begin
                   Code    := Skill or (NameType shl 8);
                   HintRaw := UpdateHint(3);
@@ -1190,7 +1218,7 @@ begin
               
               if result then begin
                 if Params[3].OperGet then begin
-                  Params[3].RetStr(Heroes.MonInfos[Monster].Names.Texts[NameType]);
+                  Params[3].RetPchar(Heroes.MonInfos[Monster].Names.Texts[NameType]);
                 end else begin
                   Code    := Monster or (NameType shl 16);
                   HintRaw := UpdateHint(3);
@@ -1240,7 +1268,7 @@ begin
     exit;
   end;
 
-  if Params[0].OperGet or not Params[0].IsStr or not Params[1].OperGet then begin
+  if not CheckCmdParamsEx(Params, NumParams, [ACTION_SET or TYPE_STR, ACTION_GET or TYPE_STR]) then begin
     Error := 'Valid syntax is !!SN:T^key^/?(str result)/...parameters...';
     exit;
   end;
@@ -1265,7 +1293,7 @@ begin
   end;
 
   Translation := Trans.tr(Params[0].Value.pc, TrParams);
-  Erm.SetZVar(pchar(Params[1].Value.v), Translation);
+  Params[1].RetStr(Translation);
 
   result := true;
 end; // .function SN_T
@@ -1275,7 +1303,6 @@ var
 {U} Slot:              TSlot;
 {U} AssocVarValue:     TAssocVar;
     AssocVarName:      string;
-    StrLen:            integer;
     NewSlotItemsCount: integer;
     GameState:         TGameState;
 {U} Tile:              Heroes.PMapTile;
@@ -1316,17 +1343,16 @@ begin
                   Slot := Slots[Ptr(Params[0].Value.v)];
                   
                   if Slot <> nil then begin
-                    pinteger(Params[1].Value.v)^ := GetSlotItemsCount(Slot);
+                    Params[1].RetInt(GetSlotItemsCount(Slot));
                   end else begin
-                    pinteger(Params[1].Value.v)^ := NO_SLOT;
+                    Params[1].RetInt(NO_SLOT);
                   end;
-                  end // .if
-                else begin
+                end else begin
                   result := GetSlot(Params[0].Value.v, Slot, Error);
                   
                   if result then begin
                     NewSlotItemsCount := GetSlotItemsCount(Slot);
-                    ModifyWithIntParam(NewSlotItemsCount, Params[1]);
+                    ApplyIntParam(Params[1], NewSlotItemsCount);
                     SetSlotItemsCount(NewSlotItemsCount, Slot);
                   end;
                 end; // .else
@@ -1346,9 +1372,9 @@ begin
 
                   if result then begin
                     if Slot.ItemsType = INT_VAR then begin
-                      ppointer(Params[1].Value.v)^ := @Slot.IntItems[Params[2].Value.v];
+                      Params[1].RetInt(integer(@Slot.IntItems[Params[2].Value.v]));
                     end else begin
-                      ppointer(Params[1].Value.v)^ := pointer(Slot.StrItems[Params[2].Value.v]);
+                      Params[1].RetInt(integer(pointer(Slot.StrItems[Params[2].Value.v])));
                     end;
                   end;
                 end else begin
@@ -1356,55 +1382,31 @@ begin
                     (not Params[1].OperGet) and
                     (not Params[1].IsStr)   and
                     Math.InRange(Params[1].Value.v, 0, GetSlotItemsCount(Slot) - 1);
+
+                  if result and (Params[2].IsStr <> (Slot.ItemsType = STR_VAR)) then begin
+                    Error  := 'Cannot get INTEGER/STRING item into variable of not appropriate type';
+                    result := false;
+                  end;
                   
                   if result then begin
                     if Params[2].OperGet then begin
                       if Slot.ItemsType = INT_VAR then begin
-                        if Params[2].IsStr then begin
-                          Windows.LStrCpy
-                          (
-                            Ptr(Params[2].Value.v),
-                            Ptr(Slot.IntItems[Params[1].Value.v])
-                          );
-                        end else begin
-                          pinteger(Params[2].Value.v)^ := Slot.IntItems[Params[1].Value.v];
-                        end;
+                        Params[2].RetInt(Slot.IntItems[Params[1].Value.v]);
                       end else begin
-                        Windows.LStrCpy
-                        (
-                          Ptr(Params[2].Value.v),
-                          pchar(Slot.StrItems[Params[1].Value.v])
-                        );
-                      end; // .else
+                        Params[2].RetStr(Slot.StrItems[Params[1].Value.v]);
+                      end;
                     end else begin
                       if Slot.ItemsType = INT_VAR then begin
-                        if Params[2].IsStr then begin
-                          if Params[2].ParamModifier = MODIFIER_CONCAT then begin
-                            StrLen := SysUtils.StrLen(pchar(Slot.IntItems[Params[1].Value.v]));
-                            
-                            Windows.LStrCpy(Utils.PtrOfs(Ptr(Slot.IntItems[Params[1].Value.v]), StrLen), Ptr(Params[2].Value.v));
-                          end else begin
-                            Windows.LStrCpy(Ptr(Slot.IntItems[Params[1].Value.v]), Ptr(Params[2].Value.v));
-                          end;
-                        end else begin
-                          Slot.IntItems[Params[1].Value.v] := Params[2].Value.v;
-                        end; // .else
+                        ApplyIntParam(Params[2], Slot.IntItems[Params[1].Value.v]);
                       end else begin
-                        if Params[2].Value.v = 0 then begin
-                          Params[2].Value.v := integer(pchar(''));
-                        end;
-                        
-                        if Params[2].ParamModifier = MODIFIER_CONCAT then begin
-                          Slot.StrItems[Params[1].Value.v] := Slot.StrItems[Params[1].Value.v] + pchar(Params[2].Value.v);
-                        end else begin
-                          Slot.StrItems[Params[1].Value.v] := pchar(Params[2].Value.v);
-                        end;
-                      end; // .else
+                        AssignStrFromParam(Params[2], Slot.StrItems[Params[1].Value.v]);
+                      end;
                     end; // .else
                   end; // .if
                 end; // .else
               end; // .if
             end; // .case 3
+          // SN:M#slot/#count/#type/#persistInSaves
           4:
             begin
               result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]) and
@@ -1429,43 +1431,35 @@ begin
     'K':
       begin
         case NumParams of 
-          // C(str)/?(len)
+          // K(str)/?(len) Get string length
           2:
             begin
-              result := (not Params[0].OperGet) and (not Params[1].IsStr) and (Params[1].OperGet);
+              result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET, ACTION_GET or TYPE_INT]);
               
               if result then begin
-                pinteger(Params[1].Value.v)^ := SysUtils.StrLen(pointer(Params[0].Value.v));
+                Params[1].RetInt(Windows.LStrLen(Params[0].Value.pc));
               end;
             end; // .case 2
-          // C(str)/(ind)/[?](strchar)
+          // K(str)/(ind)/[?](strchar) Get/set string character at position
           3:
             begin
-              result  :=
-                (not Params[0].OperGet) and
-                (not Params[1].IsStr)   and
-                (not Params[1].OperGet) and
-                (Params[1].Value.v >= 0)  and
-                (Params[2].IsStr);
-              
+              result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET, ACTION_SET or TYPE_INT, TYPE_STR]) and (Params[1].Value.v >= 0);
+             
               if result then begin
                 if Params[2].OperGet then begin
-                  pchar(Params[2].Value.v)^     := PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v];
-                  pchar(Params[2].Value.v + 1)^ := #0;
+                  Params[2].RetPchar(pchar(Utils.PtrOfs(Params[0].Value.p, Params[1].Value.v)), 1);
                 end else begin
-                  PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v] :=  pchar(Params[2].Value.v)^;
+                  PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v] := pchar(Params[2].Value.v)^;
                 end;
               end;
             end; // .case 3
+          // SN:K#count/#from/#to Copy memory
           4:
             begin
-              result  :=
-                (not Params[0].IsStr)   and
-                (not Params[0].OperGet) and
-                (Params[0].Value.v >= 0);
+              result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT]) and (Params[0].Value.v >= 0);
               
               if result and (Params[0].Value.v > 0) then begin
-                Utils.CopyMem(Params[0].Value.v, pointer(Params[1].Value.v), pointer(Params[2].Value.v));
+                Utils.CopyMem(Params[0].Value.v, Params[1].Value.p, Params[2].Value.p);
               end;
             end; // .case 4
         else
@@ -1479,14 +1473,14 @@ begin
           // Clear all
           0: AssocMem.Clear;
           
-          // Delete var
+          // SN:W#var Delete var
           1:
             begin
               result := not Params[0].OperGet;
               
               if result then begin
                 if Params[0].IsStr then begin
-                  AssocVarName := pchar(Params[0].Value.v);
+                  AssocVarName := Params[0].Value.pc;
                 end else begin
                   AssocVarName := SysUtils.IntToStr(Params[0].Value.v);
                 end;
@@ -1494,14 +1488,14 @@ begin
                 AssocMem.DeleteItem(AssocVarName);
               end;
             end; // .case 1
-          // Get/set var
+          // SN:W#var/$value Get/set var
           2:
             begin
-              result := not Params[0].OperGet;
+              result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET, ACTION_ANY or TYPE_ANY]);
               
               if result then begin
                 if Params[0].IsStr then begin
-                  AssocVarName := pchar(Params[0].Value.v);
+                  AssocVarName := Params[0].Value.pc;
                 end else begin
                   AssocVarName := SysUtils.IntToStr(Params[0].Value.v);
                 end;
@@ -1511,15 +1505,15 @@ begin
                 if Params[1].OperGet then begin
                   if Params[1].IsStr then begin
                     if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
-                      pchar(Params[1].Value.v)^ := #0;
+                      Params[1].RetStr('');
                     end else begin
-                      Erm.SetZVar(Params[1].Value.pc, AssocVarValue.StrValue);
+                      Params[1].RetStr(AssocVarValue.StrValue);
                     end;
                   end else begin
                     if AssocVarValue = nil then begin
-                      pinteger(Params[1].Value.v)^ := 0;
+                      Params[1].RetInt(0);
                     end else begin
-                      pinteger(Params[1].Value.v)^ := AssocVarValue.IntValue;
+                      Params[1].RetInt(AssocVarValue.IntValue);
                     end;
                   end; // .else
                 end else begin
@@ -1529,13 +1523,9 @@ begin
                   end;
                   
                   if Params[1].IsStr then begin
-                    if Params[1].ParamModifier <> MODIFIER_CONCAT then begin
-                      AssocVarValue.StrValue := pchar(Params[1].Value.v);
-                    end else begin
-                      AssocVarValue.StrValue := AssocVarValue.StrValue + pchar(Params[1].Value.v);
-                    end;
+                    AssignStrFromParam(Params[1], AssocVarValue.StrValue);
                   end else begin
-                    ModifyWithIntParam(AssocVarValue.IntValue, Params[1]);
+                    ApplyIntParam(Params[1], AssocVarValue.IntValue);
                   end;
                 end; // .else
               end; // .if
@@ -1563,12 +1553,12 @@ begin
       begin
         // O?$/?$/?$
         if NumParams = 3 then begin
-          result := Params[0].OperGet and Params[1].OperGet and Params[2].OperGet and not Params[0].IsStr and not Params[1].IsStr and not Params[2].IsStr;
+          result := CheckCmdParamsEx(Params, NumParams, [ACTION_GET or TYPE_INT, ACTION_GET or TYPE_INT, ACTION_GET or TYPE_INT]);
 
           if result then begin
-            Coords[0] := pinteger(Params[0].Value.v)^;
-            Coords[1] := pinteger(Params[1].Value.v)^;
-            Coords[2] := pinteger(Params[2].Value.v)^;
+            Coords[0] := Params[0].Value.pi^;
+            Coords[1] := Params[1].Value.pi^;
+            Coords[2] := Params[2].Value.pi^;
             MapSize   := GameManagerPtr^.MapSize;
 
             if (Coords[0] < 0) or (Coords[0] >= MapSize) or (Coords[1] < 0) or
@@ -1581,9 +1571,9 @@ begin
               Tile := @GameManagerPtr^.MapTiles[(Coords[2] * MapSize + Coords[1]) * MapSize + Coords[0]];
               Tile := Heroes.GetObjectEntranceTile(Tile);
               Heroes.MapTileToCoords(Tile, Coords);
-              pinteger(Params[0].Value.v)^ := Coords[0];
-              pinteger(Params[1].Value.v)^ := Coords[1];
-              pinteger(Params[2].Value.v)^ := Coords[2];
+              Params[0].RetInt(Coords[0]);
+              Params[1].RetInt(Coords[1]);
+              Params[2].RetInt(Coords[2]);
             end; // .else
           end; // .if
         end else begin
@@ -1649,7 +1639,8 @@ var
     i:       integer;
 
 begin
-  result := (NumParams >= 1) and not Params[0].OperGet and Params[0].IsStr;
+  // SN:F#funcName/#params...
+  result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET or TYPE_STR]);
 
   if not result then begin
     Error := 'Invalid command syntax. Valid syntax is !!SN:F^API function name^/possible parameters...';
@@ -1700,9 +1691,9 @@ begin
     if not result then begin
       Error := 'Cannot use SN:S outside of SN trigger';
     end else if Params[0].OperGet then begin
-      Erm.SetZVar(Params[0].Value.pc, pchar(CurrentSoundNameBuf));
+      Params[0].RetPchar(pchar(CurrentSoundNameBuf));
     end else begin
-      Utils.SetPcharValue(pchar(CurrentSoundNameBuf), Params[0].Value.pc, sizeof(CurrentSoundNameBuf^));
+      AssignPcharFromParam(Params[0], pchar(CurrentSoundNameBuf), sizeof(CurrentSoundNameBuf^));
     end;
   end;
 end;
@@ -1722,7 +1713,7 @@ begin
   result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_INT or ACTION_GET]);
 
   if result then begin
-    Params[1].Value.pi^ := Windows.LoadLibraryA(Params[0].Value.pc);
+    Params[1].RetInt(Windows.LoadLibraryA(Params[0].Value.pc));
   end;
 end;
 
@@ -1731,7 +1722,7 @@ begin
   result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_STR or ACTION_SET, TYPE_INT or ACTION_GET]) and (Params[0].Value.v <> 0);
 
   if result then begin
-    Params[2].Value.pi^ := integer(Windows.GetProcAddress(Windows.THandle(Params[0].Value.v), Params[1].Value.pc));
+    Params[2].RetInt(integer(Windows.GetProcAddress(Windows.THandle(Params[0].Value.v), Params[1].Value.pc)));
   end;
 end;
 
@@ -1746,15 +1737,15 @@ begin
     for i := 0 to NumParams - 1 do begin
       if Params[i].OperGet then begin
         if Params[i].IsStr then begin
-          Erm.SetZVar(Params[i].Value.pc, pchar(Erm.x[i + 1]));
+          Params[i].RetPchar(pchar(Erm.x[i + 1]));
         end else begin
-          Params[i].Value.pi^ := Erm.x[i + 1];
+          Params[i].RetInt(Erm.x[i + 1]);
         end;
       end else begin
         if Params[i].IsStr then begin
           Erm.x[i + 1] := Params[i].Value.v;
         end else begin
-          ModifyWithIntParam(Erm.x[i + 1], Params[i]);
+          ApplyIntParam(Params[i], Erm.x[i + 1]);
         end;
       end; // .else
     end; // .for
@@ -2581,37 +2572,35 @@ end; // .function MP_P
 
 function MP_C (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 begin
-  result := (NumParams = 1) and CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_GET]);
+  result := (NumParams = 1) and CheckCmdParamsEx(Params, NumParams, [ACTION_GET or TYPE_STR]);
 
   if result then begin
-    Windows.LStrCpy(Params[0].Value.pc, pchar(CurrentMp3Track));
+    Params[0].RetStr(CurrentMp3Track);
   end;
 end;
 
 function MP_S (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 begin
-  result := Math.InRange(NumParams, 1, 3);
-  result := result and Params[0].IsStr;
-  result := result and ((NumParams < 2) or not Params[1].IsStr);
-  result := result and ((NumParams < 3) or not Params[2].IsStr);
+  // MP:S$trackName/$dontTrackPosition/$loop
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR, TYPE_INT or PARAM_OPTIONAL, TYPE_INT or PARAM_OPTIONAL]);
 
   if result then begin
     // TrackName
     if Params[0].OperGet then begin
-      ApplyParam(Params[0], pchar(Mp3TriggerContext.TrackName));
+      Params[0].RetStr(Mp3TriggerContext.TrackName);
     end else begin
       Mp3TriggerContext.TrackName := Utils.GetPcharValue(Params[0].Value.pc, sizeof(Heroes.TCurrentMp3Track) - 1);
     end;
 
     // DontTrackPosition
     if NumParams >= 2 then begin
-      ApplyParam(Params[1], @Mp3TriggerContext.DontTrackPosition);
+      ApplyIntParam(Params[1], Mp3TriggerContext.DontTrackPosition);
       Mp3TriggerContext.DontTrackPosition := ord(Mp3TriggerContext.DontTrackPosition <> 0);
     end;
 
     // Loop
     if NumParams >= 3 then begin
-      ApplyParam(Params[2], @Mp3TriggerContext.Loop);
+      ApplyIntParam(Params[2], Mp3TriggerContext.Loop);
       Mp3TriggerContext.Loop := ord(Mp3TriggerContext.Loop <> 0);
     end;
   end; // .if
@@ -2622,7 +2611,7 @@ begin
   result := (NumParams = 1) and not Params[0].IsStr;
 
   if result then begin
-    ApplyParam(Params[0], @Mp3TriggerContext.DefaultReaction);
+    ApplyIntParam(Params[0], Mp3TriggerContext.DefaultReaction);
     Mp3TriggerContext.DefaultReaction := ord(Mp3TriggerContext.DefaultReaction <> 0);
   end;
 end;

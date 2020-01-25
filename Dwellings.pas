@@ -779,7 +779,7 @@ begin
       if not result then begin
         Error := Format('Invalid monsters type: %d. Valid value is -1..%d', [Params[2].Value.v, Heroes.NumMonstersPtr^ - 1]);
       end else begin
-        AdvErm.ApplyParam(Params[2], @RecruitMonsDlgOpenEvent.Slots[SlotInd].MonType);
+        AdvErm.ApplyIntParam(Params[2], RecruitMonsDlgOpenEvent.Slots[SlotInd].MonType);
       end;
     end;
 
@@ -796,7 +796,7 @@ begin
       if not result then begin
         Error := Format('Invalid source ID: %d', [SourceId]);
       end else begin
-        AdvErm.ApplyParam(Params[4], @RecruitMonsDlgOpenEvent.Slots[SlotInd].SourceId);
+        AdvErm.ApplyIntParam(Params[4], RecruitMonsDlgOpenEvent.Slots[SlotInd].SourceId);
 
         if not Params[4].OperGet then begin
           RecruitMonsDlgOpenEvent.UpdateSlotSourceAddr(SlotInd);
@@ -812,14 +812,14 @@ begin
         Error := Format('Invalid monsters number: %d. Valid value is 0..%d', [Params[3].Value.v, Heroes.MAX_MONS_IN_STACK]);
       end else if UseOriginalNum then begin
         if RecruitMonsDlgOpenEvent.ReadOnly then begin
-          AdvErm.ApplyParam(Params[3], @RecruitMonsDlgOpenEvent.Slots[SlotInd].OrigMonNum);
+          AdvErm.ApplyIntParam(Params[3], RecruitMonsDlgOpenEvent.Slots[SlotInd].OrigMonNum);
         end else begin
           MonNum := RecruitMonsDlgOpenEvent.Slots[SlotInd].SourceNum^;
-          AdvErm.ApplyParam(Params[3], @MonNum);
+          AdvErm.ApplyIntParam(Params[3], MonNum);
         end;
       end else begin
         MonNum := RecruitMonsDlgOpenEvent.Slots[SlotInd].SourceNum^;
-        AdvErm.ApplyParam(Params[3], @MonNum);
+        AdvErm.ApplyIntParam(Params[3], MonNum);
         
         if not Params[3].OperGet then begin
           RecruitMonsDlgOpenEvent.Slots[SlotInd].SourceNum^ := MonNum;
@@ -883,7 +883,7 @@ begin
     exit;
   end;
   
-  AdvErm.ApplyParam(Params[2], @RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[DlgSlotInd]);
+  AdvErm.ApplyIntParam(Params[2], RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[DlgSlotInd]);
 end; // .function Command_RecruitDlg_SlotIndex
 
 function Command_RecruitDlg_Info (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
@@ -905,18 +905,18 @@ begin
     exit;
   end;
 
-  AdvErm.ApplyParam(Params[1], @RecruitMonsDlgOpenEvent.Id);
+  AdvErm.ApplyIntParam(Params[1], RecruitMonsDlgOpenEvent.Id);
 
   if NumParams >= 2 then begin
-    AdvErm.ApplyParam(Params[2], @RecruitMonsDlgOpenEvent.TownId);
+    AdvErm.ApplyIntParam(Params[2], RecruitMonsDlgOpenEvent.TownId);
   end;
 
   if NumParams >= 3 then begin
-    AdvErm.ApplyParam(Params[3], @RecruitMonsDlgOpenEvent.DwellingId);
+    AdvErm.ApplyIntParam(Params[3], RecruitMonsDlgOpenEvent.DwellingId);
   end;
 
   if NumParams >= 4 then begin
-    AdvErm.ApplyParam(Params[4], @RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[RecruitMonsDlgOpenEvent.DlgSetup.SelectedMonSlot]);
+    AdvErm.ApplyIntParam(Params[4], RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[RecruitMonsDlgOpenEvent.DlgSetup.SelectedMonSlot]);
   end;
 end; // .function Command_RecruitDlg_Info
 
@@ -954,12 +954,16 @@ begin
   if Params[2].OperGet then begin
     if Params[2].IsStr then begin
       if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
-        Params[2].Value.pc^ := #0;
+        Params[2].RetStr('');
       end else begin
-        Erm.SetZVar(Params[2].Value.pc, AssocVarValue.StrValue);
+        Params[2].RetStr(AssocVarValue.StrValue);
       end;
     end else begin
-      pinteger(Params[2].Value.v)^ := Utils.IfThen(AssocVarValue <> nil, AssocVarValue.IntValue, 0);
+      if AssocVarValue <> nil then begin
+        Params[2].RetInt(0);
+      end else begin
+        Params[2].RetInt(AssocVarValue.IntValue);
+      end;
     end;
   end else begin
     if AssocVarValue = nil then begin
@@ -968,9 +972,9 @@ begin
     end;
     
     if Params[2].IsStr then begin
-      AssocVarValue.StrValue := Utils.IfThen(Params[2].ParamModifier <> AdvErm.MODIFIER_CONCAT, Params[2].Value.pc, AssocVarValue.StrValue + Params[2].Value.pc);
+      AdvErm.AssignStrFromParam(Params[2], AssocVarValue.StrValue);
     end else begin
-      AdvErm.ModifyWithIntParam(AssocVarValue.IntValue, Params[2]);
+      AdvErm.ApplyIntParam(Params[2], AssocVarValue.IntValue);
     end;
   end; // .else
 end; // .function Command_RecruitDlg_Mem
@@ -1040,7 +1044,7 @@ begin
   end;
 
   NumTowns := Heroes.ZvsCountTowns();
-  AdvErm.ApplyParam(Params[1], @TownId);
+  AdvErm.ApplyIntParam(Params[1], TownId);
 
   if (TownId <> -1) and not Math.InRange(TownId, 0, NumTowns - 1) then begin
     result := false;
@@ -1048,7 +1052,7 @@ begin
     exit;
   end;
 
-  AdvErm.ApplyParam(Params[2], @DwellingId);
+  AdvErm.ApplyIntParam(Params[2], DwellingId);
 
   if (DwellingId <> -1) and not Math.InRange(DwellingId, 0, NUM_DWELLINGS_PER_TOWN - 1) then begin
     result := false;
@@ -1056,7 +1060,7 @@ begin
     exit;
   end;
 
-  AdvErm.ApplyParam(Params[3], @TargetType);
+  AdvErm.ApplyIntParam(Params[3], TargetType);
 
   if (TargetType <> -1) and not Math.InRange(TargetType, RECRUIT_TARGET_TOWN, RECRUIT_TARGET_CUSTOM) then begin
     result := false;
@@ -1064,7 +1068,7 @@ begin
     exit;
   end;
 
-  AdvErm.ApplyParam(Params[4], @TargetId);
+  AdvErm.ApplyIntParam(Params[4], TargetId);
 
   if
     (TargetId <> -1) and
@@ -1076,7 +1080,7 @@ begin
   end;
 
   if NumParams >= 5 then begin
-    AdvErm.ApplyParam(Params[5], @DlgFlags);
+    AdvErm.ApplyIntParam(Params[5], DlgFlags);
   end else begin
     DlgFlags := 0;
   end;
