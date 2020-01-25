@@ -78,7 +78,7 @@ type
   end;
 
   PServiceParam            = ^TServiceParam;
-  TServiceParamStrReturner = procedure (Param: PServiceParam; Str: pointer; StrLen: integer);
+  TServiceParamStrReturner = procedure (Param: PServiceParam; Str: pchar; StrLen: integer);
   TServiceParamIntReturner = procedure (Param: PServiceParam; Value: integer);
 
   TServiceParam = record
@@ -88,7 +88,7 @@ type
     ValReturner:   pointer;
     ParamModifier: integer;
 
-    procedure RetStr ({n} Str: pointer; StrLen: integer = -1);
+    procedure RetStr ({n} Str: pchar; StrLen: integer = -1);
     procedure RetInt (Value: integer); inline;
   end;
 
@@ -150,8 +150,8 @@ procedure ResetMemory;
 function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
 procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
 function  WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
-procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: integer = sizeof(Erm.TErmZVar));
-procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
+procedure ApplyIntParam (var Param: TServiceParam; var Dest: integer);
+procedure ApplyStrParam (var Param: TServiceParam; Buf: pchar; BufSize: integer);
 function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
 
 
@@ -229,7 +229,7 @@ begin
   Dec(Self.BufPos, pinteger(@Self.Buf[Self.BufPos])^ + sizeof(integer));
 end;
 
-procedure TServiceParam.RetStr ({n} Str: pointer; StrLen: integer = -1);
+procedure TServiceParam.RetStr ({n} Str: pchar; StrLen: integer = -1);
 begin
   if (Str = nil) or (StrLen = 0) then begin
     TServiceParamStrReturner(Self.ValReturner)(@Self, pchar(#0), 0);
@@ -265,12 +265,12 @@ begin
   AssocVarValue.IntValue := Value;
 end;
 
-procedure ZVarStrReturner (Param: PServiceParam; Str: pointer; StrLen: integer);
+procedure ZVarStrReturner (Param: PServiceParam; Str: pchar; StrLen: integer);
 begin
   Utils.CopyMem(Math.Min(sizeof(TErmZVar) - 1, StrLen) + 1, Str, Param.Value.pc);
 end;
 
-procedure AssocStrReturner (Param: PServiceParam; Str: pointer; StrLen: integer);
+procedure AssocStrReturner (Param: PServiceParam; Str: pchar; StrLen: integer);
 var
 {Un} AssocVarValue: TAssocVar;
 
@@ -476,7 +476,6 @@ var
   ParValue:      integer;
   StartPos:      integer;
   Pos:           integer;
-  CharPos:       integer;
   StrLen:        integer;
   IndStr:        string;
   SingleDSyntax: longbool;
@@ -862,7 +861,7 @@ begin
   end;
 end;
 
-procedure ModifyWithIntParam (var Dest: integer; var Param: TServiceParam);
+procedure ApplyIntParam (var Param: TServiceParam; var Dest: integer);
 begin
   case Param.ParamModifier of 
     NO_MODIFIER:  Dest := Param.Value.v;
@@ -873,21 +872,14 @@ begin
   end;
 end;
 
-procedure ApplyParam (var Param: TServiceParam; Value: pointer; MaxParamLen: integer = sizeof(Erm.TErmZVar));
+procedure ApplyStrParam (var Param: TServiceParam; Buf: pchar; BufSize: integer);
 begin
-  if Param.OperGet then begin
-    if Param.IsStr then begin
-      Utils.SetPcharValue(Param.Value.pc, Value, sizeof(Erm.TErmZVar));
-    end else begin
-      pinteger(Param.Value.v)^ := pinteger(Value)^;
-    end;
+  {!} Assert(Utils.IsValidBuf(Buf, BufSize));
+  if Param.ParamModifier <> MODIFIER_CONCAT then begin
+    Utils.SetPcharValue(Buf, Param.Value.pc, BufSize);
   end else begin
-    if Param.IsStr then begin
-      Utils.SetPcharValue(Value, Utils.IfThen(Param.ParamModifier <> MODIFIER_CONCAT, Param.Value.pc, AnsiString(pchar(Value)) + Param.Value.pc), MaxParamLen);
-    end else begin
-      ModifyWithIntParam(pinteger(Value)^, Param);
-    end;
-  end; // .else
+    StrLib.Concat(Buf, BufSize, Buf, -1, Param.Value.pc, -1);
+  end;
 end;
 
 function CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
@@ -994,7 +986,6 @@ var
 {U} Section:     TObjDict;
 {U} StrValue:    TString;
     SectionName: string;
-    Hint:        string;
     HintRaw:     pchar;
     Code:        integer;
     DeleteHint:  boolean;
@@ -1018,14 +1009,13 @@ var
       Section.DeleteItem(Ptr(Code));
       result := nil;
     end else begin
-      Hint     := Params[HintParamN].Value.pc;
       StrValue := TString(Section[Ptr(Code)]);
 
       if StrValue = nil then begin
-        StrValue           := TString.Create(Hint);
+        StrValue           := TString.Create(Params[HintParamN].Value.pc);
         Section[Ptr(Code)] := StrValue;
       end else begin
-        StrValue.Value := Hint;
+        StrValue.Value := Params[HintParamN].Value.pc;
       end;
 
       result := pchar(StrValue.Value);
@@ -1038,7 +1028,7 @@ begin
   result   := true;
   // * * * * * //
   if NumParams >= 3 then begin
-    result := not Params[0].OperGet and Params[0].IsStr;
+    result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET or TYPE_STR]);
 
     if result then begin
       SectionName := Params[0].Value.pc;
@@ -1053,10 +1043,9 @@ begin
 
       if result then begin
         if SectionName = 'object' then begin
-          // SN:H^object^/type/subtype or -1/hint
+          // SN:H^object^/#type/#subtype or -1/$hint
           if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
+            result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, TYPE_STR]);
             
             if result then begin
               ObjType    := Params[1].Value.v;
@@ -1075,8 +1064,13 @@ begin
                 Code := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
 
                 if Params[3].OperGet then begin
-                  StrValue := Section[Ptr(Code)];                 
-                  Erm.SetZVar(Ptr(Params[3].Value.v), Utils.IfThen(StrValue <> nil, StrValue.Value, ''));
+                  StrValue := Section[Ptr(Code)];
+
+                  if StrValue = nil then begin
+                    Params[3].RetStr('', 0);
+                  end else begin
+                    Params[3].RetStr(pchar(StrValue.Value), Length(StrValue.Value));
+                  end;
                 end else begin
                   UpdateHint(3);
                 end;
@@ -1084,9 +1078,7 @@ begin
             end; // .if
           // SN:H^object^/x/y/z/hint
           end else if NumParams = 5 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and not Params[3].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr
-                      and not Params[3].IsStr and (Params[4].OperGet or Params[4].IsStr);
+            result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, TYPE_STR]);
 
             if result then begin
               x      := Params[1].Value.v;
@@ -1099,7 +1091,12 @@ begin
 
                 if Params[4].OperGet then begin
                   StrValue := Section[Ptr(Code)];                 
-                  Erm.SetZVar(Ptr(Params[4].Value.v), Utils.IfThen(StrValue <> nil, StrValue.Value, ''));
+                  
+                  if StrValue = nil then begin
+                    Params[4].RetStr('', 0);
+                  end else begin
+                    Params[4].RetStr(pchar(StrValue.Value), Length(StrValue.Value));
+                  end;
                 end else begin
                   UpdateHint(4);
                 end;
@@ -1112,8 +1109,7 @@ begin
         // SN:H^spec^/hero/short (0), full (1) or descr (2)/hint
         end else if SectionName = 'spec' then begin
           if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
+            result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, TYPE_STR]);
 
             if result then begin
               Hero     := Params[1].Value.v;
@@ -1122,7 +1118,7 @@ begin
               
               if result then begin
                 if Params[3].OperGet then begin
-                  Erm.SetZVar(Params[3].Value.pc, Erm.HeroSpecsTable[Hero].Descr[NameType]);
+                  Params[3].RetStr(Erm.HeroSpecsTable[Hero].Descr[NameType]);
                 end else begin
                   Code    := Hero or (NameType shl 8);
                   HintRaw := UpdateHint(3);
@@ -1143,8 +1139,7 @@ begin
         // SN:H^secskill^/skill/name (0), basic (1), advanced (2) or expert (3)/text
         end else if SectionName = 'secskill' then begin
           if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
+            result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, TYPE_STR]);
 
             if result then begin
               Skill    := Params[1].Value.v;
@@ -1153,7 +1148,7 @@ begin
               
               if result then begin
                 if Params[3].OperGet then begin
-                  Erm.SetZVar(Params[3].Value.pc, Heroes.SecSkillTexts[Skill].Texts[NameType]);
+                  Params[3].RetStr(Heroes.SecSkillTexts[Skill].Texts[NameType]);
                 end else begin
                   Code    := Skill or (NameType shl 8);
                   HintRaw := UpdateHint(3);
@@ -1186,8 +1181,7 @@ begin
         // SN:H^monname^/monster/single (0), plural (1), description (2)/text
         end else if SectionName = 'monname' then begin
           if NumParams = 4 then begin
-            result := not Params[1].OperGet and not Params[2].OperGet and
-                      not Params[1].IsStr   and not Params[2].IsStr   and (Params[3].OperGet or Params[3].IsStr);
+            result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, TYPE_STR]);
 
             if result then begin
               Monster  := Params[1].Value.v;
@@ -1196,7 +1190,7 @@ begin
               
               if result then begin
                 if Params[3].OperGet then begin
-                  Erm.SetZVar(Params[3].Value.pc, Heroes.MonInfos[Monster].Names.Texts[NameType]);
+                  Params[3].RetStr(Heroes.MonInfos[Monster].Names.Texts[NameType]);
                 end else begin
                   Code    := Monster or (NameType shl 16);
                   HintRaw := UpdateHint(3);
