@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes, WinNative,
+  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes, WinNative, RandMt,
   PatchApi, Core, GameExt, Heroes, Lodman, Erm, EventMan;
 
 type
@@ -721,6 +721,18 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
+function Hook_SRand: integer; stdcall; assembler;
+asm
+  mov eax, ecx
+  call RandMt.InitMt
+end;
+
+function Hook_Rand: integer; stdcall; assembler;
+asm
+  mov eax, ecx
+  call RandMt.RandomRangeMt
+end;
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1077,6 +1089,13 @@ begin
   if false then Core.p.WriteDataPatch(Ptr($41A0DC), ['01']); // save orig.dat on receive compressed
   Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
+
+  (* Replace number number generator with thread-safe Mersenne Twister *)
+  Core.ApiHook(@Hook_SRand, Core.HOOKTYPE_JUMP, Ptr($50C7B0));
+  Core.ApiHook(@Hook_Rand,  Core.HOOKTYPE_JUMP, Ptr($50C7C0));
+
+  (* Make VR:T equal to VR:V for multiplayer support *)
+  Core.p.WriteDataPatch(Ptr($735F3E), ['40'])
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
