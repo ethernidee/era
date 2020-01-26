@@ -519,6 +519,8 @@ begin
       end; // .if
     end; // .else
 
+    AssocVarUsed := false;
+
     if (PCmd[Pos] = '^') or ((PCmd[Pos] in ['s', 'i']) and (PCmd[Pos + 1] = '^')) then begin
       Params[NumParams].IsStr := true;
       AssocVarUsed            := PCmd[Pos] <> '^';
@@ -1022,7 +1024,6 @@ var
     HintRaw:     pchar;
     Code:        integer;
     DeleteHint:  boolean;
-    Str:         string;
 
     ObjType:    integer;
     ObjSubtype: integer;
@@ -2161,6 +2162,77 @@ begin
   end;
 end; // .function Hook_ZvsCheckObjHint
 
+function Hook_InterpolateErmString (Context: ApiJack.PHookContext): longbool; stdcall;
+type
+  PFrame = ^TFrame;
+  TFrame = packed record
+    j:      integer; // -28h
+    _d1:    array [1..3] of byte;
+    c:      char;    // -21h
+    _d2:    array [1..16] of byte;
+    i:      integer; // -10h
+    _d3:    array [1..4] of byte;
+    OutStr: pchar;   // -8h
+    _d4:    array [1..12] of byte;
+    InStr:  pchar;   // +8h
+  end;
+
+const
+  OFS_INSTR  = +$8;
+  OFS_OUTSTR = -$8;
+  OFS_I      = -$10;
+  OFS_C      = -$21;
+  OFS_J      = -$28;
+
+var
+  f:             PFrame;
+  Caret:         pchar;
+  StartPos:      pchar;
+  AssocVarValue: TAssocVar;
+  Str:           string;
+  VarType:       char;
+
+begin
+  f       := PFrame(Context.EBP - $28);
+  VarType := chr(byte(Context.EAX + $24));
+  result  := (VarType <> 'S') and (VarType <> 'I') or (f.InStr[f.i + 1] <> '(');
+
+  if not result then begin
+    Inc(f.i, 2);
+    Caret    := @f.InStr[f.i];
+    StartPos := Caret;
+
+    while not (Caret^ in [#0, ')']) do begin
+      Inc(Caret);
+    end;
+
+    AssocVarValue := AssocMem[StrLib.ExtractFromPchar(StartPos, Caret - StartPos)];
+
+    if VarType = 'S' then begin
+      if (AssocVarValue <> nil) and (AssocVarValue.StrValue <> '') then begin
+        Utils.CopyMem(Length(AssocVarValue.StrValue), pchar(AssocVarValue.StrValue), @f.OutStr[f.j]);
+        Inc(f.j, Length(AssocVarValue.StrValue) - 1);
+      end;
+    end else begin
+      if (AssocVarValue = nil) or (AssocVarValue.IntValue = 0) then begin
+        f.OutStr[f.j] := '0';
+      end else begin
+        Str := IntToStr(AssocVarValue.IntValue);
+        Utils.CopyMem(Length(Str), pchar(Str), @f.OutStr[f.j]);
+        Inc(f.j, Length(Str) - 1);
+      end;
+    end;
+
+    Inc(f.i, Caret - StartPos);
+
+    if Caret^ = #0 then begin
+      Dec(f.i);
+    end;
+
+    Context.RetAddr := Ptr($73DD9F);
+  end; // .if
+end; // .function Hook_InterpolateErmString
+
 procedure DumpErmMemory (const DumpFilePath: string);
 const
   ERM_CONTEXT_LEN = 300;
@@ -2738,6 +2810,9 @@ begin
   (* Make !?SN use always new unique buffer *)
   Core.p.WriteDataPatch(Ptr($59A893), ['A1E0926900']);
   ApiJack.StdSplice(Ptr($59A890), @Hook_PlaySound, ApiJack.CONV_FASTCALL, 3);
+
+  (* Allow SN:W variables interpolation *)
+  ApiJack.HookCode(Ptr($73DD82), @Hook_InterpolateErmString);
 end; // .procedure OnAfterWoG
 
 procedure OnBeforeErmInstructions (Event: PEvent); stdcall;
