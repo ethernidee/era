@@ -2966,6 +2966,20 @@ begin
   result    := not Core.EXEC_DEF_CODE;
 end;
 
+function Hook_BM_U6 (Context: Core.PHookContext): longbool; stdcall;
+var
+  FinalSpeed: integer;
+
+begin
+  result := pinteger(Context.EBP - $48)^ <> 5;
+
+  if not result then begin
+    FinalSpeed      := PatchApi.Call(THISCALL_, Ptr($4489F0), [pinteger(Context.EBP - $10)^]);
+    ZvsApply(@FinalSpeed, sizeof(integer), PErmSubCmd(pinteger(Context.EBP + $14)^), 1);
+    Context.RetAddr := Ptr($75F2D1);
+  end;
+end;
+
 function Hook_CmdElse (Context: Core.PHookContext): longbool; stdcall;
 var
   CmdFlags: PErmCmdConditions;
@@ -3206,6 +3220,9 @@ begin
 
   (* Fix MR:N in !?MR1 !?MR2 *)
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
+
+  (* Add BM:U6/?$ command to get final stack speed, including slow effect *)
+  ApiJack.HookCode(Ptr($75F2B1), @Hook_BM_U6);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
