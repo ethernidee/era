@@ -541,8 +541,14 @@ var
 
     // Each trigger saves x-vars to RetXVars before restoring previous values on exit.
     // ArgXVars are copied to x on trigger start after saving previous x-values.
-    ArgXVars: TErmXVars;
-    RetXVars: TErmXVars;
+    ArgXVars:    TErmXVars;
+    RetXVars:    TErmXVars;
+    
+    // May be set by function caller to signal, how many arguments are initialized
+    NumFuncArgsPassed: integer = 0;
+    
+    // Value, accessable via !!FU:A
+    NumFuncArgsReceived: integer = 0;
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -2420,6 +2426,7 @@ var
   SavedZ:               TErmNZVars;
   SavedF:               array [996..1000] of boolean;
   SavedV:               array [997..1000] of integer;
+  SavedNumArgsReceived: integer;
   LoopCallback:         TTriggerLoopCallback;
   Ifs:                  array [0..31] of byte;
   IfsLevel:             integer;
@@ -2457,6 +2464,9 @@ var
     SavedE := e^;
     SavedX := x^;
     x^     := ArgXVars;
+
+    SavedNumArgsReceived := NumFuncArgsReceived;
+    NumFuncArgsReceived  := NumFuncArgsPassed;
 
     for i := 1 to High(nz^) do begin
       Utils.SetPcharValue(@SavedZ[i], @nz[i], sizeof(z[1]));
@@ -2500,6 +2510,8 @@ var
     e^       := SavedE;
     RetXVars := x^;
     x^       := SavedX;
+
+    NumFuncArgsReceived := SavedNumArgsReceived;
 
     for i := 1 to High(nz^) do begin
       Utils.SetPcharValue(@nz[i], @SavedZ[i], sizeof(z[1]));
@@ -2961,7 +2973,7 @@ end; // .function Hook_CM3
 
 function Hook_MR_N (c: Core.PHookContext): longbool; stdcall;
 begin
-  c.eax     := Heroes.GetStackIdByPos(Heroes.GetVal(MrMonPtr^, STACK_POS).v);
+  c.eax     := Heroes.GetVal(MrMonPtr^, STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(MrMonPtr^, STACK_ID).v;
   c.RetAddr := Ptr($75DC76);
   result    := not Core.EXEC_DEF_CODE;
 end;
@@ -3026,6 +3038,7 @@ begin
     ArgXVars[i + 1] := SubCmd.Nums[i];
   end;
 
+  NumFuncArgsPassed := NumParams;
   FireErmEvent(FuncId);
   ApplyFuncByRefRes(SubCmd, NumParams);
 
@@ -3042,6 +3055,7 @@ begin
     ArgXVars[i + 1] := Args[i];
   end;
 
+  NumFuncArgsPassed := NumArgs;
   FireErmEvent(FuncId);
 
   result := 1;
@@ -3073,8 +3087,12 @@ begin
   LoopContext.Step     := ZvsGetParamValue(Cmd.Params[3]);
   result               := true;
 
+  if NumParams > 15 then begin
+    NumParams := 15;
+  end;
+
   // Initialize x-paramaters
-  for i := 1 to Math.Min(15, NumParams) do begin
+  for i := 1 to NumParams do begin
     ArgXVars[i] := SubCmd.Nums[i - 1];
   end;
 
@@ -3083,6 +3101,7 @@ begin
     TriggerLoopCallback.Handler := @DO_P_Callback;
     TriggerLoopCallback.Data    := @LoopContext;
 
+    NumFuncArgsPassed := NumParams;
     FireErmEvent(FuncId);
   end;
 
@@ -3098,6 +3117,29 @@ begin
     result := 0;
   end;
 end;
+
+function Hook_FU_A (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd:    PErmSubCmd;
+  NumParams: integer;
+
+begin
+  result := (Context.ECX + $43) <> ord('A');
+
+  if not result then begin
+    SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
+    NumParams := pinteger(Context.EBP + $0C)^;
+    // * * * * * //
+    if (NumParams <> 1) or (SubCmd.Params[0].GetCheckType() <> PARAM_CHECK_GET) then begin
+      ShowErmError('Invalid !!FU:A syntax');
+      Context.RetAddr := Ptr($72D19A);
+      exit;
+    end;
+
+    ZvsApply(@NumFuncArgsReceived, 4, SubCmd, 0);
+    Context.RetAddr := Ptr($72D19E);
+  end;
+end; // .function Hook_FU_A
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
@@ -3249,11 +3291,17 @@ begin
   // Rewrite FU:P implementation
   ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
 
+  // Add FU:A command
+  ApiJack.HookCode(Ptr($72D181), @Hook_FU_A);
+
   (* Rewrite ZVS Call_Function / remote function call handling *)
   Core.ApiHook(@OnFuncCalledRemotely, Core.HOOKTYPE_JUMP, Ptr($72D1D1));
 
   // Rewrite DO:P implementation
   Core.ApiHook(@Hook_DO_P, Core.HOOKTYPE_JUMP, Ptr($72D79C));
+
+  (* Allow functions to havedefault argument values *)
+  Core.p.WriteDataPatch(Ptr($74A6FC), ['73']);
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin

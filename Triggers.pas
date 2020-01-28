@@ -454,7 +454,7 @@ var
   StackInd: integer;
 
 begin
-  StackInd     := (Context.ECX - integer(Heroes.StackProp(0, 0))) div COMBAT_MON_RECORD_SIZE;
+  StackInd     := Heroes.GetVal(Ptr(Context.ECX), STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(Ptr(Context.ECX), STACK_ID).v;
   Erm.FireErmEventEx(Erm.TRIGGER_REGENERATE_PHASE, [StackInd, Context.ECX, 0]);
   DisableRegen := Erm.RetXVars[PARAM_DISABLE_REGEN] <> 0;
   result       := true;

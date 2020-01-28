@@ -32,7 +32,8 @@ const
   GAME_SETTINGS_SECTION = 'Settings';
   
   (* Stacks on battlefield *)
-  NUM_BATTLE_STACKS = 42;
+  NUM_BATTLE_STACKS          = 42;
+  NUM_BATTLE_STACKS_PER_SIDE = 21;
   
   (*  BattleMon  *)
   STACK_STRUCT_SIZE = 1352;
@@ -44,6 +45,7 @@ const
   STACK_FLAGS       = $84;
   STACK_HP          = $C0;
   STACK_SIDE        = $F4;
+  STACK_ID          = $F8;
 
   (* Game version *)
   ROE         = 0;
