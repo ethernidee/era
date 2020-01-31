@@ -308,7 +308,7 @@ begin
       result := (Ind >= 1) and (Ind <= 200) and (Erm.GetErmCurrHero <> nil);
       
       if result then begin
-        Res := SysUtils.IntToStr(Erm.w[Erm.GetErmCurrHero.Id, Ind]);
+        Res := SysUtils.IntToStr(Erm.w[Erm.ZvsWHero^, Ind]);
       end;
     end;
 
@@ -387,9 +387,9 @@ begin
       
       if result then begin
         if ServiceParam.OperGet then begin
-          ServiceParam.Value.p := @Erm.w[Erm.GetErmCurrHero.Id, Ind];
+          ServiceParam.Value.p := @Erm.w[Erm.ZvsWHero^, Ind];
         end else begin
-          ServiceParam.Value.v := Erm.w[Erm.GetErmCurrHero.Id, Ind];
+          ServiceParam.Value.v := Erm.w[Erm.ZvsWHero^, Ind];
         end;
       end else begin
         Erm.ShowErmError('w-index is out of range 1..200');
@@ -1814,53 +1814,36 @@ end;
 procedure SaveSlots;
 var
 {U} Slot:     TSlot;
-    SlotN:    integer;
-    NumSlots: integer;
     NumItems: integer;
-    StrLen:   integer;
     i:        integer;
   
 begin
-  SlotN := 0;
-  Slot  := nil;
+  Slot := nil;
   // * * * * * //
-  NumSlots := Slots.ItemCount;
-  Stores.WriteSavegameSection(sizeof(NumSlots), @NumSlots, SLOTS_SAVE_SECTION);
-  
-  Slots.BeginIterate;
-  
-  while Slots.IterateNext(pointer(SlotN), pointer(Slot)) do begin
-    Stores.WriteSavegameSection(sizeof(SlotN), @SlotN, SLOTS_SAVE_SECTION);
-    Stores.WriteSavegameSection(sizeof(Slot.ItemsType), @Slot.ItemsType, SLOTS_SAVE_SECTION);
-    Stores.WriteSavegameSection(sizeof(Slot.IsTemp), @Slot.IsTemp, SLOTS_SAVE_SECTION);
-    
-    NumItems := GetSlotItemsCount(Slot);
-    Stores.WriteSavegameSection(sizeof(NumItems), @NumItems, SLOTS_SAVE_SECTION);
-    
-    if (NumItems > 0) and not Slot.IsTemp then begin
-      if Slot.ItemsType = INT_VAR then begin
-        Stores.WriteSavegameSection
-        (
-          sizeof(integer) * NumItems,
-          @Slot.IntItems[0], SLOTS_SAVE_SECTION
-        );
-      end else begin
-        for i:=0 to NumItems - 1 do begin
-          StrLen := Length(Slot.StrItems[i]);
-          Stores.WriteSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
-          
-          if StrLen > 0 then begin
-            Stores.WriteSavegameSection(StrLen, pointer(Slot.StrItems[i]), SLOTS_SAVE_SECTION);
+  with Stores.NewRider(SLOTS_SAVE_SECTION) do begin
+    WriteInt(Slots.ItemCount);
+
+    with DataLib.IterateObjDict(Slots) do begin
+      while IterNext do begin
+        Slot     := TSlot(IterValue);
+        NumItems := GetSlotItemsCount(Slot);
+        WriteInt(integer(IterKey));
+        WriteByte(ord(Slot.ItemsType));
+        WriteByte(ord(Slot.IsTemp));
+        WriteInt(NumItems);
+        
+        if (NumItems > 0) and not Slot.IsTemp then begin
+          if Slot.ItemsType = INT_VAR then begin
+            Write(NumItems * sizeof(integer), @Slot.IntItems[0])
+          end else begin
+            for i := 0 to NumItems - 1 do begin
+              WriteStr(Slot.StrItems[i]);
+            end;
           end;
         end;
-      end; // .else
-    end; // .if
-    
-    SlotN := 0;
-    Slot  := nil;
-  end; // .while
-  
-  Slots.EndIterate;
+      end; // .while
+    end; // .with
+  end; // .with
 end; // .procedure SaveSlots
 
 procedure SaveAssocMem;
@@ -1869,7 +1852,7 @@ var
     AssocVarName:  string;
   
 begin
-  AssocVarValue :=  nil;
+  AssocVarValue := nil;
   // * * * * * //
   with Stores.NewRider(ASSOC_SAVE_SECTION) do begin
     WriteInt(AssocMem.ItemCount);
@@ -1930,49 +1913,38 @@ procedure LoadSlots;
 var
 {U} Slot:       TSlot;
     SlotN:      integer;
-    NumSlots:   integer;
     ItemsType:  TVarType;
     IsTempSlot: boolean;
     NumItems:   integer;
-    StrLen:     integer;
     i:          integer;
-    y:          integer;
+    j:          integer;
 
 begin
-  Slot     := nil;
-  NumSlots := 0;
+  Slot := nil;
   // * * * * * //
   Slots.Clear;
-  Stores.ReadSavegameSection(sizeof(NumSlots), @NumSlots, SLOTS_SAVE_SECTION);
-  
-  for i:=0 to NumSlots - 1 do begin
-    Stores.ReadSavegameSection(sizeof(SlotN), @SlotN, SLOTS_SAVE_SECTION);
-    Stores.ReadSavegameSection(sizeof(ItemsType), @ItemsType, SLOTS_SAVE_SECTION);
-    Stores.ReadSavegameSection(sizeof(IsTempSlot), @IsTempSlot, SLOTS_SAVE_SECTION);
-    
-    Stores.ReadSavegameSection(sizeof(NumItems), @NumItems, SLOTS_SAVE_SECTION);
-    
-    Slot              := NewSlot(NumItems, ItemsType, IsTempSlot);
-    Slots[Ptr(SlotN)] := Slot;
-    SetSlotItemsCount(NumItems, Slot);
-    
-    if not IsTempSlot and (NumItems > 0) then begin
-      if ItemsType = INT_VAR then begin
-        Stores.ReadSavegameSection
-        (
-          sizeof(integer) * NumItems,
-          @Slot.IntItems[0],
-          SLOTS_SAVE_SECTION
-        );
-      end else begin
-        for y:=0 to NumItems - 1 do begin
-          Stores.ReadSavegameSection(sizeof(StrLen), @StrLen, SLOTS_SAVE_SECTION);
-          SetLength(Slot.StrItems[y], StrLen);
-          Stores.ReadSavegameSection(StrLen, pointer(Slot.StrItems[y]), SLOTS_SAVE_SECTION);
+
+  with Stores.NewRider(SLOTS_SAVE_SECTION) do begin
+    for i := 0 to ReadInt - 1 do begin
+      SlotN             := ReadInt;
+      ItemsType         := TVarType(ReadByte);
+      IsTempSlot        := ReadByte <> 0;
+      NumItems          := ReadInt;
+      Slot              := NewSlot(NumItems, ItemsType, IsTempSlot);
+      Slots[Ptr(SlotN)] := Slot;
+      SetSlotItemsCount(NumItems, Slot);
+
+      if not IsTempSlot and (NumItems > 0) then begin
+        if ItemsType = INT_VAR then begin
+          Read(NumItems * sizeof(integer), @Slot.IntItems[0]);
+        end else begin
+          for j := 0 to NumItems - 1 do begin
+            Slot.StrItems[j] := ReadStr;
+          end;
         end;
-      end; // .else
-    end; // .if
-  end; // .for
+      end;
+    end; // .for
+  end; // .with
 end; // .procedure LoadSlots
 
 procedure LoadAssocMem;
@@ -1991,7 +1963,7 @@ begin
       AssocVarValue          := TAssocVar.Create;
       AssocVarName           := ReadStr;
       AssocVarValue.IntValue := ReadInt;
-      AssocVarValue.StrValue := ReadStr;     
+      AssocVarValue.StrValue := ReadStr;    
 
       if (AssocVarValue.IntValue <> 0) or (AssocVarValue.StrValue <> '') then begin
         AssocMem[AssocVarName] := AssocVarValue; AssocVarValue := nil;
@@ -2006,7 +1978,6 @@ procedure LoadHints;
 var
 {U} HintSection:     TObjDict;
     NumHintSections: integer;
-    NumRecords:      integer;
     ItemCode:        integer;
     i, k:            integer;
 
@@ -2027,16 +1998,15 @@ begin
     NumHintSections := ReadInt;
 
     // Read each hint section in a loop
-    for i := 1 to NumHintSections do begin
+    for i := 0 to NumHintSections - 1 do begin
       // Read hint section name and create hint section object
       HintSection    := DataLib.NewObjDict(Utils.OWNS_ITEMS);
       Hints[ReadStr] := HintSection;
-      NumRecords     := ReadInt;
 
       // Read hint section records
-      for k := 1 to NumRecords do begin
+      for k := 0 to ReadInt - 1 do begin
         // Read item code and hint string
-        ItemCode := ReadInt;
+        ItemCode                   := ReadInt;
         HintSection[Ptr(ItemCode)] := TString.Create(ReadStr);
       end;
     end; // .for

@@ -43,6 +43,13 @@ const
   PARAM_CHECK_GREATER_EQUAL = 6;
   PARAM_CHECK_LOWER_EQUAL   = 7;
 
+  (* ERM param variable types *)
+  PARAM_VARTYPE_QUICK = 2;
+  PARAM_VARTYPE_V     = 3;
+  PARAM_VARTYPE_W     = 4;
+  PARAM_VARTYPE_X     = 5;
+  PARAM_VARTYPE_Y     = 6;
+
   ERM_CMD_MAX_PARAMS_NUM = 16;
   MIN_ERM_SCRIPT_SIZE    = Length('ZVSE'#13#10);
   LINE_END_MARKER        = #10;
@@ -478,6 +485,7 @@ const
   ZvsEventX:                  pinteger               = Ptr($27F9964);
   ZvsEventY:                  pinteger               = Ptr($27F9968);
   ZvsEventZ:                  pinteger               = Ptr($27F996C);
+  ZvsWHero:                   pinteger               = Ptr($27F9988);
   IsWoG:                      plongbool              = Ptr($803288);
   WoGOptions:                 ^TWoGOptions           = Ptr($2771920);
   ErmEnabled:                 plongbool              = Ptr($27F995C);
@@ -518,6 +526,7 @@ const
   ZvsGetErtStr:       function (StrInd: integer): pchar cdecl = Ptr($776620);
   ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
   ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): longbool cdecl = Ptr($74195D);
+  ZvsGetVarValIndex:  function (Param: PErmCmdParam): integer cdecl = Ptr($72DCB0);
   ZvsGetParamValue:   function (var Param: TErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsReparseParam:    function (var Param: TErmCmdParam): integer cdecl = Ptr($72D573);
 
@@ -3141,6 +3150,71 @@ begin
   end;
 end; // .function Hook_FU_A
 
+function Hook_VR_C (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd:    PErmSubCmd;
+  VarParam:  PErmCmdParam;
+  NumParams: integer;
+  StartInd:  integer;
+  DestVar:   pinteger;
+  i:         integer;
+
+  (* Returns nil on invalid index/range *)
+  function GetVarArrayAddr (VarType, StartInd, NumItems: integer): {n} pinteger;
+  var
+    EndInd: integer;
+
+  begin
+    result := nil;
+    EndInd := StartInd + NumItems - 1;
+
+    if VarType = PARAM_VARTYPE_V then begin
+      if (StartInd >= Low(v^)) and (EndInd <= High(v^)) then begin
+        result := @v[StartInd];
+      end;
+    end else if VarType = PARAM_VARTYPE_W then begin
+      if (StartInd >= Low(w[1])) and (EndInd <= High(w[1])) then begin
+        result := @w[ZvsWHero^][StartInd];
+      end;
+    end else if VarType = PARAM_VARTYPE_X then begin
+      if (StartInd >= Low(x^)) and (EndInd <= High(x^)) then begin
+        result := @x[StartInd];
+      end;
+    end else if VarType = PARAM_VARTYPE_Y then begin
+      if (StartInd >= Low(y^)) and (EndInd <= High(y^)) then begin
+        result := @y[StartInd];
+      end else if (-StartInd >= Low(ny^)) and (-EndInd <= High(ny^)) then begin
+        result := @ny[-StartInd];
+      end;
+    end;
+  end; // .function GetVarArrayAddr
+
+begin
+  result := not (Context.ECX in [3..6]);
+
+  if not result then begin
+    SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
+    NumParams := pinteger(Context.EBP + $0C)^;
+    VarParam  := PErmCmdParam(ppointer(Context.EBP - $8)^);
+    // * * * * * //
+    StartInd := ZvsGetVarValIndex(VarParam);
+    DestVar  := GetVarArrayAddr(Context.ECX, StartInd, NumParams);
+
+    if DestVar = nil then begin
+      ShowErmError(Format('!!VR:C first/last index is out of range: %d..%d', [StartInd, StartInd + NumParams - 1]));
+      Context.RetAddr := Ptr($7355FB);
+      exit;
+    end;
+
+    for i := 0 to NumParams - 1 do begin
+      ZvsApply(DestVar, sizeof(DestVar^), SubCmd, i);
+      Inc(DestVar);
+    end;
+
+    Context.RetAddr := Ptr($735F06);
+  end;
+end; // .function Hook_VR_C
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
@@ -3294,14 +3368,14 @@ begin
   // Add FU:A command
   ApiJack.HookCode(Ptr($72D181), @Hook_FU_A);
 
+  // Allow VR:C command to handle v, x, w and y-variables
+  ApiJack.HookCode(Ptr($7355B7), @Hook_VR_C);
+
   (* Rewrite ZVS Call_Function / remote function call handling *)
   Core.ApiHook(@OnFuncCalledRemotely, Core.HOOKTYPE_JUMP, Ptr($72D1D1));
 
   // Rewrite DO:P implementation
   Core.ApiHook(@Hook_DO_P, Core.HOOKTYPE_JUMP, Ptr($72D79C));
-
-  (* Allow functions to havedefault argument values *)
-  Core.p.WriteDataPatch(Ptr($74A6FC), ['73']);
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
