@@ -713,9 +713,17 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OnCombatRound (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_OnCombatRound_Start (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  Inc(CombatRound);
+  if pinteger($79F0B8)^ <> Heroes.CombatManagerPtr^.Round then begin
+    Inc(CombatRound);
+  end;
+
+  result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_OnCombatRound_End (Context: Core.PHookContext): LONGBOOL; stdcall;
+begin
   Erm.v[997] := CombatRound;
   Erm.FireErmEvent(Erm.TRIGGER_COMBAT_ROUND);
   result := Core.EXEC_DEF_CODE;
@@ -1063,19 +1071,16 @@ begin
   (* Fix WoG bug: double !?OB54 event generation when attacking without moving due to Enter2Object + Enter2Monster2 calling *)
   Core.p.WriteHiHook(Ptr($705979), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.FASTCALL_, @Hook_ZvsEnter2Object);
 
-  (* Fix battle round counting: no !?BR before battlefield is shown, -1 for the whole tactics phase, the
+  (* Fix battle round counting: no !?BR before battlefield is shown, -1000000000 incrementing for the whole tactics phase, the
      first real round always starts from 0 *)
   Core.ApiHook(@Hook_OnBeforeBattlefieldVisible, Core.HOOKTYPE_BRIDGE, Ptr($75EAEA));
-  //Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($75D1B3));
   Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($75D178));
   Core.ApiHook(@Hook_OnAfterTacticsPhase,        Core.HOOKTYPE_BRIDGE, Ptr($75D137));
-  Core.ApiHook(@Hook_OnCombatRound,              Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
-  //Core.ApiHook(Y_FixNewRoundCountInTactics, Core.HOOKTYPE_BRIDGE, $473E73);
-  //Core.ApiHook(Y_FixNewRoundCountInTactics, Core.HOOKTYPE_BRIDGE, $474B79);
-  //Core.ApiHook(Y_FixNewRoundCountInTactics, Core.HOOKTYPE_BRIDGE, $4758B3);
-  //Core.p.WriteDataPatch(Ptr($473E69 + 6), ['00']);
-  //Core.p.WriteDataPatch(Ptr($474B63 + 6), ['00']);
-  //Core.p.WriteDataPatch(Ptr($47589D + 6), ['00']);
+  Core.ApiHook(@Hook_OnCombatRound_Start,        Core.HOOKTYPE_BRIDGE, Ptr($76065B));
+  Core.ApiHook(@Hook_OnCombatRound_End,          Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
+
+  // Use CombatRound instead of combat manager field to summon creatures every nth turn via creature experience system
+  Core.p.WriteDataPatch(Ptr($71DFBE), ['8B15 %d', @CombatRound]);
 
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
   Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
@@ -1098,6 +1103,11 @@ begin
   Core.p.WriteDataPatch(Ptr($735F3E), ['40'])
 end; // .procedure OnAfterWoG
 
+procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
+begin
+  CombatRound := -1000000000;
+end;
+
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
 begin
   (* Install global top-level exception filter *)
@@ -1116,5 +1126,6 @@ begin
 
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 end.
