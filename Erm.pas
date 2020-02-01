@@ -558,6 +558,11 @@ var
     
     // Value, accessable via !!FU:A
     NumFuncArgsReceived: integer = 0;
+
+    // Single flag per each function argument, representing GET-syntax usage by caller
+    FuncArgsGetSyntaxFlagsPassed:   integer = 0;
+    FuncArgsGetSyntaxFlagsReceived: integer = 0;
+
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -2436,6 +2441,7 @@ var
   SavedF:               array [996..1000] of boolean;
   SavedV:               array [997..1000] of integer;
   SavedNumArgsReceived: integer;
+  SavedArgsGetSyntaxFlagsReceived: integer;
   LoopCallback:         TTriggerLoopCallback;
   Ifs:                  array [0..31] of byte;
   IfsLevel:             integer;
@@ -2474,8 +2480,10 @@ var
     SavedX := x^;
     x^     := ArgXVars;
 
-    SavedNumArgsReceived := NumFuncArgsReceived;
-    NumFuncArgsReceived  := NumFuncArgsPassed;
+    SavedNumArgsReceived            := NumFuncArgsReceived;
+    NumFuncArgsReceived             := NumFuncArgsPassed;
+    SavedArgsGetSyntaxFlagsReceived := FuncArgsGetSyntaxFlagsReceived;
+    FuncArgsGetSyntaxFlagsReceived  := FuncArgsGetSyntaxFlagsPassed;
 
     for i := 1 to High(nz^) do begin
       Utils.SetPcharValue(@SavedZ[i], @nz[i], sizeof(z[1]));
@@ -2520,7 +2528,8 @@ var
     RetXVars := x^;
     x^       := SavedX;
 
-    NumFuncArgsReceived := SavedNumArgsReceived;
+    NumFuncArgsReceived            := SavedNumArgsReceived;
+    FuncArgsGetSyntaxFlagsReceived := SavedArgsGetSyntaxFlagsReceived;
 
     for i := 1 to High(nz^) do begin
       Utils.SetPcharValue(@nz[i], @SavedZ[i], sizeof(z[1]));
@@ -3043,8 +3052,11 @@ begin
   FuncId    := ZvsGetParamValue(Cmd.Params[0]);
   NumParams := pinteger(Context.EBP + $0C)^;
   // * * * * * //
+  FuncArgsGetSyntaxFlagsPassed := 0;
+
   for i := 0 to NumParams - 1 do begin
-    ArgXVars[i + 1] := SubCmd.Nums[i];
+    ArgXVars[i + 1]              := SubCmd.Nums[i];
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (ord(SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET) shl i);
   end;
 
   NumFuncArgsPassed := NumParams;
@@ -3064,7 +3076,8 @@ begin
     ArgXVars[i + 1] := Args[i];
   end;
 
-  NumFuncArgsPassed := NumArgs;
+  FuncArgsGetSyntaxFlagsPassed := 0;
+  NumFuncArgsPassed            := NumArgs;
   FireErmEvent(FuncId);
 
   result := 1;
@@ -3100,9 +3113,12 @@ begin
     NumParams := 15;
   end;
 
+  FuncArgsGetSyntaxFlagsPassed := 0;
+
   // Initialize x-paramaters
-  for i := 1 to NumParams do begin
-    ArgXVars[i] := SubCmd.Nums[i - 1];
+  for i := 0 to NumParams - 1 do begin
+    ArgXVars[i + 1]              := SubCmd.Nums[i];
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (ord(SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET) shl i);
   end;
 
   if ((LoopContext.Step >= 0) and (ArgXVars[16] <= LoopContext.EndValue)) or ((LoopContext.Step < 0) and (ArgXVars[16] >= LoopContext.EndValue)) then begin
@@ -3127,28 +3143,45 @@ begin
   end;
 end;
 
-function Hook_FU_A (Context: ApiJack.PHookContext): longbool; stdcall;
+function Hook_FU_EXT (Context: ApiJack.PHookContext): longbool; stdcall;
 var
+  CmdChar:   char;
   SubCmd:    PErmSubCmd;
   NumParams: integer;
+  ResValue:  integer;
 
 begin
-  result := (Context.ECX + $43) <> ord('A');
+  CmdChar := chr(Context.ECX + $43);
+  result  := not (CmdChar in ['A', 'G']);
 
   if not result then begin
     SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
     NumParams := pinteger(Context.EBP + $0C)^;
     // * * * * * //
-    if (NumParams <> 1) or (SubCmd.Params[0].GetCheckType() <> PARAM_CHECK_GET) then begin
-      ShowErmError('Invalid !!FU:A syntax');
-      Context.RetAddr := Ptr($72D19A);
-      exit;
-    end;
+    if CmdChar = 'A' then begin
+      if (NumParams <> 1) or (SubCmd.Params[0].GetCheckType() <> PARAM_CHECK_GET) then begin
+        ShowErmError('Invalid !!FU:A syntax');
+        Context.RetAddr := Ptr($72D19A);
+        exit;
+      end;
 
-    ZvsApply(@NumFuncArgsReceived, 4, SubCmd, 0);
+      ZvsApply(@NumFuncArgsReceived, 4, SubCmd, 0);
+    end else if CmdChar = 'G' then begin
+      if (NumParams <> 2) or (SubCmd.Params[0].GetCheckType() = PARAM_CHECK_GET) or (SubCmd.Params[1].GetCheckType() <> PARAM_CHECK_GET) or
+         not Math.InRange(SubCmd.Nums[0], Low(x^), High(x^))
+      then begin
+        ShowErmError('Invalid !!FU:G syntax');
+        Context.RetAddr := Ptr($72D19A);
+        exit;
+      end;
+
+      ResValue := ord((FuncArgsGetSyntaxFlagsReceived and (1 shl (SubCmd.Nums[0] - 1))) <> 0);
+      ZvsApply(@ResValue, 4, SubCmd, 1);
+    end; // .elseif
+    
     Context.RetAddr := Ptr($72D19E);
   end;
-end; // .function Hook_FU_A
+end; // .function Hook_FU_EXT
 
 function Hook_VR_C (Context: ApiJack.PHookContext): longbool; stdcall;
 var
@@ -3365,8 +3398,8 @@ begin
   // Rewrite FU:P implementation
   ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
 
-  // Add FU:A command
-  ApiJack.HookCode(Ptr($72D181), @Hook_FU_A);
+  // Add FU:A/G commands
+  ApiJack.HookCode(Ptr($72D181), @Hook_FU_EXT);
 
   // Allow VR:C command to handle v, x, w and y-variables
   ApiJack.HookCode(Ptr($7355B7), @Hook_VR_C);

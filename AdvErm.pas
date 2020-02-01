@@ -1359,7 +1359,7 @@ begin
                 end; // .else
               end; // .if
             end; // .case 2
-          // M(Slot)/(VarN)/[?](Value) or M(Slot)/?addr/(VarN)
+          // SN:M(Slot)/(VarN)/[?](Value) or M(Slot)/?addr/(VarN)
           3:
             begin
               result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT]) and GetSlot(Params[0].Value.v, Slot, Error);

@@ -959,7 +959,7 @@ begin
         Params[2].RetStr(AssocVarValue.StrValue);
       end;
     end else begin
-      if AssocVarValue <> nil then begin
+      if AssocVarValue = nil then begin
         Params[2].RetInt(0);
       end else begin
         Params[2].RetInt(AssocVarValue.IntValue);
