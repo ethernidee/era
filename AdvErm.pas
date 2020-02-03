@@ -47,7 +47,7 @@ const
   (* ERM additional commands parameter config *)
   CMD_PARAMS_CONFIG_NONE                     = 0;
   CMD_PARAMS_CONFIG_SINGLE_INT               = 1;
-  CMD_PARAMS_CONFIG_THREE_TO_FIVE_INTS       = 2;
+  CMD_PARAMS_CONFIG_ONE_TO_FIVE_INTS         = 2;
   CMD_PARAMS_CONFIG_SINGLE_INT_AS_STRUCT_PTR = 3;
   CMD_PARAMS_CONFIG_FOUR_INTS                = 4;
   CMD_PARAMS_CONFIG_TWO_VARS                 = 5;
@@ -143,7 +143,7 @@ type
 
 procedure ResetMemory;
 function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
-procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
+procedure RegisterErmReceiver (const Cmd: string; {n} Handler: TErmCmdHandler; ParamsConfig: integer);
 function  WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
 procedure ApplyIntParam (var Param: TServiceParam; var Dest: integer);
 procedure AssignPcharFromParam (var Param: TServiceParam; {n} Buf: pchar; BufSize: integer);
@@ -609,7 +609,7 @@ begin
         ParValue := 0;
 
         if ParType in ['f'..'t'] then begin
-          ParValue := ord(ParType) - ord('f');
+          ParValue := ord(ParType) - ord('f') + 1;
         end else begin
           SetString(IndStr, pchar(@PCmd[StartPos]), Pos - StartPos);
           
@@ -784,14 +784,13 @@ begin
   Cmd.Params[High(Cmd.Params)].Value := integer(GetAdditionalCmdHandler(Cmd.CmdId.Id));
 end;
 
-procedure RegisterErmReceiver (const Cmd: string; Handler: TErmCmdHandler; ParamsConfig: integer);
+procedure RegisterErmReceiver (const Cmd: string; {n} Handler: TErmCmdHandler; ParamsConfig: integer);
 var
   CmdId: Erm.TErmCmdId;
   i:     integer;
 
 begin
   {!} Assert(Length(Cmd) = 2, 'Cannot register invalid ERM receiver: ' + Cmd);
-  {!} Assert(@Handler <> nil);
   CmdId.Name[0] := Cmd[1];
   CmdId.Name[1] := Cmd[2];
 
@@ -2521,8 +2520,8 @@ begin
   
   WriteSectionHeader('Quick vars (f..t)'); LineEnd;
   
-  for i := 0 to High(Erm.QuickVars^) do begin
-    Line(CHR(ORD('f') + i) + ' = ' + IntToStr(Erm.QuickVars[i]));
+  for i := Low(Erm.QuickVars^) to High(Erm.QuickVars^) do begin
+    Line(CHR(ORD('f') + i - Low(Erm.QuickVars^)) + ' = ' + IntToStr(Erm.QuickVars[i]));
   end;
   
   DumpVars('Vars x1..x16', 'x', INT_VAR, @Erm.x[1], 16, 1);

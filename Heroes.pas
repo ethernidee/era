@@ -194,6 +194,8 @@ type
       2: (pc: pchar);
       3: (b:  byte);
       4: (w:  word);
+      5: (f:  single);
+      6: (longbool: longbool);
   end;
 
   PTxtFile  = ^TTxtFile;

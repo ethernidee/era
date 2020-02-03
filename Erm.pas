@@ -44,11 +44,21 @@ const
   PARAM_CHECK_LOWER_EQUAL   = 7;
 
   (* ERM param variable types *)
+  PARAM_VARTYPE_NUM   = 0;
+  PARAM_VARTYPE_FLAG  = 1;
   PARAM_VARTYPE_QUICK = 2;
   PARAM_VARTYPE_V     = 3;
   PARAM_VARTYPE_W     = 4;
   PARAM_VARTYPE_X     = 5;
   PARAM_VARTYPE_Y     = 6;
+  PARAM_VARTYPE_Z     = 7;
+  PARAM_VARTYPE_E     = 8;
+
+  (* Normalized ERM parameter value types *)
+  VALTYPE_INT   = 0;
+  VALTYPE_FLOAT = 1;
+  VALTYPE_BOOL  = 2;
+  VALTYPE_STR   = 3;
 
   ERM_CMD_MAX_PARAMS_NUM = 16;
   MIN_ERM_SCRIPT_SIZE    = Length('ZVSE'#13#10);
@@ -166,7 +176,7 @@ const
   TRIGGER_RECRUIT_DLG_ACTION           = 77029;
   TRIGGER_LOAD_HERO_SCREEN             = 77030;
   TRIGGER_BUILD_TOWN_BUILDING          = 77031;
-  TRIGGER_OPEN_TOWN_SCREEN            = 77032;
+  TRIGGER_OPEN_TOWN_SCREEN             = 77032;
   TRIGGER_CLOSE_TOWN_SCREEN            = 77033;
   TRIGGER_SWITCH_TOWN_SCREEN           = 77034;
   TRIGGER_PRE_TOWN_SCREEN              = 77035;
@@ -288,7 +298,7 @@ type
     Conditions: TErmCmdConditions;
     Params:     TErmCmdParams;
     Chars:      array [0..15] of char;
-    Flags:      array [0..15] of boolean;
+    DFlags:     array [0..15] of boolean;
     Nums:       array [0..15] of integer;
   end; // .record TErmSubCmd
 
@@ -373,7 +383,7 @@ type
   PErmNEVars     = ^TErmNEVars;
   TErmNEVars     = array [1..100] of single;
   PErmQuickVars  = ^TErmQuickVars;
-  TErmQuickVars  = array [0..14] of integer;
+  TErmQuickVars  = array [1..15] of integer;
   PZvsTriggerIfs = ^TZvsTriggerIfs;
   TZvsTriggerIfs = array [0..10] of shortint;
 
@@ -527,6 +537,8 @@ const
   ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
   ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): longbool cdecl = Ptr($74195D);
   ZvsGetVarValIndex:  function (Param: PErmCmdParam): integer cdecl = Ptr($72DCB0);
+  ZvsGetVarVal:       function (Param: PErmCmdParam): integer cdecl = Ptr($72DEA5);
+  ZvsSetVarVal:       function (Param: PErmCmdParam; NewValue: integer): integer cdecl = Ptr($72E301);
   ZvsGetParamValue:   function (var Param: TErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsReparseParam:    function (var Param: TErmCmdParam): integer cdecl = Ptr($72D573);
 
@@ -611,7 +623,6 @@ uses PatchApi, Stores, AdvErm, ErmTracking;
 
 const
   ERM_CMD_CACHE_LIMIT = 30000;
-
 
 var
 {O} FuncNames:       DataLib.TDict {OF FuncId: integer};
@@ -2409,6 +2420,132 @@ begin
   end;
 end; 
 
+function GetErmParamValue (Param: PErmCmdParam; out ResValType: integer): integer;
+const
+  IND_INDEX = 0;
+  IND_BASE  = 1;
+
+var
+  ValTypes: array [0..1] of integer;
+  ValType:  integer;
+  i:        integer;
+
+begin
+  ValTypes[0] := Param.GetIndexedPartType();
+  ValTypes[1] := Param.GetType();
+  result      := Param.Value;
+
+  for i := Low(ValTypes) to High(ValTypes) do begin
+    ValType := ValTypes[i];
+
+    // If ValType is raw number, it's already stored in result
+    if ValType <> PARAM_VARTYPE_NUM then begin
+      case ValType of
+        PARAM_VARTYPE_FLAG: begin
+          if (result < Low(f^)) or (result > High(f^)) then begin
+            ShowErmError(Format('Invalid flag index %d. Expected %d..%d', [result, Low(f^), High(f^)]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+          
+          ValType := VALTYPE_BOOL;
+          result  := ord(f[result]);
+        end;
+
+        PARAM_VARTYPE_QUICK: begin
+          if (result < Low(QuickVars^)) or (result > High(QuickVars^)) then begin
+            ShowErmError(Format('Invalid quick var %d. Expected %d..%d', [result, Low(QuickVars^), High(QuickVars^)]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+          
+          ValType := VALTYPE_INT;
+          result  := QuickVars[result];
+        end;
+
+        PARAM_VARTYPE_V: begin
+          if (result < Low(v^)) or (result > High(v^)) then begin
+            ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(v^), High(v^)]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+          
+          ValType := VALTYPE_INT;
+          result  := v[result];
+        end;
+
+        PARAM_VARTYPE_W: begin
+          if (result < Low(w^[0])) or (result > High(w^[0])) then begin
+            ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(w^[0]), High(w^[0])]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+
+          ValType := VALTYPE_INT;
+          result  := w[ZvsWHero^][result];
+        end;
+
+        PARAM_VARTYPE_X: begin
+          if (result < Low(x^)) or (result > High(x^)) then begin
+            ShowErmError(Format('Invalid x-var index %d. Expected %d..%d', [result, Low(x^), High(x^)]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+          
+          ValType := VALTYPE_INT;
+          result  := x[result];
+        end;
+
+        PARAM_VARTYPE_Y: begin
+          if result in [Low(y^)..High(y^)] then begin
+            result := y[result];
+          end else if -result in [Low(ny^)..High(ny^)] then begin
+            result := ny[-result];
+          end else begin
+            ShowErmError(Format('Invalid y-var index: %d. Expected -100..-1, 1..100', [result]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+
+          ValType := VALTYPE_INT;
+        end;
+
+        PARAM_VARTYPE_Z: begin
+          if (result >= Low(z^)) and (result <= High(z^)) then begin
+            result := integer(@z[result]);
+          end else if -result in [Low(nz^)..High(nz^)] then begin
+            result := integer(@nz[-result]);
+          end else if result > High(z^) then begin
+            result := integer(ZvsGetErtStr(result));
+          end else begin
+            ShowErmError(Format('Invalid z-var index: %d. Expected -10..-1, 1+', [result]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+
+          ValType := VALTYPE_STR;
+        end;
+
+        PARAM_VARTYPE_E: begin
+          if result in [Low(e^)..High(e^)] then begin
+            result := pinteger(@e[result])^;
+          end else if -result in [Low(ne^)..High(ne^)] then begin
+            result := pinteger(@ne[-result])^;
+          end else begin
+            ShowErmError(Format('Invalid e-var index: %d. Expected -100..-1, 1..100', [result]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+
+          ValType := VALTYPE_FLOAT;
+        end;
+      else
+        ShowErmError(Format('Unknown variable type %d', [ValType]));
+        ResValType := VALTYPE_INT; result := 0; exit;
+      end; // .switch 
+
+      if (ValType <> VALTYPE_INT) and (i = IND_INDEX) then begin
+        ShowErmError('Cannot use non-integer variables as indexex for other variables');
+        ResValType := VALTYPE_INT; result := 0; exit;
+      end;
+    end; // .if
+  end; // .for
+
+  ResValType := ValType;
+end; // .function GetErmParamValue
+
 procedure ProcessErm;
 const
   (* Ifs state *)
@@ -2420,6 +2557,24 @@ const
   CMD_IF = $6669;
   CMD_EL = $6C65;
   CMD_EN = $6E65;
+  CMD_RE = $6572;
+  CMD_BR = $7262;
+  CMD_CO = $6F63;
+
+  (* Flow control operator type *)
+  OPER_IF = 0;
+  OPER_RE = 1;
+
+type
+  PFlowControlOper = ^TFlowControlOper;
+  TFlowControlOper = record
+    State:    integer;
+    OperType: integer;
+    LoopVar:  PErmCmdParam;
+    Stop:     integer;
+    Step:     integer;
+    CmdInd:   integer;
+  end;
 
 var
   PrevTriggerCmdIndPtr: pinteger;
@@ -2443,11 +2598,13 @@ var
   SavedNumArgsReceived: integer;
   SavedArgsGetSyntaxFlagsReceived: integer;
   LoopCallback:         TTriggerLoopCallback;
-  Ifs:                  array [0..31] of byte;
-  IfsLevel:             integer;
+  FlowOpers:            array [0..15] of TFlowControlOper;
+  FlowOpersLevel:       integer;
+  FlowOper:             PFlowControlOper;
+  LoopVarValue:         integer;
   Cmd:                  PErmCmd;
   CmdId:                TErmCmdId;
-  i:                    integer;
+  i, j:                 integer;
 
   procedure SetTriggerQuickVarsAndFlags;
   begin
@@ -2596,7 +2753,7 @@ begin
       while (Trigger <> nil) and (Trigger.Id <> 0) do begin
         // Execute only active triggers with commands
         if (Trigger.Id = TriggerId) and (Trigger.NumCmds > 0) and (Trigger.Disabled = 0) then begin
-          IfsLevel         := -1;
+          FlowOpersLevel   := -1;
           ZvsBreakTrigger^ := false;
           QuitTriggerFlag  := false;
 
@@ -2617,40 +2774,144 @@ begin
               CmdId := Cmd.CmdId;
 
               if CmdId.Id = CMD_IF then begin
-                Inc(IfsLevel);
+                Inc(FlowOpersLevel);
 
-                if IfsLevel > High(Ifs) then begin
-                  ShowErmError('"if" - too many IFs (>32)');
+                if FlowOpersLevel > High(FlowOpers) then begin
+                  ShowErmError('"if" - too many IF/REs (>16)');
                   goto AfterTriggers;
                 end;
 
+                FlowOpers[FlowOpersLevel].OperType := OPER_IF;
+
                 // Active IF
-                if (IfsLevel = 0) or (Ifs[IfsLevel - 1] = STATE_TRUE) then begin
-                  Ifs[IfsLevel] := ord(not ZvsCheckFlags(@Cmd.Conditions));
+                if (FlowOpersLevel = 0) or (FlowOpers[FlowOpersLevel - 1].State = STATE_TRUE) then begin
+                  FlowOpers[FlowOpersLevel].State := ord(not ZvsCheckFlags(@Cmd.Conditions));
                 end
                 // Inactive IF
                 else begin
-                  Ifs[IfsLevel] := STATE_INACTIVE;
+                  FlowOpers[FlowOpersLevel].State := STATE_INACTIVE;
                 end;
               end else if CmdId.Id = CMD_EL then begin
-                if IfsLevel < 0 then begin
+                if (FlowOpersLevel < 0) or (FlowOpers[FlowOpersLevel].OperType <> OPER_IF) then begin
                   ShowErmError('"el" - no IF for ELSE');
                   goto AfterTriggers;
                 end;
 
-                if Ifs[IfsLevel] = STATE_TRUE then begin
-                  Ifs[IfsLevel] := STATE_INACTIVE;
-                end else if Ifs[IfsLevel] = STATE_FALSE then begin
-                  Ifs[IfsLevel] := ord(not ZvsCheckFlags(@Cmd.Conditions));
+                if FlowOpers[FlowOpersLevel].State = STATE_TRUE then begin
+                  FlowOpers[FlowOpersLevel].State := STATE_INACTIVE;
+                end else if FlowOpers[FlowOpersLevel].State = STATE_FALSE then begin
+                  FlowOpers[FlowOpersLevel].State := ord(not ZvsCheckFlags(@Cmd.Conditions));
                 end;
               end else if CmdId.Id = CMD_EN then begin
-                if IfsLevel < 0 then begin
-                  ShowErmError('"en" - no IF for ENDIF');
+                if FlowOpersLevel < 0 then begin
+                  ShowErmError('"en" - no IF/RE for ENDIF');
                   goto AfterTriggers;
                 end;
 
-                Dec(IfsLevel);
-              end else if ((IfsLevel < 0) or (Ifs[IfsLevel] = STATE_TRUE)) and not ZvsCheckFlags(@Cmd.Conditions) then begin
+                FlowOper := @FlowOpers[FlowOpersLevel];
+
+                if (FlowOper.State <> STATE_TRUE) or (FlowOper.OperType = OPER_IF) then begin
+                  Dec(FlowOpersLevel);
+                end else if FlowOper.OperType = OPER_RE then begin
+                  LoopVarValue := ZvsGetVarVal(FlowOper.LoopVar) + FlowOper.Step;
+
+                  if FlowOper.Step <> 0 then begin
+                    ZvsSetVarVal(FlowOper.LoopVar, LoopVarValue);
+                  end;
+
+                  if (FlowOper.Step >= 0) and (LoopVarValue > FlowOper.Stop) or (FlowOper.Step < 0) and (LoopVarValue < FlowOper.Stop) then begin
+                    Dec(FlowOpersLevel);
+                  end else begin
+                    i := FlowOper.CmdInd - 1;
+                  end;
+                end;                
+              end else if CmdId.Id = CMD_RE then begin
+                Inc(FlowOpersLevel);
+
+                if FlowOpersLevel > High(FlowOpers) then begin
+                  ShowErmError('"re" - too many IF/REs (>16)');
+                  goto AfterTriggers;
+                end;
+
+                FlowOper          := @FlowOpers[FlowOpersLevel];
+                FlowOper.OperType := OPER_RE;
+
+                // Active RE
+                if (FlowOpersLevel = 0) or (FlowOpers[FlowOpersLevel - 1].State = STATE_TRUE) then begin
+                  FlowOper.State   := STATE_TRUE;
+                  FlowOper.LoopVar := @Cmd.Params[0];
+                  FlowOper.Stop    := High(integer);
+                  FlowOper.Step    := 1;
+                  FlowOper.CmdInd  := i + 1;
+
+                  if Cmd.NumParams >= 2 then begin
+                    LoopVarValue := ZvsGetVarVal(@Cmd.Params[1]);
+                    ZvsSetVarVal(FlowOper.LoopVar, LoopVarValue);
+                  end else begin
+                    LoopVarValue := ZvsGetVarVal(FlowOper.LoopVar);
+                  end;
+
+                  if Cmd.NumParams >= 3 then begin
+                    FlowOper.Stop := ZvsGetVarVal(@Cmd.Params[2]);
+                  end else begin
+                    FlowOper.Step := 0;
+                  end;
+
+                  if Cmd.NumParams >= 4 then begin
+                    FlowOper.Step := ZvsGetVarVal(@Cmd.Params[3]);
+                  end;
+
+                  if FlowOper.Step >= 0 then begin
+                    if LoopVarValue > FlowOper.Stop then begin
+                      FlowOper.State := STATE_INACTIVE;
+                    end;
+                  end else begin
+                    if LoopVarValue < FlowOper.Stop then begin
+                      FlowOper.State := STATE_INACTIVE;
+                    end;
+                  end;
+                end
+                // Inactive RE
+                else begin
+                  FlowOper.State := STATE_INACTIVE;
+                end;
+              end else if (CmdId.Id = CMD_BR) or (CmdId.Id = CMD_CO) then begin
+                if ((FlowOpersLevel < 0) or (FlowOpers[FlowOpersLevel].State = STATE_TRUE)) and not ZvsCheckFlags(@Cmd.Conditions) then begin
+                  if FlowOpersLevel < 0 then begin
+                    ShowErmError('"br/co" - no loop to break/continue');
+                    goto AfterTriggers;
+                  end;
+
+                  j := FlowOpersLevel;
+
+                  while (j >= 0) and (FlowOpers[j].OperType <> OPER_RE) do begin
+                    Dec(j);
+                  end;
+
+                  if j < 0 then begin
+                    ShowErmError('"br/co" - no loop to break/continue');
+                    goto AfterTriggers;
+                  end;
+
+                  FlowOpersLevel := j;
+                  FlowOper       := @FlowOpers[j];
+                  i              := FlowOper.CmdInd - 1;
+
+                  if CmdId.Id = CMD_BR then begin
+                    FlowOper.State := STATE_INACTIVE;
+                  end else if CmdId.Id = CMD_CO then begin
+                    LoopVarValue := ZvsGetVarVal(FlowOper.LoopVar) + FlowOper.Step;
+
+                    if FlowOper.Step <> 0 then begin
+                      ZvsSetVarVal(FlowOper.LoopVar, LoopVarValue);
+                    end;
+
+                    if (FlowOper.Step >= 0) and (LoopVarValue > FlowOper.Stop) or (FlowOper.Step < 0) and (LoopVarValue < FlowOper.Stop) then begin
+                      FlowOper.State := STATE_INACTIVE;
+                    end;
+                  end; // .else
+                end; // .if
+              end else if ((FlowOpersLevel < 0) or (FlowOpers[FlowOpersLevel].State = STATE_TRUE)) and not ZvsCheckFlags(@Cmd.Conditions) then begin
                 ZvsProcessCmd(Cmd);
 
                 if ZvsBreakTrigger^ then begin
@@ -3010,22 +3271,6 @@ begin
   end;
 end;
 
-function Hook_CmdElse (Context: Core.PHookContext): longbool; stdcall;
-var
-  CmdFlags: PErmCmdConditions;
-  
-begin
-  if ZvsTriggerIfs[ZvsTriggerIfsDepth^] = ZVS_TRIGGER_IF_TRUE then begin
-    ZvsTriggerIfs[ZvsTriggerIfsDepth^] := ZVS_TRIGGER_IF_INACTIVE;
-  end else if ZvsTriggerIfs[ZvsTriggerIfsDepth^] = ZVS_TRIGGER_IF_FALSE then begin
-    CmdFlags := Ptr(pinteger(Context.EBP - $19C)^ * $29C + $212 + pinteger(Context.EBP - 4)^);
-    ZvsTriggerIfs[ZvsTriggerIfsDepth^] := 1 - integer(ZvsCheckFlags(CmdFlags));
-  end;
-  
-  Context.RetAddr := Ptr($74CA64);
-  result          := not Core.EXEC_DEF_CODE;
-end; // .function Hook_CmdElse
-
 procedure ApplyFuncByRefRes (SubCmd: PErmSubCmd; NumParams: integer);
 var
   i: integer;
@@ -3035,6 +3280,17 @@ begin
     if SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET then begin
       ZvsApply(@RetXVars[i + 1], sizeof(integer), SubCmd, i);
     end;
+  end;
+end;
+
+function GetParamFuSyntaxFlags (Param: PErmCmdParam; DFlag: boolean): integer; inline;
+begin
+  result := 1;
+
+  if DFlag then begin
+    result := 2;
+  end else if Param.GetCheckType() = PARAM_CHECK_GET then begin
+    result := 0;
   end;
 end;
 
@@ -3056,7 +3312,7 @@ begin
 
   for i := 0 to NumParams - 1 do begin
     ArgXVars[i + 1]              := SubCmd.Nums[i];
-    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (ord(SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET) shl i);
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.DFlags[i]) shl (i shl 1));
   end;
 
   NumFuncArgsPassed := NumParams;
@@ -3076,7 +3332,7 @@ begin
     ArgXVars[i + 1] := Args[i];
   end;
 
-  FuncArgsGetSyntaxFlagsPassed := 0;
+  FuncArgsGetSyntaxFlagsPassed := $55555555;
   NumFuncArgsPassed            := NumArgs;
   FireErmEvent(FuncId);
 
@@ -3118,7 +3374,7 @@ begin
   // Initialize x-paramaters
   for i := 0 to NumParams - 1 do begin
     ArgXVars[i + 1]              := SubCmd.Nums[i];
-    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (ord(SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET) shl i);
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.DFlags[i]) shl (i shl 1));
   end;
 
   if ((LoopContext.Step >= 0) and (ArgXVars[16] <= LoopContext.EndValue)) or ((LoopContext.Step < 0) and (ArgXVars[16] >= LoopContext.EndValue)) then begin
@@ -3148,11 +3404,12 @@ var
   CmdChar:   char;
   SubCmd:    PErmSubCmd;
   NumParams: integer;
+  Shift:     integer;
   ResValue:  integer;
 
 begin
   CmdChar := chr(Context.ECX + $43);
-  result  := not (CmdChar in ['A', 'G']);
+  result  := not (CmdChar in ['A', 'S']);
 
   if not result then begin
     SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
@@ -3166,16 +3423,17 @@ begin
       end;
 
       ZvsApply(@NumFuncArgsReceived, 4, SubCmd, 0);
-    end else if CmdChar = 'G' then begin
+    end else if CmdChar = 'S' then begin
       if (NumParams <> 2) or (SubCmd.Params[0].GetCheckType() = PARAM_CHECK_GET) or (SubCmd.Params[1].GetCheckType() <> PARAM_CHECK_GET) or
          not Math.InRange(SubCmd.Nums[0], Low(x^), High(x^))
       then begin
-        ShowErmError('Invalid !!FU:G syntax');
+        ShowErmError('Invalid !!FU:S syntax');
         Context.RetAddr := Ptr($72D19A);
         exit;
       end;
 
-      ResValue := ord((FuncArgsGetSyntaxFlagsReceived and (1 shl (SubCmd.Nums[0] - 1))) <> 0);
+      Shift    := (SubCmd.Nums[0] - 1) shl 1;
+      ResValue := (FuncArgsGetSyntaxFlagsReceived and (3 shl Shift)) shr Shift;
       ZvsApply(@ResValue, 4, SubCmd, 1);
     end; // .elseif
     
@@ -3248,6 +3506,150 @@ begin
   end;
 end; // .function Hook_VR_C
 
+function IntCompareFast (a, b: integer): integer; inline;
+begin
+  if a > b then begin
+    result := +1;
+  end else if a < b then begin
+    result := -1;
+  end else begin
+    result := 0;
+  end;
+end;
+
+function FloatCompareFast (a, b: single): integer; inline;
+begin
+  if a > b then begin
+    result := +1;
+  end else if a < b then begin
+    result := -1;
+  end else begin
+    result := 0;
+  end;
+end;
+
+function Hook_ZvsCheckFlags (Conds: PErmCmdConditions): longbool; cdecl;
+var
+  results:    array [COND_AND..COND_OR] of longbool;
+  CheckType:  integer;
+  ValType1:   integer;
+  Value1:     Heroes.TValue;
+  ValType2:   integer;
+  Value2:     Heroes.TValue;
+  IsFloatRes: longbool;
+  CmpRes:     integer;
+  i, j:       integer;
+
+label
+  ContinueOuterLoop, LoopsEnd;
+
+begin
+  results[COND_AND] := Conds[COND_AND][0][LEFT_COND].GetType() <> PARAM_VARTYPE_NUM;
+
+  // Fast exit on no condition
+  if not results[COND_AND] and (Conds[COND_OR][0][LEFT_COND].GetType() = PARAM_VARTYPE_NUM) then begin
+    result := false;
+    exit;
+  end;
+  
+  results[COND_OR] := false;
+
+  for j := COND_AND to COND_OR do begin
+    for i := Low(Conds[j]) to High(Conds[j]) do begin
+      if Conds[j][i][LEFT_COND].GetType() = PARAM_VARTYPE_NUM then begin
+        goto ContinueOuterLoop;
+      end;
+      
+      Value1.v := GetErmParamValue(@Conds[j][i][LEFT_COND], ValType1);
+
+      if ValType1 = VALTYPE_BOOL then begin
+        case Conds[j][i][LEFT_COND].GetCheckType() of
+          PARAM_CHECK_EQUAL:     Value1.v := ord(Value1.v <> 0);
+          PARAM_CHECK_NOT_EQUAL: Value1.v := ord(Value1.v = 0);
+        else
+          ShowErmError(Format('Unknown check type for flag: %d', [Conds[j][i][RIGHT_COND].GetCheckType()]));
+          result := true; exit;
+        end;
+      end else begin
+        Value2.v := GetErmParamValue(@Conds[j][i][RIGHT_COND], ValType2);
+        CmpRes   := 0;
+
+        // Number comparison
+        if (ValType1 in [VALTYPE_INT, VALTYPE_FLOAT]) or (ValType2 in [VALTYPE_INT, VALTYPE_FLOAT]) then begin
+          IsFloatRes := (ValType1 = VALTYPE_FLOAT) or (ValType2 = VALTYPE_FLOAT);
+
+          // Float result
+          if IsFloatRes then begin
+            if ValType1 = VALTYPE_INT then begin
+              Value1.f := Value1.v;
+            end else if ValType1 <> VALTYPE_FLOAT then begin
+              ShowErmError('CheckFlags: Cannot compare float variable to non-numeric value');
+              result := true; exit;
+            end;
+
+            if ValType2 = VALTYPE_INT then begin
+              Value2.f := Value2.v;
+            end else if ValType2 <> VALTYPE_FLOAT then begin
+              ShowErmError('CheckFlags: Cannot compare float variable to non-numeric value');
+              result := true; exit;
+            end;
+
+            CmpRes := FloatCompareFast(Value1.f, Value2.f);
+          // Integer result
+          end else begin
+            if ValType1 <> VALTYPE_INT then begin
+              ShowErmError('CheckFlags: Cannot compare integer variable to non-numeric value');
+              result := true; exit;
+            end;
+
+            if ValType2 <> VALTYPE_INT then begin
+              ShowErmError('CheckFlags: Cannot compare integer variable to non-numeric value');
+              result := true; exit;
+            end;
+
+            CmpRes := IntCompareFast(Value1.v, Value2.v);
+          end; // .else
+        // String comparison
+        end else if (ValType1 = VALTYPE_STR) and (ValType2 = VALTYPE_STR) then begin
+          CmpRes := StrLib.ComparePchars(Value1.pc, Value2.pc);
+        // Wrong comparison
+        end else begin
+          ShowErmError('CheckFlags: Cannot compare values of incompatible types');
+          result := true; exit;
+        end; // .else
+
+        case Conds[j][i][RIGHT_COND].GetCheckType() of
+          PARAM_CHECK_EQUAL:         Value1.longbool := CmpRes = 0;
+          PARAM_CHECK_NOT_EQUAL:     Value1.longbool := CmpRes <> 0;
+          PARAM_CHECK_GREATER:       Value1.longbool := CmpRes > 0;
+          PARAM_CHECK_LOWER:         Value1.longbool := CmpRes < 0;
+          PARAM_CHECK_GREATER_EQUAL: Value1.longbool := CmpRes >= 0;
+          PARAM_CHECK_LOWER_EQUAL:   Value1.longbool := CmpRes <= 0;
+        else
+          ShowErmError(Format('Unknown check type: %d', [Conds[j][i][RIGHT_COND].GetCheckType()]));
+          result := true; exit;
+        end; // .switch 
+      end; // .else
+
+      if Value1.v = 0 then begin
+        if j = COND_AND then begin
+          results[COND_AND] := false;
+          goto ContinueOuterLoop;
+        end;
+      end else if j = COND_OR then begin
+        results[COND_OR] := true;
+        goto LoopsEnd;
+      end;
+    end; // .for
+
+    ContinueOuterLoop:
+  end; // .for
+
+  LoopsEnd:  
+
+  result := not (results[0] or results[1]);
+end; // .function Hook_ZvsCheckFlags
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
@@ -3273,6 +3675,11 @@ begin
   {!} Assert(NewErmHeap <> nil, 'Failed to allocate 128 MB memory block for new ERM heap');
   Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
   Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', integer(NEW_ERM_HEAP_SIZE)]);
+
+  (* Register new code control receivers *)
+  AdvErm.RegisterErmReceiver('re', nil, AdvErm.CMD_PARAMS_CONFIG_ONE_TO_FIVE_INTS);
+  AdvErm.RegisterErmReceiver('br', nil, AdvErm.CMD_PARAMS_CONFIG_NONE);
+  AdvErm.RegisterErmReceiver('co', nil, AdvErm.CMD_PARAMS_CONFIG_NONE);
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -3409,6 +3816,9 @@ begin
 
   // Rewrite DO:P implementation
   Core.ApiHook(@Hook_DO_P, Core.HOOKTYPE_JUMP, Ptr($72D79C));
+
+  // Replace ZvsCheckFlags with own implementation, free from e-variables issues
+  Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin

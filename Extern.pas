@@ -6,10 +6,11 @@ unit Extern;
 
 (***)  interface  (***)
 
+
 uses
   SysUtils,
   Utils, Core, ApiJack,
-  GameExt, Heroes, Erm, Ini, Rainbow, Stores,
+  GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
   EraButtons, Lodman, Graph, Trans, EventMan;
 
 type
@@ -241,6 +242,11 @@ begin
   result := @Erm.RetXVars;
 end;
 
+procedure RegisterErmReceiver (const Cmd: pchar; {n} Handler: TErmCmdHandler; ParamsConfig: integer); stdcall;
+begin
+  AdvErm.RegisterErmReceiver(Cmd[0] + Cmd[1], Handler, ParamsConfig);
+end;
+
 exports
   Ask,
   ClearIniCache,
@@ -276,6 +282,7 @@ exports
   ReadSavegameSection,
   ReadStrFromIni,
   RedirectFile,
+  RegisterErmReceiver,
   RegisterHandler,
   ReportPluginVersion,
   SaveIni,
