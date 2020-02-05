@@ -2602,6 +2602,8 @@ var
   FlowOpersLevel:       integer;
   FlowOper:             PFlowControlOper;
   LoopVarValue:         integer;
+  TargetLoopLevel:      integer;
+  ParamValType:         integer;
   Cmd:                  PErmCmd;
   CmdId:                TErmCmdId;
   i, j:                 integer;
@@ -2882,10 +2884,31 @@ begin
                     goto AfterTriggers;
                   end;
 
+                  TargetLoopLevel := GetErmParamValue(@Cmd.Params[0], ParamValType);
+
+                  if ParamValType <> VALTYPE_INT then begin
+                    ShowErmError('"br/co" - loop index must be positive number. Given: non-integer');
+                  end;
+
+                  if TargetLoopLevel < 0 then begin
+                    ShowErmError('"br/co" - loop index must be positive number. Given: ' + IntToStr(TargetLoopLevel));
+                    goto AfterTriggers;
+                  end else if TargetLoopLevel = 0 then begin
+                    TargetLoopLevel := 1;
+                  end;
+
                   j := FlowOpersLevel;
 
-                  while (j >= 0) and (FlowOpers[j].OperType <> OPER_RE) do begin
-                    Dec(j);
+                  while (j >= 0) and (TargetLoopLevel > 0) do begin
+                    if FlowOpers[j].OperType <> OPER_RE then begin
+                      Dec(j);
+                    end else begin
+                      Dec(TargetLoopLevel);
+
+                      if TargetLoopLevel > 0 then begin
+                        Dec(j);
+                      end;
+                    end;
                   end;
 
                   if j < 0 then begin
