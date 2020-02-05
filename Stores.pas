@@ -142,10 +142,10 @@ end; // .function ReadSavegameSection
 
 constructor TRider.Create (const aSectionName: string);
 begin
-  fSectionName    := aSectionName;
-  fReadingBufPos  := 0;
-  fWritingBufPos  := 0;
-  fNumBytesRead   := 0;
+  fSectionName   := aSectionName;
+  fReadingBufPos := 0;
+  fWritingBufPos := 0;
+  fNumBytesRead  := 0;
 end;
 
 destructor TRider.Destroy;
@@ -163,7 +163,7 @@ begin
     end;
     
     // if it's enough space in cache to hold passed data then write data to cache
-    if sizeof(fWritingBuf) - fWritingBufPos > Size then begin
+    if sizeof(fWritingBuf) - fWritingBufPos >= Size then begin
       Utils.CopyMem(Size, Addr, @fWritingBuf[fWritingBufPos]);
       Inc(fWritingBufPos, Size);
     end
