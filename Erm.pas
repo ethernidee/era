@@ -3820,6 +3820,12 @@ begin
   // Replace ZvsCheckFlags with own implementation, free from e-variables issues
   Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
 
+  (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
+  Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2075044241EBF6899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF52E825D' +
+                                       'FFFFF83C404909090909090909090909090909090908945F0837DF0007575E916780000909090909090909090909090909090909090909090909090909090909090' +
+                                       '909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
+                                       '90909090909090909090909090909090']);
+
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
     if Enabled then begin
