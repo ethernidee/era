@@ -265,6 +265,8 @@ type
     RepeatInterval: word;
   end;
 
+  TGlobalEvents = packed record First, Last, Dummy: PGlobalEvent; end;
+
   PPGameManager = ^PGameManager;
   PGameManager  = ^TGameManager;
   TGameManager  = packed record
@@ -277,7 +279,7 @@ type
     Align_5: integer;                 _Event_:       array [0..2] of integer;                             // +50
     Align_6: array [0..3] of integer;                                                                     // +60
     Align_7: array [0..3] of integer;                                                                     // +70
-    Align_8: integer;                 GlobalEvents:  packed record First, Last, Dummy: PGlobalEvent; end; // +80
+    Align_8: integer;                 GlobalEvents:  TGlobalEvents;                                       // +80
     Align_9: integer;                 _CastleEvent_: array [0..2] of integer;                             // +90
     Align_10: array [0..3] of integer;                                                                    // +A0
     Align_11: array [0..3] of integer;                                                                    // +B0
