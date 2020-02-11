@@ -1100,7 +1100,7 @@ begin
   Core.ApiHook(@Hook_Rand,  Core.HOOKTYPE_JUMP, Ptr($50C7C0));
 
   (* Make VR:T equal to VR:V for multiplayer support *)
-  Core.p.WriteDataPatch(Ptr($735F3E), ['40'])
+  Core.p.WriteDataPatch(Ptr($735F3E), ['40']);
 end; // .procedure OnAfterWoG
 
 procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
