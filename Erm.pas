@@ -2772,8 +2772,9 @@ begin
                 goto AfterTriggers;
               end;
 
-              Cmd   := Utils.PtrOfs(@Trigger.FirstCmd, i * sizeof(TErmCmd));
-              CmdId := Cmd.CmdId;
+              Cmd               := Utils.PtrOfs(@Trigger.FirstCmd, i * sizeof(TErmCmd));
+              Erm.ErmErrCmdPtr^ := Cmd.CmdHeader.Value;
+              CmdId             := Cmd.CmdId;
 
               if CmdId.Id = CMD_IF then begin
                 Inc(FlowOpersLevel);
@@ -3844,7 +3845,7 @@ begin
   Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
-  Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2075044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885' +
+  Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885' +
                                        'E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF52E81CDFFFFF83C404909090909090908945F0837DF0007575E9167800' +
                                        '0090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
                                        '9090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
