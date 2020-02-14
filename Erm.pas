@@ -761,8 +761,8 @@ begin
     {*} Erm.TRIGGER_CM3:      result :=  'OnHeroesMeetScreenMouseClick';
     {*} Erm.TRIGGER_CM4:      result :=  'OnBattleScreenMouseClick';
     {*} Erm.TRIGGER_CM5:      result :=  'OnAdventureMapLeftMouseClick';
-    {*} Erm.TRIGGER_AE0:      result :=  'OnEquipArt';
-    {*} Erm.TRIGGER_AE1:      result :=  'OnUnequipArt';
+    {*} Erm.TRIGGER_AE0:      result :=  'OnUnequipArt';
+    {*} Erm.TRIGGER_AE1:      result :=  'OnEquipArt';
     {*} Erm.TRIGGER_MM0:      result :=  'OnBattleMouseHint';
     {*} Erm.TRIGGER_MM1:      result :=  'OnTownMouseHint';
     {*} Erm.TRIGGER_MP:       result :=  'OnMp3MusicChange';
@@ -1134,18 +1134,51 @@ begin
   end; // .if
 end; // .function AddrToLineAndPos
 
+type
+  TErmLocalVar = class
+    VarType:    char;
+    IsNegative: boolean;
+    StartIndex: integer;
+    Count:      integer;
+  end;
+
 function PreprocessErm (const ScriptName, Script: string): string;
 const
+  ERM2_SIGNATURE = 'ZVSE2';
+
   ANY_CHAR            = [#0..#255];
   FUNCNAME_CHARS      = ANY_CHAR - [')', #10, #13];
   LABEL_CHARS         = ANY_CHAR - [']', #10, #13];
-  SPECIAL_CHARS       = ['[', '!'];
-  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';'];
+  SPECIAL_CHARS       = ['[', '!', '$', '@'];
+  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';', '$', '@'];
+  VAR_END_CHARSET     = ['$', '@', ';', '^', #10, #13, '('];
+
+  SUPPORTED_LOCAL_VAR_TYPES = ['x', 'y', 'v', 'e', 'z'];
+  LOCAL_VAR_TYPE_ID_Y = 0;
+  LOCAL_VAR_TYPE_ID_X = 1;
+  LOCAL_VAR_TYPE_ID_Z = 2;
+  LOCAL_VAR_TYPE_ID_E = 3;
+  LOCAL_VAR_TYPE_ID_V = 4;
 
   NO_LABEL = -1;
 
 type
   TScope = (GLOBAL_SCOPE, CMD_SCOPE);
+
+  PVarRange = ^TVarRange;
+  TVarRange = record
+       StartIndex: integer;
+       Count:      integer;
+  {On} NextRange:  PVarRange;
+  end;
+
+  PLocalVarsPool = ^TLocalVarsPool;
+  TLocalVarsPool = record
+       StartIndex: integer;
+       Count:      integer;
+       IsNegative: longbool;
+  {On} FreeRanges: PVarRange;
+  end;
 
 var
 {
@@ -1155,9 +1188,18 @@ var
 {O} Buf:                TStrList {of integer};
 {O} Scanner:            TextScan.TTextScanner;
 {O} Labels:             TDict {of CmdN + 1};
+{O} LocalVars:          {O} TDict {of TErmLocalVar };
+{U} LocalVar:           TErmLocalVar;
+    LocalVarsPools:     array [LOCAL_VAR_TYPE_ID_Y..LOCAL_VAR_TYPE_ID_V] of TLocalVarsPool;
     UnresolvedLabelInd: integer; // index of last unresolved label or NO_LABEL
     CmdN:               integer; // index of next command
     MarkedPos:          integer;
+    IsInStr:            longbool;
+    IsErm2:             longbool;
+    VarPos:             integer;
+    VarName:            string;
+    ArrIndex:           integer;
+    VarIndex:           integer;
     c:                  char;
 
   procedure ShowError (ErrPos: integer; const Error: string);
@@ -1307,6 +1349,296 @@ var
     UnresolvedLabelInd := NO_LABEL;
   end; // .procedure ResolveLabels
 
+  procedure InitLocalVarsPools;
+  begin
+    with LocalVarsPools[LOCAL_VAR_TYPE_ID_Y] do begin
+      StartIndex := 1;
+      Count      := 100;
+      IsNegative := false;
+      FreeRanges := nil;
+    end;
+
+    with LocalVarsPools[LOCAL_VAR_TYPE_ID_X] do begin
+      StartIndex := 1;
+      Count      := 15;
+      IsNegative := false;
+      FreeRanges := nil;
+    end;
+
+    with LocalVarsPools[LOCAL_VAR_TYPE_ID_Z] do begin
+      StartIndex := 1;
+      Count      := 10;
+      IsNegative := true;
+      FreeRanges := nil;
+    end;
+
+    with LocalVarsPools[LOCAL_VAR_TYPE_ID_E] do begin
+      StartIndex := 1;
+      Count      := 100;
+      IsNegative := false;
+      FreeRanges := nil;
+    end;
+
+    with LocalVarsPools[LOCAL_VAR_TYPE_ID_V] do begin
+      StartIndex := 2;
+      Count      := 9;
+      IsNegative := false;
+      FreeRanges := nil;
+    end;
+  end; // procedure InitLocalVarsPools
+
+  procedure FinalizeLocalVarsPools;
+  var
+    ListItem:     PVarRange;
+    PrevListItem: PVarRange;
+    i:            integer;
+
+  begin
+    for i := Low(LocalVarsPools) to High(LocalVarsPools) do begin
+      ListItem := LocalVarsPools[i].FreeRanges;
+
+      while ListItem <> nil do begin
+        PrevListItem := ListItem;
+        ListItem     := ListItem.NextRange;
+        Dispose(PrevListItem);
+      end;
+
+      LocalVarsPools[i].FreeRanges := nil;
+    end;
+  end; // procedure FinalizeLocalVarsPools
+
+  function LocalVarCharToId (c: char): integer;
+  begin
+    case c of
+      'y': result := LOCAL_VAR_TYPE_ID_Y;
+      'x': result := LOCAL_VAR_TYPE_ID_X;
+      'z': result := LOCAL_VAR_TYPE_ID_Z;
+      'e': result := LOCAL_VAR_TYPE_ID_E;
+      'v': result := LOCAL_VAR_TYPE_ID_V;
+    else
+      Assert(false, 'LocalVarCharToId: unknown variable type: ' + c);
+      result := 0;
+    end;
+  end;
+
+  function ParseLocalVar (VarName: pchar; out IsFreeing: boolean; out VarType: char; out VarBaseName: string; out VarIndex: integer): boolean;
+  var
+    StartPtr: pchar;
+
+  begin
+    IsFreeing := VarName^ = '-';
+
+    if IsFreeing then begin
+      Inc(VarName);     
+    end;
+
+    StartPtr := VarName;
+    VarType  := VarName^;
+
+    while not (VarName^ in ['[', #0]) do begin
+      Inc(VarName);
+    end;
+
+    VarBaseName := StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr));
+    VarIndex    := 0;
+    result      := true;
+
+    if VarName^ = '[' then begin
+      Inc(VarName);
+      StartPtr := VarName;
+
+      while not (VarName^ in [']', #0]) do begin
+        Inc(VarName);
+      end;
+
+      result := (VarName^ = ']') and SysUtils.TryStrToInt(StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr)), VarIndex);
+
+      if result then begin
+        Inc(VarName);
+        result := VarName^ = #0;
+      end;
+
+      if not result then begin
+        ShowError(VarPos, 'Invalid local ERM array variable subscription');
+      end;
+    end; // .if
+  end; // .function ParseLocalVar
+
+  procedure FreeLocalVar (const VarName: string);
+  var
+  {Un} LocalVar: TErmLocalVar;
+       VarsPool: PLocalVarsPool;
+       VarRange: PVarRange;
+
+  begin
+    LocalVar := LocalVars[VarName];
+
+    if LocalVar = nil then begin
+      ShowError(VarPos, 'Cannot free local ERM variable, which was never allocated. Variable name: ' + VarName);
+    end else begin
+      VarsPool := @LocalVarsPools[LocalVarCharToId(VarName[1])];
+
+      if VarsPool.StartIndex = (LocalVar.StartIndex + LocalVar.Count) then begin
+        Dec(VarsPool.StartIndex, LocalVar.Count);
+        Inc(VarsPool.Count, LocalVar.Count);
+      end else begin
+        New(VarRange);
+        VarRange.StartIndex := LocalVar.StartIndex;
+        VarRange.Count      := LocalVar.Count;
+        VarRange.NextRange  := VarsPool.FreeRanges;
+        VarsPool.FreeRanges := VarRange;
+      end;
+    end; // .else
+  end; // .procedure FreeLocalVar
+
+  function AllocLocalVar (const VarName: string; VarType: char; Count: integer; {Un} out LocalVar: TErmLocalVar): boolean;
+  var
+    VarsPool:  PLocalVarsPool;
+    VarRange:  PVarRange;
+    PrevRange: PVarRange;
+
+  begin
+    VarsPool := @LocalVarsPools[LocalVarCharToId(VarType)];
+    result   := false;
+
+    if Count < 0 then begin
+      ShowError(VarPos, 'Cannot allocate local ERM variables array of ' + IntToStr(Count) + ' size');
+      exit;
+    end;
+
+    if Count = 0 then begin
+      Inc(Count);
+    end;
+
+    VarRange  := VarsPool.FreeRanges;
+    PrevRange := nil;
+
+    while not result and (VarRange <> nil) do begin
+      if VarRange.Count >= Count then begin
+        result              := true;
+        LocalVar            := TErmLocalVar.Create;
+        LocalVar.StartIndex := VarRange.StartIndex;
+        LocalVar.Count      := Count;
+        LocalVar.VarType    := VarType;
+        LocalVar.IsNegative := VarsPool.IsNegative;
+        LocalVars[VarName]  := LocalVar;
+
+        if VarRange.Count = Count then begin
+          if PrevRange = nil then begin
+            VarsPool.FreeRanges := VarRange.NextRange;
+          end else begin
+            PrevRange.NextRange := VarRange.NextRange;
+          end;
+
+          Dispose(VarRange);
+        end else begin
+          Inc(VarRange.StartIndex, Count);
+          Dec(VarRange.Count,      Count);
+        end;
+      end else begin
+        VarRange := VarRange.NextRange;
+      end; // .else
+
+      PrevRange := VarRange;
+    end; // .while
+
+    if not result then begin
+      if VarsPool.Count < Count then begin
+        ShowError(VarPos, 'Cannot allocate more local ' + VarType + '-vars');
+      end else begin
+        result              := true;
+        LocalVar            := TErmLocalVar.Create;
+        LocalVar.StartIndex := VarsPool.StartIndex;
+        LocalVar.Count      := Count;
+        LocalVar.VarType    := VarType;
+        LocalVar.IsNegative := VarsPool.IsNegative;
+        LocalVars[VarName]  := LocalVar;
+        Inc(VarsPool.StartIndex, Count);
+        Dec(VarsPool.Count,      Count);
+      end;
+    end;
+  end; // .function AllocLocalVar
+
+  function GetLocalVar (const VarName: string; out {Un} LocalVar: TErmLocalVar; out ArrIndex: integer): boolean;
+  var
+    IsFreeing:   boolean;
+    VarType:     char;
+    BaseVarName: string;
+    VarsPool:    PLocalVarsPool;
+
+  begin
+    result := ParseLocalVar(pointer(VarName), IsFreeing, VarType, BaseVarName, ArrIndex);
+
+    if result then begin
+      result := VarType in SUPPORTED_LOCAL_VAR_TYPES;
+
+      if not result then begin
+        ShowError(VarPos, 'Unsupported local ERM variable type: ' + VarType);
+      end else if IsFreeing then begin
+        FreeLocalVar(BaseVarName);
+        LocalVar := nil;
+      end else begin
+        LocalVar := LocalVars[BaseVarName];
+
+        if LocalVar = nil then begin
+          result := AllocLocalVar(BaseVarName, VarType, ArrIndex, LocalVar);
+        end else begin
+          if ArrIndex < 0 then begin
+            ArrIndex := LocalVar.Count + ArrIndex;
+          end;
+
+          result := (ArrIndex >= 0) and (ArrIndex < LocalVar.Count);
+          
+          if not result then begin
+            ShowError(VarPos, Format('Local ERM array index %d is out of range: 0..%d', [ArrIndex, LocalVar.Count - 1]));
+          end;
+        end;
+      end; // .else
+    end; // .if
+  end; // .unction GetLocalVar
+
+  procedure HandleLocalVar (c: char);
+  begin
+    FlushMarked;
+    VarPos := Scanner.Pos;
+    Scanner.GotoNextChar;
+
+    if Scanner.ReadTokenTillDelim(VAR_END_CHARSET, VarName) then begin
+      if Scanner.c <> c then begin
+        ShowError(VarPos, 'Expected local variable end delimiter ' + c);
+        Buf.Add('___');
+      end else if VarName = '' then begin
+        Scanner.GotoNextChar;
+        Buf.Add(c);
+      end else if not GetLocalVar(VarName, LocalVar, ArrIndex) then begin
+        Scanner.GotoNextChar;
+        Buf.Add('___');
+      end else begin
+        Scanner.GotoNextChar;
+        
+        if LocalVar <> nil then begin
+          VarIndex := LocalVar.StartIndex + ArrIndex;
+          
+          if LocalVar.IsNegative then begin
+            VarIndex := -VarIndex;
+          end;
+
+          if c = '$' then begin
+            if IsInStr then begin
+              Buf.Add('%' + UpCase(LocalVar.VarType) + IntToStr(VarIndex));
+            end else begin
+              Buf.Add(LocalVar.VarType + IntToStr(VarIndex));
+            end;
+          end else begin
+            Buf.Add(IntToStr(VarIndex));
+          end;
+        end;
+      end; // .else
+    end; // .if
+
+    MarkPos;
+  end; // .procedure HandleLocalVar
+
   procedure ParseCmd;
   var
     c: char;
@@ -1318,7 +1650,7 @@ var
     while Scanner.FindCharset(INCMD_SPECIAL_CHARS) and Scanner.GetCurrChar(c) and (c <> ';') do begin
       case c of
         '[': begin
-          if Scanner.GetCharAtRelPos(+1, c) and (c <> ':') then begin
+          if not IsInStr and Scanner.GetCharAtRelPos(+1, c) and (c <> ':') then begin
             ParseLabel(CMD_SCOPE);
           end else begin
             Scanner.GotoNextChar;
@@ -1326,14 +1658,25 @@ var
         end; // .case '['
 
         '(': begin
-          ParseFuncName;
+          if not IsInStr then begin
+            ParseFuncName;
+          end else begin
+            Scanner.GotoNextChar;
+          end;          
         end; // .case '('
 
         '^': begin
           Scanner.GotoNextChar;
-          Scanner.FindChar('^');
-          Scanner.GotoNextChar;
+          IsInStr := not IsInStr;
         end; // .case '^'
+
+        '$', '@': begin
+          if IsErm2 then begin
+            HandleLocalVar(c);
+          end else begin
+            Scanner.GotoNextChar;
+          end;
+        end;
       end; // .switch c
     end; // .while
 
@@ -1341,17 +1684,27 @@ var
       Scanner.GotoNextChar;
       Inc(CmdN);
     end;
+
+    IsInStr := false;
   end; // .procedure ParseCmd
 
 begin
-  Buf        := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-  Scanner    := TextScan.TTextScanner.Create;
-  Labels     := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  Buf       := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  Scanner   := TextScan.TTextScanner.Create;
+  Labels    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  LocalVars := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  LocalVar  := nil;
   // * * * * * //
   Scanner.Connect(Script, #10);
   MarkedPos          := 1;
   CmdN               := 999000; // CmdN must not be used in instructions
   UnresolvedLabelInd := NO_LABEL;
+  IsErm2             := (Length(Script) > 5) and (Copy(Script, 1, 5) = ERM2_SIGNATURE);
+  IsInStr            := false;
+
+  if IsErm2 then begin
+    InitLocalVarsPools;
+  end;
   
   while Scanner.FindCharset(SPECIAL_CHARS) do begin
     Scanner.GetCurrChar(c);
@@ -1373,6 +1726,11 @@ begin
             end; // .case '!'
 
             '?': begin
+              if IsErm2 then begin
+                FinalizeLocalVarsPools;
+                InitLocalVarsPools;
+              end;
+
               ResolveLabels;
               Labels.Clear;
               CmdN := -1;
@@ -1386,6 +1744,14 @@ begin
         end; // .if
       end; // .case '!'
 
+      '$', '@': begin
+        if IsErm2 then begin
+          HandleLocalVar(c);
+        end else begin
+          Scanner.GotoNextChar;
+        end;
+      end;
+
       '[': begin
         if Scanner.GetCharAtRelPos(+1, c) and (c = ':') then begin
           ParseLabel(GLOBAL_SCOPE);
@@ -1395,6 +1761,10 @@ begin
       end; // .case '['
     end; // .switch c
   end; // .while
+
+  if IsErm2 then begin
+    FinalizeLocalVarsPools;
+  end;
 
   if MarkedPos = 1 then begin
     result := Script;
@@ -1407,6 +1777,7 @@ begin
   SysUtils.FreeAndNil(Buf);
   SysUtils.FreeAndNil(Scanner);
   SysUtils.FreeAndNil(Labels);
+  SysUtils.FreeAndNil(LocalVars);
 end; // .function PreprocessErm
 
 (* Returns list of files in specified locations, sorted by numeric priorities like '906 file name.erm'.
@@ -2269,8 +2640,8 @@ begin
   NameTrigger(Erm.TRIGGER_CM3,  'OnHeroesMeetScreenMouseClick');
   NameTrigger(Erm.TRIGGER_CM4,  'OnBattleScreenMouseClick');
   NameTrigger(Erm.TRIGGER_CM5,  'OnAdventureMapLeftMouseClick');
-  NameTrigger(Erm.TRIGGER_AE0,  'OnEquipArt');
-  NameTrigger(Erm.TRIGGER_AE1,  'OnUnequipArt');
+  NameTrigger(Erm.TRIGGER_AE0,  'OnUnequipArt');
+  NameTrigger(Erm.TRIGGER_AE1,  'OnEquipArt');
   NameTrigger(Erm.TRIGGER_MM0,  'OnBattleMouseHint');
   NameTrigger(Erm.TRIGGER_MM1,  'OnTownMouseHint');
   NameTrigger(Erm.TRIGGER_MP,   'OnMp3MusicChange');
