@@ -527,6 +527,7 @@ const
   ZvsLoadErtFile:     TZvsLoadErtFile   = Ptr($72C641);
   ZvsShowMessage:     TZvsShowMessage   = Ptr($70FB63);
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
+  ZvsGetNum:          function (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool cdecl = Ptr($73E970);
   FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
   ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
   ZvsResetCommanders: Utils.TProcedure  = Ptr($770B25);
@@ -4049,6 +4050,13 @@ begin
   result := not (results[0] or results[1]);
 end; // .function Hook_ZvsCheckFlags
 
+function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
+begin
+
+
+  result := false;
+end;
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
@@ -4218,6 +4226,9 @@ begin
 
   // Replace ZvsCheckFlags with own implementation, free from e-variables issues
   Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
+
+  // Replace GetNum with own implementation, capable to process named global variables
+  //Core.ApiHook(@Hook_ZvsGetNum, Core.HOOKTYPE_JUMP, @ZvsGetNum);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885' +

@@ -362,7 +362,7 @@ begin
   end; // .switch VarType
 end; // .function ErmVarToStr
 
-function ErmVarToServiceParam (VarType: char; Ind: integer; var ServiceParam: TServiceParam): boolean;
+function ErmVarToServiceParam (VarType: char; Ind: integer; IsGet: boolean; var ServiceParam: TServiceParam): boolean;
 begin
   result             := true;
   ServiceParam.IsStr := false;
@@ -372,7 +372,7 @@ begin
       result := (Ind >= Low(Erm.v^)) and (Ind <= High(Erm.v^));
       
       if result then begin
-        if ServiceParam.OperGet then begin
+        if IsGet then begin
           ServiceParam.Value.p := @Erm.v[Ind];
         end else begin
           ServiceParam.Value.v := Erm.v[Ind];
@@ -386,7 +386,7 @@ begin
       result := (Ind >= 1) and (Ind <= 200) and (Erm.GetErmCurrHero <> nil);
       
       if result then begin
-        if ServiceParam.OperGet then begin
+        if IsGet then begin
           ServiceParam.Value.p := @Erm.w[Erm.ZvsWHero^, Ind];
         end else begin
           ServiceParam.Value.v := Erm.w[Erm.ZvsWHero^, Ind];
@@ -400,7 +400,7 @@ begin
       result := (Ind >= Low(Erm.x^)) and (Ind <= High(Erm.x^));
       
       if result then begin
-        if ServiceParam.OperGet then begin
+        if IsGet then begin
           ServiceParam.Value.p := @Erm.x[Ind];
         end else begin
           ServiceParam.Value.v := Erm.x[Ind];
@@ -420,7 +420,7 @@ begin
           ServiceParam.Value.p := @Erm.ny[-Ind];
         end;
 
-        if not ServiceParam.OperGet then begin
+        if not IsGet then begin
           ServiceParam.Value.v := pinteger(ServiceParam.Value.p)^;
         end;
       end else begin
@@ -438,7 +438,7 @@ begin
           ServiceParam.Value.p := @Erm.ne[-Ind];
         end;
 
-        if not ServiceParam.OperGet then begin
+        if not IsGet then begin
           ServiceParam.Value.v := pinteger(ServiceParam.Value.p)^;
         end;
       end else begin
@@ -463,7 +463,7 @@ begin
     end; // .case
 
     'f'..'t': begin
-      if ServiceParam.OperGet then begin
+      if IsGet then begin
         ServiceParam.Value.p := @Erm.QuickVars[Ind];
       end else begin
         ServiceParam.Value.v := Erm.QuickVars[Ind];
@@ -475,10 +475,17 @@ begin
 end; // .function ErmVarToServiceParam
 
 function GetServiceParams (Cmd: pchar; var NumParams: integer; var Params: TServiceParams): integer;
+const
+  INDEXABLE_PAR_TYPES = ['v', 'y', 'x', 'z', 'w'];
+
 var
-  PCmd:          Utils.PEndlessCharArr;
+  PCmd:          pchar;
+  CmdMark:       pchar;
+  Param:         PServiceParam;
   ParType:       char;
   ParValue:      integer;
+  BaseParType:   char;
+  IsIndexed:     boolean;
   StartPos:      integer;
   Pos:           integer;
   StrLen:        integer;
@@ -492,41 +499,48 @@ begin
   NumParams := 0;
   Pos       := 1;
 
-  while not (PCmd[Pos] in [';', ' ']) do begin
-    SingleDSyntax                   := false;
-    Params[NumParams].ParamModifier := NO_MODIFIER;
+  while not (PCmd[Pos] in [';', #0..#32]) do begin
+    SingleDSyntax       := false;
+    Param               := @Params[NumParams];
+    Param.ParamModifier := NO_MODIFIER;
 
     // Detect command type: GET or SET
     if PCmd[Pos] = '?' then begin
-      Params[NumParams].OperGet := true;
+      Param.OperGet := true;
       Inc(Pos);
     end else begin
-      Params[NumParams].OperGet := false;
+      Param.OperGet := false;
 
       if PCmd[Pos] = 'd' then begin
         Inc(Pos);
 
         case PCmd[Pos] of
-          '+': begin Params[NumParams].ParamModifier := MODIFIER_ADD; Inc(Pos); end;
-          '-': begin Params[NumParams].ParamModifier := MODIFIER_SUB; Inc(Pos); end;
-          '*': begin Params[NumParams].ParamModifier := MODIFIER_MUL; Inc(Pos); end;
-          ':': begin Params[NumParams].ParamModifier := MODIFIER_DIV; Inc(Pos); end;
-          '&': begin Params[NumParams].ParamModifier := MODIFIER_CONCAT; Inc(Pos); end;
+          '+': begin Param.ParamModifier := MODIFIER_ADD;    Inc(Pos); end;
+          '-': begin Param.ParamModifier := MODIFIER_SUB;    Inc(Pos); end;
+          '*': begin Param.ParamModifier := MODIFIER_MUL;    Inc(Pos); end;
+          ':': begin Param.ParamModifier := MODIFIER_DIV;    Inc(Pos); end;
+          '&': begin Param.ParamModifier := MODIFIER_CONCAT; Inc(Pos); end;
         else
-          Params[NumParams].ParamModifier := MODIFIER_ADD;
-          SingleDSyntax                   := true;
+          Param.ParamModifier := MODIFIER_ADD;
+          SingleDSyntax       := true;
         end; // .switch
       end; // .if
     end; // .else
 
     AssocVarUsed := false;
+    BaseParType  := PCmd[Pos];
+    IsIndexed    := BaseParType in INDEXABLE_PAR_TYPES;
+
+    if IsIndexed then begin
+      Inc(Pos);
+    end;
 
     if (PCmd[Pos] = '^') or ((PCmd[Pos] in ['s', 'i']) and (PCmd[Pos + 1] = '^')) then begin
-      Params[NumParams].IsStr := true;
-      AssocVarUsed            := PCmd[Pos] <> '^';
+      Param.IsStr  := true;
+      AssocVarUsed := PCmd[Pos] <> '^';
 
       if AssocVarUsed then begin
-        Params[NumParams].IsStr := PCmd[Pos] = 's';
+        Param.IsStr := PCmd[Pos] = 's';
         Inc(Pos);
       end;
       
@@ -546,12 +560,12 @@ begin
       PCmd[Pos] := #0;
 
       if SysUtils.StrScan(@PCmd[StartPos], '%') <> nil then begin
-        Params[NumParams].Value.pc := Erm.ZvsInterpolateStr(@PCmd[StartPos]);
-        StrLen := Windows.LStrLen(Params[NumParams].Value.pc);
-        Params[NumParams].Value.pc := LStrCpy(ServiceMemAllocator.AllocStr(StrLen), Params[NumParams].Value.pc);
+        Param.Value.pc := Erm.ZvsInterpolateStr(@PCmd[StartPos]);
+        StrLen         := Windows.LStrLen(Param.Value.pc);
+        Param.Value.pc := LStrCpy(ServiceMemAllocator.AllocStr(StrLen), Param.Value.pc);
       end else begin
-        Params[NumParams].Value.pc := ServiceMemAllocator.AllocStr(StrLen);
-        Utils.CopyMem(StrLen, pchar(@PCmd[StartPos]), Params[NumParams].Value.pc);
+        Param.Value.pc := ServiceMemAllocator.AllocStr(StrLen);
+        Utils.CopyMem(StrLen, pchar(@PCmd[StartPos]), Param.Value.pc);
       end;
       
       PCmd[Pos] := '^';
@@ -559,90 +573,100 @@ begin
 
       // Get and interpret associative var
       if AssocVarUsed then begin
-        if Params[NumParams].OperGet then begin
-          if Params[NumParams].IsStr then begin
-            Params[NumParams].ValReturner := @AssocStrReturner;
+        if Param.OperGet then begin
+          if Param.IsStr then begin
+            Param.ValReturner := @AssocStrReturner;
           end else begin
-            Params[NumParams].ValReturner := @AssocIntReturner;
+            Param.ValReturner := @AssocIntReturner;
           end;
         end else begin
-          AssocVarValue := TAssocVar(AssocMem[Params[NumParams].Value.pc]);
+          AssocVarValue := TAssocVar(AssocMem[Param.Value.pc]);
 
-          if Params[NumParams].IsStr then begin
+          if Param.IsStr then begin
             if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
-              Params[NumParams].Value.pc := #0;
+              Param.Value.pc := #0;
             end else begin
-              StrLen                     := Length(AssocVarValue.StrValue);
-              Params[NumParams].Value.pc := ServiceMemAllocator.AllocStr(StrLen);
-              Utils.CopyMem(StrLen, pchar(AssocVarValue.StrValue), Params[NumParams].Value.pc);
+              StrLen         := Length(AssocVarValue.StrValue);
+              Param.Value.pc := ServiceMemAllocator.AllocStr(StrLen);
+              Utils.CopyMem(StrLen, pchar(AssocVarValue.StrValue), Param.Value.pc);
             end;
           end else begin
             if AssocVarValue = nil then begin
-              Params[NumParams].Value.v := 0;
+              Param.Value.v := 0;
             end else begin
-              Params[NumParams].Value.v := AssocVarValue.IntValue;
+              Param.Value.v := AssocVarValue.IntValue;
             end;
           end; // .else
         end; // .else
       end; // .if
     end else begin
-      // Get parameter type: z, v, x, y or constant
+      // Get parameter type: z, v, x, y, w, e, f..t or constant
       ParType := PCmd[Pos];
 
-      if (ParType in [';', '/', ' ']) and SingleDSyntax then begin
-        Params[NumParams].IsStr   := false;
-        Params[NumParams].Value.v := 0;
+      if (ParType in [';', '/', #0..#32]) and SingleDSyntax then begin
+        Param.IsStr   := false;
+        Param.Value.v := 0;
       end else begin
         if ParType in ['-', '+', '0'..'9'] then begin
           ParType := #0;
         end else begin
           Inc(Pos);
         end;
-        
-        // Remember parameter start position
-        StartPos := Pos;
-        
-        while not(PCmd[Pos] in [';', '/', ' ']) do begin
-          Inc(Pos);
-        end;
-
-        ParValue := 0;
 
         if ParType in ['f'..'t'] then begin
-          ParValue := ord(ParType) - ord('f') + 1;
+          ParValue := ord(ParType) - ord('f') + Low(Erm.QuickVars^);
         end else begin
-          SetString(IndStr, pchar(@PCmd[StartPos]), Pos - StartPos);
-          
-          try
-            ParValue := SysUtils.StrToInt(IndStr);
-          except
+          // Remember parameter start position
+          StartPos := Pos;
+          CmdMark  := @PCmd[StartPos];
+
+          if not StrLib.ParseIntFromPchar(CmdMark, ParValue) then begin
             result := -1; exit;
           end;
-        end;
-        
+          
+          Inc(Pos, integer(CmdMark) - integer(@PCmd[StartPos]));
+        end; // .else
+
         // Literal values are handled, now handle variables
         if ParType <> #0 then begin
-          if not ErmVarToServiceParam(ParType, ParValue, Params[NumParams]) then begin
+          if not ErmVarToServiceParam(ParType, ParValue, Param.OperGet and not IsIndexed, Param^) then begin
             result := -1; exit;
           end;
-        end else begin
-          Params[NumParams].IsStr   := false;
-          Params[NumParams].Value.v := ParValue;
-        end;
-
-        if (Params[NumParams].IsStr and not(Params[NumParams].ParamModifier in [NO_MODIFIER, MODIFIER_CONCAT])) or
-           (not Params[NumParams].IsStr and (Params[NumParams].ParamModifier = MODIFIER_CONCAT))
-        then begin
+        // Disallow GET for numeric constants
+        end else if Param.OperGet then begin
           result := -1; exit;
+        // Allow SET for numeric constants
+        end else begin
+          Param.IsStr   := false;
+          Param.Value.v := ParValue;
         end;
       end; // .else
     end; // .else
 
-    if not AssocVarUsed then begin
-      if Params[NumParams].IsStr then begin
-        Params[NumParams].ValReturner := @ZVarStrReturner;
+    if IsIndexed then begin
+      // Strings are not valid indexes
+      if Param.IsStr then begin
+        result := -1; exit;
+      end;
+      
+      if not ErmVarToServiceParam(BaseParType, Param.Value.v, Param.OperGet, Param^) then begin
+        result := -1; exit;
+      end;
+    end;
+
+    // Recheck if modifiers are valid
+    if (Param.IsStr and not(Param.ParamModifier in [NO_MODIFIER, MODIFIER_CONCAT])) or
+       (not Param.IsStr and (Param.ParamModifier = MODIFIER_CONCAT))
+    then begin
+      result := -1; exit;
+    end;
+
+    // Set up getter methods for native ERM variables
+    if Param.OperGet and (IsIndexed or not AssocVarUsed) then begin
+      if Param.IsStr then begin
+        Param.ValReturner := @ZVarStrReturner;
       end else begin
-        Params[NumParams].ValReturner := @ErmIntReturner;
+        Param.ValReturner := @ErmIntReturner;
       end;
     end;
 
@@ -653,7 +677,7 @@ begin
     Inc(NumParams);
   end; // .while
   
-  while PCmd[Pos] = ' ' do begin
+  while PCmd[Pos] in [#0..#32] do begin
     Inc(Pos);
   end;
   
@@ -838,7 +862,7 @@ begin
   // Skip parameters and subcommand from previous call
   if Self.Success and (Self._ParamsLen > 0) then begin
     ServiceMemAllocator.FreePage;
-    Inc(Self.CmdPtr, Self._ParamsLen);
+    Inc(Self.CmdPtr,      Self._ParamsLen);
     Inc(Self.CmdInfo.Pos, Self._ParamsLen);
     Self._ParamsLen := 0;
   end;
@@ -855,9 +879,14 @@ begin
     end else begin
       ServiceMemAllocator.AllocPage;
       Self._ParamsLen := GetServiceParams(Self.CmdPtr, Self.NumParams, Self.Params);
-      Self.Success    := Self._ParamsLen <> -1;
-    end;
-  end;
+
+      if Self._ParamsLen = -1 then begin
+        Self.Success := false;
+        result       := false;
+        ServiceMemAllocator.FreePage;
+      end;
+    end; // .else
+  end; // .if
 end; // .function TErmCmdWrapper.FindNextSubcmd
 
 procedure TErmCmdWrapper.Cleanup;
