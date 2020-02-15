@@ -53,6 +53,7 @@ const
   PARAM_VARTYPE_Y     = 6;
   PARAM_VARTYPE_Z     = 7;
   PARAM_VARTYPE_E     = 8;
+  PARAM_VARTYPE_I     = 9;
 
   (* Normalized ERM parameter value types *)
   VALTYPE_INT   = 0;
@@ -250,9 +251,12 @@ type
     }
     ValType:  integer;
 
-    function GetType: integer; inline;
-    function GetIndexedPartType: integer; inline;
-    function GetCheckType: integer; inline;
+    function  GetType: integer; inline;
+    function  GetIndexedPartType: integer; inline;
+    function  GetCheckType: integer; inline;
+    procedure SetType (NewType: integer); inline;
+    procedure SetIndexedPartType (NewType: integer); inline;
+    procedure SetCheckType (NewCheckType: integer); inline;
   end; // .record TErmCmdParam
 
   TErmString = packed record
@@ -655,6 +659,21 @@ end;
 function TErmCmdParam.GetCheckType: integer;
 begin
   result := (Self.ValType shr 8) and $07;
+end;
+
+procedure TErmCmdParam.SetType (NewType: integer);
+begin
+  Self.ValType := (Self.ValType and not $0F) or (NewType and $0F);
+end;
+
+procedure TErmCmdParam.SetIndexedPartType (NewType: integer);
+begin
+  Self.ValType := (Self.ValType and not $F0) or ((NewType and $0F) shl 4);
+end;
+
+procedure TErmCmdParam.SetCheckType (NewCheckType: integer);
+begin
+  Self.ValType := (Self.ValType and not $0700) or ((NewCheckType and $07) shl 8);
 end;
 
 function TErmTrigger.GetSize: integer;
@@ -1569,7 +1588,6 @@ var
     IsFreeing:   boolean;
     VarType:     char;
     BaseVarName: string;
-    VarsPool:    PLocalVarsPool;
 
   begin
     result := ParseLocalVar(pointer(VarName), IsFreeing, VarType, BaseVarName, ArrIndex);
@@ -4050,12 +4068,215 @@ begin
   result := not (results[0] or results[1]);
 end; // .function Hook_ZvsCheckFlags
 
+{
+// 0=nothing, 1?, 2=, 3<>, 4>, 5<, 6>=, 7<=
+  PARAM_CHECK_NONE          = 0;
+  PARAM_CHECK_GET           = 1;
+  PARAM_CHECK_EQUAL         = 2;
+  PARAM_CHECK_NOT_EQUAL     = 3;
+  PARAM_CHECK_GREATER       = 4;
+  PARAM_CHECK_LOWER         = 5;
+  PARAM_CHECK_GREATER_EQUAL = 6;
+  PARAM_CHECK_LOWER_EQUAL   = 7;
+
+TErmSubCmd = packed record
+    Pos:        integer;
+    Code:       TErmString;
+    Conditions: TErmCmdConditions;
+    Params:     TErmCmdParams;
+    Chars:      array [0..15] of char;
+    DFlags:     array [0..15] of boolean;
+    Nums:       array [0..15] of integer;
+  end; // .record TErmSubCmd
+
+  (* ERM param variable types *)
+  PARAM_VARTYPE_NUM   = 0;
+  PARAM_VARTYPE_FLAG  = 1;
+  PARAM_VARTYPE_QUICK = 2;
+  PARAM_VARTYPE_V     = 3;
+  PARAM_VARTYPE_W     = 4;
+  PARAM_VARTYPE_X     = 5;
+  PARAM_VARTYPE_Y     = 6;
+  PARAM_VARTYPE_Z     = 7;
+  PARAM_VARTYPE_E     = 8;
+  PARAM_VARTYPE_I     = 9;
+}
+
+
+
 function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
+const
+  INDEXABLE_PAR_TYPES = ['v', 'y', 'x', 'z', 'e', 'w'];
+  INDEXING_PAR_TYPES  = ['v', 'y', 'x', 'w', 'f'..'t'];
+  NATIVE_PAR_TYPES    = ['v', 'y', 'x', 'z', 'e', 'w', 'f'..'t'];
+
+var
+  StartPtr:      pchar;
+  Caret:         pchar;
+  CheckType:     integer;
+  IsMod:         longbool;
+  Param:         PErmCmdParam;
+  BaseTypeChar:  char;
+  IndexTypeChar: char;
+  IsIndexed:     longbool;
+  BaseVarType:   integer;
+  IndexVarType:  integer;
+  ValType:       integer;
+
+label
+  Error;
+
+  function ConvertVarTypeCharToId (VarTypeChar: char; var Res: integer): boolean;
+  begin
+    result := true;
+
+    case VarTypeChar of
+      'y': Res := PARAM_VARTYPE_Y;
+      'x': Res := PARAM_VARTYPE_X;
+      'f'..'t': Res := PARAM_VARTYPE_QUICK;
+      'z': Res := PARAM_VARTYPE_Z;
+      'v': Res := PARAM_VARTYPE_V;
+      'e': Res := PARAM_VARTYPE_E;
+      'w': Res := PARAM_VARTYPE_W;
+    else
+      Res    := PARAM_VARTYPE_NUM;
+      result := false;
+      ShowErmError('ConvertVarTypeCharToId: invalid argument: ' + VarTypeChar);
+    end;
+  end; // .function ConvertParamTypeCharToId
+
 begin
+  StartPtr      := @SubCmd.Code.Value[SubCmd.Pos];
+  Caret         := StartPtr;
+  CheckType     := PARAM_CHECK_NONE;
+  IsMod         := false;
+  Param         := @SubCmd.Params[ParamInd];
+  Param.Value   := 0;
+  Param.ValType := 0;
+  IndexVarType  := PARAM_VARTYPE_NUM;
+  result        := false;
 
+  while Caret^ in [#1..#32] do begin
+    Inc(Caret);
+  end;
 
-  result := false;
-end;
+  case Caret^ of
+    '?': begin
+      CheckType := PARAM_CHECK_GET;
+      Inc(Caret);
+    end;
+
+    'd': begin
+      IsMod := true;
+      Inc(Caret);
+    end;
+
+    '=': begin
+      CheckType := PARAM_CHECK_EQUAL;
+      Inc(Caret);
+    end;
+
+    '<': begin
+      Inc(Caret);
+
+      case Caret^ of
+        '=': begin CheckType := PARAM_CHECK_LOWER_EQUAL; Inc(Caret); end;
+        '>': begin CheckType := PARAM_CHECK_NOT_EQUAL;   Inc(Caret); end;
+      else
+        CheckType := PARAM_CHECK_LOWER;
+      end;
+    end;
+
+    '>': begin
+      Inc(Caret);
+
+      if Caret^ = '=' then begin
+        CheckType := PARAM_CHECK_GREATER_EQUAL;
+        Inc(Caret);
+      end else begin
+        CheckType := PARAM_CHECK_GREATER;
+      end;
+    end;
+  end; // .switch Caret^
+
+  BaseTypeChar := Caret^;
+  IsIndexed    := BaseTypeChar in INDEXABLE_PAR_TYPES;
+
+  if IsIndexed then begin
+    Inc(Caret);
+  end;
+
+  IndexTypeChar := Caret^;
+
+  if (IndexTypeChar = 'i') and (Caret[1] = '^') then begin
+    Inc(Caret, 2);
+    IndexVarType := PARAM_VARTYPE_I;
+    Param.Value  := integer(Caret);
+
+    while not (Caret^ in ['^', #0]) do begin
+      Inc(Caret);
+    end;
+
+    if Caret^ <> '^' then begin
+      ShowErmError('*GetNum: associative variable name end marker (^) not found');
+      goto Error;
+    end;
+  end else if IndexTypeChar in ['f'..'t'] then begin
+    IndexVarType := PARAM_VARTYPE_QUICK;
+    Param.Value  := ord(IndexTypeChar) - ord('f') + Low(Erm.QuickVars^);
+    Inc(Caret);
+  end else begin
+    if IndexTypeChar in ['+', '-', '0'..'9'] then begin
+      if CheckType = PARAM_CHECK_GET then begin
+        ShowErmError('*GetNum: GET-syntax cannot be applied to constants');
+        goto Error;
+      end;
+    end else if IndexTypeChar in NATIVE_PAR_TYPES then begin
+      if not ConvertVarTypeCharToId(IndexTypeChar, IndexVarType) then begin
+        goto Error;
+      end;
+
+      Inc(Caret);
+    end;
+
+    if not StrLib.ParseIntFromPchar(Caret, Param.Value) and (IndexTypeChar in ['+', '-']) then begin
+      ShowErmError('*GetNum: expected digit after number sign (+/-). Got: ' + Caret^);
+      goto Error;
+    end;
+  end; // .else
+  
+  if IsIndexed then begin
+    ConvertVarTypeCharToId(BaseTypeChar, BaseVarType);
+    Param.SetType(BaseVarType);
+    Param.SetIndexedPartType(IndexVarType);
+  end else begin
+    Param.SetType(IndexVarType);
+  end;
+
+  Param.SetCheckType(CheckType);
+  SubCmd.DFlags[ParamInd] := IsMod;
+
+  while not (Caret^ in [#1..#32]) do begin
+    Inc(Caret);
+  end;
+
+  Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
+
+  if (DoEval <> 0) and (CheckType <> PARAM_CHECK_GET) then begin
+    SubCmd.Nums[ParamInd] := GetErmParamValue(Param, ValType);
+  end else begin
+    SubCmd.Nums[ParamInd] := Param.Value;
+  end;
+
+  exit;
+
+Error:
+  while not (Caret^ in [';', #0]) do begin
+    Inc(Caret);
+  end;
+
+  Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
+end; // .function Hook_ZvsGetNum
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
@@ -4228,7 +4449,7 @@ begin
   Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
 
   // Replace GetNum with own implementation, capable to process named global variables
-  //Core.ApiHook(@Hook_ZvsGetNum, Core.HOOKTYPE_JUMP, @ZvsGetNum);
+  Core.ApiHook(@Hook_ZvsGetNum, Core.HOOKTYPE_JUMP, @ZvsGetNum);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885' +
