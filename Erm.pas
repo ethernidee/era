@@ -1405,6 +1405,8 @@ var
 
       LocalVarsPools[i].FreeRanges := nil;
     end;
+
+    LocalVars.Clear;
   end; // procedure FinalizeLocalVarsPools
 
   function LocalVarCharToId (c: char): integer;
