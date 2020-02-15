@@ -1488,6 +1488,8 @@ var
         VarRange.NextRange  := VarsPool.FreeRanges;
         VarsPool.FreeRanges := VarRange;
       end;
+
+      LocalVars.DeleteItem(VarName);
     end; // .else
   end; // .procedure FreeLocalVar
 
