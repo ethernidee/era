@@ -4102,7 +4102,62 @@ TErmSubCmd = packed record
   PARAM_VARTYPE_I     = 9;
 }
 
+(* Extract i^...^ or s^...^ variable name. BufPos must point to first name character *)
+function ExtractGlobalNamedVarName (BufPos: pchar): string;
+var
+  StartPos: pchar;
 
+begin
+  {!} Assert(BufPos <> nil);
+  StartPos := BufPos;
+
+  while not (BufPos^ in ['^', ';', #0]) do begin
+    Inc(BufPos);
+  end;
+
+  result := StrLib.ExtractFromPchar(StartPos, integer(BufPos) - integer(StartPos));
+end;
+
+(* Converts ERM parameter to original string in code *)
+function ErmParamToCode (Param: PErmCmdParam): string;
+var
+  Types: array [0..1] of integer;
+  i:     integer;
+
+begin
+  result   := '';
+  Types[0] := Param.GetType();
+  Types[1] := Param.GetIndexedPartType();
+
+  case Param.GetCheckType of
+    PARAM_CHECK_GET:           result := result + '?';
+    PARAM_CHECK_EQUAL:         result := result + '=';
+    PARAM_CHECK_NOT_EQUAL:     result := result + '<>';
+    PARAM_CHECK_GREATER:       result := result + '>';
+    PARAM_CHECK_LOWER:         result := result + '<';
+    PARAM_CHECK_GREATER_EQUAL: result := result + '>=';
+    PARAM_CHECK_LOWER_EQUAL:   result := result + '<=';
+  end;
+
+  for i := Low(Types) to High(Types) do begin
+    case Types[i] of
+      PARAM_VARTYPE_QUICK: result := result + chr(ord('f') - Low(QuickVars^) + Param.Value);
+      PARAM_VARTYPE_V:     result := result + 'v';
+      PARAM_VARTYPE_W:     result := result + 'w';
+      PARAM_VARTYPE_X:     result := result + 'x';
+      PARAM_VARTYPE_Y:     result := result + 'y';
+      PARAM_VARTYPE_Z:     result := result + 'z';
+      PARAM_VARTYPE_E:     result := result + 'e';
+      PARAM_VARTYPE_I:     result := result + 'i^';
+    end;
+  end;
+
+  if (Types[0] = PARAM_VARTYPE_I) or (Types[1] = PARAM_VARTYPE_I) then begin
+    result := result + ExtractGlobalNamedVarName(pchar(Param.Value)) + '^';
+  end else if (Types[0] <> PARAM_VARTYPE_QUICK) and (Types[1] <> PARAM_VARTYPE_QUICK) then begin
+    result := result + IntToStr(Param.Value);
+  end;
+end; // .function ErmParamToCode
 
 function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
 const
@@ -4256,17 +4311,21 @@ begin
   Param.SetCheckType(CheckType);
   SubCmd.DFlags[ParamInd] := IsMod;
 
-  while not (Caret^ in [#1..#32]) do begin
+  while Caret^ in [#1..#32] do begin
     Inc(Caret);
   end;
-
-  Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
 
   if (DoEval <> 0) and (CheckType <> PARAM_CHECK_GET) then begin
     SubCmd.Nums[ParamInd] := GetErmParamValue(Param, ValType);
   end else begin
     SubCmd.Nums[ParamInd] := Param.Value;
   end;
+
+  if FALSE then ShowMessage(Format('Parsed {%s} AS {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20), ErmParamToCode(Param)]));
+
+  Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
+
+  if FALSE then ShowMessage(Format('Ended on {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20)]));
 
   exit;
 
