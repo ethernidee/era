@@ -533,6 +533,9 @@ const
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   ZvsGetNum:          function (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool cdecl = Ptr($73E970);
   ZvsGetCurrDay:      function: integer cdecl = Ptr($7103D2);
+  ZvsVnCopy:          procedure ({n} Src, Dst: PErmCmdParam) cdecl = Ptr($73E83B);
+  ZvsFindMacro:       function (SubCmd: PErmSubCmd; IsSet: integer): {n} pchar cdecl = Ptr($734072);
+  ZvsGetMacro:        function ({n} Macro: pchar): {n} PErmCmdParam cdecl = Ptr($7343E4);
   FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
   ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
   ZvsResetCommanders: Utils.TProcedure  = Ptr($770B25);
@@ -2815,15 +2818,73 @@ begin
   end;
 end; 
 
+(* Extract i^...^ or s^...^ variable name. BufPos must point to first name character *)
+function ExtractGlobalNamedVarName (BufPos: pchar): string;
+var
+  StartPos: pchar;
+
+begin
+  {!} Assert(BufPos <> nil);
+  StartPos := BufPos;
+
+  while not (BufPos^ in ['^', ';', #0]) do begin
+    Inc(BufPos);
+  end;
+
+  result := StrLib.ExtractFromPchar(StartPos, integer(BufPos) - integer(StartPos));
+end;
+
+(* Converts ERM parameter to original string in code *)
+function ErmParamToCode (Param: PErmCmdParam): string;
+var
+  Types: array [0..1] of integer;
+  i:     integer;
+
+begin
+  result   := '';
+  Types[0] := Param.GetType();
+  Types[1] := Param.GetIndexedPartType();
+
+  case Param.GetCheckType of
+    PARAM_CHECK_GET:           result := result + '?';
+    PARAM_CHECK_EQUAL:         result := result + '=';
+    PARAM_CHECK_NOT_EQUAL:     result := result + '<>';
+    PARAM_CHECK_GREATER:       result := result + '>';
+    PARAM_CHECK_LOWER:         result := result + '<';
+    PARAM_CHECK_GREATER_EQUAL: result := result + '>=';
+    PARAM_CHECK_LOWER_EQUAL:   result := result + '<=';
+  end;
+
+  for i := Low(Types) to High(Types) do begin
+    case Types[i] of
+      PARAM_VARTYPE_QUICK: result := result + chr(ord('f') - Low(QuickVars^) + Param.Value);
+      PARAM_VARTYPE_V:     result := result + 'v';
+      PARAM_VARTYPE_W:     result := result + 'w';
+      PARAM_VARTYPE_X:     result := result + 'x';
+      PARAM_VARTYPE_Y:     result := result + 'y';
+      PARAM_VARTYPE_Z:     result := result + 'z';
+      PARAM_VARTYPE_E:     result := result + 'e';
+      PARAM_VARTYPE_I:     result := result + 'i^';
+    end;
+  end;
+
+  if (Types[0] = PARAM_VARTYPE_I) or (Types[1] = PARAM_VARTYPE_I) then begin
+    result := result + ExtractGlobalNamedVarName(pchar(Param.Value)) + '^';
+  end else if (Types[0] <> PARAM_VARTYPE_QUICK) and (Types[1] <> PARAM_VARTYPE_QUICK) then begin
+    result := result + IntToStr(Param.Value);
+  end;
+end; // .function ErmParamToCode
+
 function GetErmParamValue (Param: PErmCmdParam; out ResValType: integer): integer;
 const
   IND_INDEX = 0;
   IND_BASE  = 1;
 
 var
-  ValTypes: array [0..1] of integer;
-  ValType:  integer;
-  i:        integer;
+{Un} AssocVarValue: AdvErm.TAssocVar;
+     ValTypes:      array [0..1] of integer;
+     ValType:       integer;
+     i:             integer;
 
 begin
   ValTypes[0] := Param.GetIndexedPartType();
@@ -2866,16 +2927,6 @@ begin
           result  := v[result];
         end;
 
-        PARAM_VARTYPE_W: begin
-          if (result < Low(w^[0])) or (result > High(w^[0])) then begin
-            ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(w^[0]), High(w^[0])]));
-            ResValType := VALTYPE_INT; result := 0; exit;
-          end;
-
-          ValType := VALTYPE_INT;
-          result  := w[ZvsWHero^][result];
-        end;
-
         PARAM_VARTYPE_X: begin
           if (result < Low(x^)) or (result > High(x^)) then begin
             ShowErmError(Format('Invalid x-var index %d. Expected %d..%d', [result, Low(x^), High(x^)]));
@@ -2897,6 +2948,22 @@ begin
           end;
 
           ValType := VALTYPE_INT;
+        end;
+
+        PARAM_VARTYPE_I: begin
+          if result = 0 then begin
+            ShowErmError('Impossible case: i-var has null address');
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+          
+          ValType       := VALTYPE_INT;
+          AssocVarValue := AdvErm.AssocMem[ExtractGlobalNamedVarName(pchar(result))];
+
+          if AssocVarValue = nil then begin
+            result := 0;
+          end else begin
+            result := AssocVarValue.IntValue;
+          end;
         end;
 
         PARAM_VARTYPE_Z: begin
@@ -2926,8 +2993,18 @@ begin
 
           ValType := VALTYPE_FLOAT;
         end;
+
+        PARAM_VARTYPE_W: begin
+          if (result < Low(w^[0])) or (result > High(w^[0])) then begin
+            ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(w^[0]), High(w^[0])]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+
+          ValType := VALTYPE_INT;
+          result  := w[ZvsWHero^][result];
+        end;
       else
-        ShowErmError(Format('Unknown variable type %d', [ValType]));
+        ShowErmError(Format('Unknown variable type: %d', [ValType]));
         ResValType := VALTYPE_INT; result := 0; exit;
       end; // .switch 
 
@@ -2940,6 +3017,248 @@ begin
 
   ResValType := ValType;
 end; // .function GetErmParamValue
+
+function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
+const
+  INDEXABLE_PAR_TYPES = ['v', 'y', 'x', 'z', 'e', 'w'];
+  INDEXING_PAR_TYPES  = ['v', 'y', 'x', 'w', 'f'..'t'];
+  NATIVE_PAR_TYPES    = ['v', 'y', 'x', 'z', 'e', 'w', 'f'..'t'];
+
+var
+  StartPtr:      pchar;
+  Caret:         pchar;
+  CheckType:     integer;
+  IsMod:         longbool;
+  Param:         PErmCmdParam;
+  BaseTypeChar:  char;
+  IndexTypeChar: char;
+  IsIndexed:     longbool;
+  AddCurrDay:    longbool;
+  BaseVarType:   integer;
+  IndexVarType:  integer;
+  ValType:       integer;
+  MacroParam:    PErmCmdParam;
+  PrevCmdPos:    integer;
+
+label
+  Error;
+
+  function ConvertVarTypeCharToId (VarTypeChar: char; var Res: integer): boolean;
+  begin
+    result := true;
+
+    case VarTypeChar of
+      'y': Res := PARAM_VARTYPE_Y;
+      'x': Res := PARAM_VARTYPE_X;
+      'f'..'t': Res := PARAM_VARTYPE_QUICK;
+      'z': Res := PARAM_VARTYPE_Z;
+      'v': Res := PARAM_VARTYPE_V;
+      'e': Res := PARAM_VARTYPE_E;
+      'w': Res := PARAM_VARTYPE_W;
+    else
+      Res    := PARAM_VARTYPE_NUM;
+      result := false;
+      ShowErmError('ConvertVarTypeCharToId: invalid argument: ' + VarTypeChar);
+    end;
+  end; // .function ConvertParamTypeCharToId
+
+begin
+  StartPtr      := @SubCmd.Code.Value[SubCmd.Pos];
+  Caret         := StartPtr;
+  CheckType     := PARAM_CHECK_NONE;
+  IsMod         := false;
+  Param         := @SubCmd.Params[ParamInd];
+  Param.Value   := 0;
+  Param.ValType := 0;
+  IndexVarType  := PARAM_VARTYPE_NUM;
+  result        := false;
+
+  while Caret^ in [#1..#32] do begin
+    Inc(Caret);
+  end;
+
+  case Caret^ of
+    '?': begin
+      CheckType := PARAM_CHECK_GET;
+      Inc(Caret);
+    end;
+
+    'd': begin
+      IsMod := true;
+      Inc(Caret);
+    end;
+
+    '=': begin
+      CheckType := PARAM_CHECK_EQUAL;
+      Inc(Caret);
+    end;
+
+    '<': begin
+      Inc(Caret);
+
+      case Caret^ of
+        '=': begin CheckType := PARAM_CHECK_LOWER_EQUAL; Inc(Caret); end;
+        '>': begin CheckType := PARAM_CHECK_NOT_EQUAL;   Inc(Caret); end;
+      else
+        CheckType := PARAM_CHECK_LOWER;
+      end;
+    end;
+
+    '>': begin
+      Inc(Caret);
+
+      if Caret^ = '=' then begin
+        CheckType := PARAM_CHECK_GREATER_EQUAL;
+        Inc(Caret);
+      end else begin
+        CheckType := PARAM_CHECK_GREATER;
+      end;
+    end;
+  end; // .switch Caret^
+
+  BaseTypeChar := Caret^;
+  IsIndexed    := BaseTypeChar in INDEXABLE_PAR_TYPES;
+  AddCurrDay   := BaseTypeChar = 'c';
+
+  if IsIndexed then begin
+    Inc(Caret);
+  end else if AddCurrDay then begin
+    if CheckType = PARAM_CHECK_GET then begin
+      ShowErmError('*GetNum: GET-syntax is not compatible with "c" modifier');
+      goto Error;
+    end;
+
+    Inc(Caret);
+  end;
+
+  IndexTypeChar := Caret^;
+
+  if (IndexTypeChar = 'i') and (Caret[1] = '^') then begin
+    Inc(Caret, 2);
+    IndexVarType := PARAM_VARTYPE_I;
+    Param.Value  := integer(Caret);
+
+    while not (Caret^ in ['^', #0]) do begin
+      Inc(Caret);
+    end;
+
+    if Caret^ <> '^' then begin
+      ShowErmError('*GetNum: associative variable name end marker (^) not found');
+      goto Error;
+    end;
+
+    Inc(Caret);
+  end else if IndexTypeChar in ['f'..'t'] then begin
+    IndexVarType := PARAM_VARTYPE_QUICK;
+    Param.Value  := ord(IndexTypeChar) - ord('f') + Low(Erm.QuickVars^);
+    Inc(Caret);
+  end else if IndexTypeChar = '$' then begin
+    PrevCmdPos := SubCmd.Pos;
+    Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
+    MacroParam := ZvsGetMacro(ZvsFindMacro(SubCmd, 0));
+
+    if MacroParam <> nil then begin
+      IndexVarType := MacroParam.GetType();
+      Param.Value  := MacroParam.Value;
+    end;
+    
+    Caret      := @SubCmd.Code.Value[SubCmd.Pos];
+    SubCmd.Pos := PrevCmdPos;
+  end else begin
+    if IndexTypeChar in ['+', '-', '0'..'9'] then begin
+      if not IsIndexed and (CheckType = PARAM_CHECK_GET) then begin
+        ShowErmError('*GetNum: GET-syntax cannot be applied to constants');
+        goto Error;
+      end;
+    end else if IndexTypeChar in NATIVE_PAR_TYPES then begin
+      if not ConvertVarTypeCharToId(IndexTypeChar, IndexVarType) then begin
+        goto Error;
+      end;
+
+      Inc(Caret);
+    end;
+
+    if not StrLib.ParseIntFromPchar(Caret, Param.Value) and (IndexTypeChar in ['+', '-']) then begin
+      ShowErmError('*GetNum: expected digit after number sign (+/-). Got: ' + Caret^);
+      goto Error;
+    end;
+  end; // .else
+  
+  if IsIndexed then begin
+    ConvertVarTypeCharToId(BaseTypeChar, BaseVarType);
+    Param.SetType(BaseVarType);
+    Param.SetIndexedPartType(IndexVarType);
+  end else begin
+    Param.SetType(IndexVarType);
+  end;
+
+  Param.SetCheckType(CheckType);
+  SubCmd.DFlags[ParamInd] := IsMod;
+
+  while Caret^ in [#1..#32] do begin
+    Inc(Caret);
+  end;
+
+  if (DoEval <> 0) and (CheckType <> PARAM_CHECK_GET) then begin
+    SubCmd.Nums[ParamInd] := GetErmParamValue(Param, ValType);
+  end else begin
+    SubCmd.Nums[ParamInd] := Param.Value;
+  end;
+
+  if AddCurrDay then begin
+    Inc(SubCmd.Nums[ParamInd], ZvsGetCurrDay());
+  end;
+
+  if FALSE then ShowMessage(Format('Parsed {%s} AS {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20), ErmParamToCode(Param)]));
+
+  Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
+
+  if FALSE then ShowMessage(Format('Ended on {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20)]));
+
+  exit;
+
+Error:
+  while not (Caret^ in [';', #0]) do begin
+    Inc(Caret);
+  end;
+
+  Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
+end; // .function Hook_ZvsGetNum
+
+function CustomGetNumAuto (CmdId: integer; SubCmd: PErmSubCmd): integer; stdcall;
+const
+  DO_EVAL = 1;
+
+  CMD_SN = $4E53;
+  CMD_MP = $504D;
+  CMD_RD = $4452;
+
+begin
+  // Skip Era triggers, which are interpreted separately
+  if (CmdId = CMD_SN) or (CmdId = CMD_MP) or (CmdId = CMD_RD) then begin
+    result := 1;
+    exit;
+  end;
+
+  result := 0;
+
+  while result < 16 do begin
+    SubCmd.Params[result].Value := 0;
+
+    if Hook_ZvsGetNum(SubCmd, result, DO_EVAL) then begin
+      result := 0;
+      exit;
+    end else begin
+      Inc(result);
+
+      if SubCmd.Code.Value[SubCmd.Pos] <> '/' then begin
+        exit;
+      end;
+
+      Inc(SubCmd.Pos);
+    end; // .else
+  end; // .while
+end; // .function CustomGetNumAuto
 
 procedure ProcessErm;
 const
@@ -4069,288 +4388,6 @@ begin
   result := not (results[0] or results[1]);
 end; // .function Hook_ZvsCheckFlags
 
-{
-// 0=nothing, 1?, 2=, 3<>, 4>, 5<, 6>=, 7<=
-  PARAM_CHECK_NONE          = 0;
-  PARAM_CHECK_GET           = 1;
-  PARAM_CHECK_EQUAL         = 2;
-  PARAM_CHECK_NOT_EQUAL     = 3;
-  PARAM_CHECK_GREATER       = 4;
-  PARAM_CHECK_LOWER         = 5;
-  PARAM_CHECK_GREATER_EQUAL = 6;
-  PARAM_CHECK_LOWER_EQUAL   = 7;
-
-TErmSubCmd = packed record
-    Pos:        integer;
-    Code:       TErmString;
-    Conditions: TErmCmdConditions;
-    Params:     TErmCmdParams;
-    Chars:      array [0..15] of char;
-    DFlags:     array [0..15] of boolean;
-    Nums:       array [0..15] of integer;
-  end; // .record TErmSubCmd
-
-  (* ERM param variable types *)
-  PARAM_VARTYPE_NUM   = 0;
-  PARAM_VARTYPE_FLAG  = 1;
-  PARAM_VARTYPE_QUICK = 2;
-  PARAM_VARTYPE_V     = 3;
-  PARAM_VARTYPE_W     = 4;
-  PARAM_VARTYPE_X     = 5;
-  PARAM_VARTYPE_Y     = 6;
-  PARAM_VARTYPE_Z     = 7;
-  PARAM_VARTYPE_E     = 8;
-  PARAM_VARTYPE_I     = 9;
-}
-
-(* Extract i^...^ or s^...^ variable name. BufPos must point to first name character *)
-function ExtractGlobalNamedVarName (BufPos: pchar): string;
-var
-  StartPos: pchar;
-
-begin
-  {!} Assert(BufPos <> nil);
-  StartPos := BufPos;
-
-  while not (BufPos^ in ['^', ';', #0]) do begin
-    Inc(BufPos);
-  end;
-
-  result := StrLib.ExtractFromPchar(StartPos, integer(BufPos) - integer(StartPos));
-end;
-
-(* Converts ERM parameter to original string in code *)
-function ErmParamToCode (Param: PErmCmdParam): string;
-var
-  Types: array [0..1] of integer;
-  i:     integer;
-
-begin
-  result   := '';
-  Types[0] := Param.GetType();
-  Types[1] := Param.GetIndexedPartType();
-
-  case Param.GetCheckType of
-    PARAM_CHECK_GET:           result := result + '?';
-    PARAM_CHECK_EQUAL:         result := result + '=';
-    PARAM_CHECK_NOT_EQUAL:     result := result + '<>';
-    PARAM_CHECK_GREATER:       result := result + '>';
-    PARAM_CHECK_LOWER:         result := result + '<';
-    PARAM_CHECK_GREATER_EQUAL: result := result + '>=';
-    PARAM_CHECK_LOWER_EQUAL:   result := result + '<=';
-  end;
-
-  for i := Low(Types) to High(Types) do begin
-    case Types[i] of
-      PARAM_VARTYPE_QUICK: result := result + chr(ord('f') - Low(QuickVars^) + Param.Value);
-      PARAM_VARTYPE_V:     result := result + 'v';
-      PARAM_VARTYPE_W:     result := result + 'w';
-      PARAM_VARTYPE_X:     result := result + 'x';
-      PARAM_VARTYPE_Y:     result := result + 'y';
-      PARAM_VARTYPE_Z:     result := result + 'z';
-      PARAM_VARTYPE_E:     result := result + 'e';
-      PARAM_VARTYPE_I:     result := result + 'i^';
-    end;
-  end;
-
-  if (Types[0] = PARAM_VARTYPE_I) or (Types[1] = PARAM_VARTYPE_I) then begin
-    result := result + ExtractGlobalNamedVarName(pchar(Param.Value)) + '^';
-  end else if (Types[0] <> PARAM_VARTYPE_QUICK) and (Types[1] <> PARAM_VARTYPE_QUICK) then begin
-    result := result + IntToStr(Param.Value);
-  end;
-end; // .function ErmParamToCode
-
-function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
-const
-  INDEXABLE_PAR_TYPES = ['v', 'y', 'x', 'z', 'e', 'w'];
-  INDEXING_PAR_TYPES  = ['v', 'y', 'x', 'w', 'f'..'t'];
-  NATIVE_PAR_TYPES    = ['v', 'y', 'x', 'z', 'e', 'w', 'f'..'t'];
-
-var
-  StartPtr:      pchar;
-  Caret:         pchar;
-  CheckType:     integer;
-  IsMod:         longbool;
-  Param:         PErmCmdParam;
-  BaseTypeChar:  char;
-  IndexTypeChar: char;
-  IsIndexed:     longbool;
-  AddCurrDay:    longbool;
-  BaseVarType:   integer;
-  IndexVarType:  integer;
-  ValType:       integer;
-
-label
-  Error;
-
-  function ConvertVarTypeCharToId (VarTypeChar: char; var Res: integer): boolean;
-  begin
-    result := true;
-
-    case VarTypeChar of
-      'y': Res := PARAM_VARTYPE_Y;
-      'x': Res := PARAM_VARTYPE_X;
-      'f'..'t': Res := PARAM_VARTYPE_QUICK;
-      'z': Res := PARAM_VARTYPE_Z;
-      'v': Res := PARAM_VARTYPE_V;
-      'e': Res := PARAM_VARTYPE_E;
-      'w': Res := PARAM_VARTYPE_W;
-    else
-      Res    := PARAM_VARTYPE_NUM;
-      result := false;
-      ShowErmError('ConvertVarTypeCharToId: invalid argument: ' + VarTypeChar);
-    end;
-  end; // .function ConvertParamTypeCharToId
-
-begin
-  StartPtr      := @SubCmd.Code.Value[SubCmd.Pos];
-  Caret         := StartPtr;
-  CheckType     := PARAM_CHECK_NONE;
-  IsMod         := false;
-  Param         := @SubCmd.Params[ParamInd];
-  Param.Value   := 0;
-  Param.ValType := 0;
-  IndexVarType  := PARAM_VARTYPE_NUM;
-  result        := false;
-
-  while Caret^ in [#1..#32] do begin
-    Inc(Caret);
-  end;
-
-  case Caret^ of
-    '?': begin
-      CheckType := PARAM_CHECK_GET;
-      Inc(Caret);
-    end;
-
-    'd': begin
-      IsMod := true;
-      Inc(Caret);
-    end;
-
-    '=': begin
-      CheckType := PARAM_CHECK_EQUAL;
-      Inc(Caret);
-    end;
-
-    '<': begin
-      Inc(Caret);
-
-      case Caret^ of
-        '=': begin CheckType := PARAM_CHECK_LOWER_EQUAL; Inc(Caret); end;
-        '>': begin CheckType := PARAM_CHECK_NOT_EQUAL;   Inc(Caret); end;
-      else
-        CheckType := PARAM_CHECK_LOWER;
-      end;
-    end;
-
-    '>': begin
-      Inc(Caret);
-
-      if Caret^ = '=' then begin
-        CheckType := PARAM_CHECK_GREATER_EQUAL;
-        Inc(Caret);
-      end else begin
-        CheckType := PARAM_CHECK_GREATER;
-      end;
-    end;
-  end; // .switch Caret^
-
-  BaseTypeChar := Caret^;
-  IsIndexed    := BaseTypeChar in INDEXABLE_PAR_TYPES;
-  AddCurrDay   := BaseTypeChar = 'c';
-
-  if IsIndexed then begin
-    Inc(Caret);
-  end else if AddCurrDay then begin
-    if CheckType = PARAM_CHECK_GET then begin
-      ShowErmError('*GetNum: GET-syntax is not compatible with "c" modifier');
-      goto Error;
-    end;
-
-    Inc(Caret);
-  end;
-
-  IndexTypeChar := Caret^;
-
-  if (IndexTypeChar = 'i') and (Caret[1] = '^') then begin
-    Inc(Caret, 2);
-    IndexVarType := PARAM_VARTYPE_I;
-    Param.Value  := integer(Caret);
-
-    while not (Caret^ in ['^', #0]) do begin
-      Inc(Caret);
-    end;
-
-    if Caret^ <> '^' then begin
-      ShowErmError('*GetNum: associative variable name end marker (^) not found');
-      goto Error;
-    end;
-  end else if IndexTypeChar in ['f'..'t'] then begin
-    IndexVarType := PARAM_VARTYPE_QUICK;
-    Param.Value  := ord(IndexTypeChar) - ord('f') + Low(Erm.QuickVars^);
-    Inc(Caret);
-  end else begin
-    if IndexTypeChar in ['+', '-', '0'..'9'] then begin
-      if not IsIndexed and (CheckType = PARAM_CHECK_GET) then begin
-        ShowErmError('*GetNum: GET-syntax cannot be applied to constants');
-        goto Error;
-      end;
-    end else if IndexTypeChar in NATIVE_PAR_TYPES then begin
-      if not ConvertVarTypeCharToId(IndexTypeChar, IndexVarType) then begin
-        goto Error;
-      end;
-
-      Inc(Caret);
-    end;
-
-    if not StrLib.ParseIntFromPchar(Caret, Param.Value) and (IndexTypeChar in ['+', '-']) then begin
-      ShowErmError('*GetNum: expected digit after number sign (+/-). Got: ' + Caret^);
-      goto Error;
-    end;
-  end; // .else
-  
-  if IsIndexed then begin
-    ConvertVarTypeCharToId(BaseTypeChar, BaseVarType);
-    Param.SetType(BaseVarType);
-    Param.SetIndexedPartType(IndexVarType);
-  end else begin
-    Param.SetType(IndexVarType);
-  end;
-
-  Param.SetCheckType(CheckType);
-  SubCmd.DFlags[ParamInd] := IsMod;
-
-  while Caret^ in [#1..#32] do begin
-    Inc(Caret);
-  end;
-
-  if (DoEval <> 0) and (CheckType <> PARAM_CHECK_GET) then begin
-    SubCmd.Nums[ParamInd] := GetErmParamValue(Param, ValType);
-  end else begin
-    SubCmd.Nums[ParamInd] := Param.Value;
-  end;
-
-  if AddCurrDay then begin
-    Inc(SubCmd.Nums[ParamInd], ZvsGetCurrDay());
-  end;
-
-  if FALSE then ShowMessage(Format('Parsed {%s} AS {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20), ErmParamToCode(Param)]));
-
-  Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
-
-  if FALSE then ShowMessage(Format('Ended on {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20)]));
-
-  exit;
-
-Error:
-  while not (Caret^ in [';', #0]) do begin
-    Inc(Caret);
-  end;
-
-  Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
-end; // .function Hook_ZvsGetNum
-
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
@@ -4526,10 +4563,13 @@ begin
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885' +
-                                       'E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF52E81CDFFFFF83C404909090909090908945F0837DF0007575E9167800' +
+                                       'E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF520FB685ECFCFFFF50E8C537C01190908945F0837DF0007575E9167800' +
                                        '0090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
                                        '9090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
                                        '90909090909090909090909090']);
+
+  (* Ovewrite GetNumAuto call from upper patch with Era filtering method *)
+  Core.ApiHook(@CustomGetNumAuto, Core.HOOKTYPE_CALL, Ptr($741EAE));
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
