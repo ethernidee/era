@@ -719,6 +719,13 @@ type
     Town: PTown;
   end;
 
+  PGameDate = ^TGameDate;
+  TGameDate = packed record
+    Month: word;
+    Week:  word;
+    Day:   word;
+  end;
+
 const
   MAlloc: TMAlloc = Ptr($617492);
   MFree:  TMFree  = Ptr($60B0F0);
@@ -728,7 +735,8 @@ const
   GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
 
-  CurrentPlayer: pinteger = Ptr($69CCF4);
+  CurrentPlayer: pinteger   = Ptr($69CCF4);
+  GameDate:      ^PGameDate = Ptr($840CE0);
 
   ZvsGzipWrite:  TGzipWrite = Ptr($704062);
   ZvsGzipRead:   TGzipRead  = Ptr($7040A7);

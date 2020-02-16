@@ -532,6 +532,7 @@ const
   ZvsShowMessage:     TZvsShowMessage   = Ptr($70FB63);
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   ZvsGetNum:          function (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool cdecl = Ptr($73E970);
+  ZvsGetCurrDay:      function: integer cdecl = Ptr($7103D2);
   FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
   ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
   ZvsResetCommanders: Utils.TProcedure  = Ptr($770B25);
@@ -4174,6 +4175,7 @@ var
   BaseTypeChar:  char;
   IndexTypeChar: char;
   IsIndexed:     longbool;
+  AddCurrDay:    longbool;
   BaseVarType:   integer;
   IndexVarType:  integer;
   ValType:       integer;
@@ -4256,8 +4258,16 @@ begin
 
   BaseTypeChar := Caret^;
   IsIndexed    := BaseTypeChar in INDEXABLE_PAR_TYPES;
+  AddCurrDay   := BaseTypeChar = 'c';
 
   if IsIndexed then begin
+    Inc(Caret);
+  end else if AddCurrDay then begin
+    if CheckType = PARAM_CHECK_GET then begin
+      ShowErmError('*GetNum: GET-syntax is not compatible with "c" modifier');
+      goto Error;
+    end;
+
     Inc(Caret);
   end;
 
@@ -4282,7 +4292,7 @@ begin
     Inc(Caret);
   end else begin
     if IndexTypeChar in ['+', '-', '0'..'9'] then begin
-      if CheckType = PARAM_CHECK_GET then begin
+      if not IsIndexed and (CheckType = PARAM_CHECK_GET) then begin
         ShowErmError('*GetNum: GET-syntax cannot be applied to constants');
         goto Error;
       end;
@@ -4319,6 +4329,10 @@ begin
     SubCmd.Nums[ParamInd] := GetErmParamValue(Param, ValType);
   end else begin
     SubCmd.Nums[ParamInd] := Param.Value;
+  end;
+
+  if AddCurrDay then begin
+    Inc(SubCmd.Nums[ParamInd], ZvsGetCurrDay());
   end;
 
   if FALSE then ShowMessage(Format('Parsed {%s} AS {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20), ErmParamToCode(Param)]));
