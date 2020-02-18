@@ -248,6 +248,7 @@ type
     [4 bits]  Type:             TErmValType;  // ex: y5;  y5 - type
     [4 bits]  IndexedPartType:  TErmValType;  // ex: vy5; y5 - indexed part;
     [3 bits]  CheckType:        TErmCheckType;
+    [1 bit]   NeedsInterpolation: boolean; // For I-type determines, if string has % character
     }
     ValType:  integer;
 
@@ -257,6 +258,8 @@ type
     procedure SetType (NewType: integer); inline;
     procedure SetIndexedPartType (NewType: integer); inline;
     procedure SetCheckType (NewCheckType: integer); inline;
+    function  NeedsInterpolation: boolean; inline;
+    procedure SetNeedsInterpolation (Value: boolean); inline;
   end; // .record TErmCmdParam
 
   TErmString = packed record
@@ -678,6 +681,16 @@ end;
 procedure TErmCmdParam.SetCheckType (NewCheckType: integer);
 begin
   Self.ValType := (Self.ValType and not $0700) or ((NewCheckType and $07) shl 8);
+end;
+
+function TErmCmdParam.NeedsInterpolation: boolean;
+begin
+  result := ((Self.ValType shr 11) and $1) <> 0;
+end;
+
+procedure TErmCmdParam.SetNeedsInterpolation (Value: boolean);
+begin
+  Self.ValType := (Self.ValType and not $8000) or (ord(Value) shl 11);
 end;
 
 function TErmTrigger.GetSize: integer;
@@ -2834,6 +2847,24 @@ begin
   result := StrLib.ExtractFromPchar(StartPos, integer(BufPos) - integer(StartPos));
 end;
 
+function ExtractGlobalNamedVarNameFast (BufPos: pchar; ResBuf: pchar; ResBufSize: integer): pchar;
+begin
+  {!} Assert(BufPos <> nil);
+  {!} Assert(ResBuf <> nil);
+  {!} Assert(ResBufSize > 0);
+  result := ResBuf;
+  Dec(ResBufSize);
+
+  while (ResBufSize > 0) and not (BufPos^ in ['^', ';', #0]) do begin
+    ResBuf^ := BufPos^;
+    Inc(BufPos);
+    Inc(ResBuf);
+    Dec(ResBufSize);
+  end;
+
+  ResBuf^ := #0;
+end; // .function ExtractGlobalNamedVarNameFast
+
 (* Converts ERM parameter to original string in code *)
 function ErmParamToCode (Param: PErmCmdParam): string;
 var
@@ -2884,6 +2915,7 @@ var
 {Un} AssocVarValue: AdvErm.TAssocVar;
      ValTypes:      array [0..1] of integer;
      ValType:       integer;
+     StrBuf:        array [0..511] of char;
      i:             integer;
 
 begin
@@ -2956,8 +2988,13 @@ begin
             ResValType := VALTYPE_INT; result := 0; exit;
           end;
           
-          ValType       := VALTYPE_INT;
-          AssocVarValue := AdvErm.AssocMem[ExtractGlobalNamedVarName(pchar(result))];
+          ValType := VALTYPE_INT;
+
+          if Param.NeedsInterpolation() then begin
+            AssocVarValue := AdvErm.AssocMem[ZvsInterpolateStr(ExtractGlobalNamedVarNameFast(pchar(result), @StrBuf, sizeof(StrBuf)))];
+          end else begin
+            AssocVarValue := AdvErm.AssocMem[ExtractGlobalNamedVarName(pchar(result))];
+          end;
 
           if AssocVarValue = nil then begin
             result := 0;
@@ -3025,20 +3062,21 @@ const
   NATIVE_PAR_TYPES    = ['v', 'y', 'x', 'z', 'e', 'w', 'f'..'t'];
 
 var
-  StartPtr:      pchar;
-  Caret:         pchar;
-  CheckType:     integer;
-  IsMod:         longbool;
-  Param:         PErmCmdParam;
-  BaseTypeChar:  char;
-  IndexTypeChar: char;
-  IsIndexed:     longbool;
-  AddCurrDay:    longbool;
-  BaseVarType:   integer;
-  IndexVarType:  integer;
-  ValType:       integer;
-  MacroParam:    PErmCmdParam;
-  PrevCmdPos:    integer;
+  StartPtr:           pchar;
+  Caret:              pchar;
+  CheckType:          integer;
+  IsMod:              longbool;
+  Param:              PErmCmdParam;
+  BaseTypeChar:       char;
+  IndexTypeChar:      char;
+  IsIndexed:          longbool;
+  AddCurrDay:         longbool;
+  BaseVarType:        integer;
+  IndexVarType:       integer;
+  ValType:            integer;
+  NeedsInterpolation: longbool;
+  MacroParam:         PErmCmdParam;
+  PrevCmdPos:         integer;
 
 label
   Error;
@@ -3135,16 +3173,25 @@ begin
 
   if (IndexTypeChar = 'i') and (Caret[1] = '^') then begin
     Inc(Caret, 2);
-    IndexVarType := PARAM_VARTYPE_I;
-    Param.Value  := integer(Caret);
+    IndexVarType       := PARAM_VARTYPE_I;
+    Param.Value        := integer(Caret);
+    NeedsInterpolation := false;
 
     while not (Caret^ in ['^', #0]) do begin
+      if Caret^ = '%' then begin
+        NeedsInterpolation := true;
+      end;
+      
       Inc(Caret);
     end;
 
     if Caret^ <> '^' then begin
       ShowErmError('*GetNum: associative variable name end marker (^) not found');
       goto Error;
+    end;
+
+    if NeedsInterpolation then begin
+      Param.SetNeedsInterpolation(true);
     end;
 
     Inc(Caret);
