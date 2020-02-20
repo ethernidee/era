@@ -589,6 +589,8 @@ var
     FuncArgsGetSyntaxFlagsPassed:   integer = 0;
     FuncArgsGetSyntaxFlagsReceived: integer = 0;
 
+    TempStrBuf: array [0..255] of char;
+
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -2915,9 +2917,9 @@ const
 
 var
 {Un} AssocVarValue: AdvErm.TAssocVar;
+     AssocVarName:  string;
      ValTypes:      array [0..1] of integer;
      ValType:       integer;
-     StrBuf:        array [0..511] of char;
      i:             integer;
 
 begin
@@ -2993,10 +2995,12 @@ begin
           ValType := VALTYPE_INT;
 
           if Param.NeedsInterpolation() then begin
-            AssocVarValue := AdvErm.AssocMem[ZvsInterpolateStr(ExtractGlobalNamedVarNameFast(pchar(result), @StrBuf, sizeof(StrBuf)))];
+            AssocVarName := ZvsInterpolateStr(ExtractGlobalNamedVarNameFast(pchar(result), @TempStrBuf, sizeof(TempStrBuf)));
           end else begin
-            AssocVarValue := AdvErm.AssocMem[ExtractGlobalNamedVarName(pchar(result))];
+            AssocVarName := ExtractGlobalNamedVarName(pchar(result));
           end;
+
+          AssocVarValue := AdvErm.AssocMem[AssocVarName];
 
           if AssocVarValue = nil then begin
             result := 0;
@@ -4791,10 +4795,10 @@ begin
   Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
 
   // Replace GetNum with own implementation, capable to process named global variables
-  //Core.ApiHook(@Hook_ZvsGetNum, Core.HOOKTYPE_JUMP, @ZvsGetNum);
+  Core.ApiHook(@Hook_ZvsGetNum, Core.HOOKTYPE_JUMP, @ZvsGetNum);
 
   // Replace Apply with own implementation, capable to process named global variables
-  //Core.ApiHook(@Hook_ZvsApply, Core.HOOKTYPE_JUMP, @ZvsApply);
+  Core.ApiHook(@Hook_ZvsApply, Core.HOOKTYPE_JUMP, @ZvsApply);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885' +
