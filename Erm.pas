@@ -249,6 +249,7 @@ type
     [4 bits]  IndexedPartType:  TErmValType;  // ex: vy5; y5 - indexed part;
     [3 bits]  CheckType:        TErmCheckType;
     [1 bit]   NeedsInterpolation: boolean; // For I-type determines, if string has % character
+    [1 bit]   HasCurrDayModifier: boolean; // true if "c" modifier was used before parameter
     }
     ValType:  integer;
 
@@ -260,6 +261,8 @@ type
     procedure SetCheckType (NewCheckType: integer); inline;
     function  NeedsInterpolation: boolean; inline;
     procedure SetNeedsInterpolation (Value: boolean); inline;
+    function  HasCurrDayModifier: boolean; inline;
+    procedure SetHasCurrDayModifier (Value: boolean); inline;
   end; // .record TErmCmdParam
 
   TErmString = packed record
@@ -694,7 +697,17 @@ end;
 
 procedure TErmCmdParam.SetNeedsInterpolation (Value: boolean);
 begin
-  Self.ValType := (Self.ValType and not $8000) or (ord(Value) shl 11);
+  Self.ValType := (Self.ValType and not $0800) or (ord(Value) shl 11);
+end;
+
+function TErmCmdParam.HasCurrDayModifier: boolean;
+begin
+  result := ((Self.ValType shr 12) and $1) <> 0;
+end;
+
+procedure TErmCmdParam.SetHasCurrDayModifier (Value: boolean);
+begin
+  Self.ValType := (Self.ValType and not $1000) or (ord(Value) shl 12);
 end;
 
 function TErmTrigger.GetSize: integer;
@@ -2991,7 +3004,7 @@ begin
             ShowErmError('Impossible case: i-var has null address');
             ResValType := VALTYPE_INT; result := 0; exit;
           end;
-          
+
           ValType := VALTYPE_INT;
 
           if Param.NeedsInterpolation() then begin
@@ -3057,6 +3070,15 @@ begin
       end;
     end; // .if
   end; // .for
+
+  if Param.HasCurrDayModifier() then begin
+    if ValType = VALTYPE_INT then begin
+      Inc(result, ZvsGetCurrDay());
+    end else begin
+      ShowErmError('"c" modifier can be applied to integers only');
+      ResValType := VALTYPE_INT; result := 0; exit;
+    end;
+  end;
 
   ResValType := ValType;
 end; // .function GetErmParamValue
@@ -3316,6 +3338,8 @@ begin
       goto Error;
     end;
 
+    Param.SetHasCurrDayModifier(true);
+
     Inc(Caret);
   end;
 
@@ -3380,6 +3404,11 @@ begin
       goto Error;
     end;
   end; // .else
+
+  if not StrLib.ParseIntFromPchar(Caret, Param.Value) and (IndexTypeChar in ['+', '-']) then begin
+    ShowErmError('*GetNum: expected digit after number sign (+/-). Got: ' + Caret^);
+    goto Error;
+  end;
   
   if IsIndexed then begin
     ConvertVarTypeCharToId(BaseTypeChar, BaseVarType);
@@ -3402,15 +3431,11 @@ begin
     SubCmd.Nums[ParamInd] := Param.Value;
   end;
 
-  if AddCurrDay then begin
-    Inc(SubCmd.Nums[ParamInd], ZvsGetCurrDay());
-  end;
-
-  if FALSE then ShowMessage(Format('Parsed {%s} AS {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20), ErmParamToCode(Param)]));
+  // if FALSE then ShowMessage(Format('Parsed {%s} AS {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20), ErmParamToCode(Param)]));
 
   Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
 
-  if FALSE then ShowMessage(Format('Ended on {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20)]));
+  // if FALSE then ShowMessage(Format('Ended on {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20)]));
 
   exit;
 
@@ -3422,13 +3447,53 @@ Error:
   Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
 end; // .function Hook_ZvsGetNum
 
+{PErmSubCmd = ^TErmSubCmd;
+TErmSubCmd = packed record
+  Pos:        integer;
+  Code:       TErmString;
+  Conditions: TErmCmdConditions;
+  Params:     TErmCmdParams;
+  Chars:      array [0..15] of char;
+  DFlags:     array [0..15] of boolean;
+  Nums:       array [0..15] of integer;
+end; // .record TErmSubCmd}
+
+type
+  PCachedSubCmdParams = ^TCachedSubCmdParams;
+  TCachedSubCmdParams = packed record
+    AddrHash:  integer;
+    _Align1:   integer;
+    NumParams: integer;
+    _Align2:   integer;
+    Pos:       integer;
+    _Align3:   integer;
+    Params:    TErmCmdParams;
+    DFlags:    array [0..15] of boolean;
+    Nums:      array [0..15] of integer;
+  end;
+
+var
+  SubCmdCache: array [0..99] of TCachedSubCmdParams;
+
 function CustomGetNumAuto (CmdId: integer; SubCmd: PErmSubCmd): integer; stdcall;
 const
+  DONT_EVAL = 0;
   DO_EVAL = 1;
 
   CMD_SN = $4E53;
   CMD_MP = $504D;
   CMD_RD = $4452;
+
+  NIL_HASH = 0;
+
+var
+  ParamsAddrHash: integer;
+  CacheEntry:     PCachedSubCmdParams;
+  ValType:        integer;
+  i:              integer;
+
+label
+  Quit;
 
 begin
   // Skip Era triggers, which are interpreted separately
@@ -3437,27 +3502,72 @@ begin
     exit;
   end;
 
+  ParamsAddrHash := Crypto.Tm32Encode(integer(@SubCmd.Code.Value[SubCmd.Pos]));
+  CacheEntry     := @SubCmdCache[integer(cardinal(ParamsAddrHash) mod cardinal(Length(SubCmdCache)))];
+
+  if CacheEntry.AddrHash = ParamsAddrHash then begin
+    result := CacheEntry.NumParams;
+
+    if result > 0 then begin
+      for i := 0 to result - 1 do begin
+        SubCmd.Params[i] := CacheEntry.Params[i];
+      end;
+
+      Utils.CopyMem(sizeof(CacheEntry.DFlags) + sizeof(CacheEntry.Nums), @CacheEntry.DFlags, @SubCmd.DFlags);
+    end;
+
+    SubCmd.Pos := CacheEntry.Pos;
+
+    for i := 0 to result - 1 do begin
+      if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_GET then begin
+        SubCmd.Nums[i] := GetErmParamValue(@SubCmd.Params[i], ValType);
+      end;
+    end;
+
+    exit;
+  end;
+
   result := 0;
 
   while result < 16 do begin
     SubCmd.Params[result].Value := 0;
 
-    if Hook_ZvsGetNum(SubCmd, result, DO_EVAL) then begin
+    if Hook_ZvsGetNum(SubCmd, result, DONT_EVAL) then begin
       result := 0;
-      exit;
+      goto Quit;
     end else begin
       Inc(result);
 
       if SubCmd.Code.Value[SubCmd.Pos] <> '/' then begin
-        exit;
+        goto Quit;
       end;
 
       Inc(SubCmd.Pos);
     end; // .else
   end; // .while
+
+Quit:
+  CacheEntry.AddrHash  := ParamsAddrHash;
+  CacheEntry.NumParams := result;
+
+  if result > 0 then begin
+    for i := 0 to result - 1 do begin
+      CacheEntry.Params[i] := SubCmd.Params[i];
+    end;
+
+    Utils.CopyMem(sizeof(CacheEntry.DFlags) + sizeof(CacheEntry.Nums), @SubCmd.DFlags, @CacheEntry.DFlags);
+  end;
+
+  CacheEntry.Pos := SubCmd.Pos;
+
+  for i := 0 to result - 1 do begin
+    if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_GET then begin
+      SubCmd.Nums[i] := GetErmParamValue(@SubCmd.Params[i], ValType);
+    end;
+  end;
 end; // .function CustomGetNumAuto
 
-function Hook_ZvsApply (ValuePtr: pointer; ValueSize: byte; SubCmd: PErmSubCmd; ParamInd: integer): integer; cdecl;
+function Hook_ZvsApply (ValuePtr: pointer; ValueSize: integer; SubCmd: PErmSubCmd; ParamInd: integer): integer; cdecl;
 var
   Param:       PErmCmdParam;
   Value:       integer;
