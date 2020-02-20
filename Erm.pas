@@ -535,6 +535,8 @@ const
   ZvsShowMessage:     TZvsShowMessage   = Ptr($70FB63);
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   ZvsGetNum:          function (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool cdecl = Ptr($73E970);
+  ZvsGetVal:          function (ValuePtr: pointer; ValueSize: byte): integer cdecl = Ptr($7418B0);
+  ZvsPutVal:          function (ValuePtr: pointer; ValueSize: byte; SubCmd: PErmSubCmd; ParamInd: integer): integer cdecl = Ptr($7416FD);
   ZvsGetCurrDay:      function: integer cdecl = Ptr($7103D2);
   ZvsVnCopy:          procedure ({n} Src, Dst: PErmCmdParam) cdecl = Ptr($73E83B);
   ZvsFindMacro:       function (SubCmd: PErmSubCmd; IsSet: integer): {n} pchar cdecl = Ptr($734072);
@@ -3046,7 +3048,7 @@ begin
       end; // .switch 
 
       if (ValType <> VALTYPE_INT) and (i = IND_INDEX) then begin
-        ShowErmError('Cannot use non-integer variables as indexex for other variables');
+        ShowErmError('Cannot use non-integer variables as indexes for other variables');
         ResValType := VALTYPE_INT; result := 0; exit;
       end;
     end; // .if
@@ -3054,6 +3056,150 @@ begin
 
   ResValType := ValType;
 end; // .function GetErmParamValue
+
+function SetErmParamValue (Param: PErmCmdParam; NewValue: integer): boolean;
+const
+  IND_INDEX = 0;
+  IND_BASE  = 1;
+
+var
+{Un} AssocVarValue: AdvErm.TAssocVar;
+     AssocVarName:  string;
+     ValTypes:      array [0..1] of integer;
+     ValType:       integer;
+     Value:         integer;
+     StrBuf:        array [0..511] of char;
+     i:             integer;
+
+begin
+  ValTypes[0] := Param.GetIndexedPartType();
+  ValTypes[1] := Param.GetType();
+  result      := true;
+  Value       := Param.Value;
+
+  for i := Low(ValTypes) to High(ValTypes) do begin
+    ValType := ValTypes[i];
+
+    case ValType of
+      PARAM_VARTYPE_NUM: begin
+        if i = IND_INDEX then begin
+          continue;
+        end else begin
+          ShowErmError(Format('Cannot use GET syntax with number: ?%d', [Value]));
+          result := false; exit;
+        end;         
+      end;
+
+      PARAM_VARTYPE_QUICK: begin
+        if (Value < Low(QuickVars^)) or (Value > High(QuickVars^)) then begin
+          ShowErmError(Format('Invalid quick var %d. Expected %d..%d', [Value, Low(QuickVars^), High(QuickVars^)]));
+          result := false; exit;
+        end;
+        
+        ValType := VALTYPE_INT;
+        Value   := integer(@QuickVars[Value]);
+      end;
+
+      PARAM_VARTYPE_V: begin
+        if (Value < Low(v^)) or (Value > High(v^)) then begin
+          ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [Value, Low(v^), High(v^)]));
+          result := false; exit;
+        end;
+        
+        ValType := VALTYPE_INT;
+        Value   := integer(@v[Value]);
+      end;
+
+      PARAM_VARTYPE_X: begin
+        if (Value < Low(x^)) or (Value > High(x^)) then begin
+          ShowErmError(Format('Invalid x-var index %d. Expected %d..%d', [Value, Low(x^), High(x^)]));
+          result := false; exit;
+        end;
+        
+        ValType := VALTYPE_INT;
+        Value   := integer(@x[Value]);
+      end;
+
+      PARAM_VARTYPE_Y: begin
+        if Value in [Low(y^)..High(y^)] then begin
+          Value := integer(@y[Value]);
+        end else if -Value in [Low(ny^)..High(ny^)] then begin
+          Value := integer(@ny[-Value]);
+        end else begin
+          ShowErmError(Format('Invalid y-var index: %d. Expected -100..-1, 1..100', [Value]));
+          result := false; exit;
+        end;
+
+        ValType := VALTYPE_INT;
+      end;
+
+      PARAM_VARTYPE_I: begin
+        if Value = 0 then begin
+          ShowErmError('Impossible case: i-var has null address');
+          result := false; exit;
+        end;
+        
+        ValType := VALTYPE_INT;
+
+        if Param.NeedsInterpolation() then begin
+          AssocVarName := ZvsInterpolateStr(ExtractGlobalNamedVarNameFast(pchar(Value), @StrBuf, sizeof(StrBuf)));
+        end else begin
+          AssocVarName := ExtractGlobalNamedVarName(pchar(Value));
+        end;
+
+        AssocVarValue := AdvErm.AssocMem[AssocVarName];
+
+        if AssocVarValue = nil then begin
+          AssocVarValue                 := AdvErm.TAssocVar.Create;
+          AdvErm.AssocMem[AssocVarName] := AssocVarValue;
+        end;
+
+        Value := integer(@AssocVarValue.IntValue);
+      end;
+
+      PARAM_VARTYPE_E: begin
+        if Value in [Low(e^)..High(e^)] then begin
+          Value := pinteger(@e[Value])^;
+        end else if -Value in [Low(ne^)..High(ne^)] then begin
+          Value := pinteger(@ne[-Value])^;
+        end else begin
+          ShowErmError(Format('Invalid e-var index: %d. Expected -100..-1, 1..100', [Value]));
+          result := false; exit;
+        end;
+
+        ValType := VALTYPE_FLOAT;
+      end;
+
+      PARAM_VARTYPE_W: begin
+        if (Value < Low(w^[0])) or (Value > High(w^[0])) then begin
+          ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [Value, Low(w^[0]), High(w^[0])]));
+          result := false; exit;
+        end;
+
+        Value := integer(@w[ZvsWHero^][Value]);
+      end;
+
+      PARAM_VARTYPE_FLAG: begin
+        ShowErmError(Format('Cannot use GET syntax with flags: ?%d', [Value]));
+        result := false; exit;
+      end;
+    else
+      ShowErmError(Format('SetErmParamValue: Unknown variable type: %d', [ValType]));
+      result := false; exit;
+    end; // .switch 
+
+    if i = IND_INDEX then begin
+      if ValType <> VALTYPE_INT then begin
+        ShowErmError('Cannot use non-integer variables as indexes for other variables');
+        result := false; exit;
+      end;
+
+      Value := pinteger(Value)^;
+    end;    
+  end; // .for
+
+  pinteger(Value)^ := NewValue;
+end; // .function SetErmParamValue
 
 function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
 const
@@ -3306,6 +3452,45 @@ begin
     end; // .else
   end; // .while
 end; // .function CustomGetNumAuto
+
+function Hook_ZvsApply (ValuePtr: pointer; ValueSize: byte; SubCmd: PErmSubCmd; ParamInd: integer): integer; cdecl;
+var
+  Param:       PErmCmdParam;
+  Value:       integer;
+  SecondValue: integer;
+  CheckType:   integer;
+
+begin
+  Param     := @SubCmd.Params[ParamInd];
+  CheckType := Param.GetCheckType();
+  result    := 1;
+
+  if CheckType = PARAM_CHECK_NONE then begin
+    result := 0;
+    ZvsPutVal(ValuePtr, ValueSize, SubCmd, ParamInd);
+  end else begin
+    Value := ZvsGetVal(ValuePtr, ValueSize);
+
+    if CheckType = PARAM_CHECK_GET then begin
+      if not SetErmParamValue(Param, Value) then begin
+        result := -1;
+      end;
+
+      exit;
+    end else begin
+      SecondValue := SubCmd.Nums[ParamInd];
+
+      case CheckType of
+        PARAM_CHECK_EQUAL:         f[1] := Value = SecondValue;
+        PARAM_CHECK_NOT_EQUAL:     f[1] := Value <> SecondValue;
+        PARAM_CHECK_GREATER:       f[1] := Value > SecondValue;
+        PARAM_CHECK_LOWER:         f[1] := Value < SecondValue;
+        PARAM_CHECK_GREATER_EQUAL: f[1] := Value >= SecondValue;
+        PARAM_CHECK_LOWER_EQUAL:   f[1] := Value <= SecondValue;
+      end; // switch CheckType
+    end; // .else
+  end; // .else
+end; // .function Hook_ZvsApply
 
 procedure ProcessErm;
 const
@@ -4606,7 +4791,10 @@ begin
   Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
 
   // Replace GetNum with own implementation, capable to process named global variables
-  Core.ApiHook(@Hook_ZvsGetNum, Core.HOOKTYPE_JUMP, @ZvsGetNum);
+  //Core.ApiHook(@Hook_ZvsGetNum, Core.HOOKTYPE_JUMP, @ZvsGetNum);
+
+  // Replace Apply with own implementation, capable to process named global variables
+  //Core.ApiHook(@Hook_ZvsApply, Core.HOOKTYPE_JUMP, @ZvsApply);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885' +
