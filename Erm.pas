@@ -643,6 +643,9 @@ uses PatchApi, Stores, AdvErm, ErmTracking;
 const
   ERM_CMD_CACHE_LIMIT = 30000;
 
+  (* GetErmParamValue flags *)
+  FLAG_GETVALUE_GET_STR_ADDR = 1; // Indicates, that caller expects string address, not index
+
 var
 {O} FuncNames:       DataLib.TDict {OF FuncId: integer};
 {O} FuncIdToNameMap: DataLib.TObjDict {O} {OF TString};
@@ -2923,7 +2926,7 @@ begin
   end;
 end; // .function ErmParamToCode
 
-function GetErmParamValue (Param: PErmCmdParam; out ResValType: integer): integer;
+function GetErmParamValue (Param: PErmCmdParam; out ResValType: integer; Flags: integer): integer;
 const
   IND_INDEX = 0;
   IND_BASE  = 1;
@@ -3023,19 +3026,28 @@ begin
         end;
 
         PARAM_VARTYPE_Z: begin
-          if (result >= Low(z^)) and (result <= High(z^)) then begin
-            result := integer(@z[result]);
-          end else if -result in [Low(nz^)..High(nz^)] then begin
-            result := integer(@nz[-result]);
-          end else if result > High(z^) then begin
-            result := integer(ZvsGetErtStr(result));
-          end else begin
-            ShowErmError(Format('Invalid z-var index: %d. Expected -10..-1, 1+', [result]));
-            ResValType := VALTYPE_INT; result := 0; exit;
-          end;
+          if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
+            if (result >= Low(z^)) and (result <= High(z^)) then begin
+              result := integer(@z[result]);
+            end else if -result in [Low(nz^)..High(nz^)] then begin
+              result := integer(@nz[-result]);
+            end else if result > High(z^) then begin
+              result := integer(ZvsGetErtStr(result));
+            end else begin
+              ShowErmError(Format('Invalid z-var index: %d. Expected -10..-1, 1+', [result]));
+              ResValType := VALTYPE_INT; result := 0; exit;
+            end;
 
-          ValType := VALTYPE_STR;
-        end;
+            ValType := VALTYPE_STR;
+          end else begin
+            if ((result >= Low(z^)) and (result <= High(z^))) or (-result in [Low(nz^)..High(nz^)]) or (result > High(z^)) then begin
+              ResValType := VALTYPE_INT;
+            end else begin
+              ShowErmError(Format('Invalid z-var index: %d. Expected -10..-1, 1+', [result]));
+              ResValType := VALTYPE_INT; result := 0; exit;
+            end;
+          end; // .else       
+        end; // .case PARAM_VARTYPE_Z
 
         PARAM_VARTYPE_E: begin
           if result in [Low(e^)..High(e^)] then begin
@@ -3404,7 +3416,7 @@ begin
       goto Error;
     end;
   end; // .else
-  
+
   if IsIndexed then begin
     ConvertVarTypeCharToId(BaseTypeChar, BaseVarType);
     Param.SetType(BaseVarType);
@@ -3421,7 +3433,7 @@ begin
   end;
 
   if (DoEval <> 0) and (CheckType <> PARAM_CHECK_GET) then begin
-    SubCmd.Nums[ParamInd] := GetErmParamValue(Param, ValType);
+    SubCmd.Nums[ParamInd] := GetErmParamValue(Param, ValType, 0);
   end else begin
     SubCmd.Nums[ParamInd] := Param.Value;
   end;
@@ -3856,7 +3868,7 @@ begin
                     goto AfterTriggers;
                   end;
 
-                  TargetLoopLevel := GetErmParamValue(@Cmd.Params[0], ParamValType);
+                  TargetLoopLevel := GetErmParamValue(@Cmd.Params[0], ParamValType, FLAG_GETVALUE_GET_STR_ADDR);
 
                   if ParamValType <> VALTYPE_INT then begin
                     ShowErmError('"br/co" - loop index must be positive number. Given: non-integer');
@@ -4555,7 +4567,7 @@ begin
         goto ContinueOuterLoop;
       end;
       
-      Value1.v := GetErmParamValue(@Conds[j][i][LEFT_COND], ValType1);
+      Value1.v := GetErmParamValue(@Conds[j][i][LEFT_COND], ValType1, FLAG_GETVALUE_GET_STR_ADDR);
 
       if ValType1 = VALTYPE_BOOL then begin
         case Conds[j][i][LEFT_COND].GetCheckType() of
@@ -4566,7 +4578,7 @@ begin
           result := true; exit;
         end;
       end else begin
-        Value2.v := GetErmParamValue(@Conds[j][i][RIGHT_COND], ValType2);
+        Value2.v := GetErmParamValue(@Conds[j][i][RIGHT_COND], ValType2, FLAG_GETVALUE_GET_STR_ADDR);
         CmpRes   := 0;
 
         // Number comparison
