@@ -3404,11 +3404,6 @@ begin
       goto Error;
     end;
   end; // .else
-
-  if not StrLib.ParseIntFromPchar(Caret, Param.Value) and (IndexTypeChar in ['+', '-']) then begin
-    ShowErmError('*GetNum: expected digit after number sign (+/-). Got: ' + Caret^);
-    goto Error;
-  end;
   
   if IsIndexed then begin
     ConvertVarTypeCharToId(BaseTypeChar, BaseVarType);
@@ -3447,53 +3442,14 @@ Error:
   Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
 end; // .function Hook_ZvsGetNum
 
-{PErmSubCmd = ^TErmSubCmd;
-TErmSubCmd = packed record
-  Pos:        integer;
-  Code:       TErmString;
-  Conditions: TErmCmdConditions;
-  Params:     TErmCmdParams;
-  Chars:      array [0..15] of char;
-  DFlags:     array [0..15] of boolean;
-  Nums:       array [0..15] of integer;
-end; // .record TErmSubCmd}
-
-type
-  PCachedSubCmdParams = ^TCachedSubCmdParams;
-  TCachedSubCmdParams = packed record
-    AddrHash:  integer;
-    _Align1:   integer;
-    NumParams: integer;
-    _Align2:   integer;
-    Pos:       integer;
-    _Align3:   integer;
-    Params:    TErmCmdParams;
-    DFlags:    array [0..15] of boolean;
-    Nums:      array [0..15] of integer;
-  end;
-
-var
-  SubCmdCache: array [0..99] of TCachedSubCmdParams;
-
 function CustomGetNumAuto (CmdId: integer; SubCmd: PErmSubCmd): integer; stdcall;
 const
   DONT_EVAL = 0;
-  DO_EVAL = 1;
+  DO_EVAL   = 1;
 
   CMD_SN = $4E53;
   CMD_MP = $504D;
   CMD_RD = $4452;
-
-  NIL_HASH = 0;
-
-var
-  ParamsAddrHash: integer;
-  CacheEntry:     PCachedSubCmdParams;
-  ValType:        integer;
-  i:              integer;
-
-label
-  Quit;
 
 begin
   // Skip Era triggers, which are interpreted separately
@@ -3502,69 +3458,24 @@ begin
     exit;
   end;
 
-  ParamsAddrHash := Crypto.Tm32Encode(integer(@SubCmd.Code.Value[SubCmd.Pos]));
-  CacheEntry     := @SubCmdCache[integer(cardinal(ParamsAddrHash) mod cardinal(Length(SubCmdCache)))];
-
-  if CacheEntry.AddrHash = ParamsAddrHash then begin
-    result := CacheEntry.NumParams;
-
-    if result > 0 then begin
-      for i := 0 to result - 1 do begin
-        SubCmd.Params[i] := CacheEntry.Params[i];
-      end;
-
-      Utils.CopyMem(sizeof(CacheEntry.DFlags) + sizeof(CacheEntry.Nums), @CacheEntry.DFlags, @SubCmd.DFlags);
-    end;
-
-    SubCmd.Pos := CacheEntry.Pos;
-
-    for i := 0 to result - 1 do begin
-      if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_GET then begin
-        SubCmd.Nums[i] := GetErmParamValue(@SubCmd.Params[i], ValType);
-      end;
-    end;
-
-    exit;
-  end;
-
   result := 0;
 
   while result < 16 do begin
     SubCmd.Params[result].Value := 0;
 
-    if Hook_ZvsGetNum(SubCmd, result, DONT_EVAL) then begin
+    if Hook_ZvsGetNum(SubCmd, result, DO_EVAL) then begin
       result := 0;
-      goto Quit;
+      exit;
     end else begin
       Inc(result);
 
       if SubCmd.Code.Value[SubCmd.Pos] <> '/' then begin
-        goto Quit;
+        exit;
       end;
 
       Inc(SubCmd.Pos);
     end; // .else
   end; // .while
-
-Quit:
-  CacheEntry.AddrHash  := ParamsAddrHash;
-  CacheEntry.NumParams := result;
-
-  if result > 0 then begin
-    for i := 0 to result - 1 do begin
-      CacheEntry.Params[i] := SubCmd.Params[i];
-    end;
-
-    Utils.CopyMem(sizeof(CacheEntry.DFlags) + sizeof(CacheEntry.Nums), @SubCmd.DFlags, @CacheEntry.DFlags);
-  end;
-
-  CacheEntry.Pos := SubCmd.Pos;
-
-  for i := 0 to result - 1 do begin
-    if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_GET then begin
-      SubCmd.Nums[i] := GetErmParamValue(@SubCmd.Params[i], ValType);
-    end;
-  end;
 end; // .function CustomGetNumAuto
 
 function Hook_ZvsApply (ValuePtr: pointer; ValueSize: integer; SubCmd: PErmSubCmd; ParamInd: integer): integer; cdecl;
