@@ -54,6 +54,7 @@ const
   PARAM_VARTYPE_Z     = 7;
   PARAM_VARTYPE_E     = 8;
   PARAM_VARTYPE_I     = 9;
+  PARAM_VARTYPE_STR   = 10;
 
   (* Normalized ERM parameter value types *)
   VALTYPE_INT   = 0;
@@ -2852,7 +2853,7 @@ begin
 end; 
 
 (* Extract i^...^ or s^...^ variable name. BufPos must point to first name character *)
-function ExtractGlobalNamedVarName (BufPos: pchar): string;
+function ExtractErmStrLiteral (BufPos: pchar): string;
 var
   StartPos: pchar;
 
@@ -2867,7 +2868,7 @@ begin
   result := StrLib.ExtractFromPchar(StartPos, integer(BufPos) - integer(StartPos));
 end;
 
-function ExtractGlobalNamedVarNameFast (BufPos: pchar; ResBuf: pchar; ResBufSize: integer): pchar;
+function ExtractErmStrLiteralFast (BufPos: pchar; ResBuf: pchar; ResBufSize: integer): pchar;
 begin
   {!} Assert(BufPos <> nil);
   {!} Assert(ResBuf <> nil);
@@ -2883,7 +2884,22 @@ begin
   end;
 
   ResBuf^ := #0;
-end; // .function ExtractGlobalNamedVarNameFast
+end; // .function ExtractErmStrLiteralFast
+
+function GetErmStrLiteralLen (BufPos: pchar): integer;
+var
+  StartPos: pchar;
+
+begin
+  {!} Assert(BufPos <> nil);
+  StartPos := BufPos;
+
+  while not (BufPos^ in ['^', ';', #0]) do begin
+    Inc(BufPos);
+  end;
+
+  result := integer(BufPos) - integer(StartPos);
+end;
 
 (* Converts ERM parameter to original string in code *)
 function ErmParamToCode (Param: PErmCmdParam): string;
@@ -2916,11 +2932,12 @@ begin
       PARAM_VARTYPE_Z:     result := result + 'z';
       PARAM_VARTYPE_E:     result := result + 'e';
       PARAM_VARTYPE_I:     result := result + 'i^';
+      PARAM_VARTYPE_STR:   result := result + 'i^';
     end;
   end;
 
-  if (Types[0] = PARAM_VARTYPE_I) or (Types[1] = PARAM_VARTYPE_I) then begin
-    result := result + ExtractGlobalNamedVarName(pchar(Param.Value)) + '^';
+  if (Types[0] = PARAM_VARTYPE_I) or (Types[1] = PARAM_VARTYPE_I) or (Types[0] = PARAM_VARTYPE_STR) or (Types[1] = PARAM_VARTYPE_STR) then begin
+    result := result + ExtractErmStrLiteral(pchar(Param.Value)) + '^';
   end else if (Types[0] <> PARAM_VARTYPE_QUICK) and (Types[1] <> PARAM_VARTYPE_QUICK) then begin
     result := result + IntToStr(Param.Value);
   end;
@@ -2936,6 +2953,8 @@ var
      AssocVarName:  string;
      ValTypes:      array [0..1] of integer;
      ValType:       integer;
+     StrLiteral:    pchar;
+     StrLen:        integer;
      i:             integer;
 
 begin
@@ -3011,9 +3030,9 @@ begin
           ValType := VALTYPE_INT;
 
           if Param.NeedsInterpolation() then begin
-            AssocVarName := ZvsInterpolateStr(ExtractGlobalNamedVarNameFast(pchar(result), @TempStrBuf, sizeof(TempStrBuf)));
+            AssocVarName := ZvsInterpolateStr(ExtractErmStrLiteralFast(pchar(result), @TempStrBuf, sizeof(TempStrBuf)));
           end else begin
-            AssocVarName := ExtractGlobalNamedVarName(pchar(result));
+            AssocVarName := ExtractErmStrLiteral(pchar(result));
           end;
 
           AssocVarValue := AdvErm.AssocMem[AssocVarName];
@@ -3024,6 +3043,26 @@ begin
             result := AssocVarValue.IntValue;
           end;
         end;
+
+        PARAM_VARTYPE_STR: begin
+          if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
+            if Param.NeedsInterpolation() then begin
+              StrLiteral := ZvsInterpolateStr(ExtractErmStrLiteralFast(pchar(result), @TempStrBuf, sizeof(TempStrBuf)));
+              StrLen     := Windows.LStrLen(StrLiteral);
+            end else begin
+              StrLiteral := pchar(result);
+              StrLen     := GetErmStrLiteralLen(StrLiteral);
+            end;
+
+            result := integer(ServiceMemAllocator.AllocStr(StrLen));
+            Utils.CopyMem(StrLen, StrLiteral, pchar(result));
+
+            ValType := VALTYPE_STR;
+          end else begin
+            ShowErmError(Format('Cannot use string literal ^%s^ in native ERM receiver except of conditional part.', [result]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end; // .else       
+        end; // .case PARAM_VARTYPE_STR
 
         PARAM_VARTYPE_Z: begin
           if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
@@ -3180,9 +3219,9 @@ begin
         ValType := VALTYPE_INT;
 
         if Param.NeedsInterpolation() then begin
-          AssocVarName := ZvsInterpolateStr(ExtractGlobalNamedVarNameFast(pchar(Value), @StrBuf, sizeof(StrBuf)));
+          AssocVarName := ZvsInterpolateStr(ExtractErmStrLiteralFast(pchar(Value), @StrBuf, sizeof(StrBuf)));
         end else begin
-          AssocVarName := ExtractGlobalNamedVarName(pchar(Value));
+          AssocVarName := ExtractErmStrLiteral(pchar(Value));
         end;
 
         AssocVarValue := AdvErm.AssocMem[AssocVarName];
@@ -3357,9 +3396,15 @@ begin
 
   IndexTypeChar := Caret^;
 
-  if (IndexTypeChar = 'i') and (Caret[1] = '^') then begin
-    Inc(Caret, 2);
-    IndexVarType       := PARAM_VARTYPE_I;
+  if ((IndexTypeChar = '^') and (DoEval = 0)) or ((IndexTypeChar = 'i') and (Caret[1] = '^')) then begin
+    if IndexTypeChar = '^' then begin
+      Inc(Caret);
+      IndexVarType := PARAM_VARTYPE_STR;
+    end else begin
+      Inc(Caret, 2);
+      IndexVarType := PARAM_VARTYPE_I;
+    end;
+
     Param.Value        := integer(Caret);
     NeedsInterpolation := false;
 
@@ -3372,7 +3417,7 @@ begin
     end;
 
     if Caret^ <> '^' then begin
-      ShowErmError('*GetNum: associative variable name end marker (^) not found');
+      ShowErmError('*GetNum: string end marker (^) not found');
       goto Error;
     end;
 
@@ -3380,7 +3425,7 @@ begin
       Param.SetNeedsInterpolation(true);
     end;
 
-    Inc(Caret);
+    Inc(Caret);   
   end else if IndexTypeChar in ['f'..'t'] then begin
     IndexVarType := PARAM_VARTYPE_QUICK;
     Param.Value  := ord(IndexTypeChar) - ord('f') + Low(Erm.QuickVars^);
@@ -3970,8 +4015,16 @@ begin
     EventTracker.TrackCmd(PErmCmd(ppointer(Context.EBP + 8)^).CmdHeader.Value);
   end;
 
+  ServiceMemAllocator.AllocPage;
+
   ErmErrReported := false;  
   result         := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_ProcessCmd_End (Context: Core.PHookContext): longbool; stdcall;
+begin
+  ServiceMemAllocator.FreePage;
+  result := true;
 end;
 
 function Hook_FindErm_BeforeMainLoop (Context: Core.PHookContext): longbool; stdcall;
@@ -4843,13 +4896,15 @@ begin
   (* Ovewrite GetNumAuto call from upper patch with Era filtering method *)
   Core.ApiHook(@CustomGetNumAuto, Core.HOOKTYPE_CALL, Ptr($741EAE));
 
+  (* Set ProcessCmd enter/leave hooks *)
+  Core.ApiHook(@Hook_ProcessCmd, Core.HOOKTYPE_BRIDGE, Ptr($741E3F));
+  ApiJack.HookCode(Ptr($749702), @Hook_ProcessCmd_End);
+
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
     if Enabled then begin
       EventTracker := ErmTracking.TEventTracker.Create(MaxRecords).SetDumpCommands(DumpCommands).SetIgnoreEmptyTriggers(IgnoreEmptyTriggers).SetIgnoreRealTimeTimers(IgnoreRealTimeTimers);
     end;
-
-    Core.ApiHook(@Hook_ProcessCmd, Core.HOOKTYPE_BRIDGE, Ptr($741E3F));
   end;
 end; // .procedure OnAfterWoG
 

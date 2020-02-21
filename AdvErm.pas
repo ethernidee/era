@@ -154,6 +154,8 @@ function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const Pa
 var
 {O} AssocMem: {O} AssocArrays.TAssocArray {OF TAssocVar};
 
+  ServiceMemAllocator: TServiceMemAllocator;
+
   
 (***) implementation (***)
 
@@ -188,8 +190,6 @@ var
     Mp3TriggerContext:   PMp3TriggerContext = nil;
     CurrentMp3Track:     string;
     CurrentSoundNameBuf: PSoundNameBuffer = nil;
-
-    ServiceMemAllocator: TServiceMemAllocator;
 
 
 procedure TServiceMemAllocator.Init;
@@ -860,7 +860,6 @@ function TErmCmdWrapper.FindNextSubcmd (AllowedSubcmds: Utils.TCharSet): boolean
 begin
   // Skip parameters and subcommand from previous call
   if Self.Success and (Self._ParamsLen > 0) then begin
-    ServiceMemAllocator.FreePage;
     Inc(Self.CmdPtr,      Self._ParamsLen);
     Inc(Self.CmdInfo.Pos, Self._ParamsLen);
     Self._ParamsLen := 0;
@@ -876,13 +875,11 @@ begin
     if not Self.Success then begin
       Error := 'Unknown command "!!' + Self.CmdName + ':' + Self.Cmd + '"';
     end else begin
-      ServiceMemAllocator.AllocPage;
       Self._ParamsLen := GetServiceParams(Self.CmdPtr, Self.NumParams, Self.Params);
 
       if Self._ParamsLen = -1 then begin
         Self.Success := false;
         result       := false;
-        ServiceMemAllocator.FreePage;
       end;
     end; // .else
   end; // .if
@@ -2827,6 +2824,7 @@ begin
 end;
 
 begin
+  ServiceMemAllocator.Init;
   Erm.ErmCmdOptimizer := @OptimizeErmCmd;
 
   Kernel32Handle := Windows.LoadLibraryW('kernel32.dll');
