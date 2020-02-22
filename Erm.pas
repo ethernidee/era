@@ -300,6 +300,9 @@ type
     NumParams:    integer;
     CmdHeader:    TErmString; // ##:...
     CmdBody:      TErmString; // #^...^/...
+
+    procedure SetIsGenerated (NewValue: boolean); inline;
+    function  IsGenerated: boolean; inline;
   end; // .record TErmCmd
 
   PErmSubCmd = ^TErmSubCmd;
@@ -645,6 +648,16 @@ const
   (* GetErmParamValue flags *)
   FLAG_GETVALUE_GET_STR_ADDR = 1; // Indicates, that caller expects string address, not index
 
+type
+  PCachedSubCmdParams = ^TCachedSubCmdParams;
+  TCachedSubCmdParams = packed record
+    AddrHash:       integer;
+    NumParams:      integer;
+    Pos:            integer;
+    Params:         TErmCmdParams;
+    DFlags:         array [0..15] of boolean;
+  end;
+
 var
 {O} FuncNames:       DataLib.TDict {OF FuncId: integer};
 {O} FuncIdToNameMap: DataLib.TObjDict {O} {OF TString};
@@ -660,6 +673,9 @@ var
     NullTrigger:           PErmTrigger            = nil;
     NumUniqueTriggers:     integer                = 0;
     CompiledErmOptimized:  boolean                = false;
+
+    (* Speed up loops with nativ ERM receivers *)
+    SubCmdCache: array [0..511] of TCachedSubCmdParams;
 
 
 function TErmCmdParam.GetType: integer;
@@ -710,6 +726,16 @@ end;
 procedure TErmCmdParam.SetHasCurrDayModifier (Value: boolean);
 begin
   Self.ValType := (Self.ValType and not $1000) or (ord(Value) shl 12);
+end;
+
+procedure TErmCmd.SetIsGenerated (NewValue: boolean);
+begin
+  Self.Params[14].Value := (Self.Params[14].Value and not $1) or ord(NewValue);
+end;
+
+function TErmCmd.IsGenerated: boolean;
+begin
+  result := (Self.Params[14].Value and $1) <> 0;
 end;
 
 function TErmTrigger.GetSize: integer;
@@ -1055,6 +1081,8 @@ begin
     Res := Res and ErmScanner.GotoNextChar;
 
     if Res then begin
+      Cmd.SetIsGenerated(true);
+
       // Allocate memory, because ERM engine changes command contents during execution
       GetMem(Cmd.CmdHeader.Value, Length(CmdStr) + 1 + Length('!!'));
       pchar(Cmd.CmdHeader.Value)[0] := '!';
@@ -1131,6 +1159,7 @@ begin
   
   FreeAndNil(FuncIdToNameMap);
   FuncIdToNameMap := DataLib.FlipDict(FuncNames);
+
 
   (* Load scripts *)
   ScriptMan.LoadScriptsFromSavedGame;
@@ -2331,6 +2360,11 @@ begin
   OrigFunc(Owner);
 end;
 
+procedure ResetErmSubCmdCache;
+begin
+  System.FillChar(SubCmdCache, sizeof(SubCmdCache), #0);
+end;
+
 (* === START: Erm optimization section === *)
 type
   TTriggerFastAccessListSorter = class (Alg.TQuickSortAdapter)
@@ -2643,6 +2677,7 @@ end; // .function OptimizeCompiledErm
 
 function Hook_FindErm_Start (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
+  ResetErmSubCmdCache;
   CompiledErmOptimized := false;
   result               := true;
 end;
@@ -3492,32 +3527,7 @@ Error:
   Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
 end; // .function Hook_ZvsGetNum
 
-{PErmSubCmd = ^TErmSubCmd;
-TErmSubCmd = packed record
-  Pos:        integer;
-  Code:       TErmString;
-  Conditions: TErmCmdConditions;
-  Params:     TErmCmdParams;
-  Chars:      array [0..15] of char;
-  DFlags:     array [0..15] of boolean;
-  Nums:       array [0..15] of integer;
-end; // .record TErmSubCmd}
-
-type
-  PCachedSubCmdParams = ^TCachedSubCmdParams;
-  TCachedSubCmdParams = packed record
-    AddrHash:       integer;
-    NumParams:      integer;
-    Pos:            integer;
-    Params:         TErmCmdParams;
-    DFlags:         array [0..15] of boolean;
-    ParamPositions: array [0..15] of integer;
-  end;
-
-var
-  SubCmdCache: array [0..399] of TCachedSubCmdParams;
-
-function CustomGetNumAuto (CmdId: integer; SubCmd: PErmSubCmd): integer; stdcall;
+function CustomGetNumAuto (Cmd: PErmCmd; SubCmd: PErmSubCmd): integer; stdcall;
 const
   DONT_EVAL = 0;
   DO_EVAL   = 1;
@@ -3527,15 +3537,19 @@ const
   CMD_RD = $4452;
 
 var
+  CmdId:          integer;
   ParamsAddrHash: integer;
   CacheEntry:     PCachedSubCmdParams;
   ValType:        integer;
+  UseCaching:     longbool;
   i:              integer;
 
 label
   Quit;
 
 begin
+  CmdId := Cmd.CmdId.Id;
+
   // Skip Era triggers, which are interpreted separately
   if (CmdId = CMD_SN) or (CmdId = CMD_MP) or (CmdId = CMD_RD) then begin
     result := 1;
@@ -3544,8 +3558,10 @@ begin
 
   ParamsAddrHash := Crypto.Tm32Encode(integer(@SubCmd.Code.Value[SubCmd.Pos]));
   CacheEntry     := @SubCmdCache[integer(cardinal(ParamsAddrHash) mod cardinal(Length(SubCmdCache)))];
+  UseCaching     := not Cmd.IsGenerated;
 
-  if CacheEntry.AddrHash = ParamsAddrHash then begin
+  // Caching is ON and HIT
+  if UseCaching and (CacheEntry.AddrHash = ParamsAddrHash) then begin
     result := CacheEntry.NumParams;
 
     if result > 0 then begin
@@ -3553,32 +3569,34 @@ begin
       System.Move(CacheEntry.DFlags, SubCmd.DFlags, sizeof(CacheEntry.DFlags));
     end;
 
-    SubCmd.Pos := CacheEntry.Pos;
-
     for i := 0 to result - 1 do begin
       if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_GET then begin
         if SubCmd.Params[i].ValType = PARAM_VARTYPE_NUM then begin
           SubCmd.Nums[i] := SubCmd.Params[i].Value;
         end else begin
-          SubCmd.Pos     := CacheEntry.ParamPositions[i];
           SubCmd.Nums[i] := GetErmParamValue(@SubCmd.Params[i], ValType, 0);
         end;
       end;
     end;
 
+    SubCmd.Pos := CacheEntry.Pos;
+
     exit;
-  end;
+  end; // .if
 
   result := 0;
 
   while result < Length(SubCmd.Params) do begin
-    SubCmd.Params[result].Value := 0;
-
     if Hook_ZvsGetNum(SubCmd, result, DO_EVAL) then begin
       result := 0;
-      goto Quit;
+
+      // Do not cache erroreous commands
+      if UseCaching then begin
+        CacheEntry.AddrHash := 0;
+      end;
+      
+      exit;
     end else begin
-      CacheEntry.ParamPositions[result] := SubCmd.Pos;
       Inc(result);
 
       if SubCmd.Code.Value[SubCmd.Pos] <> '/' then begin
@@ -3590,6 +3608,10 @@ begin
   end; // .while
 
 Quit:
+  if not UseCaching then begin
+    exit;
+  end;
+
   CacheEntry.AddrHash  := ParamsAddrHash;
   CacheEntry.NumParams := result;
 
@@ -4785,6 +4807,11 @@ begin
   end;
 end;
 
+procedure OnBeforeClearErmScripts (Event: GameExt.PEvent); stdcall;
+begin
+  ResetErmSubCmdCache;
+end;
+
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
 const
   NEW_ERM_HEAP_SIZE = 128 * 1000 * 1000;
@@ -4954,7 +4981,7 @@ begin
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF8955FC890D0C0E84008885' +
-                                       'E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF520FB785ECFCFFFF50E8C537C01190908945F0837DF0007575E9167800' +
+                                       'E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF528B45089090909050E8C537C01190908945F0837DF0007575E9167800' +
                                        '0090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
                                        '9090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
                                        '90909090909090909090909090']);
@@ -5027,6 +5054,7 @@ begin
   EventMan.GetInstance.On('OnAfterWoG',               OnAfterWoG);
   EventMan.GetInstance.On('$OnEraSaveScripts',        OnEraSaveScripts);
   EventMan.GetInstance.On('$OnEraLoadScripts',        OnEraLoadScripts);
+  EventMan.GetInstance.On('OnBeforeClearErmScripts',  OnBeforeClearErmScripts);
   EventMan.GetInstance.On('OnGenerateDebugInfo',      OnGenerateDebugInfo);
   EventMan.GetInstance.On('OnAfterStructRelocations', OnAfterStructRelocations);
 end.

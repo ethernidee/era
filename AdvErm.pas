@@ -575,6 +575,7 @@ begin
         Param.Value.pc := ServiceMemAllocator.AllocStr(StrLen);
         Utils.CopyMem(StrLen, pchar(@PCmd[StartPos]), Param.Value.pc);
       end;
+
       
       PCmd[Pos] := '^';
       Inc(Pos);
