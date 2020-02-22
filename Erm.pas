@@ -251,6 +251,7 @@ type
     [3 bits]  CheckType:        TErmCheckType;
     [1 bit]   NeedsInterpolation: boolean; // For I-type determines, if string has % character
     [1 bit]   HasCurrDayModifier: boolean; // true if "c" modifier was used before parameter
+    [1 bit]   CanBeFastIntEvaled: boolean; // true if it's v/y/x variable with valid known index
     }
     ValType:  integer;
 
@@ -264,6 +265,8 @@ type
     procedure SetNeedsInterpolation (Value: boolean); inline;
     function  HasCurrDayModifier: boolean; inline;
     procedure SetHasCurrDayModifier (Value: boolean); inline;
+    function  CanBeFastIntEvaled: boolean; inline;
+    procedure SetCanBeFastIntEvaled (Value: boolean); inline;
   end; // .record TErmCmdParam
 
   TErmString = packed record
@@ -596,6 +599,7 @@ var
     FuncArgsGetSyntaxFlagsPassed:   integer = 0;
     FuncArgsGetSyntaxFlagsReceived: integer = 0;
 
+    ErmLegacySupport: boolean = false;
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -605,8 +609,6 @@ var
     IgnoreEmptyTriggers:  boolean;
     IgnoreRealTimeTimers: boolean;
   end;
-
-  ErmLegacySupport: boolean = false;
 
 
 procedure SetZVar (Str: pchar; const Value: string); overload;
@@ -648,6 +650,8 @@ const
   (* GetErmParamValue flags *)
   FLAG_GETVALUE_GET_STR_ADDR = 1; // Indicates, that caller expects string address, not index
 
+  FAST_INT_TYPE_CHARS = ['y', 'x', 'v'];
+
 type
   PCachedSubCmdParams = ^TCachedSubCmdParams;
   TCachedSubCmdParams = packed record
@@ -656,6 +660,11 @@ type
     Pos:            integer;
     Params:         TErmCmdParams;
     DFlags:         array [0..15] of boolean;
+  end;
+
+  TFastIntVarSet = record
+    MinInd: integer;
+    MaxInd: integer;
   end;
 
 var
@@ -676,6 +685,10 @@ var
 
     (* Speed up loops with nativ ERM receivers *)
     SubCmdCache: array [0..511] of TCachedSubCmdParams;
+
+    (* Fast known integer variables like y3, x15 or v600 compilation optimization *)
+    FastIntVarSets:  array [0..15] of TFastIntVarSet;
+    FastIntVarAddrs: array [0..15] of Utils.PEndlessIntArr;
 
 
 function TErmCmdParam.GetType: integer;
@@ -726,6 +739,16 @@ end;
 procedure TErmCmdParam.SetHasCurrDayModifier (Value: boolean);
 begin
   Self.ValType := (Self.ValType and not $1000) or (ord(Value) shl 12);
+end;
+
+function TErmCmdParam.CanBeFastIntEvaled: boolean;
+begin
+  result := ((Self.ValType shr 13) and $1) <> 0;
+end;
+
+procedure TErmCmdParam.SetCanBeFastIntEvaled (Value: boolean);
+begin
+  Self.ValType := (Self.ValType and not $2000) or (ord(Value) shl 13);
 end;
 
 procedure TErmCmd.SetIsGenerated (NewValue: boolean);
@@ -2961,7 +2984,7 @@ begin
       PARAM_VARTYPE_Z:     result := result + 'z';
       PARAM_VARTYPE_E:     result := result + 'e';
       PARAM_VARTYPE_I:     result := result + 'i^';
-      PARAM_VARTYPE_STR:   result := result + 'i^';
+      PARAM_VARTYPE_STR:   result := result + '^';
     end;
   end;
 
@@ -2987,6 +3010,12 @@ var
      i:             integer;
 
 begin
+  if Param.CanBeFastIntEvaled() then begin
+    result     := FastIntVarAddrs[Param.GetType()][Param.Value];
+    ResValType := VALTYPE_INT;
+    exit;
+  end;
+
   ValTypes[0] := Param.GetIndexedPartType();
   ValTypes[1] := Param.GetType();
   result      := Param.Value;
@@ -3177,6 +3206,12 @@ var
      i:             integer;
 
 begin
+  if Param.CanBeFastIntEvaled() then begin
+    FastIntVarAddrs[Param.GetType()][Param.Value] := NewValue;
+    result := true;
+    exit;
+  end;
+
   ValTypes[0] := Param.GetIndexedPartType();
   ValTypes[1] := Param.GetType();
   result      := true;
@@ -3289,7 +3324,7 @@ begin
         result := false; exit;
       end;
     else
-      ShowErmError(Format('SetErmParamValue: Unknown variable type: %d', [ValType]));
+      ShowErmError(Format('SetErmParamValue: Unsupported variable type: %d', [ValType]));
       result := false; exit;
     end; // .switch 
 
@@ -3494,6 +3529,13 @@ begin
     ConvertVarTypeCharToId(BaseTypeChar, BaseVarType);
     Param.SetType(BaseVarType);
     Param.SetIndexedPartType(IndexVarType);
+
+    // Optimize known safe int vars like y3, x15 or v600
+    if (IndexVarType = PARAM_VARTYPE_NUM) and (BaseTypeChar in FAST_INT_TYPE_CHARS) and
+       (Param.Value >= FastIntVarSets[BaseVarType].MinInd) and (Param.Value <= FastIntVarSets[BaseVarType].MaxInd)
+    then begin
+      Param.SetCanBeFastIntEvaled(true);
+    end;
   end else begin
     Param.SetType(IndexVarType);
   end;
@@ -3540,6 +3582,7 @@ var
   CmdId:          integer;
   ParamsAddrHash: integer;
   CacheEntry:     PCachedSubCmdParams;
+  Param:          PErmCmdParam;
   ValType:        integer;
   UseCaching:     longbool;
   i:              integer;
@@ -3570,11 +3613,15 @@ begin
     end;
 
     for i := 0 to result - 1 do begin
-      if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_GET then begin
-        if SubCmd.Params[i].ValType = PARAM_VARTYPE_NUM then begin
-          SubCmd.Nums[i] := SubCmd.Params[i].Value;
+      Param := @SubCmd.Params[i];
+
+      if Param.GetCheckType() <> PARAM_CHECK_GET then begin
+        if Param.ValType = PARAM_VARTYPE_NUM then begin
+          SubCmd.Nums[i] := Param.Value;
+        end else if Param.CanBeFastIntEvaled() then begin
+          SubCmd.Nums[i] := FastIntVarAddrs[Param.GetType()][Param.Value];
         end else begin
-          SubCmd.Nums[i] := GetErmParamValue(@SubCmd.Params[i], ValType, 0);
+          SubCmd.Nums[i] := GetErmParamValue(Param, ValType, 0);
         end;
       end;
     end;
@@ -4798,6 +4845,19 @@ begin
   result := not (results[0] or results[1]);
 end; // .function Hook_ZvsCheckFlags
 
+procedure InitFastIntOptimizationStructs;
+begin
+  FastIntVarSets[PARAM_VARTYPE_Y].MinInd := Low(y^);
+  FastIntVarSets[PARAM_VARTYPE_Y].MaxInd := High(y^);
+  FastIntVarAddrs[PARAM_VARTYPE_Y]       := Utils.PtrOfs(y, -sizeof(integer));
+  FastIntVarSets[PARAM_VARTYPE_X].MinInd := Low(x^);
+  FastIntVarSets[PARAM_VARTYPE_X].MaxInd := High(x^);
+  FastIntVarAddrs[PARAM_VARTYPE_X]       := Utils.PtrOfs(x, -sizeof(integer));
+  FastIntVarSets[PARAM_VARTYPE_V].MinInd := Low(v^);
+  FastIntVarSets[PARAM_VARTYPE_V].MaxInd := High(v^);
+  FastIntVarAddrs[PARAM_VARTYPE_V]       := Utils.PtrOfs(v, -sizeof(integer));
+end;
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
@@ -5049,6 +5109,8 @@ begin
   );
   IsWoG^      :=  true;
   ScriptNames :=  Lists.NewSimpleStrList;
+
+  InitFastIntOptimizationStructs;
   
   EventMan.GetInstance.On('OnBeforeWoG',              OnBeforeWoG);
   EventMan.GetInstance.On('OnAfterWoG',               OnAfterWoG);
