@@ -477,6 +477,7 @@ end; // .function ErmVarToServiceParam
 function GetServiceParams (Cmd: pchar; var NumParams: integer; var Params: TServiceParams): integer;
 const
   INDEXABLE_PAR_TYPES = ['v', 'y', 'x', 'z', 'w', 'e'];
+  PARAM_START_CHARS   = ['x', 'y', 'z', 'w', 'v', 'e', 'f'..'t', 'd', '+', '-', '0'..'9', '?', '^'];
 
 var
   PCmd:          pchar;
@@ -498,15 +499,14 @@ begin
   NumParams := 0;
   Pos       := 1;
 
-  while not (PCmd[Pos] in [';', #0]) do begin
+  while true do begin
     while PCmd[Pos] in [#1..#32] do begin
       Inc(Pos);
     end;
 
-    if PCmd[Pos] in [';', #0] then begin
+    if not (PCmd[Pos] in PARAM_START_CHARS) then begin
       break;
     end;
-
 
     SingleDSyntax       := false;
     Param               := @Params[NumParams];
