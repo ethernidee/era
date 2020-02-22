@@ -593,8 +593,6 @@ var
     FuncArgsGetSyntaxFlagsPassed:   integer = 0;
     FuncArgsGetSyntaxFlagsReceived: integer = 0;
 
-    TempStrBuf: array [0..255] of char;
-
   
   (* ERM tracking options *)
   TrackingOpts: record
@@ -2868,23 +2866,19 @@ begin
   result := StrLib.ExtractFromPchar(StartPos, integer(BufPos) - integer(StartPos));
 end;
 
-function ExtractErmStrLiteralFast (BufPos: pchar; ResBuf: pchar; ResBufSize: integer): pchar;
+function GetInterpolatedErmStrLiteral (BufPos: pchar): pchar;
 begin
   {!} Assert(BufPos <> nil);
-  {!} Assert(ResBuf <> nil);
-  {!} Assert(ResBufSize > 0);
-  result := ResBuf;
-  Dec(ResBufSize);
+  result := BufPos;
 
-  while (ResBufSize > 0) and not (BufPos^ in ['^', ';', #0]) do begin
-    ResBuf^ := BufPos^;
+  while BufPos^ <> '^' do begin
     Inc(BufPos);
-    Inc(ResBuf);
-    Dec(ResBufSize);
   end;
 
-  ResBuf^ := #0;
-end; // .function ExtractErmStrLiteralFast
+  BufPos^ := #0;
+  result  := ZvsInterpolateStr(result);
+  BufPos^ := '^';
+end;
 
 function GetErmStrLiteralLen (BufPos: pchar): integer;
 var
@@ -3030,7 +3024,7 @@ begin
           ValType := VALTYPE_INT;
 
           if Param.NeedsInterpolation() then begin
-            AssocVarName := ZvsInterpolateStr(ExtractErmStrLiteralFast(pchar(result), @TempStrBuf, sizeof(TempStrBuf)));
+            AssocVarName := GetInterpolatedErmStrLiteral(pchar(result));
           end else begin
             AssocVarName := ExtractErmStrLiteral(pchar(result));
           end;
@@ -3047,7 +3041,7 @@ begin
         PARAM_VARTYPE_STR: begin
           if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
             if Param.NeedsInterpolation() then begin
-              StrLiteral := ZvsInterpolateStr(ExtractErmStrLiteralFast(pchar(result), @TempStrBuf, sizeof(TempStrBuf)));
+              StrLiteral := GetInterpolatedErmStrLiteral(pchar(result));
               StrLen     := Windows.LStrLen(StrLiteral);
             end else begin
               StrLiteral := pchar(result);
@@ -3145,7 +3139,6 @@ var
      ValTypes:      array [0..1] of integer;
      ValType:       integer;
      Value:         integer;
-     StrBuf:        array [0..511] of char;
      i:             integer;
 
 begin
@@ -3219,7 +3212,7 @@ begin
         ValType := VALTYPE_INT;
 
         if Param.NeedsInterpolation() then begin
-          AssocVarName := ZvsInterpolateStr(ExtractErmStrLiteralFast(pchar(Value), @StrBuf, sizeof(StrBuf)));
+          AssocVarName := GetInterpolatedErmStrLiteral(pchar(Value));
         end else begin
           AssocVarName := ExtractErmStrLiteral(pchar(Value));
         end;
