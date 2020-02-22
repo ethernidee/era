@@ -650,7 +650,7 @@ const
   (* GetErmParamValue flags *)
   FLAG_GETVALUE_GET_STR_ADDR = 1; // Indicates, that caller expects string address, not index
 
-  FAST_INT_TYPE_CHARS = ['y', 'x', 'v'];
+  FAST_INT_TYPE_CHARS = ['f'..'t', 'v', 'x', 'y'];
 
 type
   PCachedSubCmdParams = ^TCachedSubCmdParams;
@@ -4847,15 +4847,18 @@ end; // .function Hook_ZvsCheckFlags
 
 procedure InitFastIntOptimizationStructs;
 begin
-  FastIntVarSets[PARAM_VARTYPE_Y].MinInd := Low(y^);
-  FastIntVarSets[PARAM_VARTYPE_Y].MaxInd := High(y^);
-  FastIntVarAddrs[PARAM_VARTYPE_Y]       := Utils.PtrOfs(y, -sizeof(integer));
-  FastIntVarSets[PARAM_VARTYPE_X].MinInd := Low(x^);
-  FastIntVarSets[PARAM_VARTYPE_X].MaxInd := High(x^);
-  FastIntVarAddrs[PARAM_VARTYPE_X]       := Utils.PtrOfs(x, -sizeof(integer));
-  FastIntVarSets[PARAM_VARTYPE_V].MinInd := Low(v^);
-  FastIntVarSets[PARAM_VARTYPE_V].MaxInd := High(v^);
-  FastIntVarAddrs[PARAM_VARTYPE_V]       := Utils.PtrOfs(v, -sizeof(integer));
+  FastIntVarSets[PARAM_VARTYPE_Y].MinInd     := Low(y^);
+  FastIntVarSets[PARAM_VARTYPE_Y].MaxInd     := High(y^);
+  FastIntVarAddrs[PARAM_VARTYPE_Y]           := Utils.PtrOfs(y, -sizeof(integer));
+  FastIntVarSets[PARAM_VARTYPE_X].MinInd     := Low(x^);
+  FastIntVarSets[PARAM_VARTYPE_X].MaxInd     := High(x^);
+  FastIntVarAddrs[PARAM_VARTYPE_X]           := Utils.PtrOfs(x, -sizeof(integer));
+  FastIntVarSets[PARAM_VARTYPE_V].MinInd     := Low(v^);
+  FastIntVarSets[PARAM_VARTYPE_V].MaxInd     := High(v^);
+  FastIntVarAddrs[PARAM_VARTYPE_V]           := Utils.PtrOfs(v, -sizeof(integer));
+  FastIntVarSets[PARAM_VARTYPE_QUICK].MinInd := Low(QuickVars^);
+  FastIntVarSets[PARAM_VARTYPE_QUICK].MaxInd := High(QuickVars^);
+  FastIntVarAddrs[PARAM_VARTYPE_QUICK]       := Utils.PtrOfs(QuickVars, -sizeof(integer));
 end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
