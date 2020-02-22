@@ -93,7 +93,7 @@ type
   (* Params index starts from 1 *)
   TCommandHandler = function (const CommandName: string; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 
-  TErmCmdHandler = function (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer cdecl;
+  TErmCmdHandler = function (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer cdecl;
 
   TVarType = (INT_VAR, STR_VAR);
   
@@ -123,7 +123,7 @@ type
   PErmCmdWrapper = ^TErmCmdWrapper;
   TErmCmdWrapper = record
     Success:    boolean;
-    CmdInfo:    Erm.PErmSubCmd;
+    SubCmd:     Erm.PErmSubCmd;
     CmdPtr:     pchar;
     CmdName:    pchar;
     Cmd:        char;
@@ -144,7 +144,7 @@ type
 procedure ResetMemory;
 function  GetOrCreateAssocVar (const VarName: string): {U} TAssocVar;
 procedure RegisterErmReceiver (const Cmd: string; {n} Handler: TErmCmdHandler; ParamsConfig: integer);
-function  WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
+function  WrapErmCmd (CmdName: pchar; SubCmd: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
 procedure ApplyIntParam (var Param: TServiceParam; var Dest: integer);
 procedure AssignPcharFromParam (var Param: TServiceParam; {n} Buf: pchar; BufSize: integer);
 procedure AssignStrFromParam (var Param: TServiceParam; var Str: string);
@@ -498,7 +498,16 @@ begin
   NumParams := 0;
   Pos       := 1;
 
-  while not (PCmd[Pos] in [';', #1..#32]) do begin
+  while not (PCmd[Pos] in [';', #0]) do begin
+    while PCmd[Pos] in [#1..#32] do begin
+      Inc(Pos);
+    end;
+
+    if PCmd[Pos] in [';', #0] then begin
+      break;
+    end;
+
+
     SingleDSyntax       := false;
     Param               := @Params[NumParams];
     Param.ParamModifier := NO_MODIFIER;
@@ -534,23 +543,23 @@ begin
       Inc(Pos);
     end;
 
-    if (PCmd[Pos] = '^') or ((PCmd[Pos] in ['s', 'i']) and (PCmd[Pos + 1] = '^')) then begin
+    if (BaseParType = '^') or ((BaseParType in ['s', 'i']) and (PCmd[Pos + 1] = '^')) then begin
       Param.IsStr  := true;
-      AssocVarUsed := PCmd[Pos] <> '^';
+      AssocVarUsed := BaseParType <> '^';
 
       if AssocVarUsed then begin
-        Param.IsStr := PCmd[Pos] = 's';
+        Param.IsStr := BaseParType = 's';
         Inc(Pos);
       end;
       
       Inc(Pos);
       StartPos := Pos;
       
-      while not (PCmd[Pos] in ['^', #0]) do begin
+      while not (PCmd[Pos] in ['^', ';', #0]) do begin
         Inc(Pos);
       end;
 
-      if PCmd[Pos] = #0 then begin
+      if PCmd[Pos] <> '^' then begin
         result := -1;
         exit;
       end;
@@ -583,7 +592,7 @@ begin
 
           if Param.IsStr then begin
             if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
-              Param.Value.pc := #0;
+              Param.Value.pc := '';
             end else begin
               StrLen         := Length(AssocVarValue.StrValue);
               Param.Value.pc := ServiceMemAllocator.AllocStr(StrLen);
@@ -632,7 +641,7 @@ begin
             result := -1; exit;
           end;
         // Disallow GET for numeric constants
-        end else if Param.OperGet then begin
+        end else if not IsIndexed and Param.OperGet then begin
           result := -1; exit;
         // Allow SET for numeric constants
         end else begin
@@ -669,16 +678,16 @@ begin
       end;
     end;
 
-    if PCmd[Pos] = '/' then begin
+    Inc(NumParams);
+
+    while PCmd[Pos] in [#1..#32] do begin
       Inc(Pos);
     end;
 
-    Inc(NumParams);
+    if PCmd[Pos] = '/' then begin
+      Inc(Pos);
+    end;
   end; // .while
-  
-  while PCmd[Pos] in [#1..#32] do begin
-    Inc(Pos);
-  end;
   
   result := Pos;
 end; // .function GetServiceParams
@@ -837,18 +846,18 @@ begin
   AdditionalCmds[NumAdditionalCmds].Handler := nil;
 end; // .procedure RegisterErmReceiver
 
-function WrapErmCmd (CmdName: pchar; CmdInfo: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
+function WrapErmCmd (CmdName: pchar; SubCmd: Erm.PErmSubCmd; var Wrapper: TErmCmdWrapper): PErmCmdWrapper;
 begin
   {!} Assert(CmdName <> nil);
-  {!} Assert(CmdInfo <> nil);
-  CmdInfo.Pos     := 0;
-  Wrapper.CmdInfo := CmdInfo;
+  {!} Assert(SubCmd <> nil);
+  SubCmd.Pos      := 0;
+  Wrapper.SubCmd  := SubCmd;
   Wrapper.CmdName := CmdName;
   result          := @Wrapper;
 
   with Wrapper do begin
     Success    := true;
-    CmdPtr     := @CmdInfo.Code.Value[0];
+    CmdPtr     := @SubCmd.Code.Value[0];
     Cmd        := CmdPtr^;
     Error      := 'Invalid command parameters';
     NumParams  := 0;
@@ -860,12 +869,21 @@ function TErmCmdWrapper.FindNextSubcmd (AllowedSubcmds: Utils.TCharSet): boolean
 begin
   // Skip parameters and subcommand from previous call
   if Self.Success and (Self._ParamsLen > 0) then begin
-    Inc(Self.CmdPtr,      Self._ParamsLen);
-    Inc(Self.CmdInfo.Pos, Self._ParamsLen);
+    Inc(Self.CmdPtr,     Self._ParamsLen);
+    Inc(Self.SubCmd.Pos, Self._ParamsLen);
     Self._ParamsLen := 0;
   end;
 
-  result := Self.Success and (Self.CmdPtr^ <> ';');
+  result := Self.Success;
+
+  if result then begin
+    while Self.CmdPtr^ in [#1..#32] do begin
+      Inc(Self.CmdPtr^);
+      Inc(Self.SubCmd.Pos);
+    end;
+
+    result := not (Self.CmdPtr^ in [';', #0]);
+  end;
 
   if result then begin
     Self.Cmd     := Self.CmdPtr^;
@@ -895,7 +913,7 @@ begin
   result := ord(Self.Success);
 
   if not Self.Success then begin
-    Erm.ErmErrCmdPtr^ := @CmdInfo.Code.Value[0];
+    Erm.ErmErrCmdPtr^ := @SubCmd.Code.Value[0];
     Erm.ShowErmError(Self.Error);
   end;
 end;
@@ -1777,12 +1795,12 @@ begin
   end; // .if
 end; // .function SN_X
 
-function SN_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
+function SN_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
 var
   CmdWrapper: TErmCmdWrapper;
 
 begin
-  with WrapErmCmd('SN', CmdInfo, CmdWrapper)^ do begin
+  with WrapErmCmd('SN', SubCmd, CmdWrapper)^ do begin
     while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R']) do begin
       case Cmd of
         'G': begin
@@ -1814,6 +1832,7 @@ begin
         end;
       end;
     end;
+
 
     result := GetCmdResult;
     Cleanup;
@@ -2682,12 +2701,12 @@ begin
   end;
 end;
 
-function New_Mp3_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; CmdInfo: Erm.PErmSubCmd): integer; cdecl;
+function New_Mp3_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
 var
   CmdWrapper: TErmCmdWrapper;
 
 begin
-  with WrapErmCmd('MP', CmdInfo, CmdWrapper)^ do begin
+  with WrapErmCmd('MP', SubCmd, CmdWrapper)^ do begin
     while FindNextSubcmd(['P', 'C', 'S', 'R']) do begin
       case Cmd of
         'P': begin Success := MP_P(NumParams, @Params, Error); end;
