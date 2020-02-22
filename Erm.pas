@@ -3413,8 +3413,14 @@ begin
     end;
 
     '=': begin
-      CheckType := PARAM_CHECK_EQUAL;
       Inc(Caret);
+
+      case Caret^ of
+        '>': begin CheckType := PARAM_CHECK_GREATER_EQUAL; Inc(Caret); end;
+        '<': begin CheckType := PARAM_CHECK_LOWER_EQUAL;   Inc(Caret); end;
+      else
+        CheckType := PARAM_CHECK_EQUAL;
+      end;      
     end;
 
     '<': begin
