@@ -2962,14 +2962,17 @@ begin
     // If ValType is raw number, it's already stored in result
     if ValType <> PARAM_VARTYPE_NUM then begin
       case ValType of
-        PARAM_VARTYPE_FLAG: begin
-          if (result < Low(f^)) or (result > High(f^)) then begin
-            ShowErmError(Format('Invalid flag index %d. Expected %d..%d', [result, Low(f^), High(f^)]));
+        PARAM_VARTYPE_Y: begin
+          if result in [Low(y^)..High(y^)] then begin
+            result := y[result];
+          end else if -result in [Low(ny^)..High(ny^)] then begin
+            result := ny[-result];
+          end else begin
+            ShowErmError(Format('Invalid y-var index: %d. Expected -100..-1, 1..100', [result]));
             ResValType := VALTYPE_INT; result := 0; exit;
           end;
-          
-          ValType := VALTYPE_BOOL;
-          result  := ord(f[result]);
+
+          ValType := VALTYPE_INT;
         end;
 
         PARAM_VARTYPE_QUICK: begin
@@ -3002,19 +3005,6 @@ begin
           result  := x[result];
         end;
 
-        PARAM_VARTYPE_Y: begin
-          if result in [Low(y^)..High(y^)] then begin
-            result := y[result];
-          end else if -result in [Low(ny^)..High(ny^)] then begin
-            result := ny[-result];
-          end else begin
-            ShowErmError(Format('Invalid y-var index: %d. Expected -100..-1, 1..100', [result]));
-            ResValType := VALTYPE_INT; result := 0; exit;
-          end;
-
-          ValType := VALTYPE_INT;
-        end;
-
         PARAM_VARTYPE_I: begin
           if result = 0 then begin
             ShowErmError('Impossible case: i-var has null address');
@@ -3038,6 +3028,16 @@ begin
           end;
         end;
 
+        PARAM_VARTYPE_FLAG: begin
+          if (result < Low(f^)) or (result > High(f^)) then begin
+            ShowErmError(Format('Invalid flag index %d. Expected %d..%d', [result, Low(f^), High(f^)]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+          
+          ValType := VALTYPE_BOOL;
+          result  := ord(f[result]);
+        end;
+
         PARAM_VARTYPE_STR: begin
           if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
             if Param.NeedsInterpolation() then begin
@@ -3053,7 +3053,7 @@ begin
 
             ValType := VALTYPE_STR;
           end else begin
-            ShowErmError(Format('Cannot use string literal ^%s^ in native ERM receiver except of conditional part.', [result]));
+            ShowErmError(Format('Cannot use string literal ^%s^ in native ERM receiver except of conditional part.', [ExtractErmStrLiteral(pchar(result))]));
             ResValType := VALTYPE_INT; result := 0; exit;
           end; // .else       
         end; // .case PARAM_VARTYPE_STR
@@ -3492,6 +3492,31 @@ Error:
   Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
 end; // .function Hook_ZvsGetNum
 
+{PErmSubCmd = ^TErmSubCmd;
+TErmSubCmd = packed record
+  Pos:        integer;
+  Code:       TErmString;
+  Conditions: TErmCmdConditions;
+  Params:     TErmCmdParams;
+  Chars:      array [0..15] of char;
+  DFlags:     array [0..15] of boolean;
+  Nums:       array [0..15] of integer;
+end; // .record TErmSubCmd}
+
+type
+  PCachedSubCmdParams = ^TCachedSubCmdParams;
+  TCachedSubCmdParams = packed record
+    AddrHash:       integer;
+    NumParams:      integer;
+    Pos:            integer;
+    Params:         TErmCmdParams;
+    DFlags:         array [0..15] of boolean;
+    ParamPositions: array [0..15] of integer;
+  end;
+
+var
+  SubCmdCache: array [0..399] of TCachedSubCmdParams;
+
 function CustomGetNumAuto (CmdId: integer; SubCmd: PErmSubCmd): integer; stdcall;
 const
   DONT_EVAL = 0;
@@ -3501,6 +3526,15 @@ const
   CMD_MP = $504D;
   CMD_RD = $4452;
 
+var
+  ParamsAddrHash: integer;
+  CacheEntry:     PCachedSubCmdParams;
+  ValType:        integer;
+  i:              integer;
+
+label
+  Quit;
+
 begin
   // Skip Era triggers, which are interpreted separately
   if (CmdId = CMD_SN) or (CmdId = CMD_MP) or (CmdId = CMD_RD) then begin
@@ -3508,24 +3542,63 @@ begin
     exit;
   end;
 
+  ParamsAddrHash := Crypto.Tm32Encode(integer(@SubCmd.Code.Value[SubCmd.Pos]));
+  CacheEntry     := @SubCmdCache[integer(cardinal(ParamsAddrHash) mod cardinal(Length(SubCmdCache)))];
+
+  if CacheEntry.AddrHash = ParamsAddrHash then begin
+    result := CacheEntry.NumParams;
+
+    if result > 0 then begin
+      System.Move(CacheEntry.Params, SubCmd.Params, sizeof(SubCmd.Params[0]) * result);
+      System.Move(CacheEntry.DFlags, SubCmd.DFlags, sizeof(CacheEntry.DFlags));
+    end;
+
+    SubCmd.Pos := CacheEntry.Pos;
+
+    for i := 0 to result - 1 do begin
+      if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_GET then begin
+        if SubCmd.Params[i].ValType = PARAM_VARTYPE_NUM then begin
+          SubCmd.Nums[i] := SubCmd.Params[i].Value;
+        end else begin
+          SubCmd.Pos     := CacheEntry.ParamPositions[i];
+          SubCmd.Nums[i] := GetErmParamValue(@SubCmd.Params[i], ValType, 0);
+        end;
+      end;
+    end;
+
+    exit;
+  end;
+
   result := 0;
 
-  while result < 16 do begin
+  while result < Length(SubCmd.Params) do begin
     SubCmd.Params[result].Value := 0;
 
     if Hook_ZvsGetNum(SubCmd, result, DO_EVAL) then begin
       result := 0;
-      exit;
+      goto Quit;
     end else begin
+      CacheEntry.ParamPositions[result] := SubCmd.Pos;
       Inc(result);
 
       if SubCmd.Code.Value[SubCmd.Pos] <> '/' then begin
-        exit;
+        goto Quit;
       end;
 
       Inc(SubCmd.Pos);
     end; // .else
   end; // .while
+
+Quit:
+  CacheEntry.AddrHash  := ParamsAddrHash;
+  CacheEntry.NumParams := result;
+
+  if result > 0 then begin
+    System.Move(SubCmd.Params, CacheEntry.Params, sizeof(SubCmd.Params[0]) * result);
+    System.Move(SubCmd.DFlags, CacheEntry.DFlags, sizeof(CacheEntry.DFlags));
+  end;
+
+  CacheEntry.Pos := SubCmd.Pos;
 end; // .function CustomGetNumAuto
 
 function Hook_ZvsApply (ValuePtr: pointer; ValueSize: integer; SubCmd: PErmSubCmd; ParamInd: integer): integer; cdecl;
