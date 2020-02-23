@@ -67,6 +67,8 @@ const
   MIN_ERM_SCRIPT_SIZE    = Length('ZVSE'#13#10);
   LINE_END_MARKER        = #10;
 
+  CONST_NAME_CHARSET = ['A'..'Z', '0'..'9', '_'];
+
   (* Erm script state*)
   SCRIPT_NOT_USED = 0;
   SCRIPT_IS_USED  = 1;
@@ -672,6 +674,7 @@ var
 {O} FuncNames:       DataLib.TDict {OF FuncId: integer};
 {O} FuncIdToNameMap: DataLib.TObjDict {O} {OF TString};
     FuncAutoId:      integer;
+{O} GlobalConsts:    DataLib.TDict {OF Value: integer};
 {O} ScriptNames:     Lists.TStringList;
 {O} ErmScanner:      TextScan.TTextScanner;
 {O} ErmCmdCache:     {O} TAssocArray {OF PErmCmd};
@@ -790,6 +793,20 @@ begin
     ShowMessage('Invalid ERM value type: "' + c + '"');
   end; // .switch
 end; // .function GetErmValType
+
+function IsValidConstName (const ConstName: string): boolean;
+var
+  Caret: pchar;
+
+begin
+  Caret := pchar(ConstName);
+
+  while Caret^ in CONST_NAME_CHARSET do begin
+    Inc(Caret);
+  end;
+
+  result := Caret^ = #0;
+end;
 
 function GetErmFuncByName (const FuncName: string): integer;
 begin
@@ -1184,7 +1201,6 @@ begin
   FreeAndNil(FuncIdToNameMap);
   FuncIdToNameMap := DataLib.FlipDict(FuncNames);
 
-
   (* Load scripts *)
   ScriptMan.LoadScriptsFromSavedGame;
 end;
@@ -1261,6 +1277,10 @@ const
   SPECIAL_CHARS       = ['[', '!', '$', '@'];
   INCMD_SPECIAL_CHARS = ['[', '(', '^', ';', '$', '@'];
   VAR_END_CHARSET     = ['$', '@', ';', '^', #10, #13, '('];
+  CMD_END_CHARSET     = [';', #0];
+  SAFE_BLANKS         = [#1..#32];
+  NUMBER_START_CHARS  = ['+', '-', '0'..'9'];
+  DIGITS              = ['0'..'9'];
 
   SUPPORTED_LOCAL_VAR_TYPES = ['x', 'y', 'v', 'e', 'z'];
   LOCAL_VAR_TYPE_ID_Y = 0;
@@ -1302,6 +1322,10 @@ var
     LocalVarsPools:     array [LOCAL_VAR_TYPE_ID_Y..LOCAL_VAR_TYPE_ID_V] of TLocalVarsPool;
     UnresolvedLabelInd: integer; // index of last unresolved label or NO_LABEL
     CmdN:               integer; // index of next command
+    ConstName:          string;
+    StartPos:           integer;
+    ConstValue:         integer;
+    ExistingConstValue: integer;
     MarkedPos:          integer;
     IsInStr:            longbool;
     IsErm2:             longbool;
@@ -1342,23 +1366,33 @@ var
     end;
   end;
 
-  procedure ParseFuncName;
+  procedure ParseConstName;
   var
-    FuncId:   integer;
-    FuncName: string;
-    c:        char;
+    FuncId:     integer;
+    ConstValue: integer;
+    Ident:      string;
+    c:          char;
 
   begin
     FlushMarked;
     Scanner.GotoNextChar;
 
-    if Scanner.ReadToken(FUNCNAME_CHARS, FuncName) and Scanner.GetCurrChar(c) then begin
+    if Scanner.ReadToken(FUNCNAME_CHARS, Ident) and Scanner.GetCurrChar(c) then begin
       if c = ')' then begin
         Scanner.GotoNextChar;
-        AllocErmFunc(FuncName, FuncId);
-        Buf.Add(IntToStr(FuncId));
+        ConstValue := 0;
+
+        if not IsValidConstName(Ident) then begin
+          AllocErmFunc(Ident, FuncId);
+          Buf.Add(IntToStr(FuncId));
+        end else if GlobalConsts.GetExistingValue(Ident, pointer(ConstValue)) then begin
+          Buf.Add(IntToStr(ConstValue));
+        end else begin
+          ShowError(Scanner.Pos, 'Unknown global constant name: "' + Ident + '". Assuming 0');
+          Buf.Add('0');
+        end;
       end else begin
-        ShowError(Scanner.Pos, 'Unexpected line end in function name');
+        ShowError(Scanner.Pos, 'Unexpected line end in function/constant name');
         Buf.Add('999999');
       end;
     end else begin
@@ -1367,7 +1401,7 @@ var
     end; // .else
 
     MarkPos;
-  end; // .procedure ParseFuncName
+  end; // .procedure ParseConstName
 
   procedure DeclareLabel (const LabelName: string);
   begin
@@ -1751,53 +1785,136 @@ var
     MarkPos;
   end; // .procedure HandleLocalVar
 
+  function HandleConstDeclaration: boolean;
+  begin
+    Scanner.GotoRelPos(+2);
+    result := Scanner.c = '(';
+
+    if not result then begin
+      ShowError(Scanner.Pos, 'Expected "(" character in const declaration');
+    end else begin
+      Scanner.GotoNextChar;
+      StartPos := Scanner.Pos;
+      Scanner.SkipCharset(CONST_NAME_CHARSET);
+      result := Scanner.c = ')';
+
+      if not result then begin
+        ShowError(Scanner.Pos, 'Invalid constant name. Expected [A-Z_] characters');
+      end;
+    end;
+
+    if result then begin
+      ConstName := Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos);
+      Scanner.GotoNextChar;
+      Scanner.SkipCharset(SAFE_BLANKS);
+      result := Scanner.c = '=';
+
+      if not result then begin
+        ShowError(Scanner.Pos, 'Expected "=" character and constant value');
+      end;
+    end;
+
+    if result then begin
+      ExistingConstValue := 0;
+      result             := not GlobalConsts.GetExistingValue(ConstName, pointer(ExistingConstValue));
+
+      if not result then begin
+        ShowError(StartPos, Format('Global constant "%s" is already defined with value %d', [ConstName, ExistingConstValue]));
+      end;
+    end;
+
+    if result then begin
+      Scanner.GotoNextChar;
+      Scanner.SkipCharset(SAFE_BLANKS);
+      
+      result := Scanner.c in NUMBER_START_CHARS;
+
+      if not result then begin
+        ShowError(Scanner.Pos, 'Expected valid integer as constant value');
+      end;
+    end;
+
+    if result then begin
+      StartPos := Scanner.Pos;
+      Scanner.GotoNextChar;
+      Scanner.SkipCharset(DIGITS);
+      result := Scanner.c = ';';
+
+      if not result then begin
+        ShowError(Scanner.Pos, 'Expected ";" character as const declaration end marker');
+      end;
+    end;
+
+    if result then begin
+      result := TryStrToInt(Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos), ConstValue);
+
+      if not result then begin
+        ShowError(StartPos, 'Expected valid integer as constant value');
+      end else begin
+        GlobalConsts[ConstName] := Ptr(ConstValue);
+      end;
+    end;
+
+    // Recover from error
+    if not result then begin
+      Scanner.FindCharset(CMD_END_CHARSET);
+    end;
+
+    MarkPos;
+  end; // .function HandleConstDeclaration
+
   procedure ParseCmd;
   var
     c: char;
 
   begin
     Scanner.GotoNextChar;
-    c := ' ';
 
-    while Scanner.FindCharset(INCMD_SPECIAL_CHARS) and Scanner.GetCurrChar(c) and (c <> ';') do begin
-      case c of
-        '[': begin
-          if not IsInStr and Scanner.GetCharAtRelPos(+1, c) and (c <> ':') then begin
-            ParseLabel(CMD_SCOPE);
-          end else begin
+    if (Scanner.c = 'D') and (Scanner.CharsRel[1] = 'C') then begin
+      HandleConstDeclaration;
+    end else begin
+      c := ' ';
+
+      while Scanner.FindCharset(INCMD_SPECIAL_CHARS) and Scanner.GetCurrChar(c) and (c <> ';') do begin
+        case c of
+          '[': begin
+            if not IsInStr and Scanner.GetCharAtRelPos(+1, c) and (c <> ':') then begin
+              ParseLabel(CMD_SCOPE);
+            end else begin
+              Scanner.GotoNextChar;
+            end;
+          end; // .case '['
+
+          '(': begin
+            if not IsInStr then begin
+              ParseConstName;
+            end else begin
+              Scanner.GotoNextChar;
+            end;          
+          end; // .case '('
+
+          '^': begin
             Scanner.GotoNextChar;
+            IsInStr := not IsInStr;
+          end; // .case '^'
+
+          '$', '@': begin
+            if IsErm2 then begin
+              HandleLocalVar(c);
+            end else begin
+              Scanner.GotoNextChar;
+            end;
           end;
-        end; // .case '['
+        end; // .switch c
+      end; // .while
 
-        '(': begin
-          if not IsInStr then begin
-            ParseFuncName;
-          end else begin
-            Scanner.GotoNextChar;
-          end;          
-        end; // .case '('
+      if c = ';' then begin
+        Scanner.GotoNextChar;
+        Inc(CmdN);
+      end;
 
-        '^': begin
-          Scanner.GotoNextChar;
-          IsInStr := not IsInStr;
-        end; // .case '^'
-
-        '$', '@': begin
-          if IsErm2 then begin
-            HandleLocalVar(c);
-          end else begin
-            Scanner.GotoNextChar;
-          end;
-        end;
-      end; // .switch c
-    end; // .while
-
-    if c = ';' then begin
-      Scanner.GotoNextChar;
-      Inc(CmdN);
-    end;
-
-    IsInStr := false;
+      IsInStr := false;
+    end; // .else
   end; // .procedure ParseCmd
 
 begin
@@ -2092,6 +2209,7 @@ begin
   // * * * * * //
   Self.ClearScripts;
   ZvsClearErtStrings;
+  GlobalConsts.Clear;
 
   Self.LoadMapInternalScripts;
   
@@ -5139,6 +5257,7 @@ end; // .procedure OnAfterStructRelocations
 begin
   ScriptMan       := TScriptMan.Create;
   FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  GlobalConsts    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   FuncIdToNameMap := DataLib.NewObjDict(Utils.OWNS_ITEMS);
   
   ErmScanner  := TextScan.TTextScanner.Create;
