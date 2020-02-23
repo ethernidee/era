@@ -54,7 +54,8 @@ const
   PARAM_VARTYPE_Z     = 7;
   PARAM_VARTYPE_E     = 8;
   PARAM_VARTYPE_I     = 9;
-  PARAM_VARTYPE_STR   = 10;
+  PARAM_VARTYPE_S     = 11;
+  PARAM_VARTYPE_STR   = 12;
 
   (* Normalized ERM parameter value types *)
   VALTYPE_INT   = 0;
@@ -2984,11 +2985,12 @@ begin
       PARAM_VARTYPE_Z:     result := result + 'z';
       PARAM_VARTYPE_E:     result := result + 'e';
       PARAM_VARTYPE_I:     result := result + 'i^';
+      PARAM_VARTYPE_S:     result := result + 's^';
       PARAM_VARTYPE_STR:   result := result + '^';
     end;
   end;
 
-  if (Types[0] = PARAM_VARTYPE_I) or (Types[1] = PARAM_VARTYPE_I) or (Types[0] = PARAM_VARTYPE_STR) or (Types[1] = PARAM_VARTYPE_STR) then begin
+  if (Types[0] = PARAM_VARTYPE_I) or (Types[1] = PARAM_VARTYPE_I) or (Types[0] = PARAM_VARTYPE_S) or (Types[1] = PARAM_VARTYPE_S) or (Types[0] = PARAM_VARTYPE_STR) or (Types[1] = PARAM_VARTYPE_STR) then begin
     result := result + ExtractErmStrLiteral(pchar(Param.Value)) + '^';
   end else if (Types[0] <> PARAM_VARTYPE_QUICK) and (Types[1] <> PARAM_VARTYPE_QUICK) then begin
     result := result + IntToStr(Param.Value);
@@ -3049,16 +3051,6 @@ begin
           result  := QuickVars[result];
         end;
 
-        PARAM_VARTYPE_V: begin
-          if (result < Low(v^)) or (result > High(v^)) then begin
-            ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(v^), High(v^)]));
-            ResValType := VALTYPE_INT; result := 0; exit;
-          end;
-          
-          ValType := VALTYPE_INT;
-          result  := v[result];
-        end;
-
         PARAM_VARTYPE_X: begin
           if (result < Low(x^)) or (result > High(x^)) then begin
             ShowErmError(Format('Invalid x-var index %d. Expected %d..%d', [result, Low(x^), High(x^)]));
@@ -3069,9 +3061,19 @@ begin
           result  := x[result];
         end;
 
+        PARAM_VARTYPE_V: begin
+          if (result < Low(v^)) or (result > High(v^)) then begin
+            ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(v^), High(v^)]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+          
+          ValType := VALTYPE_INT;
+          result  := v[result];
+        end;        
+
         PARAM_VARTYPE_I: begin
           if result = 0 then begin
-            ShowErmError('Impossible case: i-var has null address');
+            ShowErmError('Impossible case: named i-var has null address');
             ResValType := VALTYPE_INT; result := 0; exit;
           end;
 
@@ -3090,16 +3092,6 @@ begin
           end else begin
             result := AssocVarValue.IntValue;
           end;
-        end;
-
-        PARAM_VARTYPE_FLAG: begin
-          if (result < Low(f^)) or (result > High(f^)) then begin
-            ShowErmError(Format('Invalid flag index %d. Expected %d..%d', [result, Low(f^), High(f^)]));
-            ResValType := VALTYPE_INT; result := 0; exit;
-          end;
-          
-          ValType := VALTYPE_BOOL;
-          result  := ord(f[result]);
         end;
 
         PARAM_VARTYPE_STR: begin
@@ -3159,6 +3151,16 @@ begin
           ValType := VALTYPE_FLOAT;
         end;
 
+        PARAM_VARTYPE_FLAG: begin
+          if (result < Low(f^)) or (result > High(f^)) then begin
+            ShowErmError(Format('Invalid flag index %d. Expected %d..%d', [result, Low(f^), High(f^)]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+          
+          ValType := VALTYPE_BOOL;
+          result  := ord(f[result]);
+        end;
+
         PARAM_VARTYPE_W: begin
           if (result < Low(w^[0])) or (result > High(w^[0])) then begin
             ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(w^[0]), High(w^[0])]));
@@ -3168,6 +3170,35 @@ begin
           ValType := VALTYPE_INT;
           result  := w[ZvsWHero^][result];
         end;
+
+        PARAM_VARTYPE_S: begin      
+          if result = 0 then begin
+            ShowErmError('Impossible case: named s-var has null address');
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end;
+
+          if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
+            ValType := VALTYPE_STR;
+
+            if Param.NeedsInterpolation() then begin
+              AssocVarName := GetInterpolatedErmStrLiteral(pchar(result));
+            end else begin
+              AssocVarName := ExtractErmStrLiteral(pchar(result));
+            end;
+
+            AssocVarValue := AdvErm.AssocMem[AssocVarName];
+
+            if AssocVarValue = nil then begin
+              result := integer(pchar(''));
+            end else begin
+              result := integer(ServiceMemAllocator.AllocStr(Length(AssocVarValue.StrValue)));
+              Utils.CopyMem(Length(AssocVarValue.StrValue), pchar(AssocVarValue.StrValue), pchar(result));
+            end;
+          end else begin
+            ShowErmError(Format('Cannot use named s-var ^%s^ in native ERM receiver except of conditional part.', [ExtractErmStrLiteral(pchar(result))]));
+            ResValType := VALTYPE_INT; result := 0; exit;
+          end; // .else
+        end; // .case PARAM_VARTYPE_S
       else
         ShowErmError(Format('Unknown variable type: %d', [ValType]));
         ResValType := VALTYPE_INT; result := 0; exit;
@@ -3230,36 +3261,6 @@ begin
         end;         
       end;
 
-      PARAM_VARTYPE_QUICK: begin
-        if (Value < Low(QuickVars^)) or (Value > High(QuickVars^)) then begin
-          ShowErmError(Format('Invalid quick var %d. Expected %d..%d', [Value, Low(QuickVars^), High(QuickVars^)]));
-          result := false; exit;
-        end;
-        
-        ValType := VALTYPE_INT;
-        Value   := integer(@QuickVars[Value]);
-      end;
-
-      PARAM_VARTYPE_V: begin
-        if (Value < Low(v^)) or (Value > High(v^)) then begin
-          ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [Value, Low(v^), High(v^)]));
-          result := false; exit;
-        end;
-        
-        ValType := VALTYPE_INT;
-        Value   := integer(@v[Value]);
-      end;
-
-      PARAM_VARTYPE_X: begin
-        if (Value < Low(x^)) or (Value > High(x^)) then begin
-          ShowErmError(Format('Invalid x-var index %d. Expected %d..%d', [Value, Low(x^), High(x^)]));
-          result := false; exit;
-        end;
-        
-        ValType := VALTYPE_INT;
-        Value   := integer(@x[Value]);
-      end;
-
       PARAM_VARTYPE_Y: begin
         if Value in [Low(y^)..High(y^)] then begin
           Value := integer(@y[Value]);
@@ -3272,6 +3273,36 @@ begin
 
         ValType := VALTYPE_INT;
       end;
+
+      PARAM_VARTYPE_QUICK: begin
+        if (Value < Low(QuickVars^)) or (Value > High(QuickVars^)) then begin
+          ShowErmError(Format('Invalid quick var %d. Expected %d..%d', [Value, Low(QuickVars^), High(QuickVars^)]));
+          result := false; exit;
+        end;
+        
+        ValType := VALTYPE_INT;
+        Value   := integer(@QuickVars[Value]);
+      end;
+
+      PARAM_VARTYPE_X: begin
+        if (Value < Low(x^)) or (Value > High(x^)) then begin
+          ShowErmError(Format('Invalid x-var index %d. Expected %d..%d', [Value, Low(x^), High(x^)]));
+          result := false; exit;
+        end;
+        
+        ValType := VALTYPE_INT;
+        Value   := integer(@x[Value]);
+      end;
+
+      PARAM_VARTYPE_V: begin
+        if (Value < Low(v^)) or (Value > High(v^)) then begin
+          ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [Value, Low(v^), High(v^)]));
+          result := false; exit;
+        end;
+        
+        ValType := VALTYPE_INT;
+        Value   := integer(@v[Value]);
+      end;      
 
       PARAM_VARTYPE_I: begin
         if Value = 0 then begin
