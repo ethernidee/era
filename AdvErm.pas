@@ -2202,6 +2202,7 @@ var
   f:             PFrame;
   Caret:         pchar;
   StartPos:      pchar;
+  Ident:         string;
   AssocVarValue: TAssocVar;
   Str:           string;
   VarType:       char;
@@ -2209,7 +2210,7 @@ var
 begin
   f       := PFrame(Context.EBP - $28);
   VarType := chr(byte(Context.EAX + $24));
-  result  := (VarType <> 'S') and (VarType <> 'I') or (f.InStr[f.i + 1] <> '(');
+  result  := not (VarType in ['I', 'S', 'T']) or (f.InStr[f.i + 1] <> '(');
 
   if not result then begin
     Inc(f.i, 2);
@@ -2220,22 +2221,30 @@ begin
       Inc(Caret);
     end;
 
-    AssocVarValue := AssocMem[StrLib.ExtractFromPchar(StartPos, Caret - StartPos)];
+    Ident := StrLib.ExtractFromPchar(StartPos, Caret - StartPos);
+    
+    if VarType <> 'T' then begin
+      AssocVarValue := AssocMem[Ident];
 
-    if VarType = 'S' then begin
-      if (AssocVarValue <> nil) and (AssocVarValue.StrValue <> '') then begin
-        Utils.CopyMem(Length(AssocVarValue.StrValue), pchar(AssocVarValue.StrValue), @f.OutStr[f.j]);
-        Inc(f.j, Length(AssocVarValue.StrValue) - 1);
+      if VarType = 'S' then begin
+        if (AssocVarValue <> nil) and (AssocVarValue.StrValue <> '') then begin
+          Utils.CopyMem(Length(AssocVarValue.StrValue), pchar(AssocVarValue.StrValue), @f.OutStr[f.j]);
+          Inc(f.j, Length(AssocVarValue.StrValue) - 1);
+        end;
+      end else begin
+        if (AssocVarValue = nil) or (AssocVarValue.IntValue = 0) then begin
+          f.OutStr[f.j] := '0';
+        end else begin
+          Str := IntToStr(AssocVarValue.IntValue);
+          Utils.CopyMem(Length(Str), pchar(Str), @f.OutStr[f.j]);
+          Inc(f.j, Length(Str) - 1);
+        end;
       end;
     end else begin
-      if (AssocVarValue = nil) or (AssocVarValue.IntValue = 0) then begin
-        f.OutStr[f.j] := '0';
-      end else begin
-        Str := IntToStr(AssocVarValue.IntValue);
-        Utils.CopyMem(Length(Str), pchar(Str), @f.OutStr[f.j]);
-        Inc(f.j, Length(Str) - 1);
-      end;
-    end;
+      Str := Trans.tr(Ident, []);
+      Utils.CopyMem(Length(Str), pchar(Str), @f.OutStr[f.j]);
+      Inc(f.j, Length(Str) - 1);
+    end; // .else
 
     Inc(f.i, Caret - StartPos);
 
