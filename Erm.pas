@@ -761,8 +761,8 @@ begin
     {*} Erm.TRIGGER_CM3:      result :=  'OnHeroesMeetScreenMouseClick';
     {*} Erm.TRIGGER_CM4:      result :=  'OnBattleScreenMouseClick';
     {*} Erm.TRIGGER_CM5:      result :=  'OnAdventureMapLeftMouseClick';
-    {*} Erm.TRIGGER_AE0:      result :=  'OnEquipArt';
-    {*} Erm.TRIGGER_AE1:      result :=  'OnUnequipArt';
+    {*} Erm.TRIGGER_AE0:      result :=  'OnUnequipArt';
+    {*} Erm.TRIGGER_AE1:      result :=  'OnEquipArt';
     {*} Erm.TRIGGER_MM0:      result :=  'OnBattleMouseHint';
     {*} Erm.TRIGGER_MM1:      result :=  'OnTownMouseHint';
     {*} Erm.TRIGGER_MP:       result :=  'OnMp3MusicChange';
@@ -2269,8 +2269,8 @@ begin
   NameTrigger(Erm.TRIGGER_CM3,  'OnHeroesMeetScreenMouseClick');
   NameTrigger(Erm.TRIGGER_CM4,  'OnBattleScreenMouseClick');
   NameTrigger(Erm.TRIGGER_CM5,  'OnAdventureMapLeftMouseClick');
-  NameTrigger(Erm.TRIGGER_AE0,  'OnEquipArt');
-  NameTrigger(Erm.TRIGGER_AE1,  'OnUnequipArt');
+  NameTrigger(Erm.TRIGGER_AE0,  'OnUnequipArt');
+  NameTrigger(Erm.TRIGGER_AE1,  'OnEquipArt');
   NameTrigger(Erm.TRIGGER_MM0,  'OnBattleMouseHint');
   NameTrigger(Erm.TRIGGER_MM1,  'OnTownMouseHint');
   NameTrigger(Erm.TRIGGER_MP,   'OnMp3MusicChange');
