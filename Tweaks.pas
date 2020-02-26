@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes, WinNative, RandMt,
+  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes, WinNative, RandMt, Stores,
   PatchApi, Core, GameExt, Heroes, Lodman, Erm, EventMan;
 
 type
@@ -40,6 +40,9 @@ var
   
 (***) implementation (***)
 
+
+const
+  RNG_SAVE_SECTION = 'Era.RNG';
 
 type
   TWogMp3Process = procedure; stdcall;
@@ -741,6 +744,50 @@ asm
   call RandMt.RandomRangeMt
 end;
 
+function NewTimeRandom (Min, Max: integer): integer; cdecl;
+begin
+  if Min > Max then begin
+    result := Min;
+  end else begin
+    result := RandMt.RandomRangeMt(Min, Max);
+  end;
+end;
+
+procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
+begin
+  CombatRound := -1000000000;
+end;
+
+procedure OnSavegameWrite (Event: PEvent); stdcall;
+var
+  RngState: RandMt.TRngState;
+
+begin
+  RngState := RandMt.GetState;
+  
+  with Stores.NewRider(RNG_SAVE_SECTION) do begin
+    WriteInt(Length(RngState));
+    Write(Length(RngState), @RngState[0]);
+  end;
+
+  RandMt.SetState(RngState);
+end;
+
+procedure OnSavegameRead (Event: PEvent); stdcall;
+var
+  RngState: RandMt.TRngState;
+
+begin
+  with Stores.NewRider(RNG_SAVE_SECTION) do begin
+    SetLength(RngState, ReadInt);
+
+    if RngState <> nil then begin
+      Read(Length(RngState), @RngState[0]);
+      RandMt.SetState(RngState);
+    end;
+  end;
+end;
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1095,18 +1142,16 @@ begin
   Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
 
-  (* Replace number number generator with thread-safe Mersenne Twister *)
-  Core.ApiHook(@Hook_SRand, Core.HOOKTYPE_JUMP, Ptr($50C7B0));
-  Core.ApiHook(@Hook_Rand,  Core.HOOKTYPE_JUMP, Ptr($50C7C0));
+  if FALSE then begin
+    (* Replace VR:T number number generator with thread-safe Mersenne Twister *)
+    (* Direct replacement produces hard-to-fix bugs, cancelled *)
+    Core.ApiHook(@Hook_SRand, Core.HOOKTYPE_JUMP, Ptr($50C7B0));
+    Core.ApiHook(@Hook_Rand,  Core.HOOKTYPE_JUMP, Ptr($50C7C0));
+  end;
 
   (* Make VR:T equal to VR:V for multiplayer support *)
-  Core.p.WriteDataPatch(Ptr($735F3E), ['40']);
+  Core.ApiHook(@NewTimeRandom, Core.HOOKTYPE_CALL, Ptr($734D24));
 end; // .procedure OnAfterWoG
-
-procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
-begin
-  CombatRound := -1000000000;
-end;
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
 begin
@@ -1128,4 +1173,11 @@ begin
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
+
+  if FALSE then begin
+    (* Save RandMT state in saved games *)
+    (* Makes game predictable. Disabled *)
+    EventMan.GetInstance.On('OnSavegameWrite', OnSavegameWrite);
+    EventMan.GetInstance.On('OnSavegameRead',  OnSavegameRead);
+  end;
 end.
