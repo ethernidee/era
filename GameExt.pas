@@ -296,7 +296,7 @@ function GetMapDir: string;
 begin
   if MapDir = '' then begin
     if Heroes.IsCampaign then begin
-      MapDir := GameDir + '\Maps\Resources\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '_' + SysUtils.IntToStr(Heroes.GetCampaignMapInd + 1);
+      MapDir := GameDir + '\Maps\Resources\' + SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '\' + SysUtils.IntToStr(Heroes.GetCampaignMapInd + 1);
     end else begin
       MapDir := GameDir + '\Maps\Resources\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
     end;
