@@ -227,7 +227,7 @@ begin
       ItemPath := DestDir + '\' + ItemName;
 
       if System.Pos('\', ItemName) <> 0 then begin
-        Res := ForcePath(SysUtils.ExtractFilePath(ItemPath));
+        Res := Files.ForcePath(SysUtils.ExtractFilePath(ItemPath));
 
         if not Res then begin
           result := 'Cannot create directory "' + SysUtils.ExtractFilePath(ItemPath) + '"';

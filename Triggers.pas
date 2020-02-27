@@ -263,7 +263,7 @@ const
 var
   Action: integer;
   Obj:    integer;
-  
+
 begin
   Erm.ArgXVars[ARG_EVENT_SUBTYPE] := ON_CHAT_INPUT;
   Erm.ArgXVars[ARG_CHAT_INPUT]    := pinteger(Context.ECX + $34)^;

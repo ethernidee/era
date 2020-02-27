@@ -307,7 +307,11 @@ end;
 
 function GetMapDirName: string;
 begin
-  result := SysUtils.ExtractFileName(GetMapDir);
+  if Heroes.IsCampaign then begin
+    result := SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '\' + SysUtils.IntToStr(Heroes.GetCampaignMapInd + 1);
+  end else begin
+    result := SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
+  end;
 end;
 
 procedure SetMapDir (const NewMapDir: string);
