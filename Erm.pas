@@ -3910,6 +3910,7 @@ var
   SavedNY:              TErmNYVars;
   SavedE:               TErmEVars;
   SavedX:               TErmXVars;
+  SavedQuickVars:       TErmQuickVars;
   SavedZ:               TErmNZVars;
   SavedF:               array [996..1000] of boolean;
   SavedV:               array [997..1000] of integer;
@@ -3953,9 +3954,10 @@ var
       SavedNY := ny^;
     end;
 
-    SavedE := e^;
-    SavedX := x^;
-    x^     := ArgXVars;
+    SavedE         := e^;
+    SavedX         := x^;
+    x^             := ArgXVars;
+    SavedQuickVars := QuickVars^;
 
     SavedNumArgsReceived            := NumFuncArgsReceived;
     NumFuncArgsReceived             := NumFuncArgsPassed;
@@ -4001,9 +4003,10 @@ var
       ny^ := SavedNY;
     end;
 
-    e^       := SavedE;
-    RetXVars := x^;
-    x^       := SavedX;
+    e^         := SavedE;
+    RetXVars   := x^;
+    x^         := SavedX;
+    QuickVars^ := SavedQuickVars;
 
     NumFuncArgsReceived            := SavedNumArgsReceived;
     FuncArgsGetSyntaxFlagsReceived := SavedArgsGetSyntaxFlagsReceived;
