@@ -57,6 +57,15 @@ const
   PARAM_VARTYPE_S     = 11;
   PARAM_VARTYPE_STR   = 12;
 
+  PARAM_MODIFIER_NONE    = 0;
+  PARAM_MODIFIER_ADD     = 1;
+  PARAM_MODIFIER_SUB     = 2;
+  PARAM_MODIFIER_MUL     = 3;
+  PARAM_MODIFIER_DIV     = 4;
+  PARAM_MODIFIER_MOD     = 5;
+  PARAM_MODIFIER_OR      = 6;
+  PARAM_MODIFIER_AND_NOT = 7;
+
   (* Normalized ERM parameter value types *)
   VALTYPE_INT   = 0;
   VALTYPE_FLOAT = 1;
@@ -318,7 +327,7 @@ type
     Conditions: TErmCmdConditions;
     Params:     TErmCmdParams;
     Chars:      array [0..15] of char;
-    DFlags:     array [0..15] of boolean;
+    Modifiers:  array [0..15] of byte;
     Nums:       array [0..15] of integer;
   end; // .record TErmSubCmd
 
@@ -662,7 +671,7 @@ type
     NumParams:      integer;
     Pos:            integer;
     Params:         TErmCmdParams;
-    DFlags:         array [0..15] of boolean;
+    Modifiers:      array [0..15] of byte;
   end;
 
   TFastIntVarSet = record
@@ -3500,7 +3509,7 @@ var
   StartPtr:           pchar;
   Caret:              pchar;
   CheckType:          integer;
-  IsMod:              longbool;
+  Modifier:           integer;
   Param:              PErmCmdParam;
   BaseTypeChar:       char;
   IndexTypeChar:      char;
@@ -3539,7 +3548,7 @@ begin
   StartPtr      := @SubCmd.Code.Value[SubCmd.Pos];
   Caret         := StartPtr;
   CheckType     := PARAM_CHECK_NONE;
-  IsMod         := false;
+  Modifier      := PARAM_MODIFIER_NONE;
   Param         := @SubCmd.Params[ParamInd];
   Param.Value   := 0;
   Param.ValType := 0;
@@ -3557,8 +3566,18 @@ begin
     end;
 
     'd': begin
-      IsMod := true;
+      Modifier := PARAM_MODIFIER_ADD;
       Inc(Caret);
+
+      case Caret^ of
+        '+': begin                                     Inc(Caret); end;
+        '-': begin Modifier := PARAM_MODIFIER_SUB;     Inc(Caret); end;
+        '*': begin Modifier := PARAM_MODIFIER_MUL;     Inc(Caret); end;
+        ':': begin Modifier := PARAM_MODIFIER_DIV;     Inc(Caret); end;
+        '%': begin Modifier := PARAM_MODIFIER_MOD;     Inc(Caret); end;
+        '|': begin Modifier := PARAM_MODIFIER_OR;      Inc(Caret); end;
+        '~': begin Modifier := PARAM_MODIFIER_AND_NOT; Inc(Caret); end;
+      end;
     end;
 
     '=': begin
@@ -3696,7 +3715,7 @@ begin
   end;
 
   Param.SetCheckType(CheckType);
-  SubCmd.DFlags[ParamInd] := IsMod;
+  SubCmd.Modifiers[ParamInd] := Modifier;
 
   while Caret^ in [#1..#32] do begin
     Inc(Caret);
@@ -3708,11 +3727,7 @@ begin
     SubCmd.Nums[ParamInd] := Param.Value;
   end;
 
-  // if FALSE then ShowMessage(Format('Parsed {%s} AS {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20), ErmParamToCode(Param)]));
-
   Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
-
-  // if FALSE then ShowMessage(Format('Ended on {%s}', [Copy(pchar(@SubCmd.Code.Value[SubCmd.Pos]), 0, 20)]));
 
   exit;
 
@@ -3764,7 +3779,7 @@ begin
 
     if result > 0 then begin
       System.Move(CacheEntry.Params, SubCmd.Params, sizeof(SubCmd.Params[0]) * result);
-      System.Move(CacheEntry.DFlags, SubCmd.DFlags, sizeof(CacheEntry.DFlags));
+      System.Move(CacheEntry.Modifiers, SubCmd.Modifiers, sizeof(CacheEntry.Modifiers));
     end;
 
     for i := 0 to result - 1 do begin
@@ -3819,11 +3834,52 @@ Quit:
 
   if result > 0 then begin
     System.Move(SubCmd.Params, CacheEntry.Params, sizeof(SubCmd.Params[0]) * result);
-    System.Move(SubCmd.DFlags, CacheEntry.DFlags, sizeof(CacheEntry.DFlags));
+    System.Move(SubCmd.Modifiers, CacheEntry.Modifiers, sizeof(CacheEntry.Modifiers));
   end;
 
   CacheEntry.Pos := SubCmd.Pos;
 end; // .function CustomGetNumAuto
+
+procedure PutVal (ValuePtr: pointer; ValueSize, Value, Modifier: integer);
+var
+  OrigValue:  integer;
+  FinalValue: integer;
+
+begin
+  case ValueSize of
+    4:  OrigValue := pinteger(ValuePtr)^;
+    2:  OrigValue := psmallint(ValuePtr)^;
+    1:  OrigValue := pshortint(ValuePtr)^;
+    -4: OrigValue := pinteger(ValuePtr)^;
+    -2: OrigValue := pword(ValuePtr)^;
+    -1: OrigValue := pbyte(ValuePtr)^;
+  else
+    exit;
+  end;
+
+  case Modifier of
+    PARAM_MODIFIER_NONE:    FinalValue := Value;
+    PARAM_MODIFIER_ADD:     FinalValue := OrigValue + Value;
+    PARAM_MODIFIER_SUB:     FinalValue := OrigValue - Value;
+    PARAM_MODIFIER_MUL:     FinalValue := OrigValue * Value;
+    PARAM_MODIFIER_DIV:     FinalValue := OrigValue div Value;
+    PARAM_MODIFIER_MOD:     FinalValue := OrigValue mod Value;
+    PARAM_MODIFIER_OR:      FinalValue := OrigValue or Value;
+    PARAM_MODIFIER_AND_NOT: FinalValue := OrigValue and not Value;
+  else
+    FinalValue := Value;
+  end;
+
+  if ValueSize < 0 then begin
+    ValueSize := -ValueSize;
+  end;
+
+  case ValueSize of
+    4: pinteger(ValuePtr)^  := FinalValue;
+    2: psmallint(ValuePtr)^ := FinalValue;
+    1: pshortint(ValuePtr)^ := FinalValue;
+  end; 
+end; // .procedure PutVal
 
 function Hook_ZvsApply (ValuePtr: pointer; ValueSize: integer; SubCmd: PErmSubCmd; ParamInd: integer): integer; cdecl;
 var
@@ -3839,7 +3895,7 @@ begin
 
   if CheckType = PARAM_CHECK_NONE then begin
     result := 0;
-    ZvsPutVal(ValuePtr, ValueSize, SubCmd, ParamInd);
+    PutVal(ValuePtr, ValueSize, SubCmd.Nums[ParamInd], SubCmd.Modifiers[ParamInd]);
   end else begin
     Value := ZvsGetVal(ValuePtr, ValueSize);
 
@@ -4665,7 +4721,7 @@ begin
 
   for i := 0 to NumParams - 1 do begin
     ArgXVars[i + 1]              := SubCmd.Nums[i];
-    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.DFlags[i]) shl (i shl 1));
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
   NumFuncArgsPassed := NumParams;
@@ -4727,7 +4783,7 @@ begin
   // Initialize x-paramaters
   for i := 0 to NumParams - 1 do begin
     ArgXVars[i + 1]              := SubCmd.Nums[i];
-    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.DFlags[i]) shl (i shl 1));
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
   if ((LoopContext.Step >= 0) and (ArgXVars[16] <= LoopContext.EndValue)) or ((LoopContext.Step < 0) and (ArgXVars[16] >= LoopContext.EndValue)) then begin
