@@ -585,7 +585,7 @@ type
     SpPoints:     word;                           // +18  dw    = bally zaklinanij
     Id:           integer;                        // +1A  dd    = nomer podtipa (konkretnyj geroj)
     BadFood:      integer;                        // +1E  dd    = BAD FOOD marker
-    Owner:        char;                           // +22  db    = xozyain (czvet)
+    Owner:        byte;                           // +22  db    = xozyain (czvet)
     Name:         array [0..12] of char;          // +23  db*D  = imya,0
     Spec:         integer;                        // +30  dd    = str[8] str=(*[67CD08])[nomer podtipa *5C]
     Pic:          byte;                           // +34  db    = nomer kartinki
@@ -642,14 +642,14 @@ type
                                                   //  38000000 = konkretnyj tip fontana udachi
     _u6:          array [0..8] of byte;           // +109
     _u7:          integer;                        // +112 
-    DMorale:      char;                           // +116 modifikatory morali (nakaplivayutsya)
+    DMorale:      byte;                           // +116 modifikatory morali (nakaplivayutsya)
     _u60:         array [0..2] of byte;           
-    DMorale1:     char;                           // +11A modif morali (oazis)
-    DLuck:        char;                           // +11B modif udachi do sled bitvy
+    DMorale1:     byte;                           // +11A modif morali (oazis)
+    DLuck:        byte;                           // +11B modif udachi do sled bitvy
     _u6a:         array [0..16] of byte;          
     IArt:         array [0..18, 0..1] of integer; // +12D dd*2*13h = artifakty dd-nomer,dd-(FF) (kniga 3,FF)
     FreeAddSlots: byte;                           // +1C5 kolichestvo pustyh dop. slotov sleva
-    LockedSlot:   array [0..13] of char;          // +1C6
+    LockedSlot:   array [0..13] of byte;          // +1C6
     OArt:         array [0..63, 0..1] of integer; // +1D4 dd*2*40 = art v ryukzake dd-nomer, dd-(FF)
     OANum:        byte;                           // +3D4 db   = chislo artifaktov v ryukzake
     Sex:          integer;                        // +3D5 dd    = pol
@@ -660,7 +660,7 @@ type
     Bibl:         TExtString;                     // +3DE
     Spell:        array [0..69] of byte;          // +3EA db*46 = zaklinanie (est'/net)
     LSpell:       array [0..69] of byte;          // +430 db*46 = uroven' zaklinaniya (>=1)
-    PSkill:       array [0..3] of char;           // +476 db*4  = pervichnye navyki
+    PSkill:       array [0..3]  of byte;          // +476 db*4  = pervichnye navyki
     _u8:          array [0..23] of byte;
   end; // .record THero
 
@@ -789,6 +789,8 @@ function  StackProp (StackInd: integer; PropOfs: integer): PValue;
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
 function  GetStackIdByPos (StackPos: integer): integer;
 procedure RedrawHeroMeetingScreen;
+procedure HideHero (Hero: PHero);
+procedure ShowHero (Hero: PHero);
 function  IsCampaign: boolean;
 function  GetMapFileName: string;
 function  GetCampaignFileName: string;
@@ -1368,6 +1370,19 @@ asm
   MOV EAX, $603190
   CALL EAX
 end; // .procedure RedrawHeroMeetingScreen
+
+procedure HideHero (Hero: PHero);
+begin
+  PatchApi.Call(THISCALL_, Ptr($4D7950), [Hero]);
+end;
+
+procedure ShowHero (Hero: PHero);
+const
+  TYPE_HERO = 34;
+
+begin
+  PatchApi.Call(THISCALL_, Ptr($4D7840), [Hero, TYPE_HERO, Hero.Id]);
+end;
 
 function IsCampaign: boolean;
 begin

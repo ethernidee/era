@@ -303,7 +303,7 @@ type
       true:  (Name: array [0..1] of char);
       false: (Id: word);
   end; // .record TErmCmdId
-  
+
   PErmCmd = ^TErmCmd;
   TErmCmd = packed record
     CmdId:        TErmCmdId;
@@ -4622,6 +4622,46 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_DeleteFromBag
 
+function Hook_HE_P (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams: integer;
+  Hero:      Heroes.PHero;
+  SubCmd:    PErmSubCmd;
+  x:         integer;
+  y:         integer;
+  z:         integer;
+
+begin
+  // OK result
+  Context.RetAddr := Ptr($746F00);
+  NumParams       := pinteger(Context.EBP - $10)^;
+  Hero            := ppointer(Context.EBP - $380)^;
+  SubCmd          := pointer(Context.EBP - $300);
+
+  x := Hero.x;
+  y := Hero.y;
+  z := Hero.l;
+
+  ZvsApply(@x, sizeof(x), SubCmd, 0);
+  ZvsApply(@y, sizeof(y), SubCmd, 1);
+  ZvsApply(@z, sizeof(z), SubCmd, 2);
+  
+  if (x <> Hero.x) or (y <> Hero.y) or (z <> Hero.l) then begin
+    // Flag 4 is set and hero belongs to current player - do teleport with sound and redraw
+    if (NumParams > 3) and (SubCmd.Nums[3] <> 0) and (Heroes.GetCurrentPlayer = Hero.Owner) then begin
+      PatchApi.Call(CDECL_, Ptr($712008), [Hero, x, y, z, 1]);
+    end else begin
+      Heroes.HideHero(Hero);
+      Hero.x := x;
+      Hero.y := y;
+      Hero.l := z;
+      Heroes.ShowHero(Hero);
+    end;
+  end;
+
+  result := false;
+end; // .function Hook_HE_P
+
 function Hook_DlgCallback (Context: Core.PHookContext): longbool; stdcall;
 const
   NO_CMD = 0;
@@ -5180,6 +5220,9 @@ begin
   (* Fix HE:A3 artifacts delete - update art number *)
   Core.ApiHook(@Hook_ErmHeroArt_DeleteFromBag, Core.HOOKTYPE_BRIDGE, Ptr($745051));
   Core.ApiHook(@Hook_ErmHeroArt_DeleteFromBag, Core.HOOKTYPE_BRIDGE, Ptr($7452F3));
+
+  (* Fix HE:P accept any d-modifiers, honor passed flags *)
+  ApiJack.HookCode(Ptr($743E2D), @Hook_HE_P);
   
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
