@@ -65,6 +65,8 @@ const
   PARAM_MODIFIER_MOD     = 5;
   PARAM_MODIFIER_OR      = 6;
   PARAM_MODIFIER_AND_NOT = 7;
+  PARAM_MODIFIER_SHL     = 8;
+  PARAM_MODIFIER_SHR     = 9;
 
   (* Normalized ERM parameter value types *)
   VALTYPE_INT   = 0;
@@ -577,6 +579,10 @@ const
   ZvsSetVarVal:       function (Param: PErmCmdParam; NewValue: integer): integer cdecl = Ptr($72E301);
   ZvsGetParamValue:   function (var Param: TErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsReparseParam:    function (var Param: TErmCmdParam): integer cdecl = Ptr($72D573);
+  
+  ZvsCrExpoSet_GetExpMod: function (ItemType, ItemId, Modifier: integer): integer cdecl = Ptr($718D34);
+  ZvsCrExpoSet_Find:      function (ItemType, ItemId: integer): pointer {*CrExpo} cdecl = Ptr($718617);
+  ZvsCrExpoSet_GetExp:    function (ItemType, ItemId: integer): integer cdecl = Ptr($718CCD);
 
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
@@ -3577,6 +3583,8 @@ begin
         '%': begin Modifier := PARAM_MODIFIER_MOD;     Inc(Caret); end;
         '|': begin Modifier := PARAM_MODIFIER_OR;      Inc(Caret); end;
         '~': begin Modifier := PARAM_MODIFIER_AND_NOT; Inc(Caret); end;
+        '<': begin if Caret[1] = '<' then begin Modifier := PARAM_MODIFIER_SHL; Inc(Caret, 2); end; end;
+        '>': begin if Caret[1] = '>' then begin Modifier := PARAM_MODIFIER_SHR; Inc(Caret, 2); end; end;
       end;
     end;
 
@@ -3841,6 +3849,9 @@ Quit:
 end; // .function CustomGetNumAuto
 
 procedure PutVal (ValuePtr: pointer; ValueSize, Value, Modifier: integer);
+const
+  BITS_IN_INT32 = 32;
+
 var
   OrigValue:  integer;
   FinalValue: integer;
@@ -3866,6 +3877,8 @@ begin
     PARAM_MODIFIER_MOD:     FinalValue := OrigValue mod Value;
     PARAM_MODIFIER_OR:      FinalValue := OrigValue or Value;
     PARAM_MODIFIER_AND_NOT: FinalValue := OrigValue and not Value;
+    PARAM_MODIFIER_SHL:     FinalValue := OrigValue shl Alg.ToRange(Value, 0, BITS_IN_INT32);
+    PARAM_MODIFIER_SHR:     FinalValue := OrigValue shr Alg.ToRange(Value, 0, BITS_IN_INT32);
   else
     FinalValue := Value;
   end;
