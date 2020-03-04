@@ -435,8 +435,9 @@ type
 
   TWoGOptions = array [CURRENT_WOG_OPTIONS..GLOBAL_WOG_OPTIONS, 0..NUM_WOG_OPTIONS - 1] of integer;
 
+  PHeroSpecRecord = ^THeroSpecRecord;
   THeroSpecRecord = packed record
-    Setup:       array [0..6] of integer;
+    Setup: array [0..6] of integer;
 
     case boolean of
       false: (
@@ -4703,6 +4704,7 @@ begin
   SubCmd          := pointer(Context.EBP - $300);
   Slot            := SubCmd.Nums[1];
   IsCheckOnly     := true;
+  result          := false;
 
   MonType := Hero.MonTypes[Slot];
   MonNum  := Hero.MonNums[Slot];
@@ -4753,9 +4755,29 @@ begin
   end;
 
   ZvsCrExpoSet_Modify(OPER_SET_TYPE_AND_NUM, ITEM_TYPE_HERO, Hero.Id + Slot * $10000, Exp, ExpMod, Hero.MonTypes[Slot], MonNum, Hero.MonNums[Slot]);
-
-  result := false;
 end; // .function Hook_HE_C
+
+function Hook_HE_X (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams:   integer;
+  Hero:        Heroes.PHero;
+  SubCmd:      PErmSubCmd;
+  SpecRecord:  PHeroSpecRecord;
+  i:           integer;
+
+begin
+  // OK result
+  Context.RetAddr := Ptr($746F00);
+  NumParams       := pinteger(Context.EBP - $10)^;
+  Hero            := ppointer(Context.EBP - $380)^;
+  SubCmd          := pointer(Context.EBP - $300);
+  SpecRecord      := @HeroSpecsTable[Hero.Id];
+  result          := false;
+
+  for i := 0 to Math.Min(NumParams, Length(SpecRecord.Setup)) - 1 do begin
+    ZvsApply(@SpecRecord.Setup[i], sizeof(SpecRecord.Setup[i]), SubCmd, i);
+  end;
+end; // .function Hook_HE_X
 
 function Hook_DlgCallback (Context: Core.PHookContext): longbool; stdcall;
 const
@@ -5321,6 +5343,9 @@ begin
 
   (* Fix HE:C0 optmized and accept any d-modifiers. Magic -1/-2 constants are not used anymore *)
   ApiJack.HookCode(Ptr($7442AC), @Hook_HE_C);
+  
+  (* Rewrite HE:X to accept any d-modifiers *)
+  ApiJack.HookCode(Ptr($743F9F), @Hook_HE_X);
   
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
