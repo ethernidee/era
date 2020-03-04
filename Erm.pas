@@ -404,8 +404,9 @@ type
 
   TWoGOptions = array [CURRENT_WOG_OPTIONS..GLOBAL_WOG_OPTIONS, 0..NUM_WOG_OPTIONS - 1] of integer;
 
+  PHeroSpecRecord = ^THeroSpecRecord;
   THeroSpecRecord = packed record
-    Setup:       array [0..6] of integer;
+    Setup: array [0..6] of integer;
 
     case boolean of
       false: (
@@ -3237,6 +3238,28 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_ErmHeroArt_DeleteFromBag
 
+function Hook_HE_X (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams:   integer;
+  Hero:        Heroes.PHero;
+  SubCmd:      PErmSubCmd;
+  SpecRecord:  PHeroSpecRecord;
+  i:           integer;
+
+begin
+  // OK result
+  Context.RetAddr := Ptr($746F00);
+  NumParams       := pinteger(Context.EBP - $10)^;
+  Hero            := ppointer(Context.EBP - $380)^;
+  SubCmd          := pointer(Context.EBP - $300);
+  SpecRecord      := @HeroSpecsTable[Hero.Id];
+  result          := false;
+
+  for i := 0 to Math.Min(NumParams, Length(SpecRecord.Setup)) - 1 do begin
+    ZvsApply(@SpecRecord.Setup[i], sizeof(SpecRecord.Setup[i]), SubCmd, i);
+  end;
+end; // .function Hook_HE_X
+
 function Hook_DlgCallback (Context: Core.PHookContext): longbool; stdcall;
 const
   NO_CMD = 0;
@@ -3774,6 +3797,9 @@ begin
   (* Fix HE:A3 artifacts delete - update art number *)
   Core.ApiHook(@Hook_ErmHeroArt_DeleteFromBag, Core.HOOKTYPE_BRIDGE, Ptr($745051));
   Core.ApiHook(@Hook_ErmHeroArt_DeleteFromBag, Core.HOOKTYPE_BRIDGE, Ptr($7452F3));
+  
+  (* Rewrite HE:X to accept any d-modifiers *)
+  ApiJack.HookCode(Ptr($743F9F), @Hook_HE_X);
   
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
