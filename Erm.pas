@@ -580,9 +580,10 @@ const
   ZvsGetParamValue:   function (var Param: TErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsReparseParam:    function (var Param: TErmCmdParam): integer cdecl = Ptr($72D573);
   
-  ZvsCrExpoSet_GetExpMod: function (ItemType, ItemId, Modifier: integer): integer cdecl = Ptr($718D34);
-  ZvsCrExpoSet_Find:      function (ItemType, ItemId: integer): pointer {*CrExpo} cdecl = Ptr($718617);
-  ZvsCrExpoSet_GetExp:    function (ItemType, ItemId: integer): integer cdecl = Ptr($718CCD);
+  ZvsCrExpoSet_GetExpM: function (ItemType, ItemId, Modifier: integer): integer cdecl = Ptr($718D34);
+  ZvsCrExpoSet_Find:    function (ItemType, ItemId: integer): pointer {*CrExpo} cdecl = Ptr($718617);
+  ZvsCrExpoSet_GetExp:  function (ItemType, ItemId: integer): integer cdecl = Ptr($718CCD);
+  ZvsCrExpoSet_Modify:  function (Oper, ItemType, ItemId, Exp, Modifier, MonType, OrigNum, NewNum: integer; {n} MonArr: pointer = nil): integer cdecl = Ptr($719260);
 
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
@@ -4675,6 +4676,87 @@ begin
   result := false;
 end; // .function Hook_HE_P
 
+function Hook_HE_C (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  ITEM_TYPE_HERO                    = 1;
+  OPER_SET_TYPE_AND_NUM             = 5;
+  STACK_EXP_MOD_SET_FOR_WHOLE_STACK = 2;
+  STACK_EXP_MOD_ADD_FOR_WHOLE_STACK = 3;
+
+var
+  NumParams:   integer;
+  Hero:        Heroes.PHero;
+  SubCmd:      PErmSubCmd;
+  Slot:        integer;
+  MonType:     integer;
+  MonNum:      integer;
+  ExpMod:      integer;
+  Exp:         integer;
+  OrigExp:     integer;
+  IsCheckOnly: longbool;
+
+begin
+  // OK result
+  Context.RetAddr := Ptr($746F00);
+  NumParams       := pinteger(Context.EBP - $10)^;
+  Hero            := ppointer(Context.EBP - $380)^;
+  SubCmd          := pointer(Context.EBP - $300);
+  Slot            := SubCmd.Nums[1];
+  IsCheckOnly     := true;
+
+  MonType := Hero.MonTypes[Slot];
+  MonNum  := Hero.MonNums[Slot];
+
+  IsCheckOnly := ZvsApply(@MonType, sizeof(MonType), SubCmd, 2) and ZvsApply(@MonNum, sizeof(MonNum), SubCmd, 3);
+
+  // Fast quit for HE:C0/#/?$/?$
+  if IsCheckOnly and (NumParams < 5) then begin
+    exit;
+  end;
+
+  // Normalize creature type/number values
+  if (MonType < 0) or (MonNum <= 0) then begin
+    MonType := -1;
+    MonNum  := 0;
+  end;
+
+  // Update hero structure. Get original values to MonType/MonNum
+  Utils.Exchange(Hero.MonTypes[Slot], MonType);
+  Utils.Exchange(Hero.MonNums[Slot],  MonNum);
+
+  // Fast quit for HE:C0/#/$/$ if slot was not really changed and exp was not specified
+  if (NumParams < 5) and (MonType = Hero.MonTypes[Slot]) and (MonNum = Hero.MonNums[Slot]) then begin
+    exit;
+  end;
+
+  Exp    := 0;
+  ExpMod := 0;
+
+  if NumParams >= 6 then begin
+    ExpMod := SubCmd.Nums[5];
+  end;
+
+  if NumParams >= 5 then begin
+    Exp     := ZvsCrExpoSet_GetExpM(ITEM_TYPE_HERO, Hero.Id + Slot * $10000, ExpMod);
+    OrigExp := Exp;
+    
+    if ZvsApply(@Exp, sizeof(Exp), SubCmd, 4) then begin
+      Exp := 0;
+    end else begin
+      IsCheckOnly := false;
+    end;
+  end;
+
+  // Fast quit if type/num/exp were used with GET-syntax only
+  if IsCheckOnly then begin
+    exit;
+  end;
+
+  ZvsCrExpoSet_Modify(OPER_SET_TYPE_AND_NUM, ITEM_TYPE_HERO, Hero.Id + Slot * $10000, Exp, ExpMod, Hero.MonTypes[Slot], MonNum, Hero.MonNums[Slot]);
+
+  result := false;
+end; // .function Hook_HE_C
+
 function Hook_DlgCallback (Context: Core.PHookContext): longbool; stdcall;
 const
   NO_CMD = 0;
@@ -5236,6 +5318,9 @@ begin
 
   (* Fix HE:P accept any d-modifiers, honor passed flags *)
   ApiJack.HookCode(Ptr($743E2D), @Hook_HE_P);
+
+  (* Fix HE:C0 optmized and accept any d-modifiers. Magic -1/-2 constants are not used anymore *)
+  ApiJack.HookCode(Ptr($7442AC), @Hook_HE_C);
   
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
