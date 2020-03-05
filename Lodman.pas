@@ -295,12 +295,12 @@ var
   Redirected: string;
 
 begin 
-  if FindRedirection(PPCHAR(Context.EBP + $8)^, Redirected) then begin
-    PPCHAR(Context.EBP + $8)^ :=  pchar(Redirected);
+  if FindRedirection(ppchar(Context.EBP + $8)^, Redirected) then begin
+    ppchar(Context.EBP + $8)^ := pchar(Redirected);
   end;
   
-  result  :=  Core.EXEC_DEF_CODE;
-end; // .function Hook_FindFileInLod
+  result := Core.EXEC_DEF_CODE;
+end;
 
 function Hook_AfterLoadLods (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -323,12 +323,12 @@ begin
       LodRedirs.DeleteItem(OldFileName);
     end;
   end else begin
-    Redirection :=  LodRedirs[OldFileName];
+    Redirection := LodRedirs[OldFileName];
   
     if Redirection = nil then begin
-      LodRedirs[OldFileName] :=  TString.Create(NewFileName);
+      LodRedirs[OldFileName] := TString.Create(NewFileName);
     end else begin
-      Redirection.Value :=  NewFileName;
+      Redirection.Value := NewFileName;
     end;
   end; // .else
   
@@ -349,12 +349,12 @@ begin
       GlobalLodRedirs.DeleteItem(OldFileName);
     end;
   end else begin
-    Redirection :=  GlobalLodRedirs[OldFileName];
+    Redirection := GlobalLodRedirs[OldFileName];
   
     if Redirection = nil then begin
-      GlobalLodRedirs[OldFileName]  :=  TString.Create(NewFileName);
+      GlobalLodRedirs[OldFileName] := TString.Create(NewFileName);
     end else begin
-      Redirection.Value :=  NewFileName;
+      Redirection.Value := NewFileName;
     end;
   end; // .else
   
