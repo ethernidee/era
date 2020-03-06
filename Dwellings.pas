@@ -68,18 +68,18 @@ type
     MonTypes:        array [0..3] of integer; // +92
     MonNums:         array [0..3] of pword;
     _Unk2:           array [0..7] of byte;
-    Cost:            integer;                 // +132
-    Resource:        integer;                 // +136
-    ResourceCost:    integer;                 // +140
-    IsTownScreen:    integer;                 // +144, 0 for kingdom overview
-    _Unk3:           integer;
-    Target:          PRecruitMonsDlgTarget;
-    _One1:           integer;
-    _Unk5:           array [0..2] of integer;
-    MaxQuantity:     integer;
-    TotalPrice:      integer;
-    MonQuantityDup:  integer;
-    MonQuantity:     integer;
+    Cost:            integer; // +132
+    Resource:        integer; // +136
+    ResourceCost:    integer; // +140
+    IsTownScreen:    integer; // +144, 0 for kingdom overview
+    _Unk3:           integer; // +148
+    Target:          PRecruitMonsDlgTarget; // +152
+    _One1:           integer; // +156
+    _Unk5:           array [0..2] of integer; // +160
+    MaxQuantity:     integer; // +172
+    TotalPrice:      integer; // +176
+    MonQuantityDup:  integer; // +180
+    MonQuantity:     integer; // +184
   end; // .orecord TRecruitMonsDlgSetup
 
   PRecruitMonsSlot = ^TRecruitMonsSlot;
@@ -887,6 +887,10 @@ begin
 end; // .function Command_RecruitDlg_SlotIndex
 
 function Command_RecruitDlg_Info (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
+var
+  ParamName:  string;
+  ParamValue: integer;
+
 begin
   if not RecruitMonsDlgOpenEvent.Inited then begin
     result := false;
@@ -894,30 +898,76 @@ begin
     exit;
   end;
 
-  result := (NumParams >= 1) and AdvErm.CheckCmdParamsEx(@Params^, NumParams, [
-    AdvErm.TYPE_INT or AdvErm.ACTION_GET,
-    AdvErm.TYPE_INT or AdvErm.ACTION_GET or AdvErm.PARAM_OPTIONAL,
-    AdvErm.TYPE_INT or AdvErm.ACTION_GET or AdvErm.PARAM_OPTIONAL,
-    AdvErm.TYPE_INT or AdvErm.ACTION_GET or AdvErm.PARAM_OPTIONAL
-  ]);
+  result := NumParams >= 1;
 
   if not result then begin
     exit;
   end;
 
-  AdvErm.ApplyIntParam(Params[1], RecruitMonsDlgOpenEvent.Id);
+  if not Params[1].IsStr then begin
+    result := AdvErm.CheckCmdParamsEx(@Params^, NumParams, [
+      AdvErm.TYPE_INT or AdvErm.ACTION_GET,
+      AdvErm.TYPE_INT or AdvErm.ACTION_GET or AdvErm.PARAM_OPTIONAL,
+      AdvErm.TYPE_INT or AdvErm.ACTION_GET or AdvErm.PARAM_OPTIONAL,
+      AdvErm.TYPE_INT or AdvErm.ACTION_GET or AdvErm.PARAM_OPTIONAL
+    ]);
 
-  if NumParams >= 2 then begin
-    AdvErm.ApplyIntParam(Params[2], RecruitMonsDlgOpenEvent.TownId);
-  end;
+    if not result then begin
+      exit;
+    end;
 
-  if NumParams >= 3 then begin
-    AdvErm.ApplyIntParam(Params[3], RecruitMonsDlgOpenEvent.DwellingId);
-  end;
+    Params[1].RetInt(RecruitMonsDlgOpenEvent.Id);
 
-  if NumParams >= 4 then begin
-    AdvErm.ApplyIntParam(Params[4], RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[RecruitMonsDlgOpenEvent.DlgSetup.SelectedMonSlot]);
-  end;
+    if NumParams >= 2 then begin
+      Params[2].RetInt(RecruitMonsDlgOpenEvent.TownId);
+    end;
+
+    if NumParams >= 3 then begin
+      Params[3].RetInt(RecruitMonsDlgOpenEvent.DwellingId);
+    end;
+
+    if NumParams >= 4 then begin
+      Params[4].RetInt(RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[RecruitMonsDlgOpenEvent.DlgSetup.SelectedMonSlot]);
+    end;
+  end else begin
+    result := AdvErm.CheckCmdParamsEx(@Params^, NumParams, [
+      AdvErm.TYPE_STR or AdvErm.ACTION_SET,
+      AdvErm.TYPE_INT or AdvErm.ACTION_GET
+    ]);
+
+    if not result then begin
+      exit;
+    end;
+
+    ParamName  := Params[1].Value.pc;
+    ParamValue := 0;
+
+    if ParamName = 'dlgId' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.Id;
+    end else if ParamName = 'townId' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.TownId;
+    end else if ParamName = 'dwellingId' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.DwellingId;
+    end else if ParamName = 'slot' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[RecruitMonsDlgOpenEvent.DlgSetup.SelectedMonSlot];
+    end else if ParamName = 'cost' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.DlgSetup.Cost;
+    end else if ParamName = 'resource' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.DlgSetup.Resource;
+    end else if ParamName = 'resourceCost' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.DlgSetup.ResourceCost;
+    end else if ParamName = 'quantity' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.DlgSetup.MonQuantity;
+    end else if ParamName = 'maxQuantity' then begin
+      ParamValue := RecruitMonsDlgOpenEvent.DlgSetup.MaxQuantity;
+    end else begin
+      Error  := SysUtils.Format('!!RD - unknown parameter name "%s"', [ParamName]);
+      result := false;
+      exit;
+    end; // .else
+
+    Params[2].RetInt(ParamValue);
+  end; // .else
 end; // .function Command_RecruitDlg_Info
 
 function Command_RecruitDlg_Mem (NumParams: integer; Params: POneBasedCmdParams; var Error: string): boolean;
