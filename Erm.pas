@@ -4779,6 +4779,22 @@ begin
   end;
 end; // .function Hook_HE_X
 
+function Hook_HE_Z (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd: PErmSubCmd;
+  Hero:   Heroes.PHero;
+
+begin
+  result := pbyte(Context.EBP - $31D)^ <> ord('Z');
+
+  if not result then begin
+    SubCmd          := pointer(Context.EBP - $300);
+    Hero            := ppointer(Context.EBP - $380)^;
+    ZvsApply(@Hero, sizeof(Hero), SubCmd, 0);
+    Context.RetAddr := Ptr($746F00);
+  end;
+end; // .function Hook_HE_Z
+
 function Hook_BM_Z (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   SubCmd:      PErmSubCmd;
@@ -5366,6 +5382,9 @@ begin
   
   (* Rewrite HE:X to accept any d-modifiers *)
   ApiJack.HookCode(Ptr($743F9F), @Hook_HE_X);
+
+  (* New HE:Z command to get hero structure address *)
+  ApiJack.HookCode(Ptr($746EE3), @Hook_HE_Z);
 
   (* New BM:Z command to get address of battle stack structure *)
   ApiJack.HookCode(Ptr($75F840), @Hook_BM_Z);
