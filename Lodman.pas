@@ -302,13 +302,6 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_AfterLoadLods (Context: Core.PHookContext): LONGBOOL; stdcall;
-begin
-  LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
-  GameExt.FireEvent('OnAfterLoadLods', nil, 0);
-  result := Core.EXEC_DEF_CODE;
-end;
-
 procedure RedirectFile (const OldFileName, NewFileName: string);
 var
   Redirection:  TString;
@@ -418,6 +411,7 @@ end;
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   LoadGlobalRedirectionConfig(GLOBAL_REDIRECTIONS_CONFIG_DIR, REDIRECT_MISSING_AND_EXISTING);
+  LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
 end;
 
 begin
