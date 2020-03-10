@@ -11,8 +11,8 @@ uses
   StrUtils, ApiJack, GameExt, Heroes, Stores, EventMan;
 
 const
-  MAX_NUM_LODS  = 100;
-  DEF_NUM_LODS  = 8;
+  MAX_NUM_LODS = 100;
+  DEF_NUM_LODS = 8;
   
   LODREDIR_SAVE_SECTION = 'Era.ResourceRedirections';
 
@@ -20,34 +20,34 @@ type
   (* IMPORT *)
   TString = TypeWrappers.TString;
 
-  TGameVersion  = Heroes.ROE..Heroes.SOD_AND_AB;
-  TLodType      = (LOD_SPRITE = 1, LOD_BITMAP = 2, LOD_WAV = 3);
+  TGameVersion = Heroes.ROE..Heroes.SOD_AND_AB;
+  TLodType     = (LOD_SPRITE = 1, LOD_BITMAP = 2, LOD_WAV = 3);
   
   PLodTable = ^TLodTable;
   TLodTable = array [0..MAX_NUM_LODS - 1] of Heroes.TLod;
 
-  TZvsAddLodToList  = function (LodInd: integer): integer; cdecl;
+  TZvsAddLodToList = function (LodInd: integer): integer; cdecl;
   
-  PIndexes  = ^TIndexes;
-  TIndexes  = array [0..MAX_NUM_LODS - 1] of integer;
+  PIndexes = ^TIndexes;
+  TIndexes = array [0..MAX_NUM_LODS - 1] of integer;
   
   PLodIndexes = ^TLodIndexes;
   TLodIndexes = packed record
     NumLods:  integer;
     Indexes:  PIndexes;
-  end; // .record TLodIndexes
+  end;
   
   PLodTypes = ^TLodTypes;
   TLodTypes = packed record
-    Table:    array [TLodType, TGameVersion] of TLodIndexes;
-    Indexes:  array [TLodType, TGameVersion] of TIndexes;
-  end; // .record TLodTypes
+    Table:   array [TLodType, TGameVersion] of TLodIndexes;
+    Indexes: array [TLodType, TGameVersion] of TIndexes;
+  end;
 
 
 const
-  ZvsAddLodToList:  TZvsAddLodToList  = Ptr($75605B);
-  ZvsLodTable:      PLodTable         = Ptr($28077D0);
-  ZvsLodTypes:      PLodTypes         = Ptr($79EFE0);
+  ZvsAddLodToList: TZvsAddLodToList = Ptr($75605B);
+  ZvsLodTable:     PLodTable        = Ptr($28077D0);
+  ZvsLodTypes:     PLodTypes        = Ptr($79EFE0);
 
 
 procedure RedirectFile (const OldFileName, NewFileName: string);
@@ -207,9 +207,10 @@ var
 {U} Redirection: TString;
 
 begin
+  {!} Windows.EnterCriticalSection(RedirCritSection);
+
   Redirection := LodRedirs[FileName];
-  // * * * * * //
-  result := false;
+  result      := false;
 
   if Redirection = nil then begin
     Redirection := GlobalLodRedirs[FileName];
@@ -219,6 +220,8 @@ begin
     Redirected := Redirection.Value;
     result     := true;
   end;
+
+  {!} Windows.LeaveCriticalSection(RedirCritSection);
 end; // .function FindRedirection
 
 (* Loads global redirection rules from json configs *)
