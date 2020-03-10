@@ -555,7 +555,7 @@ begin
       Inc(Pos);
       StartPos := Pos;
       
-      while not (PCmd[Pos] in ['^', ';', #0]) do begin
+      while not (PCmd[Pos] in ['^', #0]) do begin
         Inc(Pos);
       end;
 

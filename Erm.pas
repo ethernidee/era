@@ -1892,7 +1892,7 @@ var
     end else begin
       c := ' ';
 
-      while Scanner.FindCharset(INCMD_SPECIAL_CHARS) and Scanner.GetCurrChar(c) and (c <> ';') do begin
+      while Scanner.FindCharset(INCMD_SPECIAL_CHARS) and Scanner.GetCurrChar(c) and ((c <> ';') or IsInStr) do begin
         case c of
           '[': begin
             if not IsInStr and Scanner.GetCharAtRelPos(+1, c) and (c <> ':') then begin
@@ -1921,6 +1921,10 @@ var
             end else begin
               Scanner.GotoNextChar;
             end;
+          end;
+
+          ';': begin
+            Scanner.GotoNextChar;
           end;
         end; // .switch c
       end; // .while
@@ -3053,7 +3057,7 @@ begin
   {!} Assert(BufPos <> nil);
   StartPos := BufPos;
 
-  while not (BufPos^ in ['^', ';', #0]) do begin
+  while not (BufPos^ in ['^', #0]) do begin
     Inc(BufPos);
   end;
 
@@ -3082,7 +3086,7 @@ begin
   {!} Assert(BufPos <> nil);
   StartPos := BufPos;
 
-  while not (BufPos^ in ['^', ';', #0]) do begin
+  while not (BufPos^ in ['^', #0]) do begin
     Inc(BufPos);
   end;
 
@@ -5433,7 +5437,7 @@ begin
   ApiJack.HookCode(Ptr($743E2D), @Hook_HE_P);
 
   (* Fix HE:C0 optmized and accept any d-modifiers. Magic -1/-2 constants are not used anymore *)
-  ApiJack.HookCode(Ptr($7442AC), @Hook_HE_C);
+  //ApiJack.HookCode(Ptr($7442AC), @Hook_HE_C);
   
   (* Rewrite HE:X to accept any d-modifiers *)
   ApiJack.HookCode(Ptr($743F9F), @Hook_HE_X);
