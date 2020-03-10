@@ -8,7 +8,7 @@ BASED ON:     "Lods" plugin by Sav, WoG Sources by ZVS
 (***)  interface  (***)
 uses
   Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib, Log, Json,
-  StrUtils, GameExt, Heroes, Stores, EventMan;
+  StrUtils, ApiJack, GameExt, Heroes, Stores, EventMan;
 
 const
   MAX_NUM_LODS  = 100;
@@ -89,28 +89,28 @@ var
    
 begin
   {!} Assert(Math.InRange(LodInd, 0, NumLods - 1), 'Lod index is out of allowed range: ' + IntToStr(LodInd));
-  Table   :=  nil;
-  Indexes :=  nil;
+  Table   := nil;
+  Indexes := nil;
   // * * * * * //
   for LodType := Low(TLodType) to High(TLodType) do begin
     for GameVersion := Low(TGameVersion) to High(TGameVersion) do begin
-      Table         :=  @ZvsLodTypes.Table[LodType, GameVersion];
-      Indexes       :=  Table.Indexes;
-      LocalNumLods  :=  Table.NumLods;
+      Table         := @ZvsLodTypes.Table[LodType, GameVersion];
+      Indexes       := Table.Indexes;
+      LocalNumLods  := Table.NumLods;
       
-      LeftInd :=  0;
-      i       :=  0;
+      LeftInd := 0;
+      i       := 0;
       
       while i < LocalNumLods do begin
         if Indexes[i] <> LodInd then begin
-          Indexes[LeftInd]  :=  Indexes[i];
+          Indexes[LeftInd] := Indexes[i];
           Inc(LeftInd);
         end;
         
         Inc(i);
       end;
       
-      Table.NumLods :=  LeftInd;
+      Table.NumLods := LeftInd;
     end; // .for
   end; // .for
   
@@ -155,7 +155,7 @@ end; // .procedure UnregisterDeadLods
 function FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean; 
 begin
   {!} Assert(Lod <> nil);
-  result  :=  false;
+  result := false;
   
   if FileName <> '' then begin
     asm
@@ -175,22 +175,22 @@ var
   i:    integer;
   
 begin
-  Lod :=  Utils.PtrOfs(ZvsLodTable, sizeof(Heroes.TLod) * (NumLods - 1));
+  Lod := @ZvsLodTable[NumLods - 1];
   // * * * * * //
-  result  :=  false;
-  i       :=  NumLods - 1;
+  result := false;
+  i      := NumLods - 1;
    
   while not result and (i >= 0) do begin
-    result  :=  FileIsInLod(FileName, Lod);
+    result := FileIsInLod(FileName, Lod);
     
     if not result then begin
-      Lod :=  Utils.PtrOfs(Lod, -sizeof(Heroes.TLod));
+      Dec(Lod);
       Dec(i);
     end;
   end;
 
   if result then begin
-    LodPath :=  pchar(integer(Lod) + 8);
+    LodPath := pchar(integer(Lod) + 8);
   end;
 end; // .function FindFileLod
 
@@ -246,7 +246,7 @@ begin
               WillBeRedirected := not RedirectOnlyMissing;
 
               if RedirectOnlyMissing then begin
-                if AnsiEndsText(ResourceName, '.mp3') then begin
+                if AnsiEndsText('.mp3', ResourceName) then begin
                   WillBeRedirected := not FileExists(MUSIC_DIR + '\' + ResourceName);
                 end else begin
                   WillBeRedirected := not FileIsInLods(ResourceName);
@@ -268,7 +268,19 @@ begin
   FreeAndNil(Config);
 end; // .procedure LoadGlobalRedirectionConfig
 
-function Hook_LoadLods (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_FindFileInLod (Context: Core.PHookContext): longbool; stdcall;
+var
+  Redirected: string;
+
+begin 
+  if FindRedirection(ppchar(Context.EBP + $8)^, Redirected) then begin
+    ppchar(Context.EBP + $8)^ := pchar(Redirected);
+  end;
+  
+  result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_LoadLods (Context: Core.PHookContext): longbool; stdcall;
 var
   i: integer;
   
@@ -287,19 +299,20 @@ begin
     Inc(NumLods);
   end;
 
-  result  :=  Core.EXEC_DEF_CODE;
+  result := Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadLods
 
-function Hook_FindFileInLod (Context: Core.PHookContext): LONGBOOL; stdcall;
-var
-  Redirected: string;
+function Hook_AfterLoadLods (Context: Core.PHookContext): longbool; stdcall;
+begin
+  LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
 
-begin 
-  if FindRedirection(ppchar(Context.EBP + $8)^, Redirected) then begin
-    ppchar(Context.EBP + $8)^ := pchar(Redirected);
-  end;
-  
-  result := Core.EXEC_DEF_CODE;
+  (* Begin lods files redirection *)
+  Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FB106));
+  Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FACA6)); // A0_Lod_FindResource_sub_4FACA0
+
+  EventMan.GetInstance().Fire('OnAfterLoadLods');
+
+  result := true;
 end;
 
 procedure RedirectFile (const OldFileName, NewFileName: string);
@@ -330,7 +343,7 @@ end; // .procedure RedirectFile
 
 procedure GlobalRedirectFile (const OldFileName, NewFileName: string);
 var
-  Redirection:  TString;
+  Redirection: TString;
    
 begin
   {!} Windows.EnterCriticalSection(RedirCritSection);
@@ -400,18 +413,18 @@ end; // .procedure OnSavegameRead
 procedure OnBeforeWoG (Event: PEvent); stdcall;
 begin
   (* Remove WoG h3custom and h3wog lods registration *)
-  PWORD($7015E5)^ :=  $38EB;
+  PWORD($7015E5)^ := $38EB;
+
+  (* Lead lods loading/reordering *)
   Core.Hook(@Hook_LoadLods, Core.HOOKTYPE_BRIDGE, 5, Ptr($559408));
-  
-  (* Lods files redirection mechanism *)
-  Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FB106));
-  Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FACA6)); // A0_Lod_FindResource_sub_4FACA0
+
+  (* Implement OnAfterLoadLods event and missing resources redirection *)
+  ApiJack.HookCode(Ptr($4EDD65), @Hook_AfterLoadLods);
 end;
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   LoadGlobalRedirectionConfig(GLOBAL_REDIRECTIONS_CONFIG_DIR, REDIRECT_MISSING_AND_EXISTING);
-  LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
 end;
 
 begin
