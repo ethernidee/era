@@ -9,7 +9,7 @@ unit Dwellings;
 uses
   SysUtils, Math, Utils, Alg, DataLib,
   PatchApi, Core, ApiJack, EventMan, GameExt, Erm,
-  Heroes, AdvErm, DlgMes {FIXME};
+  Heroes, AdvErm;
 
 
 (***)  implementation  (***)
