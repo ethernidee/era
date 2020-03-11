@@ -4713,7 +4713,13 @@ begin
   MonType := Hero.MonTypes[Slot];
   MonNum  := Hero.MonNums[Slot];
 
-  IsCheckOnly := ZvsApply(@MonType, sizeof(MonType), SubCmd, 2) and ZvsApply(@MonNum, sizeof(MonNum), SubCmd, 3);
+  if not ZvsApply(@MonType, sizeof(MonType), SubCmd, 2) then begin
+    IsCheckOnly := false;
+  end;
+
+  if not ZvsApply(@MonNum, sizeof(MonNum), SubCmd, 3) then begin
+    IsCheckOnly := false;
+  end;
 
   // Fast quit for HE:C0/#/?$/?$
   if IsCheckOnly and (NumParams < 5) then begin
@@ -4936,8 +4942,6 @@ begin
   for i := 0 to NumParams - 1 do begin
     if SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET then begin
       ZvsApply(@RetXVars[i + 1], sizeof(integer), SubCmd, i);
-    // end else if SubCmd.Params[i].GetCheckType() = PARAM_CHECK_EQUAL then begin
-    //   SetErmParamValue(@SubCmd.Params[i], RetXVars[i + 1]);
     end;
   end;
 end;
@@ -5437,7 +5441,7 @@ begin
   ApiJack.HookCode(Ptr($743E2D), @Hook_HE_P);
 
   (* Fix HE:C0 optmized and accept any d-modifiers. Magic -1/-2 constants are not used anymore *)
-  //ApiJack.HookCode(Ptr($7442AC), @Hook_HE_C);
+  ApiJack.HookCode(Ptr($7442AC), @Hook_HE_C);
   
   (* Rewrite HE:X to accept any d-modifiers *)
   ApiJack.HookCode(Ptr($743F9F), @Hook_HE_X);
