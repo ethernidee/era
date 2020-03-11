@@ -53,7 +53,14 @@ var
   
   GameCDFound:  boolean;
   GameCDPath:   string;
-  
+
+
+(* Returns true if non-redirected sound resource exists *)
+function HasSoundReal (const FileName: string): boolean;
+
+(* Returns true if non-redirected video resource exists *)
+function HasVideoReal (const FileName: string): boolean;
+
   
 (***) implementation (***)
 uses Lodman;
@@ -63,6 +70,16 @@ var
 {O} SndFiles: {O} AssocArrays.TAssocArray {OF PItemInfo};
 {O} VidFiles: {O} AssocArrays.TAssocArray {OF PItemInfo};
 
+
+function HasSoundReal (const FileName: string): boolean;
+begin
+  result := SndFiles[SysUtils.ChangeFileExt(FileName, '')] <> nil;
+end;
+
+function HasVideoReal (const FileName: string): boolean;
+begin
+  result := VidFiles[FileName] <> nil;
+end;
 
 procedure FindGameCD;
 const

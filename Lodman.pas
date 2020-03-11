@@ -8,7 +8,7 @@ BASED ON:     "Lods" plugin by Sav, WoG Sources by ZVS
 (***)  interface  (***)
 uses
   Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib, Log, Json,
-  StrUtils, ApiJack, GameExt, Heroes, Stores, EventMan;
+  StrUtils, ApiJack, GameExt, Heroes, Stores, EventMan, DlgMes;
 
 const
   MAX_NUM_LODS = 100;
@@ -58,6 +58,7 @@ function  FindRedirection (const FileName: string; var {out} Redirected: string)
   
 
 (***) implementation (***)
+uses SndVid;
 
 
 const
@@ -74,6 +75,8 @@ var
 {O} LodList:          Lists.TStringList;
     NumLods:          integer = DEF_NUM_LODS;
     RedirCritSection: Windows.TRTLCriticalSection;
+
+{O} PostponedMissingMediaRedirs: {O} Lists.TStringList {OF TString};
 
 
 procedure UnregisterLod (LodInd: integer);
@@ -251,13 +254,15 @@ begin
               if RedirectOnlyMissing then begin
                 if AnsiEndsText('.mp3', ResourceName) then begin
                   WillBeRedirected := not FileExists(MUSIC_DIR + '\' + ResourceName);
+                end else if AnsiEndsText('.wav', ResourceName) or AnsiEndsText('.smk', ResourceName) or AnsiEndsText('.bik', ResourceName) then begin
+                  PostponedMissingMediaRedirs.AddObj(ResourceName, TString.Create(Config.GetString(i)));
                 end else begin
                   WillBeRedirected := not FileIsInLods(ResourceName);
                 end;
               end;
               
               if WillBeRedirected then begin
-                GlobalLodRedirs[ResourceName] := TString.Create(Config.getString(i));
+                GlobalLodRedirs[ResourceName] := TString.Create(Config.GetString(i));
               end;
             end; // .if
           end; // .for
@@ -317,6 +322,34 @@ begin
 
   result := true;
 end;
+
+function Hook_AfterLoadMedia (Context: Core.PHookContext): longbool; stdcall;
+var
+  ResourceName:     string;
+  WillBeRedirected: boolean;
+  i:                integer;
+
+begin
+  (* Apply postponed missing media redirections *)
+  for i := 0 to PostponedMissingMediaRedirs.Count - 1 do begin
+    ResourceName := PostponedMissingMediaRedirs[i];
+
+    if AnsiEndsText('.wav', ResourceName) then begin
+      WillBeRedirected := not SndVid.HasSoundReal(ResourceName);
+    end else begin
+      WillBeRedirected := not SndVid.HasVideoReal(ResourceName);
+    end;
+
+    if WillBeRedirected then begin
+      GlobalRedirectFile(ResourceName, TString(PostponedMissingMediaRedirs.Values[i]).Value);
+    end;
+  end;
+
+  PostponedMissingMediaRedirs.Clear;
+  EventMan.GetInstance().Fire('OnAfterLoadMedia');
+
+  result := true;
+end; // .function Hook_AfterLoadMedia
 
 procedure RedirectFile (const OldFileName, NewFileName: string);
 var
@@ -423,6 +456,7 @@ begin
 
   (* Implement OnAfterLoadLods event and missing resources redirection *)
   ApiJack.HookCode(Ptr($4EDD65), @Hook_AfterLoadLods);
+  ApiJack.HookCode(Ptr($4EE0CB), @Hook_AfterLoadMedia);
 end;
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
@@ -432,9 +466,10 @@ end;
 
 begin
   Windows.InitializeCriticalSection(RedirCritSection);
-  GlobalLodRedirs := AssocArrays.NewStrictAssocArr(TString);
-  LodRedirs       := AssocArrays.NewStrictAssocArr(TString);
-  LodList         := Lists.NewSimpleStrList;
+  GlobalLodRedirs             := AssocArrays.NewStrictAssocArr(TString);
+  LodRedirs                   := AssocArrays.NewStrictAssocArr(TString);
+  LodList                     := Lists.NewSimpleStrList;
+  PostponedMissingMediaRedirs := DataLib.NewStrList(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
 
   EventMan.GetInstance.On('OnBeforeWoG',             OnBeforeWoG);
   EventMan.GetInstance.On('OnAfterWoG',              OnAfterWoG);
