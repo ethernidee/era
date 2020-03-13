@@ -16,6 +16,7 @@ type
   TAssocArray = AssocArrays.TAssocArray;
   TStrList    = DataLib.TStrList;
   TDict       = DataLib.TDict;
+  TList       = DataLib.TList;
   TString     = TypeWrappers.TString;
   TResource   = RscLists.TResource;
 
@@ -604,6 +605,9 @@ var
     QuitTriggerFlag:         boolean = false;
     TriggerLoopCallback:     TTriggerLoopCallback;
 
+    // List of objects, that will be freed on current trigger end
+    {Un} TriggerLocalObjects: {O} TList {of TObject} = nil;
+
     // Each trigger saves x-vars to RetXVars before restoring previous values on exit.
     // ArgXVars are copied to x on trigger start after saving previous x-values.
     ArgXVars:    TErmXVars;
@@ -645,6 +649,9 @@ procedure ExtractErm; stdcall;
 function  AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
 procedure AssignEventParams (const Params: array of integer);
 procedure FireErmEventEx (EventId: integer; const Params: array of integer);
+
+(* Registers object as trigger local object. It will be freed on exit from current trigger *)
+procedure RegisterTriggerLocalObject ({O} Obj: TObject);
 
 (* Returns true if default reaction is allowed *)
 function  FireMouseEvent (TriggerId: integer; MouseEventInfo: Heroes.PMouseEventInfo): boolean;
@@ -3939,6 +3946,15 @@ begin
   end; // .else
 end; // .function Hook_ZvsApply
 
+procedure RegisterTriggerLocalObject ({O} Obj: TObject);
+begin
+  if TriggerLocalObjects = nil then begin
+    TriggerLocalObjects := DataLib.NewList(Utils.OWNS_ITEMS);
+  end;
+
+  TriggerLocalObjects.Add(Obj);
+end;
+
 procedure ProcessErm;
 const
   (* Ifs state *)
@@ -3970,6 +3986,8 @@ type
   end;
 
 var
+{Un} SavedTriggerLocalObjects: {O} TList {of TObject};
+  
   PrevTriggerCmdIndPtr: pinteger;
   NumericEventName:     string;
   HumanEventName:       string;
@@ -4137,8 +4155,10 @@ begin
       EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, TriggerId);
     end;
 
-    PrevTriggerCmdIndPtr    := CurrentTriggerCmdIndPtr;
-    CurrentTriggerCmdIndPtr := @i;
+    PrevTriggerCmdIndPtr     := CurrentTriggerCmdIndPtr;
+    CurrentTriggerCmdIndPtr  := @i;
+    SavedTriggerLocalObjects := TriggerLocalObjects;
+    TriggerLocalObjects      := nil;
 
     // Repeat executing all triggers with specified ID, unless TriggerLoopCallback is not set or returns false
     while true do begin
@@ -4348,6 +4368,11 @@ begin
           end; // .if
         end; // .if
 
+        if TriggerLocalObjects <> nil then begin
+          TriggerLocalObjects.Free;
+          TriggerLocalObjects := nil;
+        end;
+
         Trigger := Trigger.Next;
       end; // .while
 
@@ -4358,8 +4383,6 @@ begin
         break;
       end;
     end; // .while
-
-    CurrentTriggerCmdIndPtr := PrevTriggerCmdIndPtr;
   end; // .if HasEventHandlers
 
   AfterTriggers:
@@ -4372,6 +4395,13 @@ begin
     end;
 
     RestoreVars;
+    CurrentTriggerCmdIndPtr := PrevTriggerCmdIndPtr;
+
+    if TriggerLocalObjects <> nil then begin
+      TriggerLocalObjects.Free;
+    end;
+    
+    TriggerLocalObjects := SavedTriggerLocalObjects;
   end else begin
     RetXVars := ArgXVars;
   end;

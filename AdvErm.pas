@@ -10,11 +10,12 @@ uses
   PatchApi, Core, GameExt, Erm, Stores, Triggers, Heroes, Lodman, Trans, EventMan;
 
 const
-  SPEC_SLOT = -1;
-  NO_SLOT   = -1;
+  AUTO_ALLOC_SLOT = -1;
+  NO_SLOT         = -1;
   
-  IS_TEMP   = 0;
-  NOT_TEMP  = 1;
+  IS_TEMP          = 0;
+  NOT_TEMP         = 1;
+  IS_TRIGGER_LOCAL = -1;
 
   (* For CheckCmdParamsEx *)
   TYPE_INT       = 1;
@@ -103,6 +104,15 @@ type
     IntItems:  array of integer;
     StrItems:  array of string;
   end;
+
+  TSlotReleaser = class
+   protected
+    fSlotN: integer;
+
+   public
+    constructor Create (SlotN: integer);
+    destructor Destroy; override;
+  end;
   
   TAssocVar = class
     IntValue: integer;
@@ -185,12 +195,22 @@ var
 
 {O} Hints:      {O} TDict {of [O] TObjDict of TString};
 {O} Slots:      {O} AssocArrays.TObjArray {OF TSlot};
-    FreeSlotN:  integer = SPEC_SLOT - 1;
+    FreeSlotN:  integer = AUTO_ALLOC_SLOT - 1;
 
     Mp3TriggerContext:   PMp3TriggerContext = nil;
     CurrentMp3Track:     string;
     CurrentSoundNameBuf: PSoundNameBuffer = nil;
 
+
+constructor TSlotReleaser.Create (SlotN: integer);
+begin
+  Self.fSlotN := SlotN;
+end;
+
+destructor TSlotReleaser.Destroy;
+begin
+  Slots.DeleteItem(Ptr(Self.fSlotN));
+end;
 
 procedure TServiceMemAllocator.Init;
 begin
@@ -1036,7 +1056,7 @@ begin
     Dec(FreeSlotN);
     
     if FreeSlotN > 0 then begin
-      FreeSlotN :=  SPEC_SLOT - 1;
+      FreeSlotN := AUTO_ALLOC_SLOT - 1;
     end;
   end;
   
@@ -1045,7 +1065,7 @@ begin
   Dec(FreeSlotN);
   
   if FreeSlotN > 0 then begin
-    FreeSlotN :=  SPEC_SLOT - 1;
+    FreeSlotN := AUTO_ALLOC_SLOT - 1;
   end;
 end; // .function AllocSlot
 
@@ -1371,7 +1391,7 @@ begin
           // M(Slot); delete specified slot
           1:
             begin
-              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET]) and (Params[0].Value.v <> SPEC_SLOT);
+              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET]) and (Params[0].Value.v <> AUTO_ALLOC_SLOT);
               
               if result then begin
                 Slots.DeleteItem(Ptr(Params[0].Value.v));
@@ -1450,20 +1470,24 @@ begin
                 end; // .else
               end; // .if
             end; // .case 3
-          // SN:M#slot/#count/#type/#persistInSaves
+          // SN:M#slot/#count/#type/#persistInSaves or -1 for trigger-local array
           4:
             begin
               result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]) and
-              (Params[0].Value.v >= SPEC_SLOT)                        and
+              (Params[0].Value.v >= AUTO_ALLOC_SLOT)                  and
               (Params[1].Value.v >= 0)                                and
               Math.InRange(Params[2].Value.v, 0, ord(High(TVarType))) and
-              ((Params[3].Value.v = IS_TEMP) or (Params[3].Value.v = NOT_TEMP));
+              ((Params[3].Value.v = IS_TEMP) or (Params[3].Value.v = NOT_TEMP) or ((Params[3].Value.v = IS_TRIGGER_LOCAL) and (Params[0].Value.v = AUTO_ALLOC_SLOT)));
               
               if result then begin
-                if Params[0].Value.v = SPEC_SLOT then begin
-                  Erm.v[1] := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP);
+                if Params[0].Value.v = AUTO_ALLOC_SLOT then begin
+                  Erm.v[1] := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v <> NOT_TEMP);
                 end else begin
-                  Slots[Ptr(Params[0].Value.v)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v = IS_TEMP);
+                  Slots[Ptr(Params[0].Value.v)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v <> NOT_TEMP);
+                end;
+
+                if Params[3].Value.v = IS_TRIGGER_LOCAL then begin
+                  Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(Erm.v[1]));
                 end;
               end;
             end; // .case 4
