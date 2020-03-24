@@ -200,7 +200,8 @@ const
   TRIGGER_POST_TOWN_SCREEN             = 77036;
   TRIGGER_PRE_HEROSCREEN               = 77037;
   TRIGGER_POST_HEROSCREEN              = 77038;
-  {!} LAST_ERA_TRIGGER                 = TRIGGER_POST_HEROSCREEN;
+  TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE = 77039;
+  {!} LAST_ERA_TRIGGER                 = TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE;
   
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -610,8 +611,8 @@ var
 
     // Each trigger saves x-vars to RetXVars before restoring previous values on exit.
     // ArgXVars are copied to x on trigger start after saving previous x-values.
-    ArgXVars:    TErmXVars;
-    RetXVars:    TErmXVars;
+    ArgXVars: TErmXVars;
+    RetXVars: TErmXVars;
     
     // May be set by function caller to signal, how many arguments are initialized
     NumFuncArgsPassed: integer = 0;
@@ -985,6 +986,7 @@ begin
     {*} Erm.TRIGGER_POST_TOWN_SCREEN:             result := 'OnPostTownScreen';
     {*} Erm.TRIGGER_PRE_HEROSCREEN:               result := 'OnPreHeroScreen';
     {*} Erm.TRIGGER_POST_HEROSCREEN:              result := 'OnPostHeroScreen';
+    {*} Erm.TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE: result := 'OnDetermineMonInfoDlgUpgrade';
     (* END Era Triggers *)
   else
     if EventID >= Erm.TRIGGER_OB_POS then begin
@@ -2976,6 +2978,7 @@ begin
   NameTrigger(Erm.TRIGGER_POST_TOWN_SCREEN,             'OnPostTownScreen');
   NameTrigger(Erm.TRIGGER_PRE_HEROSCREEN,               'OnPreHeroScreen');
   NameTrigger(Erm.TRIGGER_POST_HEROSCREEN,              'OnPostHeroScreen');
+  NameTrigger(Erm.TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, 'OnDetermineMonInfoDlgUpgrade');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);

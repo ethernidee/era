@@ -1140,7 +1140,7 @@ begin
     Core.ApiHook(@Hook_Rand,  Core.HOOKTYPE_JUMP, Ptr($50C7C0));
   end;
 
-  (* Make VR:T equal to VR:V for multiplayer support *)
+  (* Make VR:T a Mersenne Twister generator *)
   Core.ApiHook(@NewTimeRandom, Core.HOOKTYPE_CALL, Ptr($734D24));
 end; // .procedure OnAfterWoG
 

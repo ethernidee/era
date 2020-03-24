@@ -1607,14 +1607,16 @@ begin
       begin
         GetGameState(GameState);
         
-        if GameState.CurrentDlgId = ADVMAP_DLGID then begin
+        if GameState.CurrentDlgId = Heroes.ADVMAP_DLGID then begin
           Erm.ExecErmCmd('UN:R1;');
-        end else if GameState.CurrentDlgId = TOWN_SCREEN_DLGID then begin
+        end else if GameState.CurrentDlgId = Heroes.TOWN_SCREEN_DLGID then begin
           Erm.ExecErmCmd('UN:R4;');
-        end else if GameState.CurrentDlgId = HERO_SCREEN_DLGID then begin
+        end else if GameState.CurrentDlgId = Heroes.HERO_SCREEN_DLGID then begin
           Erm.ExecErmCmd('UN:R3/-1;');
-        end else if GameState.CurrentDlgId = HERO_MEETING_SCREEN_DLGID then begin
+        end else if GameState.CurrentDlgId = Heroes.HERO_MEETING_SCREEN_DLGID then begin
           Heroes.RedrawHeroMeetingScreen;
+        end else if GameState.CurrentDlgId = Heroes.BATTLE_DLGID then begin
+          Erm.ExecErmCmd('BU:R;');
         end;
       end; // .case "D"
     'O':

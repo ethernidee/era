@@ -521,6 +521,45 @@ begin
   result := true;
 end;
 
+function Hook_InitMonInfoDlg (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  ARG_MON_UPGRADE_TYPE = 2;
+
+var
+  IsReadOnlyDlg: longbool;
+  Town:          Heroes.PTown;
+  Hero:          Heroes.PHero;
+  TownId:        integer;
+  HeroId:        integer;
+  MonType:       integer;
+  UpgradeType:   integer;
+
+begin
+  IsReadOnlyDlg := pbyte(Context.EBP + $24)^ <> 0;
+
+  if not IsReadOnlyDlg then begin
+    Town        := ppointer(Context.EBP + $14)^;
+    Hero        := ppointer(Context.EBP + $10)^;
+    HeroId      := -1;
+    TownId      := -1;
+    MonType     := Utils.PEndlessIntArr(ppointer(Context.EBP + $8)^)[pinteger(Context.EBP + $0C)^];
+    UpgradeType := pinteger(Context.EBP - $14)^;
+
+    if Town <> nil then begin
+      TownId := Town.Id;
+    end;
+
+    if Hero <> nil then begin
+      HeroId := Hero.Id;
+    end;
+    
+    Erm.FireErmEventEx(Erm.TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, [MonType, UpgradeType, TownId, HeroId]);
+    pinteger(Context.EBP - $14)^ := Erm.RetXVars[ARG_MON_UPGRADE_TYPE];
+  end; // .if
+
+  result := true;
+end; // .function Hook_InitMonInfoDlg
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -579,6 +618,9 @@ begin
 
   (* OnEnterTownScreen event *)
   ApiJack.HookCode(Ptr($5D4709), @Hook_SwitchTownScreen);
+
+  (* OnDetermineMonInfoDlgUpgrade *)
+  ApiJack.HookCode(Ptr($4C6B1C), @Hook_InitMonInfoDlg);
 end; // .procedure OnAfterWoG
 
 begin
