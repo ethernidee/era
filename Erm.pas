@@ -1298,15 +1298,18 @@ const
   ERM2_SIGNATURE = 'ZVSE2';
 
   ANY_CHAR            = [#0..#255];
-  FUNCNAME_CHARS      = ANY_CHAR - [')', #10, #13];
+  IDENT_CHARS         = ANY_CHAR - [')', ')', #10, #13];
   LABEL_CHARS         = ANY_CHAR - [']', #10, #13];
-  SPECIAL_CHARS       = ['[', '!', '$', '@'];
-  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';', '$', '@'];
-  VAR_END_CHARSET     = ['$', '@', ';', '^', #10, #13, '('];
+  SPECIAL_CHARS       = ['[', '!'];
+  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';'];
   CMD_END_CHARSET     = [';', #0];
   SAFE_BLANKS         = [#1..#32];
   NUMBER_START_CHARS  = ['+', '-', '0'..'9'];
   DIGITS              = ['0'..'9'];
+
+  IDENT_TYPE_CONST = 1;
+  IDENT_TYPE_FUNC  = 2;
+  IDENT_TYPE_VAR   = 3;
 
   SUPPORTED_LOCAL_VAR_TYPES = ['x', 'y', 'v', 'e', 'z'];
   LOCAL_VAR_TYPE_ID_Y = 0;
@@ -1344,7 +1347,6 @@ var
 {O} Scanner:            TextScan.TTextScanner;
 {O} Labels:             TDict {of CmdN + 1};
 {O} LocalVars:          {O} TDict {of TErmLocalVar };
-{U} LocalVar:           TErmLocalVar;
     LocalVarsPools:     array [LOCAL_VAR_TYPE_ID_Y..LOCAL_VAR_TYPE_ID_V] of TLocalVarsPool;
     UnresolvedLabelInd: integer; // index of last unresolved label or NO_LABEL
     CmdN:               integer; // index of next command
@@ -1356,9 +1358,6 @@ var
     IsInStr:            longbool;
     IsErm2:             longbool;
     VarPos:             integer;
-    VarName:            string;
-    ArrIndex:           integer;
-    VarIndex:           integer;
     c:                  char;
 
   procedure ShowError (ErrPos: integer; const Error: string);
@@ -1391,43 +1390,6 @@ var
       MarkedPos := Scanner.Pos;
     end;
   end;
-
-  procedure ParseConstName;
-  var
-    FuncId:     integer;
-    ConstValue: integer;
-    Ident:      string;
-    c:          char;
-
-  begin
-    FlushMarked;
-    Scanner.GotoNextChar;
-
-    if Scanner.ReadToken(FUNCNAME_CHARS, Ident) and Scanner.GetCurrChar(c) then begin
-      if c = ')' then begin
-        Scanner.GotoNextChar;
-        ConstValue := 0;
-
-        if not IsValidConstName(Ident) then begin
-          AllocErmFunc(Ident, FuncId);
-          Buf.Add(IntToStr(FuncId));
-        end else if GlobalConsts.GetExistingValue(Ident, pointer(ConstValue)) then begin
-          Buf.Add(IntToStr(ConstValue));
-        end else begin
-          ShowError(Scanner.Pos, 'Unknown global constant name: "' + Ident + '". Assuming 0');
-          Buf.Add('0');
-        end;
-      end else begin
-        ShowError(Scanner.Pos, 'Unexpected line end in function/constant name');
-        Buf.Add('999999');
-      end;
-    end else begin
-      ShowError(Scanner.Pos, 'Missing closing ")"');
-      Buf.Add('999999');
-    end; // .else
-
-    MarkPos;
-  end; // .procedure ParseConstName
 
   procedure DeclareLabel (const LabelName: string);
   begin
@@ -1592,7 +1554,7 @@ var
     end;
   end;
 
-  function ParseLocalVar (VarName: pchar; out IsFreeing: boolean; out VarType: char; out VarBaseName: string; out VarIndex: integer): boolean;
+  function ParseLocalVar (VarName: pchar; out IsFreeing: longbool; out IsAddr: longbool; out VarType: char; out VarBaseName: string; out VarIndex: integer): boolean;
   var
     StartPtr: pchar;
 
@@ -1732,14 +1694,14 @@ var
     end;
   end; // .function AllocLocalVar
 
-  function GetLocalVar (const VarName: string; out {Un} LocalVar: TErmLocalVar; out ArrIndex: integer): boolean;
+  function GetLocalVar (const VarName: string; out {Un} LocalVar: TErmLocalVar; out ArrIndex: integer; out IsAddr: longbool): boolean;
   var
-    IsFreeing:   boolean;
+    IsFreeing:   longbool;
     VarType:     char;
     BaseVarName: string;
 
   begin
-    result := ParseLocalVar(pointer(VarName), IsFreeing, VarType, BaseVarName, ArrIndex);
+    result := ParseLocalVar(pointer(VarName), IsFreeing, IsAddr, VarType, BaseVarName, ArrIndex);
 
     if result then begin
       result := VarType in SUPPORTED_LOCAL_VAR_TYPES;
@@ -1769,44 +1731,37 @@ var
     end; // .if
   end; // .unction GetLocalVar
 
-  procedure HandleLocalVar (c: char);
+  procedure HandleLocalVar (const VarName: string; VarStartPos: integer);
+  var
+  {U} LocalVar: TErmLocalVar;
+      VarIndex: integer;
+      ArrIndex: integer;
+      IsAddr:   longbool;
+
   begin
-    FlushMarked;
-    VarPos := Scanner.Pos;
-    Scanner.GotoNextChar;
+    VarPos := VarStartPos;
 
-    if Scanner.ReadTokenTillDelim(VAR_END_CHARSET, VarName) then begin
-      if Scanner.c <> c then begin
-        ShowError(VarPos, 'Expected local variable end delimiter ' + c);
-        Buf.Add('___');
-      end else if VarName = '' then begin
-        Scanner.GotoNextChar;
-        Buf.Add(c);
-      end else if not GetLocalVar(VarName, LocalVar, ArrIndex) then begin
-        Scanner.GotoNextChar;
-        Buf.Add('___');
-      end else begin
-        Scanner.GotoNextChar;
-        
-        if LocalVar <> nil then begin
-          VarIndex := LocalVar.StartIndex + ArrIndex;
-          
-          if LocalVar.IsNegative then begin
-            VarIndex := -VarIndex;
-          end;
+    if not GetLocalVar(VarName, LocalVar, ArrIndex, IsAddr) then begin
+      Buf.Add('q');
+    end
+    // It it's not free var operation
+    else if LocalVar <> nil then begin
+      VarIndex := LocalVar.StartIndex + ArrIndex;
+      
+      if LocalVar.IsNegative then begin
+        VarIndex := -VarIndex;
+      end;
 
-          if c = '$' then begin
-            if IsInStr then begin
-              Buf.Add('%' + UpCase(LocalVar.VarType) + IntToStr(VarIndex));
-            end else begin
-              Buf.Add(LocalVar.VarType + IntToStr(VarIndex));
-            end;
-          end else begin
-            Buf.Add(IntToStr(VarIndex));
-          end;
+      if c = '$' then begin
+        if IsInStr then begin
+          Buf.Add('%' + UpCase(LocalVar.VarType) + IntToStr(VarIndex));
+        end else begin
+          Buf.Add(LocalVar.VarType + IntToStr(VarIndex));
         end;
-      end; // .else
-    end; // .if
+      end else begin
+        Buf.Add(IntToStr(VarIndex));
+      end;
+    end; // .elseif
 
     MarkPos;
   end; // .procedure HandleLocalVar
@@ -1889,6 +1844,93 @@ var
     MarkPos;
   end; // .function HandleConstDeclaration
 
+  function DetectIdentType (const Ident: string; out IdentType: integer): boolean;
+  var
+    FirstChar: char;
+    CharPos:   integer;
+
+  begin
+    result := Ident <> '';
+
+    if result then begin
+      FirstChar := Ident[1];
+
+      if FirstChar in ['A'..'Z'] then begin
+        if not StrLib.SkipCharsetEx(['A'..'Z', '0'..'9', '_'], Ident, 1, CharPos) then begin
+          IdentType := IDENT_TYPE_CONST;
+        end else if not StrLib.SkipCharsetEx(['A'..'Z', 'a'..'z', '0'..'9', '_'], Ident, CharPos, CharPos) then begin
+          IdentType := IDENT_TYPE_FUNC;
+        end else begin
+          result := false;
+        end;
+      end else if FirstChar in ['a'..'z', '@', '-'] then begin
+        IdentType := IDENT_TYPE_VAR;
+      end else begin
+        result := false;
+      end; // .else
+    end; // .if
+  end; // .function DetectIdentType
+
+  procedure ParseIdent;
+  var
+    StartPos:   integer;
+    IdentType:  integer;
+    ConstValue: integer;
+    FuncId:     integer;
+    Ident:      string;
+    c:          char;
+
+  begin
+    FlushMarked;
+    StartPos := Scanner.Pos;
+    Scanner.GotoNextChar;
+
+    if Scanner.ReadToken(IDENT_CHARS, Ident) and Scanner.GetCurrChar(c) then begin
+      if c = ')' then begin
+        Scanner.GotoNextChar;
+
+        if not IsErm2 then begin
+          AllocErmFunc(Ident, FuncId);
+          Buf.Add(IntToStr(FuncId));
+        end else if not DetectIdentType(Ident, IdentType) then begin
+          ShowError(StartPos, 'Invalid identifier: (' + Ident + ')');
+          Buf.Add('999999');
+        end else begin
+          case IdentType of
+            IDENT_TYPE_VAR: begin
+              HandleLocalVar(Ident, StartPos);
+            end;
+
+            IDENT_TYPE_CONST: begin
+              ConstValue := 0;
+
+              if GlobalConsts.GetExistingValue(Ident, pointer(ConstValue)) then begin
+                Buf.Add(IntToStr(ConstValue));
+              end else begin
+                ShowError(StartPos, 'Unknown global constant name: "' + Ident + '". Assuming 0');
+                GlobalConsts[Ident] := Ptr(0);
+                Buf.Add('0');
+              end;
+            end;
+
+            IDENT_TYPE_FUNC: begin
+              AllocErmFunc(Ident, FuncId);
+              Buf.Add(IntToStr(FuncId));
+            end;
+          end; // .switch
+        end; // .else
+      end else begin
+        ShowError(Scanner.Pos, 'Unexpected character in identifier name');
+        Buf.Add('999999');
+      end;
+    end else begin
+      ShowError(Scanner.Pos, 'Missing closing ")"');
+      Buf.Add('999999');
+    end; // .else
+
+    MarkPos;
+  end; // .procedure ParseIdent
+
   procedure ParseCmd;
   var
     c: char;
@@ -1913,7 +1955,7 @@ var
 
           '(': begin
             if not IsInStr then begin
-              ParseConstName;
+              ParseIdent;
             end else begin
               Scanner.GotoNextChar;
             end;          
@@ -1923,14 +1965,6 @@ var
             Scanner.GotoNextChar;
             IsInStr := not IsInStr;
           end; // .case '^'
-
-          '$', '@': begin
-            if IsErm2 then begin
-              HandleLocalVar(c);
-            end else begin
-              Scanner.GotoNextChar;
-            end;
-          end;
 
           ';': begin
             Scanner.GotoNextChar;
@@ -2002,14 +2036,6 @@ begin
           end; // .switch c
         end; // .if
       end; // .case '!'
-
-      '$', '@': begin
-        if IsErm2 then begin
-          HandleLocalVar(c);
-        end else begin
-          Scanner.GotoNextChar;
-        end;
-      end;
 
       '[': begin
         if Scanner.GetCharAtRelPos(+1, c) and (c = ':') then begin
