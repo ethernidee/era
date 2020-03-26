@@ -181,8 +181,14 @@ var
       EmptyLine;
       WriteIndentation;
 
-      Write(IfThen(Event.EventType = TRACKEDEVENT_START_TRIGGER, '!?(', '; END FU(') + Erm.GetTriggerReadableName(Event.TriggerId) + '); ID:' + IntToStr(Event.TriggerId)
-                                                                                       + ', v' + IntToStr(low(Event.v)) + ' = [');
+      if Event.EventType = TRACKEDEVENT_START_TRIGGER then begin
+        Write('!?(');
+      end else begin
+        Write('; END FU(');
+      end;
+
+      Write(Erm.GetTriggerReadableName(Event.TriggerId) + '); ID:' + SysUtils.IntToStr(Event.TriggerId) + ', v' + SysUtils.IntToStr(low(Event.v)) + ' = [');
+
       for j := low(Event.v) to high(Event.v) do begin
         if j > low(Event.v) then begin
           Write(', ');

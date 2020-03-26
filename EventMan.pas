@@ -90,7 +90,11 @@ end;
 
 function TEventInfo.GetNumHandlers: integer;
 begin
-  result := Utils.IfThen(Self.fHandlers <> nil, Self.fHandlers.Count, 0);
+  result := 0;
+
+  if Self.fHandlers <> nil then begin
+    result := Self.fHandlers.Count;
+  end;
 end;
 
 class function TEventManager.GetInstance: {U} TEventManager;
