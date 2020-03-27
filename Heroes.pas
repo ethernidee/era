@@ -198,8 +198,14 @@ type
       6: (longbool: longbool);
   end;
 
-  PTxtFile  = ^TTxtFile;
-  TTxtFile  = packed record
+  PTxtFile = ^TTxtFile;
+  TTxtFile = packed record
+    Data:     pointer;
+    NumLines: integer;
+  end;
+
+  PTxtFileNode  = ^TTxtFileNode;
+  TTxtFileNode  = packed record
     Dummy:    array [0..$17] of byte;
     RefCount: integer;
     (* Dummy *)
@@ -738,12 +744,15 @@ const
   CurrentPlayer: pinteger   = Ptr($69CCF4);
   GameDate:      ^PGameDate = Ptr($840CE0);
 
-  ZvsGzipWrite:  TGzipWrite = Ptr($704062);
-  ZvsGzipRead:   TGzipRead  = Ptr($7040A7);
-  WndProc:       TWndProc   = Ptr($4F8290);
-  ZvsGetHero:    function (HeroId: integer): {n} PHero cdecl = Ptr($71168D);
-  ZvsGetTowns:   function: {n} PTowns cdecl = Ptr($711BD4);
-  ZvsCountTowns: function: integer = Ptr($711C0E);
+  ZvsGzipWrite:   TGzipWrite = Ptr($704062);
+  ZvsGzipRead:    TGzipRead  = Ptr($7040A7);
+  WndProc:        TWndProc   = Ptr($4F8290);
+  ZvsGetHero:     function (HeroId: integer): {n} PHero cdecl = Ptr($71168D);
+  ZvsGetTowns:    function: {n} PTowns cdecl = Ptr($711BD4);
+  ZvsCountTowns:  function: integer = Ptr($711C0E);
+  ZvsLoadTxtFile: function (FilePath: pchar; var TxtFile: TTxtFile): longbool cdecl = Ptr($777030); // true on error
+  ZvsGetTxtValue: function (Row, Col: integer; TxtFile: PTxtFile): pchar cdecl = Ptr($77710B);
+  a2i:            function (Str: pchar): int cdecl = Ptr($6184D9);
   
   GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
   MemAllocFunc:       TMemAllocFunc       = Ptr($617492);

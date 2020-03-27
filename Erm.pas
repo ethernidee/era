@@ -24,6 +24,7 @@ const
   ERM_SCRIPTS_SECTION      = 'Era.ErmScripts';
   FUNC_NAMES_SECTION       = 'Era.FuncNames';
   ERM_SCRIPTS_PATH         = 'Data\s';
+  ERS_FILES_PATH           = 'Data\s';
   EXTRACTED_SCRIPTS_PATH   = GameExt.DEBUG_DIR + '\Scripts';
   ERM_TRACKING_REPORT_PATH = DEBUG_DIR + '\erm tracking.erm';
 
@@ -591,8 +592,11 @@ const
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
 
+  ZvsAddItemToWogOptions: function (Script, Page, Group, Item, Default, Multip, Internal: integer; Text, Hint, PopUp: pchar): integer cdecl = Ptr($777E0C);
+
 
 var
+{O} LoadedErsFiles:  {O} TList {of Heroes.PTxtFile};
 {O} ScriptMan:       TScriptMan;
     ErmTriggerDepth: integer = 0;
 
@@ -1257,6 +1261,65 @@ begin
     ZvsLoadErtFile('', pchar('..\' + ErtFilePath));
   end;
 end;
+
+function Hook_LoadErsFiles (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+{O} TxtFilePtr: Heroes.PTxtFile;
+    TxtFile:    Heroes.TTxtFile;
+  
+begin
+  TxtFilePtr := nil;
+  // * * * * * //
+  with Files.Locate(GameExt.GameDir + '\' + ERS_FILES_PATH + '\*.ers', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      System.FillChar(TxtFile, sizeof(TxtFile), #0);
+
+      if not Heroes.ZvsLoadTxtFile(pchar('..\' + ERS_FILES_PATH + '\' + FoundName), TxtFile) then begin
+        GetMem(TxtFilePtr, sizeof(TxtFilePtr^));
+        TxtFilePtr^ := TxtFile;
+        LoadedErsFiles.Add(TxtFilePtr); TxtFilePtr := nil;
+      end;
+    end;
+  end; // .with
+  
+  Context.RetAddr := Ptr($77941A);
+  result          := false;
+  // * * * * * //
+  FreeMem(TxtFilePtr);
+end; // .function Hook_LoadErsFiles
+
+function Hook_ApplyErsOptions (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+{U} TxtFile: Heroes.PTxtFile;
+    i, j:    integer;
+  
+begin
+  TxtFile := nil;
+  // * * * * * //
+  for i := 0 to LoadedErsFiles.Count - 1 do begin
+    TxtFile := Heroes.PTxtFile(LoadedErsFiles[i]);
+
+    for j := 0 to TxtFile.NumLines - 1 do begin
+      ZvsAddItemToWogOptions(
+        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 1, TxtFile)),
+        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 2, TxtFile)),
+        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 3, TxtFile)),
+        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 4, TxtFile)),
+        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 5, TxtFile)),
+        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 6, TxtFile)),
+        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 7, TxtFile)),
+        Heroes.ZvsGetTxtValue(j, 8, TxtFile),
+        Heroes.ZvsGetTxtValue(j, 9, TxtFile),
+        Heroes.ZvsGetTxtValue(j, 10, TxtFile),
+      );
+    end;
+  end; // .for
+  
+  Context.RetAddr := Ptr($778613);
+  result          := false;
+end; // .function Hook_ApplyErsOptions
+
+
 
 function AddrToLineAndPos (Document: pchar; DocSize: integer; CharPos: pchar; var LineN: integer; var LinePos: integer): boolean;
 var
@@ -5549,7 +5612,7 @@ begin
   (* Disable internal map scripts interpretation *)
   Core.ApiHook(@Hook_FindErm_BeforeMainLoop, Core.HOOKTYPE_BRIDGE, Ptr($749BBA));
 
-  (* Disable internal map scripts interpretation *)
+  (* Free ERM heap on scripts recompilation *)
   Core.ApiHook(@Hook_FindErm_ZeroHeap, Core.HOOKTYPE_BRIDGE, Ptr($7499A2));
 
   (* Remove default mechanism of loading [mapname].erm *)
@@ -5613,7 +5676,7 @@ begin
   (* Fix HE:P accept any d-modifiers, honor passed flags *)
   ApiJack.HookCode(Ptr($743E2D), @Hook_HE_P);
 
-  (* Fix HE:C0 optmized and accept any d-modifiers. Magic -1/-2 constants are not used anymore *)
+  (* Fix HE:C0 optimized and accept any d-modifiers. Magic -1/-2 constants are not used anymore *)
   ApiJack.HookCode(Ptr($7442AC), @Hook_HE_C);
   
   (* Rewrite HE:X to accept any d-modifiers *)
@@ -5636,6 +5699,11 @@ begin
 
   (* Disable connection between script number and option state in WoG options *)
   Core.p.WriteDataPatch(Ptr($777E48), ['E9180100009090909090']);
+
+  (* Load all *.ers files without name/count limits *)
+  ApiJack.HookCode(Ptr($77938A), @Hook_LoadErsFiles);
+  ApiJack.HookCode(Ptr($77846B), @Hook_ApplyErsOptions);
+
   
   (* Fix CM3 trigger allowing to handle all clicks *)
   Core.ApiHook(@Hook_CM3, Core.HOOKTYPE_BRIDGE, Ptr($5B0255));
@@ -5727,40 +5795,41 @@ end; // .procedure OnAfterWoG
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
 begin
-  ZvsIsGameLoading            := GameExt.GetRealAddr(ZvsIsGameLoading);
-  ZvsTriggerIfs               := GameExt.GetRealAddr(ZvsTriggerIfs);
-  ZvsTriggerIfsDepth          := GameExt.GetRealAddr(ZvsTriggerIfsDepth);
-  ZvsChestsEnabled            := GameExt.GetRealAddr(ZvsChestsEnabled);
-  ZvsGmAiFlags                := GameExt.GetRealAddr(ZvsGmAiFlags);
-  IsWoG                       := GameExt.GetRealAddr(IsWoG);
-  WoGOptions                  := GameExt.GetRealAddr(WoGOptions);
-  ErmEnabled                  := GameExt.GetRealAddr(ErmEnabled);
-  ErmErrCmdPtr                := GameExt.GetRealAddr(ErmErrCmdPtr);
-  ErmDlgCmd                   := GameExt.GetRealAddr(ErmDlgCmd);
-  MrMonPtr                    := GameExt.GetRealAddr(MrMonPtr);
-  HeroSpecsTable              := GameExt.GetRealAddr(HeroSpecsTable);
-  HeroSpecsTableBack          := GameExt.GetRealAddr(HeroSpecsTableBack);
-  HeroSpecSettingsTable       := GameExt.GetRealAddr(HeroSpecSettingsTable);
-  SecSkillSettingsTable       := GameExt.GetRealAddr(SecSkillSettingsTable);
-  SecSkillNamesBack           := GameExt.GetRealAddr(SecSkillNamesBack);
-  SecSkillDescsBack           := GameExt.GetRealAddr(SecSkillDescsBack);
-  SecSkillTextsBack           := GameExt.GetRealAddr(SecSkillTextsBack);
-  MonNamesSettingsTable       := GameExt.GetRealAddr(MonNamesSettingsTable);
-  MonNamesSingularTable       := GameExt.GetRealAddr(MonNamesSingularTable);
-  MonNamesPluralTable         := GameExt.GetRealAddr(MonNamesPluralTable);
-  MonNamesSpecialtyTable      := GameExt.GetRealAddr(MonNamesSpecialtyTable);
-  MonNamesSingularTableBack   := GameExt.GetRealAddr(MonNamesSingularTableBack);
-  MonNamesPluralTableBack     := GameExt.GetRealAddr(MonNamesPluralTableBack);
-  MonNamesSpecialtyTableBack  := GameExt.GetRealAddr(MonNamesSpecialtyTableBack);
-  MonNamesTables[0]           := MonNamesSingularTable;
-  MonNamesTables[1]           := MonNamesPluralTable;
-  MonNamesTables[2]           := MonNamesSpecialtyTable;
-  MonNamesTablesBack[0]       := MonNamesSingularTableBack;
-  MonNamesTablesBack[1]       := MonNamesPluralTableBack;
-  MonNamesTablesBack[2]       := MonNamesSpecialtyTableBack;
+  ZvsIsGameLoading           := GameExt.GetRealAddr(ZvsIsGameLoading);
+  ZvsTriggerIfs              := GameExt.GetRealAddr(ZvsTriggerIfs);
+  ZvsTriggerIfsDepth         := GameExt.GetRealAddr(ZvsTriggerIfsDepth);
+  ZvsChestsEnabled           := GameExt.GetRealAddr(ZvsChestsEnabled);
+  ZvsGmAiFlags               := GameExt.GetRealAddr(ZvsGmAiFlags);
+  IsWoG                      := GameExt.GetRealAddr(IsWoG);
+  WoGOptions                 := GameExt.GetRealAddr(WoGOptions);
+  ErmEnabled                 := GameExt.GetRealAddr(ErmEnabled);
+  ErmErrCmdPtr               := GameExt.GetRealAddr(ErmErrCmdPtr);
+  ErmDlgCmd                  := GameExt.GetRealAddr(ErmDlgCmd);
+  MrMonPtr                   := GameExt.GetRealAddr(MrMonPtr);
+  HeroSpecsTable             := GameExt.GetRealAddr(HeroSpecsTable);
+  HeroSpecsTableBack         := GameExt.GetRealAddr(HeroSpecsTableBack);
+  HeroSpecSettingsTable      := GameExt.GetRealAddr(HeroSpecSettingsTable);
+  SecSkillSettingsTable      := GameExt.GetRealAddr(SecSkillSettingsTable);
+  SecSkillNamesBack          := GameExt.GetRealAddr(SecSkillNamesBack);
+  SecSkillDescsBack          := GameExt.GetRealAddr(SecSkillDescsBack);
+  SecSkillTextsBack          := GameExt.GetRealAddr(SecSkillTextsBack);
+  MonNamesSettingsTable      := GameExt.GetRealAddr(MonNamesSettingsTable);
+  MonNamesSingularTable      := GameExt.GetRealAddr(MonNamesSingularTable);
+  MonNamesPluralTable        := GameExt.GetRealAddr(MonNamesPluralTable);
+  MonNamesSpecialtyTable     := GameExt.GetRealAddr(MonNamesSpecialtyTable);
+  MonNamesSingularTableBack  := GameExt.GetRealAddr(MonNamesSingularTableBack);
+  MonNamesPluralTableBack    := GameExt.GetRealAddr(MonNamesPluralTableBack);
+  MonNamesSpecialtyTableBack := GameExt.GetRealAddr(MonNamesSpecialtyTableBack);
+  MonNamesTables[0]          := MonNamesSingularTable;
+  MonNamesTables[1]          := MonNamesPluralTable;
+  MonNamesTables[2]          := MonNamesSpecialtyTable;
+  MonNamesTablesBack[0]      := MonNamesSingularTableBack;
+  MonNamesTablesBack[1]      := MonNamesPluralTableBack;
+  MonNamesTablesBack[2]      := MonNamesSpecialtyTableBack;
 end; // .procedure OnAfterStructRelocations
 
 begin
+  LoadedErsFiles  := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
   ScriptMan       := TScriptMan.Create;
   FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   GlobalConsts    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
@@ -5772,8 +5841,8 @@ begin
     Crypto.AnsiCRC32,
     AssocArrays.NO_KEY_PREPROCESS_FUNC
   );
-  IsWoG^      :=  true;
-  ScriptNames :=  Lists.NewSimpleStrList;
+  IsWoG^      := true;
+  ScriptNames := Lists.NewSimpleStrList;
 
   InitFastIntOptimizationStructs;
   
