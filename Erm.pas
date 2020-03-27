@@ -1297,11 +1297,11 @@ function PreprocessErm (const ScriptName, Script: string): string;
 const
   ERM2_SIGNATURE = 'ZVSE2';
 
-  ANY_CHAR            = [#0..#255];
-  IDENT_CHARS         = ANY_CHAR - [')', ')', #10, #13];
+  ANY_CHAR            = [#1..#255];
+  IDENT_CHARS         = ANY_CHAR - ['(', ')', #10, #13];
   LABEL_CHARS         = ANY_CHAR - [']', #10, #13];
   SPECIAL_CHARS       = ['[', '!'];
-  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';'];
+  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';', '$'];
   CMD_END_CHARSET     = [';', #0];
   SAFE_BLANKS         = [#1..#32];
   NUMBER_START_CHARS  = ['+', '-', '0'..'9'];
@@ -1321,7 +1321,19 @@ const
   NO_LABEL = -1;
 
 type
-  TScope = (GLOBAL_SCOPE, CMD_SCOPE);
+  TScope   = (GLOBAL_SCOPE, CMD_SCOPE);
+  TCmdType = (CMD_TYPE_INSTRUCTION, CMD_TYPE_RECEIVER, CMD_TYPE_TRIGGER);
+
+  PParsedLocalVar = ^TParsedLocalVar;
+  TParsedLocalVar = record
+    Name:          string;
+    Index:         integer;
+    VarType:       char;
+    IsFreeing:     boolean;
+    IsDeclaration: boolean;
+    IsAddr:        boolean;
+    HasIndex:      boolean;
+  end;
 
   PVarRange = ^TVarRange;
   TVarRange = record
@@ -1350,7 +1362,6 @@ var
     LocalVarsPools:     array [LOCAL_VAR_TYPE_ID_Y..LOCAL_VAR_TYPE_ID_V] of TLocalVarsPool;
     UnresolvedLabelInd: integer; // index of last unresolved label or NO_LABEL
     CmdN:               integer; // index of next command
-    ConstName:          string;
     StartPos:           integer;
     ConstValue:         integer;
     ExistingConstValue: integer;
@@ -1554,47 +1565,86 @@ var
     end;
   end;
 
-  function ParseLocalVar (VarName: pchar; out IsFreeing: longbool; out IsAddr: longbool; out VarType: char; out VarBaseName: string; out VarIndex: integer): boolean;
+  function ParseLocalVar (VarName: pchar; var ParsedVar: TParsedLocalVar): boolean;
   var
     StartPtr: pchar;
 
   begin
-    IsFreeing := VarName^ = '-';
+    ParsedVar.IsFreeing     := VarName^ = '-';
+    ParsedVar.IsDeclaration := false;
+    ParsedVar.HasIndex      := false;
+    ParsedVar.Index         := 1;
 
-    if IsFreeing then begin
-      Inc(VarName);     
+    if ParsedVar.IsFreeing then begin
+      Inc(VarName);
+    end else begin
+      ParsedVar.IsAddr := VarName^ = '@';
+
+      if ParsedVar.IsAddr then begin
+        Inc(VarName);
+      end;
     end;
 
     StartPtr := VarName;
-    VarType  := VarName^;
+    result   := VarName^ in ['a'..'z'];
 
-    while not (VarName^ in ['[', #0]) do begin
+    if not result then begin
+      ShowError(VarPos, 'Local variable must start with "a".."z" character');
+      exit;
+    end;
+
+    while (VarName^ in ['a'..'z', 'A'..'Z', '0'..'9']) do begin
       Inc(VarName);
     end;
 
-    VarBaseName := StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr));
-    VarIndex    := 0;
-    result      := true;
+    ParsedVar.Name := StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr));
+    result         := VarName^ in [#0, '[', ':'];
+
+    if not result then begin
+      ShowError(VarPos, 'Invalid character in local variable name: "' + VarName^ + '"');
+      exit;
+    end else if VarName^ = #0 then begin
+      exit;
+    end;
 
     if VarName^ = '[' then begin
       Inc(VarName);
-      StartPtr := VarName;
+      ParsedVar.HasIndex := true;
+      StartPtr           := VarName;
 
-      while not (VarName^ in [']', #0]) do begin
+      while (VarName^ in ['-', '0'..'9']) do begin
         Inc(VarName);
       end;
 
-      result := (VarName^ = ']') and SysUtils.TryStrToInt(StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr)), VarIndex);
+      result := (VarName^ = ']') and SysUtils.TryStrToInt(StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr)), ParsedVar.Index);
 
       if result then begin
         Inc(VarName);
-        result := VarName^ = #0;
-      end;
-
-      if not result then begin
-        ShowError(VarPos, 'Invalid local ERM array variable subscription');
+      end else begin
+        ShowError(VarPos, 'Invalid ERM local array subscript');
+        exit;
       end;
     end; // .if
+
+    result := VarName^ in [#0, ':'];
+
+    if not result then begin
+      ShowError(VarPos, 'Unexpected local variable termination. Expected ")" or ":"');
+      exit;
+    end else if VarName^ = #0 then begin
+      exit;
+    end;
+
+    Inc(VarName);
+    ParsedVar.IsDeclaration := true;
+    result                  := VarName^ in SUPPORTED_LOCAL_VAR_TYPES;
+
+    if not result then begin
+      ShowError(VarPos, 'Invalid local variable type in declaration. Expected one of "x", "y", "z", "e" or "v"');
+      exit;
+    end else begin
+      ParsedVar.VarType := VarName^;
+    end;
   end; // .function ParseLocalVar
 
   procedure FreeLocalVar (const VarName: string);
@@ -1696,37 +1746,49 @@ var
 
   function GetLocalVar (const VarName: string; out {Un} LocalVar: TErmLocalVar; out ArrIndex: integer; out IsAddr: longbool): boolean;
   var
-    IsFreeing:   longbool;
-    VarType:     char;
-    BaseVarName: string;
+    ParsedVar: TParsedLocalVar;
 
   begin
-    result := ParseLocalVar(pointer(VarName), IsFreeing, IsAddr, VarType, BaseVarName, ArrIndex);
+    result := ParseLocalVar(pchar(VarName), ParsedVar);
 
     if result then begin
-      result := VarType in SUPPORTED_LOCAL_VAR_TYPES;
+      IsAddr   := ParsedVar.IsAddr;
+      ArrIndex := 0;
 
-      if not result then begin
-        ShowError(VarPos, 'Unsupported local ERM variable type: ' + VarType);
-      end else if IsFreeing then begin
-        FreeLocalVar(BaseVarName);
+      if ParsedVar.HasIndex then begin
+        ArrIndex := ParsedVar.Index;
+      end;
+
+      if ParsedVar.IsFreeing then begin
+        FreeLocalVar(ParsedVar.Name);
         LocalVar := nil;
       end else begin
-        LocalVar := LocalVars[BaseVarName];
+        LocalVar := LocalVars[ParsedVar.Name];
 
         if LocalVar = nil then begin
-          result := AllocLocalVar(BaseVarName, VarType, ArrIndex, LocalVar);
-        end else begin
-          if ArrIndex < 0 then begin
-            ArrIndex := LocalVar.Count + ArrIndex;
-          end;
+          result := ParsedVar.IsDeclaration;
 
-          result := (ArrIndex >= 0) and (ArrIndex < LocalVar.Count);
-          
           if not result then begin
-            ShowError(VarPos, Format('Local ERM array index %d is out of range: 0..%d', [ArrIndex, LocalVar.Count - 1]));
+            ShowError(VarPos, Format('Usage of underclared local variable "%s". Assuming "t"-variable', [ParsedVar.Name]));
+          end else begin
+            result := AllocLocalVar(ParsedVar.Name, ParsedVar.VarType, ParsedVar.Index, LocalVar);
           end;
-        end;
+        end else begin
+          if ParsedVar.IsDeclaration and ((LocalVar.VarType <> ParsedVar.VarType) or (LocalVar.Count <> ParsedVar.Index)) then begin
+            ShowError(VarPos, Format('Redeclaration of local variable "%s" must have the same type and length as original declaration', [ParsedVar.Name]));
+            result := false;
+          end else begin
+            if ArrIndex < 0 then begin
+              ArrIndex := LocalVar.Count + ArrIndex;
+            end;
+
+            result := (ArrIndex >= 0) and (ArrIndex < LocalVar.Count);
+            
+            if not result then begin
+              ShowError(VarPos, Format('Local array index %d is out of range: 0..%d', [ArrIndex, LocalVar.Count - 1]));
+            end;
+          end;
+        end; // .else
       end; // .else
     end; // .if
   end; // .unction GetLocalVar
@@ -1752,7 +1814,7 @@ var
         VarIndex := -VarIndex;
       end;
 
-      if c = '$' then begin
+      if not IsAddr then begin
         if IsInStr then begin
           Buf.Add('%' + UpCase(LocalVar.VarType) + IntToStr(VarIndex));
         end else begin
@@ -1762,13 +1824,17 @@ var
         Buf.Add(IntToStr(VarIndex));
       end;
     end; // .elseif
-
-    MarkPos;
   end; // .procedure HandleLocalVar
 
   function HandleConstDeclaration: boolean;
+  var
+    ConstName: string;
+
   begin
-    Scanner.GotoRelPos(+2);
+    Scanner.GotoRelPos(-2);
+    FlushMarked;
+
+    Scanner.GotoRelPos(+4);
     result := Scanner.c = '(';
 
     if not result then begin
@@ -1863,8 +1929,16 @@ var
         end else begin
           result := false;
         end;
-      end else if FirstChar in ['a'..'z', '@', '-'] then begin
+      end else if FirstChar in ['@', '-'] then begin
         IdentType := IDENT_TYPE_VAR;
+      end else if FirstChar in ['a'..'z'] then begin
+        if not StrLib.FindChar('_', Ident, CharPos) then begin
+          IdentType := IDENT_TYPE_VAR;
+        end else if not StrLib.SkipCharsetEx(['A'..'Z', 'a'..'z', '0'..'9', '_'], Ident, 1, CharPos) then begin
+          IdentType := IDENT_TYPE_FUNC;
+        end else begin
+          result := false;
+        end;
       end else begin
         result := false;
       end; // .else
@@ -1881,7 +1955,6 @@ var
     c:          char;
 
   begin
-    FlushMarked;
     StartPos := Scanner.Pos;
     Scanner.GotoNextChar;
 
@@ -1889,7 +1962,10 @@ var
       if c = ')' then begin
         Scanner.GotoNextChar;
 
-        if not IsErm2 then begin
+        if Ident = '' then begin
+          ShowError(StartPos, 'Empty string is not a valid identifier: (nothing inside parantheses)');
+          Buf.Add('999999');
+        end else if not IsErm2 then begin
           AllocErmFunc(Ident, FuncId);
           Buf.Add(IntToStr(FuncId));
         end else if not DetectIdentType(Ident, IdentType) then begin
@@ -1927,20 +2003,28 @@ var
       ShowError(Scanner.Pos, 'Missing closing ")"');
       Buf.Add('999999');
     end; // .else
-
-    MarkPos;
   end; // .procedure ParseIdent
 
-  procedure ParseCmd;
+  procedure ParseCmd (CmdType: TCmdType);
   var
-    c: char;
+    c:              char;
+    DummyCmdBufPos: integer;
 
   begin
     Scanner.GotoNextChar;
 
-    if (Scanner.c = 'D') and (Scanner.CharsRel[1] = 'C') then begin
+    if (CmdType = CMD_TYPE_INSTRUCTION) and (Scanner.c = 'D') and (Scanner.CharsRel[1] = 'C') then begin
       HandleConstDeclaration;
     end else begin
+      DummyCmdBufPos := -1;
+
+      if (CmdType = CMD_TYPE_INSTRUCTION) and (Scanner.c = 'V') and (Scanner.CharsRel[1] = 'A') then begin
+        Scanner.GotoRelPos(-2);
+        FlushMarked;
+        Scanner.GotoRelPos(+2);
+        DummyCmdBufPos := Buf.Count;
+      end;
+
       c := ' ';
 
       while Scanner.FindCharset(INCMD_SPECIAL_CHARS) and Scanner.GetCurrChar(c) and ((c <> ';') or IsInStr) do begin
@@ -1955,7 +2039,9 @@ var
 
           '(': begin
             if not IsInStr then begin
+              FlushMarked;
               ParseIdent;
+              MarkPos;
             end else begin
               Scanner.GotoNextChar;
             end;          
@@ -1966,6 +2052,29 @@ var
             IsInStr := not IsInStr;
           end; // .case '^'
 
+          '$': begin
+            if IsInStr and (Scanner.CharsRel[1] in ['(', '$']) then begin
+              case Scanner.CharsRel[1] of
+                '(': begin
+                  FlushMarked;
+                  Scanner.GotoNextChar;
+                  ParseIdent;
+                  MarkPos;
+                end;
+
+                '$': begin
+                  FlushMarked;
+                  Scanner.GotoRelPos(+2);
+                  MarkPos;
+                end;
+              else
+                Scanner.GotoNextChar;
+              end; // .switch
+            end else begin
+              Scanner.GotoNextChar;
+            end;
+          end; // .case '$'
+
           ';': begin
             Scanner.GotoNextChar;
           end;
@@ -1975,6 +2084,12 @@ var
       if c = ';' then begin
         Scanner.GotoNextChar;
         Inc(CmdN);
+
+        // Erase anything, written during dummy command parsing
+        if DummyCmdBufPos <> -1 then begin
+          Buf.SetCount(DummyCmdBufPos);
+          MarkPos;
+        end;
       end;
 
       IsInStr := false;
@@ -1986,7 +2101,6 @@ begin
   Scanner   := TextScan.TTextScanner.Create;
   Labels    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   LocalVars := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-  LocalVar  := nil;
   // * * * * * //
   Scanner.Connect(Script, #10);
   MarkedPos          := 1;
@@ -2014,7 +2128,7 @@ begin
                 Scanner.SkipChars('!');
                 MarkPos;
               end else begin
-                ParseCmd;
+                ParseCmd(CMD_TYPE_RECEIVER);
               end;
             end; // .case '!'
 
@@ -2027,11 +2141,11 @@ begin
               ResolveLabels;
               Labels.Clear;
               CmdN := -1;
-              ParseCmd;
+              ParseCmd(CMD_TYPE_TRIGGER);
             end; // .case '?'
 
             '#': begin
-              ParseCmd;
+              ParseCmd(CMD_TYPE_INSTRUCTION);
             end; // .case '!'
           end; // .switch c
         end; // .if
