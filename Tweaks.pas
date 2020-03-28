@@ -687,15 +687,22 @@ begin
   HadTacticsPhase := Heroes.CombatManagerPtr^.IsTactics;
 
   if not HadTacticsPhase then begin
-    CombatRound := 0;
+    CombatRound        := 0;
+    pinteger($79F0B8)^ := 0;
+    pinteger($79F0BC)^ := 0;
   end;
   
   Erm.FireErmEvent(Erm.TRIGGER_BATTLEFIELD_VISIBLE);
   Erm.v[997] := CombatRound;
-  Erm.FireErmEvent(Erm.TRIGGER_COMBAT_ROUND);
+  Erm.FireErmEventEx(Erm.TRIGGER_COMBAT_ROUND, [CombatRound]);
+
+  if not HadTacticsPhase then begin
+    Erm.v[997] := CombatRound;
+    Erm.FireErmEvent(Erm.TRIGGER_BR);
+  end;
   
-  result := Core.EXEC_DEF_CODE;
-end;
+  result := true;
+end; // .function Hook_OnBattlefieldVisible
 
 function Hook_OnAfterTacticsPhase (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
@@ -1112,10 +1119,13 @@ begin
   (* Fix battle round counting: no !?BR before battlefield is shown, -1000000000 incrementing for the whole tactics phase, the
      first real round always starts from 0 *)
   Core.ApiHook(@Hook_OnBeforeBattlefieldVisible, Core.HOOKTYPE_BRIDGE, Ptr($75EAEA));
-  Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($75D178));
+  Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($4B0A5F));
   Core.ApiHook(@Hook_OnAfterTacticsPhase,        Core.HOOKTYPE_BRIDGE, Ptr($75D137));
   Core.ApiHook(@Hook_OnCombatRound_Start,        Core.HOOKTYPE_BRIDGE, Ptr($76065B));
   Core.ApiHook(@Hook_OnCombatRound_End,          Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
+
+  // Disable WoG AppearAfterTactics hook. We will call BR0 manually a bit after to reduce crashing probability
+  Core.p.WriteDataPatch(Ptr($462C19), ['E8F2051A00']);
 
   // Use CombatRound instead of combat manager field to summon creatures every nth turn via creature experience system
   Core.p.WriteDataPatch(Ptr($71DFBE), ['8B15 %d', @CombatRound]);
