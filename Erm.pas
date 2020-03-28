@@ -4092,15 +4092,29 @@ begin
     PARAM_MODIFIER_ADD:     FinalValue := OrigValue + Value;
     PARAM_MODIFIER_SUB:     FinalValue := OrigValue - Value;
     PARAM_MODIFIER_MUL:     FinalValue := OrigValue * Value;
-    PARAM_MODIFIER_DIV:     FinalValue := OrigValue div Value;
-    PARAM_MODIFIER_MOD:     FinalValue := OrigValue mod Value;
     PARAM_MODIFIER_OR:      FinalValue := OrigValue or Value;
     PARAM_MODIFIER_AND_NOT: FinalValue := OrigValue and not Value;
     PARAM_MODIFIER_SHL:     FinalValue := OrigValue shl Alg.ToRange(Value, 0, BITS_IN_INT32);
     PARAM_MODIFIER_SHR:     FinalValue := OrigValue shr Alg.ToRange(Value, 0, BITS_IN_INT32);
+    
+    PARAM_MODIFIER_DIV: begin
+      if Value <> 0 then begin
+        FinalValue := OrigValue div Value;
+      end else begin
+        ShowErmError('Division by zero in d-modifier');
+      end;
+    end;
+
+    PARAM_MODIFIER_MOD: begin
+      if Value <> 0 then begin
+        FinalValue := OrigValue mod Value;
+      end else begin
+        ShowErmError('Division by zero in d-modifier');
+      end;
+    end;
   else
     FinalValue := Value;
-  end;
+  end; // .switch
 
   if ValueSize < 0 then begin
     ValueSize := -ValueSize;
