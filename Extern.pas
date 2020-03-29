@@ -66,7 +66,7 @@ begin
   Ini.ClearIniCache(FileName);
 end;
 
-function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall;
+function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): longbool; stdcall;
 var
   ResStr: string;
 
@@ -75,12 +75,12 @@ begin
   Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
 end;
 
-function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall;
+function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): longbool; stdcall;
 begin
   result := Ini.WriteStrToIni(Key, Value, SectionName, FilePath);
 end;
 
-function SaveIni (FilePath: pchar): boolean; stdcall;
+function SaveIni (FilePath: pchar): longbool; stdcall;
 begin
   result := Ini.SaveIni(FilePath);
 end;
@@ -130,12 +130,12 @@ begin
   result := EraButtons.GetButtonID(ButtonName);
 end;
 
-function PatchExists (PatchName: pchar): boolean; stdcall;
+function PatchExists (PatchName: pchar): longbool; stdcall;
 begin
   result := GameExt.PatchExists(PatchName);
 end;
 
-function PluginExists (PluginName: pchar): boolean; stdcall;
+function PluginExists (PluginName: pchar): longbool; stdcall;
 begin
   result := GameExt.PluginExists(PluginName);
 end;
@@ -190,7 +190,7 @@ begin
   Heroes.ShowMessage(Mes);
 end;
 
-function Ask (Question: pchar): boolean; stdcall;
+function Ask (Question: pchar): longbool; stdcall;
 begin
   result := Heroes.Ask(Question);
 end;

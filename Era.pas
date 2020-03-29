@@ -171,12 +171,12 @@ const
 
 function  GetButtonID (ButtonName: pchar): integer; stdcall; external 'era.dll' name 'GetButtonID';
 function  GetRealAddr (Addr: pointer): pointer; stdcall; external 'era.dll' name 'GetRealAddr';
-function  PatchExists (PatchName: pchar): boolean; stdcall; external 'era.dll' name 'PatchExists';
-function  PluginExists (PluginName: pchar): boolean; stdcall; external 'era.dll' name 'PluginExists';
+function  PatchExists (PatchName: pchar): longbool; stdcall; external 'era.dll' name 'PatchExists';
+function  PluginExists (PluginName: pchar): longbool; stdcall; external 'era.dll' name 'PluginExists';
 function  ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar ): integer; stdcall; external 'era.dll' name 'ReadSavegameSection';
-function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall; external 'era.dll' name 'ReadStrFromIni';
-function  SaveIni (FilePath: pchar): boolean; stdcall; external 'era.dll' name 'SaveIni';
-function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall; external 'era.dll' name 'WriteStrToIni';
+function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): longbool; stdcall; external 'era.dll' name 'ReadStrFromIni';
+function  SaveIni (FilePath: pchar): longbool; stdcall; external 'era.dll' name 'SaveIni';
+function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): longbool; stdcall; external 'era.dll' name 'WriteStrToIni';
 procedure ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer); stdcall; external 'era.dll' name 'ApiHook';
 procedure ClearAllIniCache; external 'era.dll' name 'ClearAllIniCache';
 procedure ClearIniCache (FileName: pchar); stdcall; external 'era.dll' name 'ClearIniCache';
