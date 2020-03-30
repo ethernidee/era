@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib, DlgMes,
+  Windows, SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib,
   Core, GameExt, Heroes, EventMan;
 
 const
@@ -22,6 +22,7 @@ type
     procedure WriteByte (Value: byte);
     procedure WriteInt (Value: integer);
     procedure WriteStr (const Str: string);
+    procedure WritePchar ({n} Str: pchar);
     function  Read (Size: integer; {n} Addr: pbyte): integer;
     function  ReadByte: byte;
     function  ReadInt: integer;
@@ -65,6 +66,7 @@ type
     procedure WriteByte (Value: byte);
     procedure WriteInt (Value: integer);
     procedure WriteStr (const Str: string);
+    procedure WritePchar ({n} Str: pchar);
     function  Read (Size: integer; {n} Addr: pbyte): integer;
 
     // if nothing to read, returns 0
@@ -196,6 +198,24 @@ begin
     Write(StrLen, pointer(Str));
   end;
 end; // .procedure TRider.WriteStr
+
+procedure TRider.WritePchar ({n} Str: pchar);
+var
+  StrLen: integer;
+
+begin
+  StrLen := 0;
+
+  if Str <> nil then begin
+    StrLen := Windows.LStrLen(Str);
+  end;
+  
+  WriteInt(StrLen);
+  
+  if StrLen > 0 then begin
+    Write(StrLen, pointer(Str));
+  end;
+end; // .procedure TRider.WritePchar
 
 procedure TRider.Flush;
 begin
