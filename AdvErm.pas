@@ -1365,6 +1365,7 @@ end; // .function SN_T
 function ExtendedEraService (Cmd: char; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
 {U} Slot:              TSlot;
+    SlotId:            integer;
 {U} AssocVarValue:     TAssocVar;
     AssocVarName:      string;
     NewSlotItemsCount: integer;
@@ -1470,27 +1471,34 @@ begin
                 end; // .else
               end; // .if
             end; // .case 3
-          // SN:M#slot/#count/#type/#persistInSaves or -1 for trigger-local array
-          4:
+          // SN:M#slot/#count/#type/#persistInSaves or -1 for trigger-local array[/?slotID]
+          4..5:
             begin
-              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]) and
+              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_GET or PARAM_OPTIONAL]) and
               (Params[0].Value.v >= AUTO_ALLOC_SLOT)                  and
               (Params[1].Value.v >= 0)                                and
               Math.InRange(Params[2].Value.v, 0, ord(High(TVarType))) and
               ((Params[3].Value.v = IS_TEMP) or (Params[3].Value.v = NOT_TEMP) or ((Params[3].Value.v = IS_TRIGGER_LOCAL) and (Params[0].Value.v = AUTO_ALLOC_SLOT)));
               
               if result then begin
-                if Params[0].Value.v = AUTO_ALLOC_SLOT then begin
-                  Erm.v[1] := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v <> NOT_TEMP);
+                SlotId := Params[0].Value.v;
+
+                if SlotId = AUTO_ALLOC_SLOT then begin
+                  SlotId   := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v <> NOT_TEMP);
+                  Erm.v[1] := SlotId;
                 end else begin
-                  Slots[Ptr(Params[0].Value.v)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v <> NOT_TEMP);
+                  Slots[Ptr(SlotId)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v <> NOT_TEMP);
+                end;
+
+                if NumParams >= 5 then begin
+                  Params[4].RetInt(SlotId);
                 end;
 
                 if Params[3].Value.v = IS_TRIGGER_LOCAL then begin
                   Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(Erm.v[1]));
                 end;
-              end;
-            end; // .case 4
+              end; // .if
+            end; // .case 4..5
         else
           result := false;
           Error  := 'Invalid number of command parameters';
