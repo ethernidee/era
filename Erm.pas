@@ -5409,8 +5409,29 @@ begin
     end;
 
     Context.RetAddr := Ptr($735F06);
-  end;
+  end; // .if
 end; // .function Hook_VR_C
+
+function Hook_VR_R (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd:    PErmSubCmd;
+  VarParam:  PErmCmdParam;
+  NumParams: integer;
+  MinValue:  integer;
+  MaxValue:  integer;
+
+begin
+  NumParams := pinteger(Context.EBP + $0C)^;
+  result    := NumParams <> 3;
+
+  if not result then begin
+    SubCmd   := PErmSubCmd(ppointer(Context.EBP + $14)^);
+    VarParam := PErmCmdParam(ppointer(Context.EBP - $8)^);
+    // * * * * * //
+    SetErmParamValue(VarParam, Heroes.ZvsRandom(SubCmd.Nums[1], SubCmd.Nums[2]));
+    Context.RetAddr := Ptr($735F01);
+  end;
+end; // .function Hook_VR_R
 
 function IntCompareFast (a, b: integer): integer; inline;
 begin
@@ -5760,6 +5781,10 @@ begin
 
   // Allow VR:C command to handle v, x, w and y-variables
   ApiJack.HookCode(Ptr($7355B7), @Hook_VR_C);
+
+  // Add VR:R0/min/max command to generate random value in specified range and SET it to value, not add
+  Core.p.WriteDataPatch(Ptr($734C43), ['03']);
+  ApiJack.HookCode(Ptr($734CB3), @Hook_VR_R);
 
   (* Rewrite ZVS Call_Function / remote function call handling *)
   Core.ApiHook(@OnFuncCalledRemotely, Core.HOOKTYPE_JUMP, Ptr($72D1D1));

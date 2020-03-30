@@ -733,8 +733,9 @@ type
   end;
 
 const
-  MAlloc: TMAlloc = Ptr($617492);
-  MFree:  TMFree  = Ptr($60B0F0);
+  MAlloc:    TMAlloc = Ptr($617492);
+  MFree:     TMFree  = Ptr($60B0F0);
+  ZvsRandom: function (MinValue, MaxValue: integer): integer cdecl = Ptr($710509);
 
   AdvManagerPtr:    PPAdvManager    = Ptr($6992D0);
   WndManagerPtr:    ^PWndManager    = Ptr($6992D0); // CHECKME!
