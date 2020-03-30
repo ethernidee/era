@@ -22,6 +22,7 @@ type
 
 const
   ERM_SCRIPTS_SECTION      = 'Era.ErmScripts';
+  ERT_STRINGS_SECTION      = 'Era.ErtStrings';
   FUNC_NAMES_SECTION       = 'Era.FuncNames';
   ERM_SCRIPTS_PATH         = 'Data\s';
   ERS_FILES_PATH           = 'Data\s';
@@ -569,9 +570,9 @@ const
   ZvsVnCopy:          procedure ({n} Src, Dst: PErmCmdParam) cdecl = Ptr($73E83B);
   ZvsFindMacro:       function (SubCmd: PErmSubCmd; IsSet: integer): {n} pchar cdecl = Ptr($734072);
   ZvsGetMacro:        function ({n} Macro: pchar): {n} PErmCmdParam cdecl = Ptr($7343E4);
-  FireErmEvent:       TFireErmEvent     = Ptr($74CE30);
-  ZvsDumpErmVars:     TZvsDumpErmVars   = Ptr($72B8C0);
-  ZvsResetCommanders: Utils.TProcedure  = Ptr($770B25);
+  FireErmEvent:       TFireErmEvent    = Ptr($74CE30);
+  ZvsDumpErmVars:     TZvsDumpErmVars  = Ptr($72B8C0);
+  ZvsResetCommanders: Utils.TProcedure = Ptr($770B25);
   ZvsEnableNpc:       procedure (HeroId: integer; AutoHired: integer) cdecl = Ptr($76B541);
   ZvsDisableNpc:      procedure (HeroId: integer) cdecl = Ptr($76B5D6);
   ZvsIsAi:            function (Owner: integer): boolean cdecl = Ptr($711828);
@@ -589,6 +590,12 @@ const
   ZvsCrExpoSet_GetExp:  function (ItemType, ItemId: integer): integer cdecl = Ptr($718CCD);
   ZvsCrExpoSet_Modify:  function (Oper, ItemType, ItemId, Exp, Modifier, MonType, OrigNum, NewNum: integer; {n} MonArr: pointer = nil): integer cdecl = Ptr($719260);
 
+  ZvsStringSet_Clear: procedure () cdecl = Ptr($7764F2);
+  ZvsStringSet_Add: function (Index: integer; Str: pchar): longbool cdecl = Ptr($776550);
+  ZvsStringSet_GetText: function (Index: integer): pchar cdecl = Ptr($776620);
+  ZvsStringSet_Load: function (): longbool cdecl = Ptr($776694);
+  ZvsStringSet_Save: function (): longbool cdecl = Ptr($77679D);
+
   FireRemoteEventProc: TFireRemoteEventProc = Ptr($76863A);
   ZvsPlaceMapObject:   TZvsPlaceMapObject   = Ptr($71299E);
 
@@ -597,6 +604,7 @@ const
 
 var
 {O} LoadedErsFiles:  {O} TList {of Heroes.PTxtFile};
+{O} ErtStrings:      {O} AssocArrays.TObjArray {of Index => pchar}; // use H3 Alloc/Free
 {O} ScriptMan:       TScriptMan;
     ErmTriggerDepth: integer = 0;
 
@@ -2726,6 +2734,49 @@ begin
   OrigFunc(Owner);
 end;
 
+procedure Hook_ZvsStringSet_Clear (); cdecl;
+begin
+  with DataLib.IterateObjDict(ErtStrings) do begin
+    while IterNext do begin
+      Heroes.MemFree(pointer(IterValue));
+    end;
+  end;
+  
+  ErtStrings.Clear();
+end;
+
+function Hook_ZvsStringSet_Add (Index: integer; {OU} Str: pchar): longbool; cdecl;
+begin
+  if ErtStrings[Ptr(Index)] <> nil then begin
+    ShowMessage('Duplicate ERM string index ' + SysUtils.IntToStr(Index));
+    result := true;
+  end else begin
+    ErtStrings[Ptr(Index)] := Str;
+    result                 := false;
+  end;
+end;
+
+function Hook_ZvsStringSet_GetText (Index: integer): pchar; cdecl;
+begin
+  result := ErtStrings[Ptr(Index)];
+
+  if result = nil then begin
+    result := 'STRING NOT FOUND';
+  end;
+end;
+
+function Hook_ZvsStringSet_Load (): longbool; cdecl;
+begin
+  // Strings saving moved to OnSavegameRead event
+  result := false;
+end;
+
+function Hook_ZvsStringSet_Save (): longbool; cdecl;
+begin
+  // Strings saving moved to OnSavegameWrite event
+  result := false;
+end;
+
 procedure ResetErmSubCmdCache;
 begin
   System.FillChar(SubCmdCache, sizeof(SubCmdCache), #0);
@@ -4078,8 +4129,10 @@ begin
     exit;
   end;
 
+  FinalValue := Value;
+
   case Modifier of
-    PARAM_MODIFIER_NONE:    FinalValue := Value;
+    PARAM_MODIFIER_NONE:    begin (* already set *) end;
     PARAM_MODIFIER_ADD:     FinalValue := OrigValue + Value;
     PARAM_MODIFIER_SUB:     FinalValue := OrigValue - Value;
     PARAM_MODIFIER_MUL:     FinalValue := OrigValue * Value;
@@ -5417,8 +5470,6 @@ var
   SubCmd:    PErmSubCmd;
   VarParam:  PErmCmdParam;
   NumParams: integer;
-  MinValue:  integer;
-  MaxValue:  integer;
 
 begin
   NumParams := pinteger(Context.EBP + $0C)^;
@@ -5593,6 +5644,55 @@ begin
   FastIntVarAddrs[PARAM_VARTYPE_QUICK]       := Utils.PtrOfs(QuickVars, -sizeof(integer));
 end;
 
+procedure DoSaveErtStrings;
+begin
+  with Stores.NewRider(ERT_STRINGS_SECTION) do begin
+    WriteInt(ErtStrings.ItemCount);
+    
+    with DataLib.IterateObjDict(ErtStrings) do begin
+      while IterNext do begin
+        WriteInt(integer(IterKey));
+        WritePchar(pchar(IterValue));
+      end;
+    end;
+  end; // .with
+end;
+
+procedure DoLoadErtStrings;
+var
+  Index:  integer;
+  StrLen: integer;
+  Buf:    pchar;
+  i:      integer;
+
+begin
+  ZvsStringSet_Clear();
+
+  with Stores.NewRider(ERT_STRINGS_SECTION) do begin
+    for i := 0 to ReadInt - 1 do begin
+      Index  := ReadInt;
+      StrLen := ReadInt;
+
+      if StrLen >= 0 then begin
+        Buf := Heroes.MemAllocFunc(StrLen + 1);
+        Read(StrLen, pbyte(Buf));
+        Buf[StrLen - 1]        := #0;
+        ErtStrings[Ptr(Index)] := Buf;
+      end;
+    end; // .for
+  end; // .with
+end; // .procedure DoLoadErtStrings
+
+procedure OnSavegameWrite (Event: PEvent); stdcall;
+begin
+  DoSaveErtStrings;
+end;
+
+procedure OnSavegameRead (Event: PEvent); stdcall;
+begin
+  DoLoadErtStrings;
+end;
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
@@ -5722,6 +5822,13 @@ begin
   
   (* Fix LoadErtFile to handle any relative pathes *)
   Core.Hook(@Hook_LoadErtFile, Core.HOOKTYPE_BRIDGE, 5, Ptr($72C660));
+
+  (* Replace ERT files storage implementation entirely *)
+  Core.ApiHook(@Hook_ZvsStringSet_Clear,   Core.HOOKTYPE_JUMP, @ZvsStringSet_Clear);
+  Core.ApiHook(@Hook_ZvsStringSet_Add,     Core.HOOKTYPE_JUMP, @ZvsStringSet_Add);
+  Core.ApiHook(@Hook_ZvsStringSet_GetText, Core.HOOKTYPE_JUMP, @ZvsStringSet_GetText);
+  Core.ApiHook(@Hook_ZvsStringSet_Load,    Core.HOOKTYPE_JUMP, @ZvsStringSet_Load);
+  Core.ApiHook(@Hook_ZvsStringSet_Save,    Core.HOOKTYPE_JUMP, @ZvsStringSet_Save);
 
   (* Disable connection between script number and option state in WoG options *)
   Core.p.WriteDataPatch(Ptr($777E48), ['E9180100009090909090']);
@@ -5860,6 +5967,7 @@ end; // .procedure OnAfterStructRelocations
 
 begin
   LoadedErsFiles  := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
+  ErtStrings      := AssocArrays.NewObjArr(not Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
   ScriptMan       := TScriptMan.Create;
   FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   GlobalConsts    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
@@ -5876,6 +5984,8 @@ begin
 
   InitFastIntOptimizationStructs;
   
+  EventMan.GetInstance.On('OnSavegameWrite',          OnSavegameWrite);
+  EventMan.GetInstance.On('OnSavegameRead',           OnSavegameRead);
   EventMan.GetInstance.On('OnBeforeWoG',              OnBeforeWoG);
   EventMan.GetInstance.On('OnAfterWoG',               OnAfterWoG);
   EventMan.GetInstance.On('$OnEraSaveScripts',        OnEraSaveScripts);
