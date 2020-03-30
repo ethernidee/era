@@ -1119,7 +1119,7 @@ begin
   (* Fix battle round counting: no !?BR before battlefield is shown, -1000000000 incrementing for the whole tactics phase, the
      first real round always starts from 0 *)
   Core.ApiHook(@Hook_OnBeforeBattlefieldVisible, Core.HOOKTYPE_BRIDGE, Ptr($75EAEA));
-  Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($4B0A5F));
+  Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($462E2B));
   Core.ApiHook(@Hook_OnAfterTacticsPhase,        Core.HOOKTYPE_BRIDGE, Ptr($75D137));
   Core.ApiHook(@Hook_OnCombatRound_Start,        Core.HOOKTYPE_BRIDGE, Ptr($76065B));
   Core.ApiHook(@Hook_OnCombatRound_End,          Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
