@@ -1796,6 +1796,7 @@ begin
   end;
 end;
 
+
 function SN_X (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
   i: integer;
@@ -1822,13 +1823,77 @@ begin
   end; // .if
 end; // .function SN_X
 
+function SN_U (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+const
+  FIRST_ITEM_PARAM_IND = 2;
+
+var
+{U} Slot:       TSlot;
+    SlotLength: integer;
+    StartInd:   integer;
+    ItemInd:    integer;
+    i:          integer;
+
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET]);
+
+  if not result then begin
+    exit;
+  end;
+
+  result := GetSlot(Params[0].Value.v, Slot, Error);
+
+  if not result then begin
+    Error := 'Failed to find SN:M array with ID ' + SysUtils.IntToStr(Params[0].Value.v);
+    exit;
+  end;
+
+  StartInd   := Params[1].Value.v;
+  SlotLength := GetSlotItemsCount(Slot);
+
+  if not Math.InRange(StartInd, 0, SlotLength - 1) then begin
+    Error  := Format('Invalid starting dynamical array index: %d for array with ID %d and length %d', [StartInd, Params[0].Value.v, SlotLength]);
+    result := false; exit;
+  end;
+  
+  if result then begin
+    for i := FIRST_ITEM_PARAM_IND to NumParams - 1 do begin
+      ItemInd := StartInd + i - FIRST_ITEM_PARAM_IND;
+
+      if ItemInd >= SlotLength then begin
+        Error  := Format('Index %d is out of bounds for dynamical array with ID %d and length %d', [ItemInd, Params[0].Value.v, SlotLength]);
+        result := false; exit;
+      end;
+
+      if (Params[i].IsStr <> (Slot.ItemsType = STR_VAR)) then begin
+        Error  := 'Cannot get INTEGER/STRING item into variable of not appropriate type';
+        result := false; exit;
+      end;
+      
+      if Params[i].OperGet then begin
+        if Slot.ItemsType = INT_VAR then begin
+          Params[i].RetInt(Slot.IntItems[ItemInd]);
+        end else begin
+          Params[i].RetStr(Slot.StrItems[ItemInd]);
+        end;
+      end else begin
+        if Slot.ItemsType = INT_VAR then begin
+          ApplyIntParam(Params[i], Slot.IntItems[ItemInd]);
+        end else begin
+          AssignStrFromParam(Params[i], Slot.StrItems[ItemInd]);
+        end;
+      end; // .else
+    end; // .for
+  end; // .if
+end; // .function SN_U
+
 function SN_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
 var
   CmdWrapper: TErmCmdWrapper;
 
 begin
   with WrapErmCmd('SN', SubCmd, CmdWrapper)^ do begin
-    while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R']) do begin
+    while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R', 'U']) do begin
       case Cmd of
         'G': begin
           Success := (Erm.CurrentTriggerCmdIndPtr <> nil) and (NumParams = 1) and not Params[0].OperGet and not Params[0].IsStr and (Params[0].Value.v >= 0) and (Params[0].Value.v < High(integer));
@@ -1853,6 +1918,7 @@ begin
         'I': begin Success := SN_I(NumParams, @Params, Error); end;
         'R': begin Success := SN_R(NumParams, @Params, Error); end;
         'F': begin Success := SN_F(NumParams, @Params, Error); end;
+        'U': begin Success := SN_U(NumParams, @Params, Error); end;
         
         'M', 'K', 'W', 'D', 'O': begin
           Success := ExtendedEraService(Cmd, NumParams, @Params, Error);
