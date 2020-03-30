@@ -1374,12 +1374,11 @@ const
   IDENT_TYPE_FUNC  = 2;
   IDENT_TYPE_VAR   = 3;
 
-  SUPPORTED_LOCAL_VAR_TYPES = ['x', 'y', 'v', 'e', 'z'];
+  SUPPORTED_LOCAL_VAR_TYPES = ['x', 'y', 'e', 'z'];
   LOCAL_VAR_TYPE_ID_Y = 0;
   LOCAL_VAR_TYPE_ID_X = 1;
   LOCAL_VAR_TYPE_ID_Z = 2;
   LOCAL_VAR_TYPE_ID_E = 3;
-  LOCAL_VAR_TYPE_ID_V = 4;
 
   NO_LABEL = -1;
 
@@ -1422,7 +1421,7 @@ var
 {O} Scanner:            TextScan.TTextScanner;
 {O} Labels:             TDict {of CmdN + 1};
 {O} LocalVars:          {O} TDict {of TErmLocalVar };
-    LocalVarsPools:     array [LOCAL_VAR_TYPE_ID_Y..LOCAL_VAR_TYPE_ID_V] of TLocalVarsPool;
+    LocalVarsPools:     array [LOCAL_VAR_TYPE_ID_Y..LOCAL_VAR_TYPE_ID_E] of TLocalVarsPool;
     UnresolvedLabelInd: integer; // index of last unresolved label or NO_LABEL
     CmdN:               integer; // index of next command
     StartPos:           integer;
@@ -1583,13 +1582,6 @@ var
       IsNegative := false;
       FreeRanges := nil;
     end;
-
-    with LocalVarsPools[LOCAL_VAR_TYPE_ID_V] do begin
-      StartIndex := 2;
-      Count      := 9;
-      IsNegative := false;
-      FreeRanges := nil;
-    end;
   end; // procedure InitLocalVarsPools
 
   procedure FinalizeLocalVarsPools;
@@ -1621,7 +1613,6 @@ var
       'x': result := LOCAL_VAR_TYPE_ID_X;
       'z': result := LOCAL_VAR_TYPE_ID_Z;
       'e': result := LOCAL_VAR_TYPE_ID_E;
-      'v': result := LOCAL_VAR_TYPE_ID_V;
     else
       Assert(false, 'LocalVarCharToId: unknown variable type: ' + c);
       result := 0;
@@ -1703,7 +1694,7 @@ var
     result                  := VarName^ in SUPPORTED_LOCAL_VAR_TYPES;
 
     if not result then begin
-      ShowError(VarPos, 'Invalid local variable type in declaration. Expected one of "x", "y", "z", "e" or "v"');
+      ShowError(VarPos, 'Invalid local variable type in declaration. Expected one of "x", "y", "z" or "e"');
       exit;
     end else begin
       ParsedVar.VarType := VarName^;
