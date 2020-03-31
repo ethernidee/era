@@ -127,6 +127,7 @@ type
 
     procedure Init;
     procedure AllocPage;
+    function  Alloc (Size: integer): pointer;
     function  AllocStr (StrLen: integer): pchar;
     procedure FreePage;
   end;
@@ -227,19 +228,24 @@ begin
   pinteger(@Self.Buf[Self.BufPos])^ := 0;
 end;
 
-function TServiceMemAllocator.AllocStr (StrLen: integer): pchar;
+function TServiceMemAllocator.Alloc (Size: integer): pointer;
 var
-  PageSize:      integer;
-  AlignedStrLen: integer;
+  PageSize:    integer;
+  AlignedSize: integer;
 
 begin
-  AlignedStrLen := (StrLen + sizeof(integer)) and not 3;
-  result        := @Self.Buf[Self.BufPos];
-  PageSize      := pinteger(@Self.Buf[Self.BufPos])^ + AlignedStrLen;
-  Self.Buf[Self.BufPos + StrLen] := #0;
-  Inc(Self.BufPos, AlignedStrLen);
-  {!} Assert(Self.BufPos + sizeof(integer) < sizeof(Self.Buf), 'TServiceMemAllocator.AllocStr failed. No space in buffer');
+  AlignedSize := (Size + (sizeof(integer) - 1)) and not 3;
+  result      := @Self.Buf[Self.BufPos];
+  PageSize    := pinteger(@Self.Buf[Self.BufPos])^ + AlignedSize;
+  Inc(Self.BufPos, AlignedSize);
+  {!} Assert(Self.BufPos + sizeof(integer) < sizeof(Self.Buf), 'TServiceMemAllocator.Alloc failed. No space in buffer');
   pinteger(@Self.Buf[Self.BufPos])^ := PageSize;
+end;
+
+function TServiceMemAllocator.AllocStr (StrLen: integer): pchar;
+begin
+  result         := Self.Alloc(StrLen + 1);
+  result[StrLen] := #0;
 end;
 
 procedure TServiceMemAllocator.FreePage;
