@@ -958,10 +958,17 @@ begin
       MODIFIER_ADD: Dest := Dest + Param.Value.v;
       MODIFIER_SUB: Dest := Dest - Param.Value.v;
       MODIFIER_MUL: Dest := Dest * Param.Value.v;
-      MODIFIER_DIV: Dest := Dest div Param.Value.v;
-    end;
-  end;
-end;
+      
+      MODIFIER_DIV: begin
+        if Param.Value.v <> 0 then begin
+          Dest := Dest div Param.Value.v;
+        end else begin
+          ShowErmError('Division by zero in d-modifier');
+        end;
+      end;
+    end; // .switch
+  end; // .else
+end; // .procedure ApplyIntParam
 
 procedure AssignPcharFromParam (var Param: TServiceParam; {n} Buf: pchar; BufSize: integer);
 begin
