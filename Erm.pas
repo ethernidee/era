@@ -507,6 +507,12 @@ type
   TZvsPlaceMapObject   = function (x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; cdecl;
   TZvsCheckEnabled     = array [0..19] of integer;
 
+  PCmdLocalObject = ^TCmdLocalObject;
+  TCmdLocalObject = record
+      ErtIndex: integer;
+  {n} Prev:     PCmdLocalObject;
+  end;
+
 const
   (* WoG vars *)
   QuickVars: PErmQuickVars = Ptr($27718D0);
@@ -620,6 +626,9 @@ var
 
     // List of objects, that will be freed on current trigger end
     {Un} TriggerLocalObjects: {O} TList {of TObject} = nil;
+    
+    // Linked list of objects, that will be freed on ProcessCmd end. Currently optimized temporary ERT strings only.
+    {Un} CmdLocalObjects: {U} PCmdLocalObject = nil;
 
     // Each trigger saves x-vars to RetXVars before restoring previous values on exit.
     // ArgXVars are copied to x on trigger start after saving previous x-values.
@@ -4219,6 +4228,17 @@ begin
   TriggerLocalObjects.Add(Obj);
 end;
 
+procedure RegisterCmdLocalObject (ErtIndex: integer);
+var
+  NewItem: PCmdLocalObject;
+
+begin
+  NewItem          := ServiceMemAllocator.Alloc(sizeof(TCmdLocalObject));
+  NewItem.ErtIndex := ErtIndex;
+  NewItem.Prev     := CmdLocalObjects;
+  CmdLocalObjects  := NewItem;
+end;
+
 procedure ProcessErm;
 const
   (* Ifs state *)
@@ -4672,19 +4692,28 @@ begin
 end; // .procedure ProcessErm
 
 function Hook_ProcessCmd (Context: Core.PHookContext): longbool; stdcall;
+const
+  PREV_CMD_LOCAL_OBJECTS_OFS = -$4;
+
 begin
   if TrackingOpts.Enabled then begin
     EventTracker.TrackCmd(PErmCmd(ppointer(Context.EBP + 8)^).CmdHeader.Value);
   end;
 
   ServiceMemAllocator.AllocPage;
+  ppointer(Context.EBP + PREV_CMD_LOCAL_OBJECTS_OFS)^ := CmdLocalObjects;
+  CmdLocalObjects                                     := nil;
 
   ErmErrReported := false;  
   result         := Core.EXEC_DEF_CODE;
 end;
 
 function Hook_ProcessCmd_End (Context: Core.PHookContext): longbool; stdcall;
+const
+  PREV_CMD_LOCAL_OBJECTS_OFS = -$4;
+
 begin
+  CmdLocalObjects := ppointer(Context.EBP + PREV_CMD_LOCAL_OBJECTS_OFS)^;
   ServiceMemAllocator.FreePage;
   result := true;
 end;
