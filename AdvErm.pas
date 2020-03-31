@@ -121,8 +121,9 @@ type
 
   (* Fast temp memory allocator for ERM inline strings storage during commands execution *)
   TServiceMemAllocator = record
-    BufPos: integer;
-    Buf:    array [0..1000000 - 1] of char;
+    BufPos:    integer;
+    Buf:       array [0..2000000 - 1] of char;
+    BufBorder: integer;
 
     procedure Init;
     procedure AllocPage;
@@ -216,6 +217,7 @@ procedure TServiceMemAllocator.Init;
 begin
   Self.BufPos                       := 0;
   pinteger(@Self.Buf[Self.BufPos])^ := 0;
+  Self.BufBorder                    := 0;
 end;
 
 procedure TServiceMemAllocator.AllocPage;
@@ -227,14 +229,15 @@ end;
 
 function TServiceMemAllocator.AllocStr (StrLen: integer): pchar;
 var
-  PageSize: integer;
+  PageSize:      integer;
+  AlignedStrLen: integer;
 
 begin
-  Inc(StrLen);
-  result   := @Self.Buf[Self.BufPos];
-  PageSize := pinteger(@Self.Buf[Self.BufPos])^ + StrLen;
-  Inc(Self.BufPos, StrLen);
-  Self.Buf[Self.BufPos - 1] := #0;
+  AlignedStrLen := (StrLen + sizeof(integer)) and not 3;
+  result        := @Self.Buf[Self.BufPos];
+  PageSize      := pinteger(@Self.Buf[Self.BufPos])^ + AlignedStrLen;
+  Self.Buf[Self.BufPos + StrLen] := #0;
+  Inc(Self.BufPos, AlignedStrLen);
   {!} Assert(Self.BufPos + sizeof(integer) < sizeof(Self.Buf), 'TServiceMemAllocator.AllocStr failed. No space in buffer');
   pinteger(@Self.Buf[Self.BufPos])^ := PageSize;
 end;
