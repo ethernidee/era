@@ -671,6 +671,7 @@ procedure ExtractErm; stdcall;
 function  AddrToScriptNameAndLine (CharPos: pchar; var ScriptName: string; var LineN: integer; var LinePos: integer): boolean;
 procedure AssignEventParams (const Params: array of integer);
 procedure FireErmEventEx (EventId: integer; const Params: array of integer);
+procedure NameTrigger (const TriggerId: integer; const FuncName: string);
 
 (* Registers object as trigger local object. It will be freed on exit from current trigger *)
 procedure RegisterTriggerLocalObject ({O} Obj: TObject);

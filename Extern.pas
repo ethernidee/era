@@ -61,6 +61,11 @@ begin
   Rainbow.NameColor(Color32, Name);
 end;
 
+procedure NameTrigger (TriggerId: integer; Name: pchar); stdcall;
+begin
+  Erm.NameTrigger(TriggerId, Name);
+end;
+
 procedure ClearIniCache (FileName: pchar); stdcall;
 begin
   Ini.ClearIniCache(FileName);
@@ -276,6 +281,7 @@ exports
   LoadImageAsPcx16,
   MemFree,
   NameColor,
+  NameTrigger,
   NotifyError,
   PatchExists,
   PluginExists,
