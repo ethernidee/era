@@ -2713,6 +2713,7 @@ begin
   EventManager := EventMan.GetInstance;
   // * * * * * //
   if not ErmEnabled^ then begin
+    RetXVars := ArgXVars;
     exit;
   end;
 
