@@ -3260,6 +3260,22 @@ begin
   end;
 end; // .function Hook_HE_X
 
+function Hook_BM_Z (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd:      PErmSubCmd;
+  BattleStack: pointer;
+
+begin
+  result := (pinteger(Context.EBP - $44)^ + $41) <> ord('Z');
+
+  if not result then begin
+    SubCmd      := ppointer(Context.EBP + $14)^;
+    BattleStack := ppointer(Context.EBP - $10)^;
+    ZvsApply(@BattleStack, sizeof(BattleStack), SubCmd, 0);
+    Context.RetAddr := Ptr($75F85D);
+  end;
+end; // .function Hook_BM_Z
+
 function Hook_DlgCallback (Context: Core.PHookContext): longbool; stdcall;
 const
   NO_CMD = 0;
@@ -3326,6 +3342,8 @@ begin
   for i := 0 to NumParams - 1 do begin
     if SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET then begin
       ZvsApply(@RetXVars[i + 1], sizeof(integer), SubCmd, i);
+    // end else if SubCmd.Params[i].GetCheckType() = PARAM_CHECK_EQUAL then begin
+    //   SetErmParamValue(@SubCmd.Params[i], RetXVars[i + 1]);
     end;
   end;
 end;
@@ -3800,6 +3818,9 @@ begin
   
   (* Rewrite HE:X to accept any d-modifiers *)
   ApiJack.HookCode(Ptr($743F9F), @Hook_HE_X);
+
+  (* New BM:Z command to get address of battle stack structure *)
+  ApiJack.HookCode(Ptr($75F840), @Hook_BM_Z);
   
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
