@@ -3277,6 +3277,61 @@ begin
   end;
 end; // .function Hook_BM_Z
 
+function Hook_UN_C (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams:     integer;
+  SubCmd:        PErmSubCmd;
+  Addr:          integer;
+  Offset:        integer;
+  Size:          integer;
+  ValueParamInd: integer;
+  i:             integer;
+
+begin
+  result      := false;
+  NumParams   := pinteger(Context.EBP + $0C)^;
+  SubCmd      := ppointer(Context.EBP + $14)^;
+  Context.EAX := ord(NumParams >= 3);
+
+  if Context.EAX = 0 then begin
+    ShowErmError('!!UN:C - insufficient parameters');
+  end else begin
+    for i := 0 to Math.Min(4, NumParams - 2) do begin
+      if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_NONE then begin
+        Context.EAX := 0;
+        ShowErmError('!!UN:C - GET-syntax is not supported for any parameters, except the last one');
+        break;
+      end;
+    end;
+  end;
+
+  Addr          := SubCmd.Nums[0];
+  Size          := SubCmd.Nums[1];
+  Offset        := 0;
+  ValueParamInd := 2;
+
+  if Context.EAX <> 0 then begin
+    if NumParams >= 4 then begin
+      Offset        := SubCmd.Nums[1];
+      Size          := SubCmd.Nums[2];
+      ValueParamInd := 3;
+    end;
+
+    Context.EAX := ord((Size = 4) or (Size = 1) or (Size = 2));
+
+    if Context.EAX = 0 then begin
+      ShowErmError('!!UN:C - wrong Size parameter: ' + SysUtils.IntToStr(Size));
+    end;
+  end; // .if
+
+  if Context.EAX <> 0 then begin
+    ZvsApply(Utils.PtrOfs(GameExt.GetRealAddr(Ptr(Addr)), Offset), Size, SubCmd, ValueParamInd);
+    Context.RetAddr := Ptr($733F4D);
+  end else begin
+    Context.RetAddr := Ptr($733F57);
+  end;
+end; // .function Hook_UN_C
+
 function Hook_DlgCallback (Context: Core.PHookContext): longbool; stdcall;
 const
   NO_CMD = 0;
@@ -3822,6 +3877,9 @@ begin
 
   (* New BM:Z command to get address of battle stack structure *)
   ApiJack.HookCode(Ptr($75F840), @Hook_BM_Z);
+
+  (* Extended UN:C implementation with 4 parameters support *)
+  ApiJack.HookCode(Ptr($731FF0), @Hook_UN_C);
   
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));

@@ -488,12 +488,6 @@ begin
   {!} Windows.LeaveCriticalSection(InetCriticalSection);
 end; // .function Hook_GetHostByName
 
-function Hook_UN_C (Context: Core.PHookContext): LONGBOOL; stdcall;
-begin
-  ppointer(Context.EBP - $0C)^ := GameExt.GetRealAddr(ppointer(Context.EBP - $0C)^);
-  result                       := Core.EXEC_DEF_CODE;
-end;
-
 function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Context.EBX := ZvsAppliedDamage^;
@@ -1058,9 +1052,6 @@ begin
       @Hook_GetHostByName
     );
   end;
-  
-  (* Fix UN:C to work with redirected addresses also *)
-  Core.ApiHook(@Hook_UN_C, Core.HOOKTYPE_BRIDGE, Ptr($732086));
   
   (* Fix ApplyDamage calls, so that !?MF1 damage is displayed correctly in log *)
   Core.ApiHook(@Hook_ApplyDamage_Ebx_Local7,  Core.HOOKTYPE_BRIDGE, Ptr($43F95B + 5));
