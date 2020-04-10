@@ -60,6 +60,13 @@ const
   PARAM_VARTYPE_S     = 11;
   PARAM_VARTYPE_STR   = 12;
 
+  PARAM_VARTYPES_MUTABLE = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
+  PARAM_VARTYPES_VALUES  = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_STR];
+  PARAM_VARTYPES_INTS    = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_I];
+  PARAM_VARTYPES_FLOATS  = [PARAM_VARTYPE_E];
+  PARAM_VARTYPES_NUMERIC = PARAM_VARTYPES_INTS + PARAM_VARTYPES_FLOATS;
+  PARAM_VARTYPES_STRINGS = [PARAM_VARTYPE_Z, PARAM_VARTYPE_S, PARAM_VARTYPE_STR];
+
   PARAM_MODIFIER_NONE    = 0;
   PARAM_MODIFIER_ADD     = 1;
   PARAM_MODIFIER_SUB     = 2;
@@ -698,18 +705,21 @@ const
   ERM_CMD_CACHE_LIMIT = 30000;
 
   (* GetErmParamValue flags *)
-  FLAG_GETVALUE_GET_STR_ADDR = 1; // Indicates, that caller expects string address, not index
+  FLAG_STR_EVALS_TO_ADDR_NOT_INDEX = 1; // Indicates, that caller expects string value address, not index
 
   FAST_INT_TYPE_CHARS = ['f'..'t', 'v', 'x', 'y'];
+
+  FIRST_LOCAL_ERT_INDEX = 1000000000;
+  LAST_LOCAL_ERT_INDEX  = 2000000000;
 
 type
   PCachedSubCmdParams = ^TCachedSubCmdParams;
   TCachedSubCmdParams = packed record
-    AddrHash:       integer;
-    NumParams:      integer;
-    Pos:            integer;
-    Params:         TErmCmdParams;
-    Modifiers:      array [0..15] of byte;
+    AddrHash:  integer;
+    NumParams: integer;
+    Pos:       integer;
+    Params:    TErmCmdParams;
+    Modifiers: array [0..15] of byte;
   end;
 
   TFastIntVarSet = record
@@ -718,15 +728,16 @@ type
   end;
 
 var
-{O} FuncNames:       DataLib.TDict {OF FuncId: integer};
-{O} FuncIdToNameMap: DataLib.TObjDict {O} {OF TString};
-    FuncAutoId:      integer;
-{O} GlobalConsts:    DataLib.TDict {OF Value: integer};
-{O} ScriptNames:     Lists.TStringList;
-{O} ErmScanner:      TextScan.TTextScanner;
-{O} ErmCmdCache:     {O} TAssocArray {OF PErmCmd};
-{O} EventTracker:    ErmTracking.TEventTracker;
-    ErmErrReported:  boolean = false;
+{O} FuncNames:         DataLib.TDict {OF FuncId: integer};
+{O} FuncIdToNameMap:   DataLib.TObjDict {O} {OF TString};
+    FuncAutoId:        integer;
+{O} GlobalConsts:      DataLib.TDict {OF Value: integer};
+{O} ScriptNames:       Lists.TStringList;
+{O} ErmScanner:        TextScan.TTextScanner;
+{O} ErmCmdCache:       {O} TAssocArray {OF PErmCmd};
+{O} EventTracker:      ErmTracking.TEventTracker;
+    ErmErrReported:    boolean = false;
+    LocalErtAutoIndex: integer = FIRST_LOCAL_ERT_INDEX;
 
     (* Binary tree in array. Fast search for first trigger with given ID *)
     TriggerFastAccessList: PTriggerFastAccessList = nil;
@@ -3313,6 +3324,48 @@ begin
   end;
 end; 
 
+procedure RegisterTriggerLocalObject ({O} Obj: TObject);
+begin
+  if TriggerLocalObjects = nil then begin
+    TriggerLocalObjects := DataLib.NewList(Utils.OWNS_ITEMS);
+  end;
+
+  TriggerLocalObjects.Add(Obj);
+end;
+
+procedure RegisterCmdLocalObject (ErtIndex: integer);
+var
+  NewItem: PCmdLocalObject;
+
+begin
+  NewItem          := ServiceMemAllocator.Alloc(sizeof(TCmdLocalObject));
+  NewItem.ErtIndex := ErtIndex;
+  NewItem.Prev     := CmdLocalObjects;
+  CmdLocalObjects  := NewItem;
+end;
+
+function CreateLocalErt (Str: pchar; StrLen: integer = -1): integer;
+var
+  Buf: pchar;
+
+begin
+  result := LocalErtAutoIndex;
+  Inc(LocalErtAutoIndex);
+
+  if LocalErtAutoIndex >= LAST_LOCAL_ERT_INDEX then begin
+    LocalErtAutoIndex := FIRST_LOCAL_ERT_INDEX;
+  end;
+
+  if StrLen = -1 then begin
+    StrLen := SysUtils.StrLen(Str);
+  end;
+
+  Buf := ServiceMemAllocator.AllocStr(StrLen);
+  Utils.CopyMem(StrLen, Str, Buf);
+  ErtStrings[Ptr(result)] := Buf;
+  RegisterCmdLocalObject(result);
+end; // .function CreateLocalErt
+
 (* Extract i^...^ or s^...^ variable name. BufPos must point to first name character *)
 function ExtractErmStrLiteral (BufPos: pchar): string;
 var
@@ -3499,27 +3552,26 @@ begin
         end;
 
         PARAM_VARTYPE_STR: begin
-          if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
-            if Param.NeedsInterpolation() then begin
-              StrLiteral := GetInterpolatedErmStrLiteral(pchar(result));
-              StrLen     := Windows.LStrLen(StrLiteral);
-            end else begin
-              StrLiteral := pchar(result);
-              StrLen     := GetErmStrLiteralLen(StrLiteral);
-            end;
+          if Param.NeedsInterpolation() then begin
+            StrLiteral := GetInterpolatedErmStrLiteral(pchar(result));
+            StrLen     := Windows.LStrLen(StrLiteral);
+          end else begin
+            StrLiteral := pchar(result);
+            StrLen     := GetErmStrLiteralLen(StrLiteral);
+          end;
 
+          if (Flags and FLAG_STR_EVALS_TO_ADDR_NOT_INDEX) <> 0 then begin
             result := integer(ServiceMemAllocator.AllocStr(StrLen));
             Utils.CopyMem(StrLen, StrLiteral, pchar(result));
-
-            ValType := VALTYPE_STR;
           end else begin
-            ShowErmError(Format('Cannot use string literal ^%s^ in native ERM receiver except of conditional part.', [ExtractErmStrLiteral(pchar(result))]));
-            ResValType := VALTYPE_INT; result := 0; exit;
-          end; // .else       
+            result := CreateLocalErt(StrLiteral, StrLen);
+          end;
+
+          ValType := VALTYPE_STR;      
         end; // .case PARAM_VARTYPE_STR
 
         PARAM_VARTYPE_Z: begin
-          if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
+          if (Flags and FLAG_STR_EVALS_TO_ADDR_NOT_INDEX) <> 0 then begin
             if (result >= Low(z^)) and (result <= High(z^)) then begin
               result := integer(@z[result]);
             end else if -result in [Low(nz^)..High(nz^)] then begin
@@ -3537,7 +3589,7 @@ begin
               ResValType := VALTYPE_INT;
             end else begin
               ShowErmError(Format('Invalid z-var index: %d. Expected -10..-1, 1+', [result]));
-              ResValType := VALTYPE_INT; result := 0; exit;
+              ResValType := VALTYPE_INT; result := LAST_LOCAL_ERT_INDEX + 1; exit;
             end;
           end; // .else       
         end; // .case PARAM_VARTYPE_Z
@@ -3549,7 +3601,7 @@ begin
             result := pinteger(@ne[-result])^;
           end else begin
             ShowErmError(Format('Invalid e-var index: %d. Expected -100..-1, 1..100', [result]));
-            ResValType := VALTYPE_INT; result := 0; exit;
+            ResValType := VALTYPE_FLOAT; result := 0; exit;
           end;
 
           ValType := VALTYPE_FLOAT;
@@ -3558,7 +3610,7 @@ begin
         PARAM_VARTYPE_FLAG: begin
           if (result < Low(f^)) or (result > High(f^)) then begin
             ShowErmError(Format('Invalid flag index %d. Expected %d..%d', [result, Low(f^), High(f^)]));
-            ResValType := VALTYPE_INT; result := 0; exit;
+            ResValType := VALTYPE_BOOL; result := 0; exit;
           end;
           
           ValType := VALTYPE_BOOL;
@@ -3581,17 +3633,17 @@ begin
             ResValType := VALTYPE_INT; result := 0; exit;
           end;
 
-          if (Flags and FLAG_GETVALUE_GET_STR_ADDR) <> 0 then begin
-            ValType := VALTYPE_STR;
+          ValType := VALTYPE_STR;
 
-            if Param.NeedsInterpolation() then begin
-              AssocVarName := GetInterpolatedErmStrLiteral(pchar(result));
-            end else begin
-              AssocVarName := ExtractErmStrLiteral(pchar(result));
-            end;
+          if Param.NeedsInterpolation() then begin
+            AssocVarName := GetInterpolatedErmStrLiteral(pchar(result));
+          end else begin
+            AssocVarName := ExtractErmStrLiteral(pchar(result));
+          end;
 
-            AssocVarValue := AdvErm.AssocMem[AssocVarName];
+          AssocVarValue := AdvErm.AssocMem[AssocVarName];
 
+          if (Flags and FLAG_STR_EVALS_TO_ADDR_NOT_INDEX) <> 0 then begin
             if AssocVarValue = nil then begin
               result := integer(pchar(''));
             end else begin
@@ -3599,8 +3651,11 @@ begin
               Utils.CopyMem(Length(AssocVarValue.StrValue), pchar(AssocVarValue.StrValue), pchar(result));
             end;
           end else begin
-            ShowErmError(Format('Cannot use named s-var ^%s^ in native ERM receiver except of conditional part.', [ExtractErmStrLiteral(pchar(result))]));
-            ResValType := VALTYPE_INT; result := 0; exit;
+            if AssocVarValue = nil then begin
+              result := CreateLocalErt('', 0);
+            end else begin
+              result := CreateLocalErt(pchar(AssocVarValue.StrValue), Length(AssocVarValue.StrValue));
+            end;
           end; // .else
         end; // .case PARAM_VARTYPE_S
       else
@@ -3620,7 +3675,6 @@ begin
       Inc(result, ZvsGetCurrDay());
     end else begin
       ShowErmError('"c" modifier can be applied to integers only');
-      ResValType := VALTYPE_INT; result := 0; exit;
     end;
   end;
 
@@ -3734,9 +3788,9 @@ begin
 
       PARAM_VARTYPE_E: begin
         if Value in [Low(e^)..High(e^)] then begin
-          Value := pinteger(@e[Value])^;
+          Value := integer(@e[Value]);
         end else if -Value in [Low(ne^)..High(ne^)] then begin
-          Value := pinteger(@ne[-Value])^;
+          Value := integer(@ne[-Value]);
         end else begin
           ShowErmError(Format('Invalid e-var index: %d. Expected -100..-1, 1..100', [Value]));
           result := false; exit;
@@ -3912,13 +3966,18 @@ begin
 
   IndexTypeChar := Caret^;
 
-  if ((IndexTypeChar = '^') and (DoEval = 0)) or ((IndexTypeChar = 'i') and (Caret[1] = '^')) then begin
+  if (IndexTypeChar = '^') or ((IndexTypeChar in ['i', 's']) and (Caret[1] = '^')) then begin
     if IndexTypeChar = '^' then begin
       Inc(Caret);
       IndexVarType := PARAM_VARTYPE_STR;
     end else begin
       Inc(Caret, 2);
-      IndexVarType := PARAM_VARTYPE_I;
+
+      if IndexTypeChar = 'i' then begin
+        IndexVarType := PARAM_VARTYPE_I;
+      end else begin
+        IndexVarType := PARAM_VARTYPE_S;
+      end;
     end;
 
     Param.Value        := integer(Caret);
@@ -4026,6 +4085,7 @@ const
   CMD_SN = $4E53;
   CMD_MP = $504D;
   CMD_RD = $4452;
+  CMD_VR = $5256;
 
 var
   CmdId:          integer;
@@ -4181,6 +4241,44 @@ begin
   end; 
 end; // .procedure PutVal
 
+function ApplyFloatModifier (OrigValue, Value: single; Modifier: integer): single;
+begin
+  result := Value;
+
+  if Modifier <> PARAM_MODIFIER_NONE then begin
+    case Modifier of
+      PARAM_MODIFIER_ADD: result := OrigValue + Value;
+      PARAM_MODIFIER_SUB: result := OrigValue - Value;
+      PARAM_MODIFIER_MUL: result := OrigValue * Value;
+      
+      PARAM_MODIFIER_DIV: begin
+        if Value <> 0 then begin
+          result := OrigValue / Value;
+        end else begin
+          ShowErmError('Division by zero in d-modifier');
+        end;
+      end;
+
+      PARAM_MODIFIER_MOD: begin
+        if Value <> 0 then begin
+          result := frac(OrigValue / Value) * Value;
+        end else begin
+          ShowErmError('Division by zero in d-modifier');
+        end;
+      end;
+    end; // .switch
+
+    // Fix NANs and infinities
+    if result <> result then begin
+      result := 0;
+    end else if result = Infinity then begin
+      result := 3.4e38;
+    end else if result = -Infinity then begin
+      result := -3.4e38;
+    end;
+  end; // .if
+end; // .function ApplyFloatModifier
+
 function Hook_ZvsApply (ValuePtr: pointer; ValueSize: integer; SubCmd: PErmSubCmd; ParamInd: integer): integer; cdecl;
 var
   Param:       PErmCmdParam;
@@ -4219,26 +4317,6 @@ begin
     end; // .else
   end; // .else
 end; // .function Hook_ZvsApply
-
-procedure RegisterTriggerLocalObject ({O} Obj: TObject);
-begin
-  if TriggerLocalObjects = nil then begin
-    TriggerLocalObjects := DataLib.NewList(Utils.OWNS_ITEMS);
-  end;
-
-  TriggerLocalObjects.Add(Obj);
-end;
-
-procedure RegisterCmdLocalObject (ErtIndex: integer);
-var
-  NewItem: PCmdLocalObject;
-
-begin
-  NewItem          := ServiceMemAllocator.Alloc(sizeof(TCmdLocalObject));
-  NewItem.ErtIndex := ErtIndex;
-  NewItem.Prev     := CmdLocalObjects;
-  CmdLocalObjects  := NewItem;
-end;
 
 procedure ProcessErm;
 const
@@ -4587,7 +4665,7 @@ begin
                     goto AfterTriggers;
                   end;
 
-                  TargetLoopLevel := GetErmParamValue(@Cmd.Params[0], ParamValType, FLAG_GETVALUE_GET_STR_ADDR);
+                  TargetLoopLevel := GetErmParamValue(@Cmd.Params[0], ParamValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
 
                   if ParamValType <> VALTYPE_INT then begin
                     ShowErmError('"br/co" - loop index must be positive number. Given: non-integer');
@@ -5264,6 +5342,134 @@ begin
   end;
 end;
 
+// PARAM_VARTYPE_NUM   = 0;
+// PARAM_VARTYPE_FLAG  = 1;
+// PARAM_VARTYPE_QUICK = 2;
+// PARAM_VARTYPE_V     = 3;
+// PARAM_VARTYPE_W     = 4;
+// PARAM_VARTYPE_X     = 5;
+// PARAM_VARTYPE_Y     = 6;
+// PARAM_VARTYPE_Z     = 7;
+// PARAM_VARTYPE_E     = 8;
+// PARAM_VARTYPE_I     = 9;
+// PARAM_VARTYPE_S     = 11;
+// PARAM_VARTYPE_STR   = 12;
+
+// PARAM_VARTYPES_MUTABLE = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
+// PARAM_VARTYPES_VALUES  = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_STR];
+// PARAM_VARTYPES_INTS    = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_I];
+// PARAM_VARTYPES_FLOATS  = [PARAM_VARTYPE_E];
+// PARAM_VARTYPES_STRINGS = [PARAM_VARTYPE_Z, PARAM_VARTYPE_S, PARAM_VARTYPE_STR];
+
+function VR_S (NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
+var
+  BaseVar:          PErmCmdParam;
+  BaseVarType:      integer;
+  ValueParam:       PErmCmdParam;
+  ValueParamType:   integer;
+  Value:            Heroes.TValue;
+  SecondValue:      Heroes.TValue;
+  ValType:          integer;
+  UseRounding:      longbool;
+
+begin
+  if NumParams < 1 then begin
+    ShowErmError('"!!VR:S" - wrong number of parameters');
+    result := 0; exit;
+  end;
+
+  result         := 1;
+  BaseVar        := @ErmCmd.Params[0];
+  BaseVarType    := BaseVar.GetType();
+  ValueParam     := @SubCmd.Params[0];
+  ValueParamType := ValueParam.GetType();
+  //showmessage(format('%d %d', [BaseVarType, ValueParamType]));
+
+  UseRounding := NumParams >= 2;
+  
+  if ValueParam.GetCheckType() <> PARAM_CHECK_NONE then begin
+    ShowErmError('"!!VR:S" - only SET syntax is supported');
+    result := 0; exit;
+  end;
+
+  if BaseVarType in PARAM_VARTYPES_INTS then begin
+    // VR(i32):S(i32)
+    if ValueParamType in PARAM_VARTYPES_INTS then begin
+      if SubCmd.Modifiers[0] = PARAM_MODIFIER_NONE then begin
+        SetErmParamValue(BaseVar, SubCmd.Nums[0]);
+      end else begin
+        Value.v := GetErmParamValue(BaseVar, ValType, 0);
+        PutVal(@Value, sizeof(Value), SubCmd.Nums[0], SubCmd.Modifiers[0]);
+        SetErmParamValue(BaseVar, Value.v);
+      end;
+    end
+    // VR(i32):S(f32) or VR(i32):S(f32)/(rounding precision)
+    else if ValueParamType in PARAM_VARTYPES_FLOATS then begin
+      Value.f       := GetErmParamValue(BaseVar, ValType, 0);
+      SecondValue.v := SubCmd.Nums[0];
+      Value.f       := ApplyFloatModifier(Value.f, SecondValue.f, SubCmd.Modifiers[0]);
+
+      if UseRounding then begin
+        SecondValue.f := Math.Power(51.0, -Alg.ToRange(SubCmd.Nums[1], 0, 100) - 2) * Math.Sign(Value.f);
+        Value.v       := trunc(Value.f + SecondValue.f);
+      end else begin
+        Value.v := trunc(Value.f);
+      end;
+      
+      SetErmParamValue(BaseVar, Value.v);
+    end
+    // VR(i32):S(wrong types)
+    else begin
+      ShowErmError('"!!VR:S" - cannot set integer variable to non-numeric value');
+      result := 0; exit;
+    end; // .else
+  end
+  else if BaseVarType in PARAM_VARTYPES_FLOATS then begin
+    // VR(n32):S(n32)
+    if ValueParamType in PARAM_VARTYPES_NUMERIC then begin
+      Value.v       := GetErmParamValue(BaseVar, ValType, 0);
+      SecondValue.v := SubCmd.Nums[0];
+
+      if ValueParamType <> PARAM_VARTYPE_E then begin
+        SecondValue.f := SecondValue.v; 
+      end;
+
+      Value.f := ApplyFloatModifier(Value.f, SecondValue.f, SubCmd.Modifiers[0]);
+
+      if UseRounding then begin
+        Value.f := Math.SimpleRoundTo(Value.f, Alg.ToRange(SubCmd.Nums[1], 0, 100));
+        SecondValue.f := Math.Power(51.0, -Alg.ToRange(SubCmd.Nums[1], 0, 100) - 2) * Math.Sign(Value.f);
+        Value.v       := trunc(Value.f + SecondValue.f);
+      end;
+      
+      SetErmParamValue(BaseVar, Value.v);
+    end
+    // VR(f32):S(wrong types)
+    else begin
+      ShowErmError('"!!VR:S" - cannot set float variable to non-numeric value');
+      result := 0; exit;
+    end; // .else
+  end;
+end; // .function VR_S
+
+function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
+const
+  MUTABLE_TYPES = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
+
+begin
+  if not (ErmCmd.Params[0].GetType() in MUTABLE_TYPES) then begin
+    ShowErmError('!!VR parameter does not belong to mutable types');
+    result := 0; exit;
+  end;
+
+  case Cmd of
+    'S': result := VR_S(NumParams, ErmCmd, SubCmd);
+  else
+    ShowErmError('Unknown ERM command !!VR:' + Cmd);
+    result := 0;
+  end; // .switch Cmd
+end; // .function New_VR_Receiver
+
 procedure ApplyFuncByRefRes (SubCmd: PErmSubCmd; NumParams: integer);
 var
   i: integer;
@@ -5574,7 +5780,7 @@ begin
         goto ContinueOuterLoop;
       end;
       
-      Value1.v := GetErmParamValue(@Conds[j][i][LEFT_COND], ValType1, FLAG_GETVALUE_GET_STR_ADDR);
+      Value1.v := GetErmParamValue(@Conds[j][i][LEFT_COND], ValType1, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
 
       if ValType1 = VALTYPE_BOOL then begin
         case Conds[j][i][LEFT_COND].GetCheckType() of
@@ -5585,7 +5791,7 @@ begin
           result := true; exit;
         end;
       end else begin
-        Value2.v := GetErmParamValue(@Conds[j][i][RIGHT_COND], ValType2, FLAG_GETVALUE_GET_STR_ADDR);
+        Value2.v := GetErmParamValue(@Conds[j][i][RIGHT_COND], ValType2, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
         CmpRes   := 0;
 
         // Number comparison
@@ -5855,6 +6061,9 @@ begin
   
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
+
+  (* Fully rewrite VR command *)
+  AdvErm.RegisterErmReceiver('VR', @New_VR_Receiver, CMD_PARAMS_CONFIG_SINGLE_INT);
   
   (* Fix LoadErtFile to handle any relative pathes *)
   Core.Hook(@Hook_LoadErtFile, Core.HOOKTYPE_BRIDGE, 5, Ptr($72C660));
