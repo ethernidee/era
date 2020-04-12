@@ -85,6 +85,9 @@ const
   VALTYPE_STR   = 3;
   VALTYPE_ERROR = 999;
 
+  ERM_MAX_FLOAT = 3.4e38;
+  ERM_MIN_FLOAT = -3.4e38;
+
   ERM_CMD_MAX_PARAMS_NUM = 16;
   MIN_ERM_SCRIPT_SIZE    = Length('ZVSE'#13#10);
   LINE_END_MARKER        = #10;
@@ -4324,6 +4327,20 @@ begin
   end;
 end; // .procedure PutVal
 
+(* Ensures, that value does not belong to NAN/+Inf/-Inf *)
+function NormalizeErmFloatValue (Value: single): single;
+begin
+  result := Value;
+
+  if result <> result then begin
+    result := 0;
+  end else if result = Infinity then begin
+    result := ERM_MAX_FLOAT;
+  end else if result = -Infinity then begin
+    result := ERM_MIN_FLOAT;
+  end;
+end;
+
 function ApplyFloatModifier (OrigValue, Value: single; Modifier: integer): single;
 begin
   result := Value;
@@ -4351,14 +4368,7 @@ begin
       end;
     end; // .switch
 
-    // Fix NANs and infinities
-    if result <> result then begin
-      result := 0;
-    end else if result = Infinity then begin
-      result := 3.4e38;
-    end else if result = -Infinity then begin
-      result := -3.4e38;
-    end;
+    result := NormalizeErmFloatValue(result);
   end; // .if
 end; // .function ApplyFloatModifier
 
@@ -5456,7 +5466,7 @@ begin
   end;
 end;
 
-function VR_S (NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
+function VR_S (NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
 var
   BaseVar:        PErmCmdParam;
   BaseVarType:    integer;
@@ -5468,19 +5478,12 @@ var
   UseRounding:    longbool;
 
 begin
-  if NumParams < 1 then begin
-    ShowErmError('"!!VR:S" - wrong number of parameters');
-    result := 0; exit;
-  end;
-
   result         := 1;
   BaseVar        := @ErmCmd.Params[0];
   BaseVarType    := BaseVar.GetType();
   ValueParam     := @SubCmd.Params[0];
   ValueParamType := ValueParam.GetType();
-  //showmessage(format('%d %d', [BaseVarType, ValueParamType]));
-
-  UseRounding := NumParams >= 2;
+  UseRounding    := NumParams >= 2;
 
   if ValueParam.GetCheckType() <> PARAM_CHECK_NONE then begin
     ShowErmError('"!!VR:S" - only SET syntax is supported');
@@ -5550,6 +5553,110 @@ begin
   end; // .else
 end; // .function VR_S
 
+function VR_Arithmetic (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
+var
+  BaseVar:        PErmCmdParam;
+  BaseVarType:    integer;
+  ValueParam:     PErmCmdParam;
+  ValueParamType: integer;
+  Value:          Heroes.TValue;
+  SecondValue:    Heroes.TValue;
+  ValType:        integer;
+  ResIsInt:       longbool;
+  SecondIsInt:    longbool;
+  ArgsAreFloat:   longbool;
+
+begin
+  result         := 1;
+  BaseVar        := @ErmCmd.Params[0];
+  BaseVarType    := BaseVar.GetType();
+  ValueParam     := @SubCmd.Params[0];
+  ValueParamType := ValueParam.GetType();
+  ResIsInt       := BaseVarType in PARAM_VARTYPES_INTS;
+  SecondIsInt    := ValueParamType in PARAM_VARTYPES_INTS;
+  ArgsAreFloat   := not ResIsInt or not SecondIsInt;
+  Value.v        := GetErmParamValue(BaseVar, ValType);
+  SecondValue.v  := SubCmd.Nums[0];
+
+  if not ((BaseVarType in PARAM_VARTYPES_NUMERIC) and (ValueParamType in PARAM_VARTYPES_NUMERIC)) then begin
+    ShowErmError('"!!VR" - cannot perform arithmetic operations with non-numeric values');
+    result := 0; exit;
+  end;
+
+  // Convert both arguments to float if any of them is float
+  if ArgsAreFloat then begin
+    if ResIsInt then begin
+      Value.f := Value.v
+    end else if SecondIsInt then begin
+      SecondValue.f := SecondValue.v;
+    end;
+  end;
+
+  case Cmd of
+    '+': begin
+      if ArgsAreFloat then begin
+        Value.f := Value.f + SecondValue.f;
+      end else begin
+        Inc(Value.v, SecondValue.v);
+      end;
+    end;
+
+    '-': begin
+      if ArgsAreFloat then begin
+        Value.f := Value.f - SecondValue.f;
+      end else begin
+        Dec(Value.v, SecondValue.v);
+      end;
+    end;
+
+    '*': begin
+      if ArgsAreFloat then begin
+        Value.f := Value.f * SecondValue.f;
+      end else begin
+        Value.v := Value.v * SecondValue.v;
+      end;
+    end;
+
+    ':', '%': begin
+      if (SecondValue.v = 0) or (ArgsAreFloat and (SecondValue.f = 0.0)) then begin
+        ShowErmError('"!!VR" - division by zero');
+        result := 0; exit;
+      end;
+
+      case Cmd of
+        ':': begin
+          if ArgsAreFloat then begin
+            Value.f := Value.f / SecondValue.f;
+          end else begin
+            Value.v := Value.v div SecondValue.v;
+          end;
+        end;
+
+        '%': begin
+          if ArgsAreFloat then begin
+            Value.f := frac(Value.f / SecondValue.f) * SecondValue.f;
+          end else begin
+            Value.v := Value.v mod SecondValue.v;
+          end;
+        end;
+      end; // .switch Cmd
+    end; // case ':', '%'
+  else
+    ShowMessage('!!VR - impossible case in math operation');
+    result := 0; exit;
+  end; // .switch Cmd
+
+  if ArgsAreFloat then begin
+    Value.f := NormalizeErmFloatValue(Value.f);
+
+    if ResIsInt then begin
+      Value.v := trunc(Value.f);
+    end;
+  end;
+
+  SetErmParamValue(BaseVar, Value.v);
+end; // .function VR_Arithmetic
+
 function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
 const
   MUTABLE_TYPES = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
@@ -5562,6 +5669,7 @@ begin
 
   case Cmd of
     'S': result := VR_S(NumParams, ErmCmd, SubCmd);
+    '+', '-', '*', ':', '%': result := VR_Arithmetic(Cmd, NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
