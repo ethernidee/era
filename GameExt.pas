@@ -306,9 +306,6 @@ begin
 end;
 
 function GetMapDirName: string;
-var
-  MapDirPath: string;
-
 begin
   if Heroes.IsCampaign then begin
     result := SysUtils.ChangeFileExt(Heroes.GetCampaignFileName, '') + '\' + SysUtils.IntToStr(Heroes.GetCampaignMapInd + 1);
