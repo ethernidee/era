@@ -122,7 +122,7 @@ type
   (* Fast temp memory allocator for ERM inline strings storage during commands execution *)
   TServiceMemAllocator = record
     BufPos:    integer;
-    Buf:       array [0..2000000 - 1] of char;
+    Buf:       array [0..3000000 - 1] of char;
     BufBorder: integer;
 
     procedure Init;
