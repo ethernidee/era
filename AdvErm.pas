@@ -31,12 +31,17 @@ const
   HINTS_SAVE_SECTION  = 'Era.Hints_SN_H';
   
   (* TParamModifier *)
-  NO_MODIFIER     = 0;
-  MODIFIER_ADD    = 1;
-  MODIFIER_SUB    = 2;
-  MODIFIER_MUL    = 3;
-  MODIFIER_DIV    = 4;
-  MODIFIER_CONCAT = 5;
+  NO_MODIFIER      = 0;
+  MODIFIER_ADD     = 1;
+  MODIFIER_SUB     = 2;
+  MODIFIER_MUL     = 3;
+  MODIFIER_DIV     = 4;
+  MODIFIER_MOD     = 5;
+  MODIFIER_CONCAT  = 6;
+  MODIFIER_OR      = 7;
+  MODIFIER_AND_NOT = 8;
+  MODIFIER_SHL     = 9;
+  MODIFIER_SHR     = 10;
 
   (* Era function call conventions *)
   ERA_CALLCONV_PASCAL           = 0;
@@ -549,17 +554,38 @@ begin
       Param.OperGet := false;
 
       if PCmd[Pos] = 'd' then begin
+        Param.ParamModifier := MODIFIER_ADD;
         Inc(Pos);
 
         case PCmd[Pos] of
-          '+': begin Param.ParamModifier := MODIFIER_ADD;    Inc(Pos); end;
-          '-': begin Param.ParamModifier := MODIFIER_SUB;    Inc(Pos); end;
-          '*': begin Param.ParamModifier := MODIFIER_MUL;    Inc(Pos); end;
-          ':': begin Param.ParamModifier := MODIFIER_DIV;    Inc(Pos); end;
-          '&': begin Param.ParamModifier := MODIFIER_CONCAT; Inc(Pos); end;
+          '+': begin Param.ParamModifier := MODIFIER_ADD;     Inc(Pos); end;
+          '-': begin Param.ParamModifier := MODIFIER_SUB;     Inc(Pos); end;
+          '*': begin Param.ParamModifier := MODIFIER_MUL;     Inc(Pos); end;
+          ':': begin Param.ParamModifier := MODIFIER_DIV;     Inc(Pos); end;
+          '%': begin Param.ParamModifier := MODIFIER_MOD;     Inc(Pos); end;
+          '&': begin Param.ParamModifier := MODIFIER_CONCAT;  Inc(Pos); end;
+          '|': begin Param.ParamModifier := MODIFIER_OR;      Inc(Pos); end;
+          '~': begin Param.ParamModifier := MODIFIER_AND_NOT; Inc(Pos); end;
+          
+          '<': begin
+            if PCmd[Pos + 1] = '<' then begin
+              Param.ParamModifier := MODIFIER_SHL;
+              Inc(Pos, 2);
+            end else begin
+              SingleDSyntax := true;
+            end;
+          end;
+          
+          '>': begin
+            if PCmd[Pos + 1] = '>' then begin
+              Param.ParamModifier := MODIFIER_SHR;
+              Inc(Pos, 2);
+            end else begin
+              SingleDSyntax := true;
+            end;
+          end;
         else
-          Param.ParamModifier := MODIFIER_ADD;
-          SingleDSyntax       := true;
+          SingleDSyntax := true;
         end; // .switch
       end; // .if
     end; // .else
@@ -966,6 +992,19 @@ begin
           ShowErmError('Division by zero in d-modifier');
         end;
       end;
+
+      MODIFIER_MOD: begin
+        if Param.Value.v <> 0 then begin
+          Dest := Dest mod Param.Value.v;
+        end else begin
+          ShowErmError('Division by zero in d-modifier');
+        end;
+      end;
+
+      MODIFIER_OR:      Dest := Dest and Param.Value.v;
+      MODIFIER_AND_NOT: Dest := Dest and not Param.Value.v;
+      MODIFIER_SHL:     Dest := Dest shl Alg.ToRange(Param.Value.v, 0, 100);
+      MODIFIER_SHR:     Dest := Dest shr Alg.ToRange(Param.Value.v, 0, 100);
     end; // .switch
   end; // .else
 end; // .procedure ApplyIntParam
