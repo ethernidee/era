@@ -5693,7 +5693,7 @@ begin
     end;
   end;
 
-  SetErmParamValue(BaseVar, Value.v);
+  result := ord(SetErmParamValue(BaseVar, Value.v));
 end; // .function VR_Arithmetic
 
 function VR_Bits (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
@@ -5738,8 +5738,44 @@ begin
     result := 0; exit;
   end; // .switch Cmd
 
-  SetErmParamValue(BaseVar, Value.v);
+  result := ord(SetErmParamValue(BaseVar, Value.v));
 end; // .function VR_Bits
+
+function VR_V (NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
+var
+  BaseVar:        PErmCmdParam;
+  BaseVarType:    integer;
+  ValueParam:     PErmCmdParam;
+  ValueParamType: integer;
+  SecondValue:    Heroes.TValue;
+
+begin
+  result         := 1;
+  BaseVar        := @ErmCmd.Params[0];
+  BaseVarType    := BaseVar.GetType();
+  ValueParam     := @SubCmd.Params[0];
+  ValueParamType := ValueParam.GetType();
+
+  if not (BaseVarType in PARAM_VARTYPES_NUMERIC) then begin
+    ShowErmError('"!!VR:V" - target variable type must be number (integer or float)');
+    result := 0; exit;
+  end;
+
+  if not (ValueParamType in PARAM_VARTYPES_STRINGS) then begin
+    ShowErmError('"!!VR:V" - value to convert to number must be of string type');
+    result := 0; exit;
+  end;
+
+  SecondValue.pc := GetZVarAddr(SubCmd.Nums[0]);
+
+  if BaseVarType = PARAM_VARTYPE_E then begin
+    SecondValue.f := Heroes.a2f(SecondValue.pc);
+  end else begin
+    SecondValue.v := Heroes.a2i(SecondValue.pc);
+  end;
+
+  result := ord(SetErmParamValue(BaseVar, SecondValue.v));
+end; // .function VR_V
 
 function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
 const
@@ -5755,6 +5791,7 @@ begin
     'S':                     result := VR_S(NumParams, ErmCmd, SubCmd);
     '+', '-', '*', ':', '%': result := VR_Arithmetic(Cmd, NumParams, ErmCmd, SubCmd);
     '&', '|', 'X', '~':      result := VR_Bits(Cmd, NumParams, ErmCmd, SubCmd);
+    'V':                     result := VR_V(NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
