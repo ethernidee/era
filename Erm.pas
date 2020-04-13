@@ -5696,6 +5696,51 @@ begin
   SetErmParamValue(BaseVar, Value.v);
 end; // .function VR_Arithmetic
 
+function VR_Bits (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
+var
+  BaseVar:     PErmCmdParam;
+  ValueParam:  PErmCmdParam;
+  Value:       Heroes.TValue;
+  SecondValue: Heroes.TValue;
+  ValType:     integer;
+
+begin
+  result     := 1;
+  BaseVar    := @ErmCmd.Params[0];
+  ValueParam := @SubCmd.Params[0];
+
+  if not((BaseVar.GetType() in PARAM_VARTYPES_INTS) and (ValueParam.GetType() in PARAM_VARTYPES_INTS)) then begin
+    ShowErmError('"!!VR" - bit operations are supported for integers only');
+    result := 0; exit;
+  end;
+  
+  Value.v       := GetErmParamValue(BaseVar, ValType);
+  SecondValue.v := SubCmd.Nums[0];
+
+  case Cmd of
+    '&': begin
+      Value.v := Value.v and SecondValue.v;
+    end;
+
+    '|': begin
+      Value.v := Value.v or SecondValue.v;
+    end;
+
+    'X': begin
+      Value.v := Value.v xor SecondValue.v;
+    end;
+
+    '~': begin
+      Value.v := Value.v and not SecondValue.v;
+    end; // case ':', '%'
+  else
+    ShowMessage('!!VR - impossible case in bit operation');
+    result := 0; exit;
+  end; // .switch Cmd
+
+  SetErmParamValue(BaseVar, Value.v);
+end; // .function VR_Bits
+
 function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
 const
   MUTABLE_TYPES = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
@@ -5707,8 +5752,9 @@ begin
   end;
 
   case Cmd of
-    'S': result := VR_S(NumParams, ErmCmd, SubCmd);
+    'S':                     result := VR_S(NumParams, ErmCmd, SubCmd);
     '+', '-', '*', ':', '%': result := VR_Arithmetic(Cmd, NumParams, ErmCmd, SubCmd);
+    '&', '|', 'X', '~':      result := VR_Bits(Cmd, NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
