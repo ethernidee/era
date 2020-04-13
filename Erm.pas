@@ -60,12 +60,13 @@ const
   PARAM_VARTYPE_S     = 11;
   PARAM_VARTYPE_STR   = 12;
 
-  PARAM_VARTYPES_MUTABLE = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
-  PARAM_VARTYPES_VALUES  = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_STR];
-  PARAM_VARTYPES_INTS    = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_I];
-  PARAM_VARTYPES_FLOATS  = [PARAM_VARTYPE_E];
-  PARAM_VARTYPES_NUMERIC = PARAM_VARTYPES_INTS + PARAM_VARTYPES_FLOATS;
-  PARAM_VARTYPES_STRINGS = [PARAM_VARTYPE_Z, PARAM_VARTYPE_S, PARAM_VARTYPE_STR];
+  PARAM_VARTYPES_MUTABLE       = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
+  PARAM_VARTYPES_VALUES        = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_STR];
+  PARAM_VARTYPES_INTS          = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_I];
+  PARAM_VARTYPES_ARRAYISH_INTS = [PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y];
+  PARAM_VARTYPES_FLOATS        = [PARAM_VARTYPE_E];
+  PARAM_VARTYPES_NUMERIC       = PARAM_VARTYPES_INTS + PARAM_VARTYPES_FLOATS;
+  PARAM_VARTYPES_STRINGS       = [PARAM_VARTYPE_Z, PARAM_VARTYPE_S, PARAM_VARTYPE_STR];
 
   PARAM_MODIFIER_NONE    = 0;
   PARAM_MODIFIER_ADD     = 1;
@@ -595,7 +596,7 @@ const
   ZvsIsAi:            function (Owner: integer): boolean cdecl = Ptr($711828);
   ZvsGetErtStr:       function (StrInd: integer): pchar cdecl = Ptr($776620);
   ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
-  ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): longbool cdecl = Ptr($74195D);
+  ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): integer cdecl = Ptr($74195D);
   ZvsGetVarValIndex:  function (Param: PErmCmdParam): integer cdecl = Ptr($72DCB0);
   ZvsGetVarVal:       function (Param: PErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsSetVarVal:       function (Param: PErmCmdParam; NewValue: integer): integer cdecl = Ptr($72E301);
@@ -927,118 +928,118 @@ begin
   result := '';
 
   case EventID of
-    {*} Erm.TRIGGER_FU1..Erm.TRIGGER_FU29999:
-      result := 'OnErmFunction ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_FU1 + 1);
-    {*} Erm.TRIGGER_TM1..Erm.TRIGGER_TM100:
-      result := 'OnErmTimer ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_TM1 + 1);
-    {*} Erm.TRIGGER_HE0..Erm.TRIGGER_HE198:
-      result := 'OnHeroInteraction ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HE0);
-    {*} Erm.TRIGGER_BA0:      result :=  'OnBeforeBattle';
-    {*} Erm.TRIGGER_BA1:      result :=  'OnAfterBattle';
-    {*} Erm.TRIGGER_BR:       result :=  'OnBattleRound';
-    {*} Erm.TRIGGER_BG0:      result :=  'OnBeforeBattleAction';
-    {*} Erm.TRIGGER_BG1:      result :=  'OnAfterBattleAction';
-    {*} Erm.TRIGGER_MW0:      result :=  'OnWanderingMonsterReach';
-    {*} Erm.TRIGGER_MW1:      result :=  'OnWanderingMonsterDeath';
-    {*} Erm.TRIGGER_MR0:      result :=  'OnMagicBasicResistance';
-    {*} Erm.TRIGGER_MR1:      result :=  'OnMagicCorrectedResistance';
-    {*} Erm.TRIGGER_MR2:      result :=  'OnDwarfMagicResistance';
-    {*} Erm.TRIGGER_CM0:      result :=  'OnAdventureMapRightMouseClick';
-    {*} Erm.TRIGGER_CM1:      result :=  'OnTownMouseClick';
-    {*} Erm.TRIGGER_CM2:      result :=  'OnHeroScreenMouseClick';
-    {*} Erm.TRIGGER_CM3:      result :=  'OnHeroesMeetScreenMouseClick';
-    {*} Erm.TRIGGER_CM4:      result :=  'OnBattleScreenMouseClick';
-    {*} Erm.TRIGGER_CM5:      result :=  'OnAdventureMapLeftMouseClick';
-    {*} Erm.TRIGGER_AE0:      result :=  'OnUnequipArt';
-    {*} Erm.TRIGGER_AE1:      result :=  'OnEquipArt';
-    {*} Erm.TRIGGER_MM0:      result :=  'OnBattleMouseHint';
-    {*} Erm.TRIGGER_MM1:      result :=  'OnTownMouseHint';
-    {*} Erm.TRIGGER_MP:       result :=  'OnMp3MusicChange';
-    {*} Erm.TRIGGER_SN:       result :=  'OnSoundPlay';
-    {*} Erm.TRIGGER_MG0:      result :=  'OnBeforeAdventureMagic';
-    {*} Erm.TRIGGER_MG1:      result :=  'OnAfterAdventureMagic';
-    {*} Erm.TRIGGER_TH0:      result :=  'OnEnterTownHall';
-    {*} Erm.TRIGGER_TH1:      result :=  'OnLeaveTownHall';
-    {*} Erm.TRIGGER_IP0:      result :=  'OnBeforeBattleBeforeDataSend';
-    {*} Erm.TRIGGER_IP1:      result :=  'OnBeforeBattleAfterDataReceived';
-    {*} Erm.TRIGGER_IP2:      result :=  'OnAfterBattleBeforeDataSend';
-    {*} Erm.TRIGGER_IP3:      result :=  'OnAfterBattleAfterDataReceived';
-    {*} Erm.TRIGGER_CO0:      result :=  'OnOpenCommanderWindow';
-    {*} Erm.TRIGGER_CO1:      result :=  'OnCloseCommanderWindow';
-    {*} Erm.TRIGGER_CO2:      result :=  'OnAfterCommanderBuy';
-    {*} Erm.TRIGGER_CO3:      result :=  'OnAfterCommanderResurrect';
-    {*} Erm.TRIGGER_BA50:     result :=  'OnBeforeBattleForThisPcDefender';
-    {*} Erm.TRIGGER_BA51:     result :=  'OnAfterBattleForThisPcDefender';
-    {*} Erm.TRIGGER_BA52:     result :=  'OnBeforeBattleUniversal';
-    {*} Erm.TRIGGER_BA53:     result :=  'OnAfterBattleUniversal';
-    {*} Erm.TRIGGER_GM0:      result :=  'OnAfterLoadGame';
-    {*} Erm.TRIGGER_GM1:      result :=  'OnBeforeSaveGame';
-    {*} Erm.TRIGGER_PI:       result :=  'OnAfterErmInstructions';
-    {*} Erm.TRIGGER_DL:       result :=  'OnCustomDialogEvent';
-    {*} Erm.TRIGGER_HM:       result :=  'OnHeroMove';
-    {*} Erm.TRIGGER_HM0..Erm.TRIGGER_HM198:
-      result := 'OnHeroMove ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HM0);
-    {*} Erm.TRIGGER_HL:   result :=  'OnHeroGainLevel';
-    {*} Erm.TRIGGER_HL0..Erm.TRIGGER_HL198:
-      result := 'OnHeroGainLevel ' + SysUtils.IntToStr(EventID - Erm.TRIGGER_HL0);
-    {*} Erm.TRIGGER_BF:       result :=  'OnSetupBattlefield';
-    {*} Erm.TRIGGER_MF1:      result :=  'OnMonsterPhysicalDamage';
-    {*} Erm.TRIGGER_TL0:      result :=  'OnEverySecond';
-    {*} Erm.TRIGGER_TL1:      result :=  'OnEvery2Seconds';
-    {*} Erm.TRIGGER_TL2:      result :=  'OnEvery5Seconds';
-    {*} Erm.TRIGGER_TL3:      result :=  'OnEvery10Seconds';
-    {*} Erm.TRIGGER_TL4:      result :=  'OnEveryMinute';
+    {*} TRIGGER_FU1..TRIGGER_FU29999:
+      result := 'OnErmFunction ' + SysUtils.IntToStr(EventID - TRIGGER_FU1 + 1);
+    {*} TRIGGER_TM1..TRIGGER_TM100:
+      result := 'OnErmTimer ' + SysUtils.IntToStr(EventID - TRIGGER_TM1 + 1);
+    {*} TRIGGER_HE0..TRIGGER_HE198:
+      result := 'OnHeroInteraction ' + SysUtils.IntToStr(EventID - TRIGGER_HE0);
+    {*} TRIGGER_BA0:      result :=  'OnBeforeBattle';
+    {*} TRIGGER_BA1:      result :=  'OnAfterBattle';
+    {*} TRIGGER_BR:       result :=  'OnBattleRound';
+    {*} TRIGGER_BG0:      result :=  'OnBeforeBattleAction';
+    {*} TRIGGER_BG1:      result :=  'OnAfterBattleAction';
+    {*} TRIGGER_MW0:      result :=  'OnWanderingMonsterReach';
+    {*} TRIGGER_MW1:      result :=  'OnWanderingMonsterDeath';
+    {*} TRIGGER_MR0:      result :=  'OnMagicBasicResistance';
+    {*} TRIGGER_MR1:      result :=  'OnMagicCorrectedResistance';
+    {*} TRIGGER_MR2:      result :=  'OnDwarfMagicResistance';
+    {*} TRIGGER_CM0:      result :=  'OnAdventureMapRightMouseClick';
+    {*} TRIGGER_CM1:      result :=  'OnTownMouseClick';
+    {*} TRIGGER_CM2:      result :=  'OnHeroScreenMouseClick';
+    {*} TRIGGER_CM3:      result :=  'OnHeroesMeetScreenMouseClick';
+    {*} TRIGGER_CM4:      result :=  'OnBattleScreenMouseClick';
+    {*} TRIGGER_CM5:      result :=  'OnAdventureMapLeftMouseClick';
+    {*} TRIGGER_AE0:      result :=  'OnUnequipArt';
+    {*} TRIGGER_AE1:      result :=  'OnEquipArt';
+    {*} TRIGGER_MM0:      result :=  'OnBattleMouseHint';
+    {*} TRIGGER_MM1:      result :=  'OnTownMouseHint';
+    {*} TRIGGER_MP:       result :=  'OnMp3MusicChange';
+    {*} TRIGGER_SN:       result :=  'OnSoundPlay';
+    {*} TRIGGER_MG0:      result :=  'OnBeforeAdventureMagic';
+    {*} TRIGGER_MG1:      result :=  'OnAfterAdventureMagic';
+    {*} TRIGGER_TH0:      result :=  'OnEnterTownHall';
+    {*} TRIGGER_TH1:      result :=  'OnLeaveTownHall';
+    {*} TRIGGER_IP0:      result :=  'OnBeforeBattleBeforeDataSend';
+    {*} TRIGGER_IP1:      result :=  'OnBeforeBattleAfterDataReceived';
+    {*} TRIGGER_IP2:      result :=  'OnAfterBattleBeforeDataSend';
+    {*} TRIGGER_IP3:      result :=  'OnAfterBattleAfterDataReceived';
+    {*} TRIGGER_CO0:      result :=  'OnOpenCommanderWindow';
+    {*} TRIGGER_CO1:      result :=  'OnCloseCommanderWindow';
+    {*} TRIGGER_CO2:      result :=  'OnAfterCommanderBuy';
+    {*} TRIGGER_CO3:      result :=  'OnAfterCommanderResurrect';
+    {*} TRIGGER_BA50:     result :=  'OnBeforeBattleForThisPcDefender';
+    {*} TRIGGER_BA51:     result :=  'OnAfterBattleForThisPcDefender';
+    {*} TRIGGER_BA52:     result :=  'OnBeforeBattleUniversal';
+    {*} TRIGGER_BA53:     result :=  'OnAfterBattleUniversal';
+    {*} TRIGGER_GM0:      result :=  'OnAfterLoadGame';
+    {*} TRIGGER_GM1:      result :=  'OnBeforeSaveGame';
+    {*} TRIGGER_PI:       result :=  'OnAfterErmInstructions';
+    {*} TRIGGER_DL:       result :=  'OnCustomDialogEvent';
+    {*} TRIGGER_HM:       result :=  'OnHeroMove';
+    {*} TRIGGER_HM0..TRIGGER_HM198:
+      result := 'OnHeroMove ' + SysUtils.IntToStr(EventID - TRIGGER_HM0);
+    {*} TRIGGER_HL:   result :=  'OnHeroGainLevel';
+    {*} TRIGGER_HL0..TRIGGER_HL198:
+      result := 'OnHeroGainLevel ' + SysUtils.IntToStr(EventID - TRIGGER_HL0);
+    {*} TRIGGER_BF:       result :=  'OnSetupBattlefield';
+    {*} TRIGGER_MF1:      result :=  'OnMonsterPhysicalDamage';
+    {*} TRIGGER_TL0:      result :=  'OnEverySecond';
+    {*} TRIGGER_TL1:      result :=  'OnEvery2Seconds';
+    {*} TRIGGER_TL2:      result :=  'OnEvery5Seconds';
+    {*} TRIGGER_TL3:      result :=  'OnEvery10Seconds';
+    {*} TRIGGER_TL4:      result :=  'OnEveryMinute';
     (* Era Triggers *)
-    {*} Erm.TRIGGER_SAVEGAME_WRITE:               result := 'OnSavegameWrite';
-    {*} Erm.TRIGGER_SAVEGAME_READ:                result := 'OnSavegameRead';
-    {*} Erm.TRIGGER_KEYPRESS:                     result := 'OnKeyPressed';
-    {*} Erm.TRIGGER_OPEN_HEROSCREEN:              result := 'OnOpenHeroScreen';
-    {*} Erm.TRIGGER_CLOSE_HEROSCREEN:             result := 'OnCloseHeroScreen';
-    {*} Erm.TRIGGER_STACK_OBTAINS_TURN:           result := 'OnBattleStackObtainsTurn';
-    {*} Erm.TRIGGER_REGENERATE_PHASE:             result := 'OnBattleRegeneratePhase';
-    {*} Erm.TRIGGER_AFTER_SAVE_GAME:              result := 'OnAfterSaveGame';
-    {*} Erm.TRIGGER_BEFOREHEROINTERACT:           result := 'OnBeforeHeroInteraction';
-    {*} Erm.TRIGGER_AFTERHEROINTERACT:            result := 'OnAfterHeroInteraction';
-    {*} Erm.TRIGGER_ONSTACKTOSTACKDAMAGE:         result := 'OnStackToStackDamage';
-    {*} Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT:    result := 'OnAICalcStackAttackEffect';
-    {*} Erm.TRIGGER_ONCHAT:                       result := 'OnChat';
-    {*} Erm.TRIGGER_ONGAMEENTER:                  result := 'OnGameEnter';
-    {*} Erm.TRIGGER_ONGAMELEAVE:                  result := 'OnGameLeave';
-    {*} Erm.TRIGGER_ONREMOTEEVENT:                result := 'OnRemoteEvent';
-    {*} Erm.TRIGGER_DAILY_TIMER:                  result := 'OnEveryDay';
-    {*} Erm.TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE: result := 'OnBeforeBattlefieldVisible';
-    {*} Erm.TRIGGER_BATTLEFIELD_VISIBLE:          result := 'OnBattlefieldVisible';
-    {*} Erm.TRIGGER_AFTER_TACTICS_PHASE:          result := 'OnAfterTacticsPhase';
-    {*} Erm.TRIGGER_COMBAT_ROUND:                 result := 'OnCombatRound';
-    {*} Erm.TRIGGER_OPEN_RECRUIT_DLG:             result := 'OnOpenRecruitDlg';
-    {*} Erm.TRIGGER_CLOSE_RECRUIT_DLG:            result := 'OnCloseRecruitDlg';
-    {*} Erm.TRIGGER_RECRUIT_DLG_MOUSE_CLICK:      result := 'OnRecruitDlgMouseClick';
-    {*} Erm.TRIGGER_TOWN_HALL_MOUSE_CLICK:        result := 'OnTownHallMouseClick';
-    {*} Erm.TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK: result := 'OnKingdomOverviewMouseClick';
-    {*} Erm.TRIGGER_RECRUIT_DLG_RECALC:           result := 'OnRecruitDlgRecalc';
-    {*} Erm.TRIGGER_RECRUIT_DLG_ACTION:           result := 'OnRecruitDlgAction';
-    {*} Erm.TRIGGER_LOAD_HERO_SCREEN:             result := 'OnLoadHeroScreen';
-    {*} Erm.TRIGGER_BUILD_TOWN_BUILDING:          result := 'OnBuildTownBuilding';
-    {*} Erm.TRIGGER_OPEN_TOWN_SCREEN:             result := 'OnOpenTownScreen';
-    {*} Erm.TRIGGER_CLOSE_TOWN_SCREEN:            result := 'OnCloseTownScreen';
-    {*} Erm.TRIGGER_SWITCH_TOWN_SCREEN:           result := 'OnSwitchTownScreen';
-    {*} Erm.TRIGGER_PRE_TOWN_SCREEN:              result := 'OnPreTownScreen';
-    {*} Erm.TRIGGER_POST_TOWN_SCREEN:             result := 'OnPostTownScreen';
-    {*} Erm.TRIGGER_PRE_HEROSCREEN:               result := 'OnPreHeroScreen';
-    {*} Erm.TRIGGER_POST_HEROSCREEN:              result := 'OnPostHeroScreen';
-    {*} Erm.TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE: result := 'OnDetermineMonInfoDlgUpgrade';
+    {*} TRIGGER_SAVEGAME_WRITE:               result := 'OnSavegameWrite';
+    {*} TRIGGER_SAVEGAME_READ:                result := 'OnSavegameRead';
+    {*} TRIGGER_KEYPRESS:                     result := 'OnKeyPressed';
+    {*} TRIGGER_OPEN_HEROSCREEN:              result := 'OnOpenHeroScreen';
+    {*} TRIGGER_CLOSE_HEROSCREEN:             result := 'OnCloseHeroScreen';
+    {*} TRIGGER_STACK_OBTAINS_TURN:           result := 'OnBattleStackObtainsTurn';
+    {*} TRIGGER_REGENERATE_PHASE:             result := 'OnBattleRegeneratePhase';
+    {*} TRIGGER_AFTER_SAVE_GAME:              result := 'OnAfterSaveGame';
+    {*} TRIGGER_BEFOREHEROINTERACT:           result := 'OnBeforeHeroInteraction';
+    {*} TRIGGER_AFTERHEROINTERACT:            result := 'OnAfterHeroInteraction';
+    {*} TRIGGER_ONSTACKTOSTACKDAMAGE:         result := 'OnStackToStackDamage';
+    {*} TRIGGER_ONAICALCSTACKATTACKEFFECT:    result := 'OnAICalcStackAttackEffect';
+    {*} TRIGGER_ONCHAT:                       result := 'OnChat';
+    {*} TRIGGER_ONGAMEENTER:                  result := 'OnGameEnter';
+    {*} TRIGGER_ONGAMELEAVE:                  result := 'OnGameLeave';
+    {*} TRIGGER_ONREMOTEEVENT:                result := 'OnRemoteEvent';
+    {*} TRIGGER_DAILY_TIMER:                  result := 'OnEveryDay';
+    {*} TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE: result := 'OnBeforeBattlefieldVisible';
+    {*} TRIGGER_BATTLEFIELD_VISIBLE:          result := 'OnBattlefieldVisible';
+    {*} TRIGGER_AFTER_TACTICS_PHASE:          result := 'OnAfterTacticsPhase';
+    {*} TRIGGER_COMBAT_ROUND:                 result := 'OnCombatRound';
+    {*} TRIGGER_OPEN_RECRUIT_DLG:             result := 'OnOpenRecruitDlg';
+    {*} TRIGGER_CLOSE_RECRUIT_DLG:            result := 'OnCloseRecruitDlg';
+    {*} TRIGGER_RECRUIT_DLG_MOUSE_CLICK:      result := 'OnRecruitDlgMouseClick';
+    {*} TRIGGER_TOWN_HALL_MOUSE_CLICK:        result := 'OnTownHallMouseClick';
+    {*} TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK: result := 'OnKingdomOverviewMouseClick';
+    {*} TRIGGER_RECRUIT_DLG_RECALC:           result := 'OnRecruitDlgRecalc';
+    {*} TRIGGER_RECRUIT_DLG_ACTION:           result := 'OnRecruitDlgAction';
+    {*} TRIGGER_LOAD_HERO_SCREEN:             result := 'OnLoadHeroScreen';
+    {*} TRIGGER_BUILD_TOWN_BUILDING:          result := 'OnBuildTownBuilding';
+    {*} TRIGGER_OPEN_TOWN_SCREEN:             result := 'OnOpenTownScreen';
+    {*} TRIGGER_CLOSE_TOWN_SCREEN:            result := 'OnCloseTownScreen';
+    {*} TRIGGER_SWITCH_TOWN_SCREEN:           result := 'OnSwitchTownScreen';
+    {*} TRIGGER_PRE_TOWN_SCREEN:              result := 'OnPreTownScreen';
+    {*} TRIGGER_POST_TOWN_SCREEN:             result := 'OnPostTownScreen';
+    {*} TRIGGER_PRE_HEROSCREEN:               result := 'OnPreHeroScreen';
+    {*} TRIGGER_POST_HEROSCREEN:              result := 'OnPostHeroScreen';
+    {*} TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE: result := 'OnDetermineMonInfoDlgUpgrade';
     (* END Era Triggers *)
   else
-    if EventID >= Erm.TRIGGER_OB_POS then begin
-      if ((EventID and Erm.TRIGGER_OB_POS) or (EventID and Erm.TRIGGER_LE_POS)) <> 0 then begin
+    if EventID >= TRIGGER_OB_POS then begin
+      if ((EventID and TRIGGER_OB_POS) or (EventID and TRIGGER_LE_POS)) <> 0 then begin
         x := EventID and 1023;
         y := (EventID shr 16) and 1023;
         z := (EventID shr 26) and 1;
 
-        if (EventID and Erm.TRIGGER_LE_POS) <> 0 then begin
+        if (EventID and TRIGGER_LE_POS) <> 0 then begin
           BaseEventName := 'OnLocalEvent ';
         end else begin
-          if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
+          if (EventID and TRIGGER_OB_LEAVE) <> 0 then begin
             BaseEventName := 'OnAfterVisitObject ';
           end else begin
             BaseEventName := 'OnBeforeVisitObject ';
@@ -1052,7 +1053,7 @@ begin
         ObjType    := (EventID shr 12) and 255;
         ObjSubtype := (EventID and 255) - 1;
 
-        if (EventID and Erm.TRIGGER_OB_LEAVE) <> 0 then begin
+        if (EventID and TRIGGER_OB_LEAVE) <> 0 then begin
           BaseEventName := 'OnAfterVisitObject ';
         end else begin
           BaseEventName := 'OnBeforeVisitObject ';
@@ -1833,7 +1834,7 @@ var
       end; // .else
 
       PrevRange := VarRange;
-    end; // .while
+    end; // .while  
 
     if not result then begin
       if VarsPool.Count < Count then begin
@@ -1863,7 +1864,7 @@ var
       IsAddr   := ParsedVar.IsAddr;
       ArrIndex := 0;
 
-      if ParsedVar.HasIndex then begin
+      if ParsedVar.HasIndex and not ParsedVar.IsDeclaration then begin
         ArrIndex := ParsedVar.Index;
       end;
 
@@ -1884,17 +1885,17 @@ var
         end else begin
           if ParsedVar.IsDeclaration and ((LocalVar.VarType <> ParsedVar.VarType) or (LocalVar.Count <> ParsedVar.Index)) then begin
             ShowError(VarPos, Format('Redeclaration of local variable "%s" must have the same type and length as original declaration', [ParsedVar.Name]));
-            result := false;
-          end else begin
-            if ArrIndex < 0 then begin
-              ArrIndex := LocalVar.Count + ArrIndex;
-            end;
+            result := false; exit;
+          end;
 
-            result := (ArrIndex >= 0) and (ArrIndex < LocalVar.Count);
+          if ArrIndex < 0 then begin
+            ArrIndex := LocalVar.Count + ArrIndex;
+          end;
 
-            if not result then begin
-              ShowError(VarPos, Format('Local array index %d is out of range: 0..%d', [ArrIndex, LocalVar.Count - 1]));
-            end;
+          result := (ArrIndex >= 0) and (ArrIndex < LocalVar.Count);
+
+          if not result then begin
+            ShowError(VarPos, Format('Local array index %d is out of range: 0..%d', [ArrIndex, LocalVar.Count - 1]));
           end;
         end; // .else
       end; // .else
@@ -2908,7 +2909,6 @@ begin
 
   ListEndInd := NumUniqueTriggers;
   result     := NullTrigger;
-  //ShowMessage(Format('Id: %d. ListEndInd = %d', [Id, ListEndInd]));
 
   if ListEndInd = 0 then begin
     exit;
@@ -2917,7 +2917,6 @@ begin
   Ind := 0;
 
   while (Ind < ListEndInd) and (TriggerFastAccessList[Ind].Id <> Id) do begin
-    //ShowMessage(Format('Compare event %d to %d', [Id, TriggerFastAccessList[Ind].Id]));
     if Id < TriggerFastAccessList[Ind].Id then begin
       Ind := Ind shl 1 + 1;
     end else begin
@@ -2926,7 +2925,6 @@ begin
   end;
 
   if Ind < ListEndInd then begin
-    //ShowMessage(Format('Found event %d', [Id]));
     result := TriggerFastAccessList[Ind].Trigger;
   end;
 end; // .function FindFirstTrigger
@@ -3179,95 +3177,95 @@ end; // .function Hook_FindErm_SuccessEnd
 
 procedure RegisterErmEventNames;
 begin
-  NameTrigger(Erm.TRIGGER_BA0,  'OnBeforeBattle');
-  NameTrigger(Erm.TRIGGER_BA1,  'OnAfterBattle');
-  NameTrigger(Erm.TRIGGER_BR,   'OnBattleRound');
-  NameTrigger(Erm.TRIGGER_BG0,  'OnBeforeBattleAction');
-  NameTrigger(Erm.TRIGGER_BG1,  'OnAfterBattleAction');
-  NameTrigger(Erm.TRIGGER_MW0,  'OnWanderingMonsterReach');
-  NameTrigger(Erm.TRIGGER_MW1,  'OnWanderingMonsterDeath');
-  NameTrigger(Erm.TRIGGER_MR0,  'OnMagicBasicResistance');
-  NameTrigger(Erm.TRIGGER_MR1,  'OnMagicCorrectedResistance');
-  NameTrigger(Erm.TRIGGER_MR2,  'OnDwarfMagicResistance');
-  NameTrigger(Erm.TRIGGER_CM0,  'OnAdventureMapRightMouseClick');
-  NameTrigger(Erm.TRIGGER_CM1,  'OnTownMouseClick');
-  NameTrigger(Erm.TRIGGER_CM2,  'OnHeroScreenMouseClick');
-  NameTrigger(Erm.TRIGGER_CM3,  'OnHeroesMeetScreenMouseClick');
-  NameTrigger(Erm.TRIGGER_CM4,  'OnBattleScreenMouseClick');
-  NameTrigger(Erm.TRIGGER_CM5,  'OnAdventureMapLeftMouseClick');
-  NameTrigger(Erm.TRIGGER_AE0,  'OnUnequipArt');
-  NameTrigger(Erm.TRIGGER_AE1,  'OnEquipArt');
-  NameTrigger(Erm.TRIGGER_MM0,  'OnBattleMouseHint');
-  NameTrigger(Erm.TRIGGER_MM1,  'OnTownMouseHint');
-  NameTrigger(Erm.TRIGGER_MP,   'OnMp3MusicChange');
-  NameTrigger(Erm.TRIGGER_SN,   'OnSoundPlay');
-  NameTrigger(Erm.TRIGGER_MG0,  'OnBeforeAdventureMagic');
-  NameTrigger(Erm.TRIGGER_MG1,  'OnAfterAdventureMagic');
-  NameTrigger(Erm.TRIGGER_TH0,  'OnEnterTownHall');
-  NameTrigger(Erm.TRIGGER_TH1,  'OnLeaveTownHall');
-  NameTrigger(Erm.TRIGGER_IP0,  'OnBeforeBattleBeforeDataSend');
-  NameTrigger(Erm.TRIGGER_IP1,  'OnBeforeBattleAfterDataReceived');
-  NameTrigger(Erm.TRIGGER_IP2,  'OnAfterBattleBeforeDataSend');
-  NameTrigger(Erm.TRIGGER_IP3,  'OnAfterBattleAfterDataReceived');
-  NameTrigger(Erm.TRIGGER_CO0,  'OnOpenCommanderWindow');
-  NameTrigger(Erm.TRIGGER_CO1,  'OnCloseCommanderWindow');
-  NameTrigger(Erm.TRIGGER_CO2,  'OnAfterCommanderBuy');
-  NameTrigger(Erm.TRIGGER_CO3,  'OnAfterCommanderResurrect');
-  NameTrigger(Erm.TRIGGER_BA50, 'OnBeforeBattleForThisPcDefender');
-  NameTrigger(Erm.TRIGGER_BA51, 'OnAfterBattleForThisPcDefender');
-  NameTrigger(Erm.TRIGGER_BA52, 'OnBeforeBattleUniversal');
-  NameTrigger(Erm.TRIGGER_BA53, 'OnAfterBattleUniversal');
-  NameTrigger(Erm.TRIGGER_GM0,  'OnAfterLoadGame');
-  NameTrigger(Erm.TRIGGER_GM1,  'OnBeforeSaveGame');
-  NameTrigger(Erm.TRIGGER_PI,   'OnAfterErmInstructions');
-  NameTrigger(Erm.TRIGGER_DL,   'OnCustomDialogEvent');
-  NameTrigger(Erm.TRIGGER_HM,   'OnHeroMove');
-  NameTrigger(Erm.TRIGGER_HL,   'OnHeroGainLevel');
-  NameTrigger(Erm.TRIGGER_BF,   'OnSetupBattlefield');
-  NameTrigger(Erm.TRIGGER_MF1,  'OnMonsterPhysicalDamage');
-  NameTrigger(Erm.TRIGGER_TL0,  'OnEverySecond');
-  NameTrigger(Erm.TRIGGER_TL1,  'OnEvery2Seconds');
-  NameTrigger(Erm.TRIGGER_TL2,  'OnEvery5Seconds');
-  NameTrigger(Erm.TRIGGER_TL3,  'OnEvery10Seconds');
-  NameTrigger(Erm.TRIGGER_TL4,  'OnEveryMinute');
-  NameTrigger(Erm.TRIGGER_SAVEGAME_WRITE,               'OnSavegameWrite');
-  NameTrigger(Erm.TRIGGER_SAVEGAME_READ,                'OnSavegameRead');
-  NameTrigger(Erm.TRIGGER_KEYPRESS,                     'OnKeyPressed');
-  NameTrigger(Erm.TRIGGER_OPEN_HEROSCREEN,              'OnOpenHeroScreen');
-  NameTrigger(Erm.TRIGGER_CLOSE_HEROSCREEN,             'OnCloseHeroScreen');
-  NameTrigger(Erm.TRIGGER_STACK_OBTAINS_TURN,           'OnBattleStackObtainsTurn');
-  NameTrigger(Erm.TRIGGER_REGENERATE_PHASE,             'OnBattleRegeneratePhase');
-  NameTrigger(Erm.TRIGGER_AFTER_SAVE_GAME,              'OnAfterSaveGame');
-  NameTrigger(Erm.TRIGGER_BEFOREHEROINTERACT,           'OnBeforeHeroInteraction');
-  NameTrigger(Erm.TRIGGER_AFTERHEROINTERACT,            'OnAfterHeroInteraction');
-  NameTrigger(Erm.TRIGGER_ONSTACKTOSTACKDAMAGE,         'OnStackToStackDamage');
-  NameTrigger(Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT,    'OnAICalcStackAttackEffect');
-  NameTrigger(Erm.TRIGGER_ONCHAT,                       'OnChat');
-  NameTrigger(Erm.TRIGGER_ONGAMEENTER,                  'OnGameEnter');
-  NameTrigger(Erm.TRIGGER_ONGAMELEAVE,                  'OnGameLeave');
-  NameTrigger(Erm.TRIGGER_ONREMOTEEVENT,                'OnRemoteEvent');
-  NameTrigger(Erm.TRIGGER_DAILY_TIMER,                  'OnEveryDay');
-  NameTrigger(Erm.TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE, 'OnBeforeBattlefieldVisible');
-  NameTrigger(Erm.TRIGGER_BATTLEFIELD_VISIBLE,          'OnBattlefieldVisible');
-  NameTrigger(Erm.TRIGGER_AFTER_TACTICS_PHASE,          'OnAfterTacticsPhase');
-  NameTrigger(Erm.TRIGGER_COMBAT_ROUND,                 'OnCombatRound');
-  NameTrigger(Erm.TRIGGER_OPEN_RECRUIT_DLG,             'OnOpenRecruitDlg');
-  NameTrigger(Erm.TRIGGER_CLOSE_RECRUIT_DLG,            'OnCloseRecruitDlg');
-  NameTrigger(Erm.TRIGGER_RECRUIT_DLG_MOUSE_CLICK,      'OnRecruitDlgMouseClick');
-  NameTrigger(Erm.TRIGGER_TOWN_HALL_MOUSE_CLICK,        'OnTownHallMouseClick');
-  NameTrigger(Erm.TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK, 'OnKingdomOverviewMouseClick');
-  NameTrigger(Erm.TRIGGER_RECRUIT_DLG_RECALC,           'OnRecruitDlgRecalc');
-  NameTrigger(Erm.TRIGGER_RECRUIT_DLG_ACTION,           'OnRecruitDlgAction');
-  NameTrigger(Erm.TRIGGER_LOAD_HERO_SCREEN,             'OnLoadHeroScreen');
-  NameTrigger(Erm.TRIGGER_BUILD_TOWN_BUILDING,          'OnBuildTownBuilding');
-  NameTrigger(Erm.TRIGGER_OPEN_TOWN_SCREEN,             'OnOpenTownScreen');
-  NameTrigger(Erm.TRIGGER_CLOSE_TOWN_SCREEN,            'OnCloseTownScreen');
-  NameTrigger(Erm.TRIGGER_SWITCH_TOWN_SCREEN,           'OnSwitchTownScreen');
-  NameTrigger(Erm.TRIGGER_PRE_TOWN_SCREEN,              'OnPreTownScreen');
-  NameTrigger(Erm.TRIGGER_POST_TOWN_SCREEN,             'OnPostTownScreen');
-  NameTrigger(Erm.TRIGGER_PRE_HEROSCREEN,               'OnPreHeroScreen');
-  NameTrigger(Erm.TRIGGER_POST_HEROSCREEN,              'OnPostHeroScreen');
-  NameTrigger(Erm.TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, 'OnDetermineMonInfoDlgUpgrade');
+  NameTrigger(TRIGGER_BA0,  'OnBeforeBattle');
+  NameTrigger(TRIGGER_BA1,  'OnAfterBattle');
+  NameTrigger(TRIGGER_BR,   'OnBattleRound');
+  NameTrigger(TRIGGER_BG0,  'OnBeforeBattleAction');
+  NameTrigger(TRIGGER_BG1,  'OnAfterBattleAction');
+  NameTrigger(TRIGGER_MW0,  'OnWanderingMonsterReach');
+  NameTrigger(TRIGGER_MW1,  'OnWanderingMonsterDeath');
+  NameTrigger(TRIGGER_MR0,  'OnMagicBasicResistance');
+  NameTrigger(TRIGGER_MR1,  'OnMagicCorrectedResistance');
+  NameTrigger(TRIGGER_MR2,  'OnDwarfMagicResistance');
+  NameTrigger(TRIGGER_CM0,  'OnAdventureMapRightMouseClick');
+  NameTrigger(TRIGGER_CM1,  'OnTownMouseClick');
+  NameTrigger(TRIGGER_CM2,  'OnHeroScreenMouseClick');
+  NameTrigger(TRIGGER_CM3,  'OnHeroesMeetScreenMouseClick');
+  NameTrigger(TRIGGER_CM4,  'OnBattleScreenMouseClick');
+  NameTrigger(TRIGGER_CM5,  'OnAdventureMapLeftMouseClick');
+  NameTrigger(TRIGGER_AE0,  'OnUnequipArt');
+  NameTrigger(TRIGGER_AE1,  'OnEquipArt');
+  NameTrigger(TRIGGER_MM0,  'OnBattleMouseHint');
+  NameTrigger(TRIGGER_MM1,  'OnTownMouseHint');
+  NameTrigger(TRIGGER_MP,   'OnMp3MusicChange');
+  NameTrigger(TRIGGER_SN,   'OnSoundPlay');
+  NameTrigger(TRIGGER_MG0,  'OnBeforeAdventureMagic');
+  NameTrigger(TRIGGER_MG1,  'OnAfterAdventureMagic');
+  NameTrigger(TRIGGER_TH0,  'OnEnterTownHall');
+  NameTrigger(TRIGGER_TH1,  'OnLeaveTownHall');
+  NameTrigger(TRIGGER_IP0,  'OnBeforeBattleBeforeDataSend');
+  NameTrigger(TRIGGER_IP1,  'OnBeforeBattleAfterDataReceived');
+  NameTrigger(TRIGGER_IP2,  'OnAfterBattleBeforeDataSend');
+  NameTrigger(TRIGGER_IP3,  'OnAfterBattleAfterDataReceived');
+  NameTrigger(TRIGGER_CO0,  'OnOpenCommanderWindow');
+  NameTrigger(TRIGGER_CO1,  'OnCloseCommanderWindow');
+  NameTrigger(TRIGGER_CO2,  'OnAfterCommanderBuy');
+  NameTrigger(TRIGGER_CO3,  'OnAfterCommanderResurrect');
+  NameTrigger(TRIGGER_BA50, 'OnBeforeBattleForThisPcDefender');
+  NameTrigger(TRIGGER_BA51, 'OnAfterBattleForThisPcDefender');
+  NameTrigger(TRIGGER_BA52, 'OnBeforeBattleUniversal');
+  NameTrigger(TRIGGER_BA53, 'OnAfterBattleUniversal');
+  NameTrigger(TRIGGER_GM0,  'OnAfterLoadGame');
+  NameTrigger(TRIGGER_GM1,  'OnBeforeSaveGame');
+  NameTrigger(TRIGGER_PI,   'OnAfterErmInstructions');
+  NameTrigger(TRIGGER_DL,   'OnCustomDialogEvent');
+  NameTrigger(TRIGGER_HM,   'OnHeroMove');
+  NameTrigger(TRIGGER_HL,   'OnHeroGainLevel');
+  NameTrigger(TRIGGER_BF,   'OnSetupBattlefield');
+  NameTrigger(TRIGGER_MF1,  'OnMonsterPhysicalDamage');
+  NameTrigger(TRIGGER_TL0,  'OnEverySecond');
+  NameTrigger(TRIGGER_TL1,  'OnEvery2Seconds');
+  NameTrigger(TRIGGER_TL2,  'OnEvery5Seconds');
+  NameTrigger(TRIGGER_TL3,  'OnEvery10Seconds');
+  NameTrigger(TRIGGER_TL4,  'OnEveryMinute');
+  NameTrigger(TRIGGER_SAVEGAME_WRITE,               'OnSavegameWrite');
+  NameTrigger(TRIGGER_SAVEGAME_READ,                'OnSavegameRead');
+  NameTrigger(TRIGGER_KEYPRESS,                     'OnKeyPressed');
+  NameTrigger(TRIGGER_OPEN_HEROSCREEN,              'OnOpenHeroScreen');
+  NameTrigger(TRIGGER_CLOSE_HEROSCREEN,             'OnCloseHeroScreen');
+  NameTrigger(TRIGGER_STACK_OBTAINS_TURN,           'OnBattleStackObtainsTurn');
+  NameTrigger(TRIGGER_REGENERATE_PHASE,             'OnBattleRegeneratePhase');
+  NameTrigger(TRIGGER_AFTER_SAVE_GAME,              'OnAfterSaveGame');
+  NameTrigger(TRIGGER_BEFOREHEROINTERACT,           'OnBeforeHeroInteraction');
+  NameTrigger(TRIGGER_AFTERHEROINTERACT,            'OnAfterHeroInteraction');
+  NameTrigger(TRIGGER_ONSTACKTOSTACKDAMAGE,         'OnStackToStackDamage');
+  NameTrigger(TRIGGER_ONAICALCSTACKATTACKEFFECT,    'OnAICalcStackAttackEffect');
+  NameTrigger(TRIGGER_ONCHAT,                       'OnChat');
+  NameTrigger(TRIGGER_ONGAMEENTER,                  'OnGameEnter');
+  NameTrigger(TRIGGER_ONGAMELEAVE,                  'OnGameLeave');
+  NameTrigger(TRIGGER_ONREMOTEEVENT,                'OnRemoteEvent');
+  NameTrigger(TRIGGER_DAILY_TIMER,                  'OnEveryDay');
+  NameTrigger(TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE, 'OnBeforeBattlefieldVisible');
+  NameTrigger(TRIGGER_BATTLEFIELD_VISIBLE,          'OnBattlefieldVisible');
+  NameTrigger(TRIGGER_AFTER_TACTICS_PHASE,          'OnAfterTacticsPhase');
+  NameTrigger(TRIGGER_COMBAT_ROUND,                 'OnCombatRound');
+  NameTrigger(TRIGGER_OPEN_RECRUIT_DLG,             'OnOpenRecruitDlg');
+  NameTrigger(TRIGGER_CLOSE_RECRUIT_DLG,            'OnCloseRecruitDlg');
+  NameTrigger(TRIGGER_RECRUIT_DLG_MOUSE_CLICK,      'OnRecruitDlgMouseClick');
+  NameTrigger(TRIGGER_TOWN_HALL_MOUSE_CLICK,        'OnTownHallMouseClick');
+  NameTrigger(TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK, 'OnKingdomOverviewMouseClick');
+  NameTrigger(TRIGGER_RECRUIT_DLG_RECALC,           'OnRecruitDlgRecalc');
+  NameTrigger(TRIGGER_RECRUIT_DLG_ACTION,           'OnRecruitDlgAction');
+  NameTrigger(TRIGGER_LOAD_HERO_SCREEN,             'OnLoadHeroScreen');
+  NameTrigger(TRIGGER_BUILD_TOWN_BUILDING,          'OnBuildTownBuilding');
+  NameTrigger(TRIGGER_OPEN_TOWN_SCREEN,             'OnOpenTownScreen');
+  NameTrigger(TRIGGER_CLOSE_TOWN_SCREEN,            'OnCloseTownScreen');
+  NameTrigger(TRIGGER_SWITCH_TOWN_SCREEN,           'OnSwitchTownScreen');
+  NameTrigger(TRIGGER_PRE_TOWN_SCREEN,              'OnPreTownScreen');
+  NameTrigger(TRIGGER_POST_TOWN_SCREEN,             'OnPostTownScreen');
+  NameTrigger(TRIGGER_PRE_HEROSCREEN,               'OnPreHeroScreen');
+  NameTrigger(TRIGGER_POST_HEROSCREEN,              'OnPostHeroScreen');
+  NameTrigger(TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, 'OnDetermineMonInfoDlgUpgrade');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
@@ -3300,7 +3298,7 @@ begin
   ZvsMouseEventInfo^        := MouseEventInfo^;
   ZvsAllowDefMouseReaction^ := true;
 
-  Erm.FireErmEvent(TriggerId);
+  FireErmEvent(TriggerId);
 
   result                    := ZvsAllowDefMouseReaction^;
   ZvsMouseEventInfo^        := PrevMouseEventInfo;
@@ -4092,7 +4090,7 @@ begin
     Inc(Caret);
   end else if IndexTypeChar in ['f'..'t'] then begin
     IndexVarType := PARAM_VARTYPE_QUICK;
-    Param.Value  := ord(IndexTypeChar) - ord('f') + Low(Erm.QuickVars^);
+    Param.Value  := ord(IndexTypeChar) - ord('f') + Low(QuickVars^);
     Inc(Caret);
   end else if IndexTypeChar = '$' then begin
     PrevCmdPos := SubCmd.Pos;
@@ -4598,7 +4596,7 @@ begin
   TriggerLoopCallback.Handler := nil;
 
   NumericEventName := 'OnTrigger ' + SysUtils.IntToStr(TriggerId);
-  HumanEventName   := Erm.GetTriggerReadableName(TriggerId);
+  HumanEventName   := GetTriggerReadableName(TriggerId);
   HasEventHandlers := (StartTrigger.Id <> 0) or EventManager.HasEventHandlers(NumericEventName) or EventManager.HasEventHandlers(HumanEventName);
 
   if HasEventHandlers then begin
@@ -4649,7 +4647,7 @@ begin
               end;
 
               Cmd               := Utils.PtrOfs(@Trigger.FirstCmd, i * sizeof(TErmCmd));
-              Erm.ErmErrCmdPtr^ := Cmd.CmdHeader.Value;
+              ErmErrCmdPtr^ := Cmd.CmdHeader.Value;
               CmdId             := Cmd.CmdId;
 
               if CmdId.Id = CMD_IF then begin
@@ -5217,11 +5215,11 @@ begin
   MonType := Hero.MonTypes[Slot];
   MonNum  := Hero.MonNums[Slot];
 
-  if not ZvsApply(@MonType, sizeof(MonType), SubCmd, 2) then begin
+  if ZvsApply(@MonType, sizeof(MonType), SubCmd, 2) = 0 then begin
     IsCheckOnly := false;
   end;
 
-  if not ZvsApply(@MonNum, sizeof(MonNum), SubCmd, 3) then begin
+  if ZvsApply(@MonNum, sizeof(MonNum), SubCmd, 3) = 0 then begin
     IsCheckOnly := false;
   end;
 
@@ -5256,7 +5254,7 @@ begin
     Exp     := ZvsCrExpoSet_GetExpM(ITEM_TYPE_HERO, Hero.Id + Slot * $10000, ExpMod);
     OrigExp := Exp;
 
-    if ZvsApply(@Exp, sizeof(Exp), SubCmd, 4) then begin
+    if ZvsApply(@Exp, sizeof(Exp), SubCmd, 4) <> 0 then begin
       Exp := 0;
     end else begin
       IsCheckOnly := false;
@@ -5438,25 +5436,6 @@ begin
   end;
 end;
 
-// PARAM_VARTYPE_NUM   = 0;
-// PARAM_VARTYPE_FLAG  = 1;
-// PARAM_VARTYPE_QUICK = 2;
-// PARAM_VARTYPE_V     = 3;
-// PARAM_VARTYPE_W     = 4;
-// PARAM_VARTYPE_X     = 5;
-// PARAM_VARTYPE_Y     = 6;
-// PARAM_VARTYPE_Z     = 7;
-// PARAM_VARTYPE_E     = 8;
-// PARAM_VARTYPE_I     = 9;
-// PARAM_VARTYPE_S     = 11;
-// PARAM_VARTYPE_STR   = 12;
-
-// PARAM_VARTYPES_MUTABLE = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
-// PARAM_VARTYPES_VALUES  = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_STR];
-// PARAM_VARTYPES_INTS    = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_I];
-// PARAM_VARTYPES_FLOATS  = [PARAM_VARTYPE_E];
-// PARAM_VARTYPES_STRINGS = [PARAM_VARTYPE_Z, PARAM_VARTYPE_S, PARAM_VARTYPE_STR];
-
 (* Rounds given value to one of the following directions: -1 for floor, 1 for ceil, 0 for away from zero *)
 function RoundFloat32 (Value: single; Direction: integer): integer;
 begin
@@ -5469,10 +5448,10 @@ begin
   end;
 end;
 
-function VR_S (NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
+function VR_S (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
-  BaseVar:        PErmCmdParam;
-  BaseVarType:    integer;
+  VarParam:       PErmCmdParam;
+  VarParamType:   integer;
   ValueParam:     PErmCmdParam;
   ValueParamType: integer;
   Value:          Heroes.TValue;
@@ -5482,8 +5461,8 @@ var
 
 begin
   result         := 1;
-  BaseVar        := @ErmCmd.Params[0];
-  BaseVarType    := BaseVar.GetType();
+  VarParam       := @ErmCmd.Params[0];
+  VarParamType   := VarParam.GetType();
   ValueParam     := @SubCmd.Params[0];
   ValueParamType := ValueParam.GetType();
   UseRounding    := NumParams >= 2;
@@ -5493,20 +5472,20 @@ begin
     result := 0; exit;
   end;
 
-  if BaseVarType in PARAM_VARTYPES_INTS then begin
+  if VarParamType in PARAM_VARTYPES_INTS then begin
     // VR(i32):S(i32)
     if ValueParamType in PARAM_VARTYPES_INTS then begin
       if SubCmd.Modifiers[0] = PARAM_MODIFIER_NONE then begin
-        result := ord(SetErmParamValue(BaseVar, SubCmd.Nums[0]));
+        result := ord(SetErmParamValue(VarParam, SubCmd.Nums[0]));
       end else begin
-        Value.v := GetErmParamValue(BaseVar, ValType);
+        Value.v := GetErmParamValue(VarParam, ValType);
         PutVal(@Value, sizeof(Value), SubCmd.Nums[0], SubCmd.Modifiers[0]);
-        result := ord(SetErmParamValue(BaseVar, Value.v));
+        result := ord(SetErmParamValue(VarParam, Value.v));
       end;
     end
     // VR(i32):S(f32) or VR(i32):S(f32)/(rounding direction)
     else if ValueParamType in PARAM_VARTYPES_FLOATS then begin
-      Value.f       := GetErmParamValue(BaseVar, ValType);
+      Value.f       := GetErmParamValue(VarParam, ValType);
       SecondValue.v := SubCmd.Nums[0];
       Value.f       := ApplyFloatModifier(Value.f, SecondValue.f, SubCmd.Modifiers[0]);
 
@@ -5517,7 +5496,7 @@ begin
         Value.v := trunc(Value.f);
       end;
 
-      result := ord(SetErmParamValue(BaseVar, Value.v));
+      result := ord(SetErmParamValue(VarParam, Value.v));
     end
     // VR(i32):S(wrong types)
     else begin
@@ -5525,10 +5504,10 @@ begin
       result := 0; exit;
     end; // .else
   end
-  else if BaseVarType in PARAM_VARTYPES_FLOATS then begin
+  else if VarParamType in PARAM_VARTYPES_FLOATS then begin
     // VR(n32):S(n32)
     if ValueParamType in PARAM_VARTYPES_NUMERIC then begin
-      Value.v       := GetErmParamValue(BaseVar, ValType);
+      Value.v       := GetErmParamValue(VarParam, ValType);
       SecondValue.v := SubCmd.Nums[0];
 
       if ValueParamType <> PARAM_VARTYPE_E then begin
@@ -5537,18 +5516,18 @@ begin
 
       Value.f := ApplyFloatModifier(Value.f, SecondValue.f, SubCmd.Modifiers[0]);
 
-      result := ord(SetErmParamValue(BaseVar, Value.v));
+      result := ord(SetErmParamValue(VarParam, Value.v));
     end
     // VR(f32):S(wrong types)
     else begin
       ShowErmError('"!!VR:S" - cannot set float variable to non-numeric value');
       result := 0; exit;
     end; // .else
-  // BaseVarType IN PARAM_VARTYPES_STRINGS
+  // VarParamType IN PARAM_VARTYPES_STRINGS
   end else begin
     // VR(str):S(str)
     if ValueParamType in PARAM_VARTYPES_STRINGS then begin
-      result := ord(SetErmParamValue(BaseVar, integer(GetZVarAddr(SubCmd.Nums[0])), FLAG_ASSIGNABLE_STRINGS));
+      result := ord(SetErmParamValue(VarParam, integer(GetZVarAddr(SubCmd.Nums[0])), FLAG_ASSIGNABLE_STRINGS));
     end else begin
       ShowErmError('"!!VR:S" - cannot set string variable to non-string value');
       result := 0; exit;
@@ -5556,10 +5535,10 @@ begin
   end; // .else
 end; // .function VR_S
 
-function VR_Arithmetic (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
+function VR_Arithmetic (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
-  BaseVar:        PErmCmdParam;
-  BaseVarType:    integer;
+  VarParam:       PErmCmdParam;
+  VarParamType:   integer;
   ValueParam:     PErmCmdParam;
   ValueParamType: integer;
   Value:          Heroes.TValue;
@@ -5575,18 +5554,18 @@ var
 
 begin
   result         := 1;
-  BaseVar        := @ErmCmd.Params[0];
-  BaseVarType    := BaseVar.GetType();
+  VarParam       := @ErmCmd.Params[0];
+  VarParamType   := VarParam.GetType();
   ValueParam     := @SubCmd.Params[0];
   ValueParamType := ValueParam.GetType();
-  ResIsInt       := BaseVarType    in PARAM_VARTYPES_INTS;
+  ResIsInt       := VarParamType    in PARAM_VARTYPES_INTS;
   SecondIsInt    := ValueParamType in PARAM_VARTYPES_INTS;
   ArgsAreFloat   := not ResIsInt or not SecondIsInt;
-  Value.v        := GetErmParamValue(BaseVar, ValType);
+  Value.v        := GetErmParamValue(VarParam, ValType);
   SecondValue.v  := SubCmd.Nums[0];
 
   // Handle string concatenations
-  if (Cmd = '+') and (BaseVarType in PARAM_VARTYPES_STRINGS) then begin
+  if (Cmd = '+') and (VarParamType in PARAM_VARTYPES_STRINGS) then begin
     if not ValueParamType in PARAM_VARTYPES_STRINGS then begin
       ShowErmError('"!!VR" - cannot perform string concatenations with non-string values');
       result := 0; exit;
@@ -5594,7 +5573,7 @@ begin
 
     SecondValue.pc := GetZVarAddr(SecondValue.v);
 
-    if BaseVarType = PARAM_VARTYPE_Z then begin
+    if VarParamType = PARAM_VARTYPE_Z then begin
       if not IsMutableZVarIndex(Value.v) then begin
         ShowErmError(Format('"!!VR" - cannot modify read-only z-variable with index: %d', [Value.v]));
         result := 0; exit;
@@ -5610,12 +5589,12 @@ begin
       ServiceMemAllocator.AllocPage;
       TempValue.pc := ServiceMemAllocator.AllocStr(ResultStrLen);
       StrLib.Concat(TempValue.pc, ResultStrLen + 1, Value.pc, FirstStrLen, SecondValue.pc, SecondStrLen);
-      SetErmParamValue(BaseVar, TempValue.v, FLAG_ASSIGNABLE_STRINGS);
+      SetErmParamValue(VarParam, TempValue.v, FLAG_ASSIGNABLE_STRINGS);
       ServiceMemAllocator.FreePage;
     end; // .else
 
     exit;
-  end else if not ((BaseVarType in PARAM_VARTYPES_NUMERIC) and (ValueParamType in PARAM_VARTYPES_NUMERIC)) then begin
+  end else if not ((VarParamType in PARAM_VARTYPES_NUMERIC) and (ValueParamType in PARAM_VARTYPES_NUMERIC)) then begin
     ShowErmError('"!!VR" - cannot perform arithmetic operations with non-numeric values');
     result := 0; exit;
   end; // .elseif
@@ -5679,7 +5658,7 @@ begin
       end; // .switch Cmd
     end; // case ':', '%'
   else
-    ShowMessage('!!VR - impossible case in math operation');
+    ShowErmError('"!!VR" - impossible case in math operation');
     result := 0; exit;
   end; // .switch Cmd
 
@@ -5691,12 +5670,12 @@ begin
     end;
   end;
 
-  result := ord(SetErmParamValue(BaseVar, Value.v));
+  result := ord(SetErmParamValue(VarParam, Value.v));
 end; // .function VR_Arithmetic
 
-function VR_Bits (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
+function VR_Bits (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
-  BaseVar:     PErmCmdParam;
+  VarParam:    PErmCmdParam;
   ValueParam:  PErmCmdParam;
   Value:       Heroes.TValue;
   SecondValue: Heroes.TValue;
@@ -5704,15 +5683,15 @@ var
 
 begin
   result     := 1;
-  BaseVar    := @ErmCmd.Params[0];
+  VarParam   := @ErmCmd.Params[0];
   ValueParam := @SubCmd.Params[0];
 
-  if not((BaseVar.GetType() in PARAM_VARTYPES_INTS) and (ValueParam.GetType() in PARAM_VARTYPES_INTS)) then begin
+  if not((VarParam.GetType() in PARAM_VARTYPES_INTS) and (ValueParam.GetType() in PARAM_VARTYPES_INTS)) then begin
     ShowErmError('"!!VR" - bit operations are supported for integers only');
     result := 0; exit;
   end;
   
-  Value.v       := GetErmParamValue(BaseVar, ValType);
+  Value.v       := GetErmParamValue(VarParam, ValType);
   SecondValue.v := SubCmd.Nums[0];
 
   case Cmd of
@@ -5732,29 +5711,29 @@ begin
       Value.v := Value.v and not SecondValue.v;
     end; // case ':', '%'
   else
-    ShowMessage('!!VR - impossible case in bit operation');
+    ShowErmError('"!!VR" - impossible case in bit operation');
     result := 0; exit;
   end; // .switch Cmd
 
-  result := ord(SetErmParamValue(BaseVar, Value.v));
+  result := ord(SetErmParamValue(VarParam, Value.v));
 end; // .function VR_Bits
 
-function VR_V (NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer;
+function VR_V (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
-  BaseVar:        PErmCmdParam;
-  BaseVarType:    integer;
+  VarParam:        PErmCmdParam;
+  VarParamType:    integer;
   ValueParam:     PErmCmdParam;
   ValueParamType: integer;
   SecondValue:    Heroes.TValue;
 
 begin
   result         := 1;
-  BaseVar        := @ErmCmd.Params[0];
-  BaseVarType    := BaseVar.GetType();
+  VarParam        := @ErmCmd.Params[0];
+  VarParamType    := VarParam.GetType();
   ValueParam     := @SubCmd.Params[0];
   ValueParamType := ValueParam.GetType();
 
-  if not (BaseVarType in PARAM_VARTYPES_NUMERIC) then begin
+  if not (VarParamType in PARAM_VARTYPES_NUMERIC) then begin
     ShowErmError('"!!VR:V" - target variable type must be number (integer or float)');
     result := 0; exit;
   end;
@@ -5766,16 +5745,81 @@ begin
 
   SecondValue.pc := GetZVarAddr(SubCmd.Nums[0]);
 
-  if BaseVarType = PARAM_VARTYPE_E then begin
+  if VarParamType = PARAM_VARTYPE_E then begin
     SecondValue.f := Heroes.a2f(SecondValue.pc);
   end else begin
     SecondValue.v := Heroes.a2i(SecondValue.pc);
   end;
 
-  result := ord(SetErmParamValue(BaseVar, SecondValue.v));
+  result := ord(SetErmParamValue(VarParam, SecondValue.v));
 end; // .function VR_V
 
-function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
+function VR_C (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
+var
+  VarParam:     PErmCmdParam;
+  VarParamType: integer;
+  StartInd:     integer;
+  DestVar:      pinteger;
+  i:            integer;
+
+  (* Returns nil on invalid index/range *)
+  function GetVarArrayAddr (VarType, StartInd, NumItems: integer): {n} pinteger;
+  var
+    EndInd: integer;
+
+  begin
+    result := nil;
+    EndInd := StartInd + NumItems - 1;
+
+    if VarType = PARAM_VARTYPE_V then begin
+      if (StartInd >= Low(v^)) and (EndInd <= High(v^)) then begin
+        result := @v[StartInd];
+      end;
+    end else if VarType = PARAM_VARTYPE_W then begin
+      if (StartInd >= Low(w[1])) and (EndInd <= High(w[1])) then begin
+        result := @w[ZvsWHero^][StartInd];
+      end;
+    end else if VarType = PARAM_VARTYPE_X then begin
+      if (StartInd >= Low(x^)) and (EndInd <= High(x^)) then begin
+        result := @x[StartInd];
+      end;
+    end else if VarType = PARAM_VARTYPE_Y then begin
+      if (StartInd >= Low(y^)) and (EndInd <= High(y^)) then begin
+        result := @y[StartInd];
+      end else if (-StartInd >= Low(ny^)) and (-EndInd <= High(ny^)) then begin
+        result := @ny[-StartInd];
+      end;
+    end;
+  end; // .function GetVarArrayAddr
+
+begin
+  result       := 1;
+  VarParam     := @ErmCmd.Params[0];
+  VarParamType := VarParam.GetType();
+
+  if not (VarParamType in PARAM_VARTYPES_ARRAYISH_INTS) then begin
+    ShowErmError('"!!VR:C" - only x, y, v, w variables are supported for mass assignment');
+    result := 0; exit;
+  end;
+  
+  StartInd := ZvsGetVarValIndex(VarParam);
+  DestVar  := GetVarArrayAddr(VarParamType, StartInd, NumParams);
+
+  if DestVar = nil then begin
+    ShowErmError(Format('"!!VR:C" first/last index is out of range: %d..%d', [StartInd, StartInd + NumParams - 1]));
+    result := 0; exit;
+  end;
+
+  for i := 0 to NumParams - 1 do begin
+    if ZvsApply(DestVar, sizeof(DestVar^), SubCmd, i) = -1 then begin
+      result := 0; exit;
+    end;
+
+    Inc(DestVar);
+  end;
+end; // .function VR_C
+
+function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer; cdecl;
 const
   MUTABLE_TYPES = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
 
@@ -5790,6 +5834,7 @@ begin
     '+', '-', '*', ':', '%': result := VR_Arithmetic(Cmd, NumParams, ErmCmd, SubCmd);
     '&', '|', 'X', '~':      result := VR_Bits(Cmd, NumParams, ErmCmd, SubCmd);
     'V':                     result := VR_V(NumParams, ErmCmd, SubCmd);
+    'C':                     result := VR_C(NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
