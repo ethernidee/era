@@ -1081,6 +1081,11 @@ begin
   Utils.SetPcharValue(Str, Value, sizeof(z[1]));
 end;
 
+function IsMutableZVarIndex (Ind: integer): boolean;
+begin
+  result := (Ind > High(z^)) or (-Ind in [Low(nz^)..High(nz^)]);
+end;
+
 function GetZVarAddr (Ind: integer): pchar;
 begin
   if Ind > High(z^) then begin
@@ -5561,10 +5566,14 @@ var
   ValueParamType: integer;
   Value:          Heroes.TValue;
   SecondValue:    Heroes.TValue;
+  TempValue:      Heroes.TValue;
   ValType:        integer;
   ResIsInt:       longbool;
   SecondIsInt:    longbool;
   ArgsAreFloat:   longbool;
+  FirstStrLen:    integer;
+  SecondStrLen:   integer;
+  ResultStrLen:   integer;
 
 begin
   result         := 1;
@@ -5572,16 +5581,46 @@ begin
   BaseVarType    := BaseVar.GetType();
   ValueParam     := @SubCmd.Params[0];
   ValueParamType := ValueParam.GetType();
-  ResIsInt       := BaseVarType in PARAM_VARTYPES_INTS;
+  ResIsInt       := BaseVarType    in PARAM_VARTYPES_INTS;
   SecondIsInt    := ValueParamType in PARAM_VARTYPES_INTS;
   ArgsAreFloat   := not ResIsInt or not SecondIsInt;
   Value.v        := GetErmParamValue(BaseVar, ValType);
   SecondValue.v  := SubCmd.Nums[0];
 
-  if not ((BaseVarType in PARAM_VARTYPES_NUMERIC) and (ValueParamType in PARAM_VARTYPES_NUMERIC)) then begin
+  // Handle string concatenations
+  if (Cmd = '+') and (BaseVarType in PARAM_VARTYPES_STRINGS) then begin
+    if not ValueParamType in PARAM_VARTYPES_STRINGS then begin
+      ShowErmError('"!!VR" - cannot perform string concatenations with non-string values');
+      result := 0; exit;
+    end;
+
+    SecondValue.pc := GetZVarAddr(SecondValue.v);
+
+    if BaseVarType = PARAM_VARTYPE_Z then begin
+      if not IsMutableZVarIndex(Value.v) then begin
+        ShowErmError(Format('"!!VR" - cannot modify read-only z-variable with index: %d', [Value.v]));
+        result := 0; exit;
+      end;
+
+      Value.pc := GetZVarAddr(Value.v);
+      StrLib.Concat(Value.pc, sizeof(z^[1]), Value.pc, -1, SecondValue.pc, -1);
+    end else begin
+      Value.pc     := GetZVarAddr(Value.v);
+      FirstStrLen  := Windows.LStrLen(Value.pc);
+      SecondStrLen := Windows.LStrLen(SecondValue.pc);
+      ResultStrLen := FirstStrLen + SecondStrLen;
+      ServiceMemAllocator.AllocPage;
+      TempValue.pc := ServiceMemAllocator.AllocStr(ResultStrLen);
+      StrLib.Concat(TempValue.pc, ResultStrLen + 1, Value.pc, FirstStrLen, SecondValue.pc, SecondStrLen);
+      SetErmParamValue(BaseVar, TempValue.v, FLAG_ASSIGNABLE_STRINGS);
+      ServiceMemAllocator.FreePage;
+    end; // .else
+
+    exit;
+  end else if not ((BaseVarType in PARAM_VARTYPES_NUMERIC) and (ValueParamType in PARAM_VARTYPES_NUMERIC)) then begin
     ShowErmError('"!!VR" - cannot perform arithmetic operations with non-numeric values');
     result := 0; exit;
-  end;
+  end; // .elseif
 
   // Convert both arguments to float if any of them is float
   if ArgsAreFloat then begin
