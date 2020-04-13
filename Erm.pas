@@ -1418,7 +1418,7 @@ const
   IDENT_CHARS         = ANY_CHAR - ['(', ')', #10, #13];
   LABEL_CHARS         = ANY_CHAR - [']', #10, #13];
   SPECIAL_CHARS       = ['[', '!'];
-  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';', '$'];
+  INCMD_SPECIAL_CHARS = ['[', '(', '^', ';', '%'];
   CMD_END_CHARSET     = [';', #0];
   SAFE_BLANKS         = [#1..#32];
   NUMBER_START_CHARS  = ['+', '-', '0'..'9'];
@@ -2160,8 +2160,8 @@ var
             IsInStr := not IsInStr;
           end; // .case '^'
 
-          '$': begin
-            if IsInStr and (Scanner.CharsRel[1] in ['(', '$']) then begin
+          '%': begin
+            if IsInStr then begin
               case Scanner.CharsRel[1] of
                 '(': begin
                   FlushMarked;
@@ -2170,10 +2170,8 @@ var
                   MarkPos;
                 end;
 
-                '$': begin
-                  FlushMarked;
+                '%': begin
                   Scanner.GotoRelPos(+2);
-                  MarkPos;
                 end;
               else
                 Scanner.GotoNextChar;
