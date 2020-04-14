@@ -735,6 +735,16 @@ type
     MaxInd: integer;
   end;
 
+  TTriggerLocalStr = class
+   protected
+   {O} Value:  pchar;
+       zIndex: integer;
+
+   public
+    constructor Create ({n} Str: pchar; StrLen: integer = -1);
+    destructor Destroy; override;
+  end;
+
 var
 {O} FuncNames:         DataLib.TDict {OF FuncId: integer};
 {O} FuncIdToNameMap:   DataLib.TObjDict {O} {OF TString};
@@ -834,6 +844,32 @@ end;
 function TErmTrigger.GetSize: integer;
 begin
   result := sizeof(Self) + Self.NumCmds * sizeof(TErmCmd);
+end;
+
+function AllocLocalErtIndex: integer; forward;
+
+constructor TTriggerLocalStr.Create({n} Str: pchar; StrLen: integer = -1);
+begin
+  if Str = nil then begin
+    Str    := '';
+    StrLen := 0;
+  end;
+
+  if StrLen < 0 then begin
+    StrLen := Windows.LStrLen(Str);
+  end;
+
+  GetMem(Self.Value, StrLen + 1);
+  Utils.CopyMem(StrLen, Str, Self.Value);
+  Self.Value[StrLen]           := #0;
+  Self.zIndex                  := AllocLocalErtIndex;
+  ErtStrings[Ptr(Self.zIndex)] := Self.Value;
+end;
+
+destructor TTriggerLocalStr.Destroy;
+begin
+  FreeMem(Self.Value);
+  ErtStrings.DeleteItem(Ptr(Self.zIndex));
 end;
 
 procedure ShowErmError (const Error: string);
@@ -3365,10 +3401,7 @@ begin
   CmdLocalObjects  := NewItem;
 end;
 
-function CreateLocalErt (Str: pchar; StrLen: integer = -1): integer;
-var
-  Buf: pchar;
-
+function AllocLocalErtIndex: integer;
 begin
   result := LocalErtAutoIndex;
   Inc(LocalErtAutoIndex);
@@ -3376,6 +3409,14 @@ begin
   if LocalErtAutoIndex >= LAST_LOCAL_ERT_INDEX then begin
     LocalErtAutoIndex := FIRST_LOCAL_ERT_INDEX;
   end;
+end;
+
+function CreateUnregisteredLocalErt (Str: pchar; StrLen: integer = -1): integer;
+var
+  Buf: pchar;
+
+begin
+  result := AllocLocalErtIndex;
 
   if StrLen = -1 then begin
     StrLen := SysUtils.StrLen(Str);
@@ -3384,8 +3425,23 @@ begin
   Buf := ServiceMemAllocator.AllocStr(StrLen);
   Utils.CopyMem(StrLen, Str, Buf);
   ErtStrings[Ptr(result)] := Buf;
+end; // .function CreateUnregisteredLocalErt
+
+function CreateCmdLocalErt (Str: pchar; StrLen: integer = -1): integer;
+begin
+  result := CreateUnregisteredLocalErt(Str, StrLen);
   RegisterCmdLocalObject(result);
-end; // .function CreateLocalErt
+end;
+
+function CreateTriggerLocalErt (Str: pchar; StrLen: integer = -1): integer;
+var
+{O} TriggerLocalStr: TTriggerLocalStr;
+
+begin
+  TriggerLocalStr := TTriggerLocalStr.Create(Str, StrLen);
+  result          := TriggerLocalStr.zIndex;
+  RegisterTriggerLocalObject(TriggerLocalStr);
+end;
 
 (* Extract i^...^ or s^...^ variable name. BufPos must point to first name character *)
 function ExtractErmStrLiteral (BufPos: pchar): string;
@@ -3595,7 +3651,7 @@ begin
             result := integer(ServiceMemAllocator.AllocStr(StrLen));
             Utils.CopyMem(StrLen, StrLiteral, pchar(result));
           end else begin
-            result := CreateLocalErt(StrLiteral, StrLen);
+            result := CreateCmdLocalErt(StrLiteral, StrLen);
           end;
         end; // .case PARAM_VARTYPE_STR
 
@@ -3681,9 +3737,9 @@ begin
             end;
           end else begin
             if AssocVarValue = nil then begin
-              result := CreateLocalErt('', 0);
+              result := CreateCmdLocalErt('', 0);
             end else begin
-              result := CreateLocalErt(pchar(AssocVarValue.StrValue), Length(AssocVarValue.StrValue));
+              result := CreateCmdLocalErt(pchar(AssocVarValue.StrValue), Length(AssocVarValue.StrValue));
             end;
           end; // .else
         end; // .case PARAM_VARTYPE_S
@@ -5819,6 +5875,35 @@ begin
   end;
 end; // .function VR_C
 
+function VR_Z (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
+var
+  VarParam:       PErmCmdParam;
+  VarParamType:   integer;
+  ValueParam:     PErmCmdParam;
+  ValueParamType: integer;
+  Value:          Heroes.TValue;
+
+begin
+  result         := 1;
+  VarParam       := @ErmCmd.Params[0];
+  VarParamType   := VarParam.GetType();
+  ValueParam     := @SubCmd.Params[0];
+  ValueParamType := ValueParam.GetType();
+  Value.v        := SubCmd.Nums[0];
+
+  if not (VarParamType in PARAM_VARTYPES_INTS) then begin
+    ShowErmError('"!!VR:Z" - base variable must be integer to store trigger local z-variable index');
+    result := 0; exit;
+  end;
+
+  if not (ValueParamType in PARAM_VARTYPES_STRINGS) then begin
+    ShowErmError('"!!VR:Z" - value must be string');
+    result := 0; exit;
+  end;
+
+  result := ord(SetErmParamValue(VarParam, CreateTriggerLocalErt(GetZVarAddr(Value.v))));
+end; // .function VR_Z
+
 function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer; cdecl;
 const
   MUTABLE_TYPES = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
@@ -5835,6 +5920,7 @@ begin
     '&', '|', 'X', '~':      result := VR_Bits(Cmd, NumParams, ErmCmd, SubCmd);
     'V':                     result := VR_V(NumParams, ErmCmd, SubCmd);
     'C':                     result := VR_C(NumParams, ErmCmd, SubCmd);
+    'Z':                     result := VR_Z(NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
