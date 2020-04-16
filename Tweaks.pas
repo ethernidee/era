@@ -745,15 +745,6 @@ asm
   call RandMt.RandomRangeMt
 end;
 
-function NewTimeRandom (Min, Max: integer): integer; cdecl;
-begin
-  if Min > Max then begin
-    result := Min;
-  end else begin
-    result := RandMt.RandomRangeMt(Min, Max);
-  end;
-end;
-
 procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
 begin
   CombatRound := -1000000000;
@@ -1149,9 +1140,6 @@ begin
     Core.ApiHook(@Hook_SRand, Core.HOOKTYPE_JUMP, Ptr($50C7B0));
     Core.ApiHook(@Hook_Rand,  Core.HOOKTYPE_JUMP, Ptr($50C7C0));
   end;
-
-  (* Make VR:T a Mersenne Twister generator *)
-  Core.ApiHook(@NewTimeRandom, Core.HOOKTYPE_CALL, Ptr($734D24));
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;

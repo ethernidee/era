@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   SysUtils, Math, Windows,
   Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
-  Lists, StrLib, Alg,
+  Lists, StrLib, Alg, RandMt,
   Core, Heroes, GameExt, Trans, RscLists, EventMan;
 
 type
@@ -5904,6 +5904,46 @@ begin
   result := ord(SetErmParamValue(VarParam, CreateTriggerLocalErt(GetZVarAddr(Value.v))));
 end; // .function VR_Z
 
+function VR_Random (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
+var
+  VarParam: PErmCmdParam;
+  ValType:  integer;
+
+begin
+  result   := 1;
+  VarParam := @ErmCmd.Params[0];
+
+  if not(VarParam.GetType() in PARAM_VARTYPES_INTS) then begin
+    ShowErmError('"!!VR" - random functions can operate on integers only');
+    result := 0; exit;
+  end;
+
+  case Cmd of
+    'R': begin
+      if NumParams >= 3 then begin
+        result := ord(SetErmParamValue(VarParam, Heroes.ZvsRandom(SubCmd.Nums[1], SubCmd.Nums[2])));
+      end else if NumParams >= 2 then begin
+        Heroes.SRand(SubCmd.Nums[1]);
+      end else begin
+        result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + Heroes.Rand(0, SubCmd.Nums[0])));
+      end;
+    end;
+
+    'T': begin
+      if NumParams >= 3 then begin
+        result := ord(SetErmParamValue(VarParam, RandMt.RandomRangeMt(SubCmd.Nums[1], SubCmd.Nums[2])));
+      end else if NumParams >= 2 then begin
+        RandMt.InitMt(SubCmd.Nums[1]);
+      end else begin
+        result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + RandMt.RandomRangeMt(0, SubCmd.Nums[0])));
+      end;
+    end;
+  else
+    ShowErmError('"!!VR" - impossible case in random operation');
+    result := 0; exit;
+  end; // .switch Cmd
+end; // .function VR_Random
+
 function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer; cdecl;
 const
   MUTABLE_TYPES = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
@@ -5921,6 +5961,7 @@ begin
     'V':                     result := VR_V(NumParams, ErmCmd, SubCmd);
     'C':                     result := VR_C(NumParams, ErmCmd, SubCmd);
     'Z':                     result := VR_Z(NumParams, ErmCmd, SubCmd);
+    'R', 'T':                result := VR_Random(Cmd, NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
@@ -6098,90 +6139,6 @@ begin
     Context.RetAddr := Ptr($72D19E);
   end;
 end; // .function Hook_FU_EXT
-
-function Hook_VR_C (Context: ApiJack.PHookContext): longbool; stdcall;
-var
-  SubCmd:    PErmSubCmd;
-  VarParam:  PErmCmdParam;
-  NumParams: integer;
-  StartInd:  integer;
-  DestVar:   pinteger;
-  i:         integer;
-
-  (* Returns nil on invalid index/range *)
-  function GetVarArrayAddr (VarType, StartInd, NumItems: integer): {n} pinteger;
-  var
-    EndInd: integer;
-
-  begin
-    result := nil;
-    EndInd := StartInd + NumItems - 1;
-
-    if VarType = PARAM_VARTYPE_V then begin
-      if (StartInd >= Low(v^)) and (EndInd <= High(v^)) then begin
-        result := @v[StartInd];
-      end;
-    end else if VarType = PARAM_VARTYPE_W then begin
-      if (StartInd >= Low(w[1])) and (EndInd <= High(w[1])) then begin
-        result := @w[ZvsWHero^][StartInd];
-      end;
-    end else if VarType = PARAM_VARTYPE_X then begin
-      if (StartInd >= Low(x^)) and (EndInd <= High(x^)) then begin
-        result := @x[StartInd];
-      end;
-    end else if VarType = PARAM_VARTYPE_Y then begin
-      if (StartInd >= Low(y^)) and (EndInd <= High(y^)) then begin
-        result := @y[StartInd];
-      end else if (-StartInd >= Low(ny^)) and (-EndInd <= High(ny^)) then begin
-        result := @ny[-StartInd];
-      end;
-    end;
-  end; // .function GetVarArrayAddr
-
-begin
-  result := not (Context.ECX in [3..6]);
-
-  if not result then begin
-    SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
-    NumParams := pinteger(Context.EBP + $0C)^;
-    VarParam  := PErmCmdParam(ppointer(Context.EBP - $8)^);
-    // * * * * * //
-    StartInd := ZvsGetVarValIndex(VarParam);
-    DestVar  := GetVarArrayAddr(Context.ECX, StartInd, NumParams);
-
-    if DestVar = nil then begin
-      ShowErmError(Format('!!VR:C first/last index is out of range: %d..%d', [StartInd, StartInd + NumParams - 1]));
-      Context.RetAddr := Ptr($7355FB);
-      exit;
-    end;
-
-    for i := 0 to NumParams - 1 do begin
-      ZvsApply(DestVar, sizeof(DestVar^), SubCmd, i);
-      Inc(DestVar);
-    end;
-
-    Context.RetAddr := Ptr($735F06);
-  end; // .if
-end; // .function Hook_VR_C
-
-function Hook_VR_R (Context: ApiJack.PHookContext): longbool; stdcall;
-var
-  SubCmd:    PErmSubCmd;
-  VarParam:  PErmCmdParam;
-  NumParams: integer;
-
-begin
-  NumParams := pinteger(Context.EBP + $0C)^;
-  result    := NumParams <> 3;
-
-  if not result then begin
-    SubCmd   := PErmSubCmd(ppointer(Context.EBP + $14)^);
-    VarParam := PErmCmdParam(ppointer(Context.EBP - $8)^);
-    // * * * * * //
-    SetErmParamValue(VarParam, Heroes.ZvsRandom(SubCmd.Nums[1], SubCmd.Nums[2]));
-    Context.RetAddr := Ptr($735F01);
-  end;
-end; // .function Hook_VR_R
 
 function IntCompareFast (a, b: integer): integer; inline;
 begin
@@ -6587,13 +6544,6 @@ begin
 
   // Add FU:A/G commands
   ApiJack.HookCode(Ptr($72D181), @Hook_FU_EXT);
-
-  // Allow VR:C command to handle v, x, w and y-variables
-  ApiJack.HookCode(Ptr($7355B7), @Hook_VR_C);
-
-  // Add VR:R0/min/max command to generate random value in specified range and SET it to value, not add
-  Core.p.WriteDataPatch(Ptr($734C43), ['03']);
-  ApiJack.HookCode(Ptr($734CB3), @Hook_VR_R);
 
   (* Rewrite ZVS Call_Function / remote function call handling *)
   Core.ApiHook(@OnFuncCalledRemotely, Core.HOOKTYPE_JUMP, Ptr($72D1D1));
