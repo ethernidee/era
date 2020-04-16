@@ -782,6 +782,8 @@ var
 
 function  MemAlloc (Size: integer): {On} pointer;
 procedure MemFreeAndNil (var p);
+function  Rand (Min, Max: integer): integer;
+procedure SRand (Seed: integer);
 procedure GZipWrite (Count: integer; {n} Addr: pointer);
 function  GzipRead (Count: integer; {n} Addr: pointer): integer;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
@@ -1160,6 +1162,16 @@ begin
     MemFree(Temp);
   end;
 end; // .procedure MemFreeAndNil
+
+function Rand (Min, Max: integer): integer;
+begin
+  result := PatchApi.Call(FASTCALL_, Ptr($50C7C0), [Min, Max]);
+end;
+
+procedure SRand (Seed: integer);
+begin
+  PatchApi.Call(THISCALL_, Ptr($50C7B0), [Seed]);
+end;
 
 function GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
 begin
