@@ -5946,8 +5946,9 @@ end; // .function VR_Random
 
 function VR_Strings (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
-  VarParam: PErmCmdParam;
-  ValType:  integer;
+  VarParam:   PErmCmdParam;
+  ValType:    integer;
+  ValueParam: PErmCmdParam;
 
 begin
   result   := 1;
@@ -5968,6 +5969,20 @@ begin
       f[SubCmd.Nums[0]] := StrLib.IsEmpty(pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX)));
       result            := ord(ValType <> VALTYPE_ERROR);
     end;
+
+    'M': begin
+      case SubCmd.Nums[0] of
+        // M1/z#1/#2/#3; get a substring
+        1: begin
+          if NumParams < 4 then begin
+            ShowErmError('"!!VR:M1" - insufficient parameters');
+            result := 0; exit;
+          end;
+          
+          result := ord(SetErmParamValue(VarParam, integer(pchar(StrLib.Substr(GetZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2], SubCmd.Nums[3]))), FLAG_ASSIGNABLE_STRINGS));
+        end;
+      end; // .switch M#
+    end; // .switch Cmd
   else
     ShowErmError('"!!VR" - impossible case in random operation');
     result := 0; exit;
@@ -5992,7 +6007,7 @@ begin
     'C':                     result := VR_C(NumParams, ErmCmd, SubCmd);
     'Z':                     result := VR_Z(NumParams, ErmCmd, SubCmd);
     'R', 'T':                result := VR_Random(Cmd, NumParams, ErmCmd, SubCmd);
-    'H':                     result := VR_Strings(Cmd, NumParams, ErmCmd, SubCmd);
+    'H', 'M':                result := VR_Strings(Cmd, NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
