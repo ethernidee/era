@@ -619,6 +619,8 @@ const
 
   ZvsAddItemToWogOptions: function (Script, Page, Group, Item, Default, Multip, Internal: integer; Text, Hint, PopUp: pchar): integer cdecl = Ptr($777E0C);
 
+  ZvsIntToStr (* Itoa *): procedure (Value: integer; Buf: pchar; Base: integer) cdecl = Ptr($71682E);
+
 
 var
 {O} LoadedErsFiles:  {O} TList {of Heroes.PTxtFile};
@@ -5990,9 +5992,11 @@ end; // .function VrGetNthToken
 
 function VR_Strings (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
-  VarParam:   PErmCmdParam;
-  ValType:    integer;
-  ValueParam: PErmCmdParam;
+  VarParam:    PErmCmdParam;
+  ValType:     integer;
+  ValueParam:  PErmCmdParam;
+  SecondValue: Heroes.TValue;
+  TempBuf:     array [0..35] of char;
 
 begin
   result   := 1;
@@ -6034,6 +6038,23 @@ begin
           end;
           
           result := ord(SetErmParamValue(VarParam, integer(pchar(VrGetNthToken(GetZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2]))), FLAG_ASSIGNABLE_STRINGS));
+        end;
+
+        // M3/#1[/#2]; convert integer to string
+        3: begin
+          if NumParams < 2 then begin
+            ShowErmError('"!!VR:M3" - insufficient parameters');
+            result := 0; exit;
+          end;
+
+          SecondValue.v := 10;
+
+          if NumParams > 2 then begin
+            SecondValue.v := Alg.ToRange(SubCmd.Nums[2], 2, 16);
+          end;
+
+          ZvsIntToStr(SubCmd.Nums[1], @TempBuf, SecondValue.v);
+          result := ord(SetErmParamValue(VarParam, integer(@TempBuf[0]), FLAG_ASSIGNABLE_STRINGS));
         end;
       end; // .switch M#
     end; // .switch Cmd
