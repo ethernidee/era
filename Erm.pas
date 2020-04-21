@@ -5944,6 +5944,50 @@ begin
   end; // .switch Cmd
 end; // .function VR_Random
 
+function VrGetNthToken ({n} Str: pchar; TokenInd: integer): string;
+const
+  DELIM_CHARS = [#1..#32, ',', '.'];
+  STOP_CHARS  = [#0] + DELIM_CHARS;
+
+var
+  CurrTokenInd: integer;
+  Start:        pchar;
+
+begin
+  result := '';
+
+  if (Str = nil) or (Str^ = #0) or (TokenInd < 0) then begin
+    exit;
+  end;
+
+  CurrTokenInd := 0;
+
+  while (Str^ <> #0) and (CurrTokenInd < TokenInd) do begin
+    while not (Str^ in STOP_CHARS) do begin
+      Inc(Str);
+    end;
+
+    while Str^ in DELIM_CHARS do begin
+      Inc(Str);
+    end;
+
+    Inc(CurrTokenInd);
+  end;
+
+  if Str^ = #0 then begin
+    exit;
+  end;
+
+  Start := Str;
+
+  while not (Str^ in STOP_CHARS) do begin
+    Inc(Str);
+  end;
+
+  SetLength(result, integer(Str) - integer(Start));
+  Utils.CopyMem(Length(result), Start, pointer(result));
+end; // .function VrGetNthToken
+
 function VR_Strings (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
   VarParam:   PErmCmdParam;
@@ -5980,6 +6024,16 @@ begin
           end;
           
           result := ord(SetErmParamValue(VarParam, integer(pchar(StrLib.Substr(GetZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2], SubCmd.Nums[3]))), FLAG_ASSIGNABLE_STRINGS));
+        end;
+
+        // M2/z#1/#2; get nth word
+        2: begin
+          if NumParams < 3 then begin
+            ShowErmError('"!!VR:M2" - insufficient parameters');
+            result := 0; exit;
+          end;
+          
+          result := ord(SetErmParamValue(VarParam, integer(pchar(VrGetNthToken(GetZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2]))), FLAG_ASSIGNABLE_STRINGS));
         end;
       end; // .switch M#
     end; // .switch Cmd
