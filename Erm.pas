@@ -5996,6 +5996,7 @@ var
   ValType:     integer;
   ValueParam:  PErmCmdParam;
   SecondValue: Heroes.TValue;
+  i:           integer;
   TempBuf:     array [0..35] of char;
 
 begin
@@ -6067,6 +6068,28 @@ begin
           SecondValue.v := StrLib.StrLen(pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX)));
           
           result := ord(SetErmParamValue(@SubCmd.Params[1], SecondValue.v));
+        end;
+
+        // M5/$; get first non-space character position or -1
+        5: begin
+          if NumParams < 2 then begin
+            ShowErmError('"!!VR:M5" - insufficient parameters');
+            result := 0; exit;
+          end;
+
+          SecondValue.pc := pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX));
+          i              := 0;
+
+          while SecondValue.pc^ in [#1..#32] do begin
+            Inc(SecondValue.pc);
+            Inc(i);
+          end;
+
+          if SecondValue.pc^ = #0 then begin
+            i := -1;
+          end;
+          
+          result := ord(SetErmParamValue(@SubCmd.Params[1], i));
         end;
       end; // .switch M#
     end; // .switch Cmd
