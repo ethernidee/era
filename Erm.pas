@@ -6056,6 +6056,18 @@ begin
           ZvsIntToStr(SubCmd.Nums[1], @TempBuf, SecondValue.v);
           result := ord(SetErmParamValue(VarParam, integer(@TempBuf[0]), FLAG_ASSIGNABLE_STRINGS));
         end;
+
+        // M4/$; get string length
+        4: begin
+          if NumParams < 2 then begin
+            ShowErmError('"!!VR:M4" - insufficient parameters');
+            result := 0; exit;
+          end;
+
+          SecondValue.v := StrLib.StrLen(pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX)));
+          
+          result := ord(SetErmParamValue(@SubCmd.Params[1], SecondValue.v));
+        end;
       end; // .switch M#
     end; // .switch Cmd
   else
