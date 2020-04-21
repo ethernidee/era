@@ -6117,9 +6117,21 @@ begin
           result := ord(SetErmParamValue(@SubCmd.Params[1], SecondValue.v - Value.v - i - 1));
         end;
       end; // .switch M#
-    end; // .switch Cmd
+    end; // .case 'M'
+
+    'U': begin
+      if not (SubCmd.Params[0].GetType() in PARAM_VARTYPES_STRINGS) then begin
+        ShowErmError('"!!VR:U" - expected substring, not a number');
+        result := 0; exit;
+      end;
+
+      Value.pc       := pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX));
+      SecondValue.pc := pchar(GetErmParamValue(@SubCmd.Params[0], ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX));
+      
+      f[1] := System.Pos(SysUtils.Trim(SysUtils.AnsiLowerCase(SecondValue.pc)), SysUtils.Trim(SysUtils.AnsiLowerCase(Value.pc))) <> 0;
+    end;
   else
-    ShowErmError('"!!VR" - impossible case in random operation');
+    ShowErmError('"!!VR" - impossible case in string operation');
     result := 0; exit;
   end; // .switch Cmd
 end; // .function VR_Strings
@@ -6142,7 +6154,7 @@ begin
     'C':                     result := VR_C(NumParams, ErmCmd, SubCmd);
     'Z':                     result := VR_Z(NumParams, ErmCmd, SubCmd);
     'R', 'T':                result := VR_Random(Cmd, NumParams, ErmCmd, SubCmd);
-    'H', 'M':                result := VR_Strings(Cmd, NumParams, ErmCmd, SubCmd);
+    'H', 'M', 'U':           result := VR_Strings(Cmd, NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
