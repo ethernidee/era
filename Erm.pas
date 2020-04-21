@@ -5944,6 +5944,36 @@ begin
   end; // .switch Cmd
 end; // .function VR_Random
 
+function VR_Strings (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
+var
+  VarParam: PErmCmdParam;
+  ValType:  integer;
+
+begin
+  result   := 1;
+  VarParam := @ErmCmd.Params[0];
+
+  if not(VarParam.GetType() in PARAM_VARTYPES_STRINGS) then begin
+    ShowErmError('"!!VR" - string functions work only with string variables');
+    result := 0; exit;
+  end;
+
+  case Cmd of
+    'H': begin
+      if (SubCmd.Nums[0] < Low(f^)) or (SubCmd.Nums[0] > High(f^)) then begin
+        ShowErmError('"!!VR:H" - invalid flag index: ' + SysUtils.IntToStr(SubCmd.Nums[0]));
+        result := 0; exit;
+      end;
+
+      f[SubCmd.Nums[0]] := StrLib.IsEmpty(pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX)));
+      result            := ord(ValType <> VALTYPE_ERROR);
+    end;
+  else
+    ShowErmError('"!!VR" - impossible case in random operation');
+    result := 0; exit;
+  end; // .switch Cmd
+end; // .function VR_Strings
+
 function New_VR_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer; cdecl;
 const
   MUTABLE_TYPES = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
@@ -5962,6 +5992,7 @@ begin
     'C':                     result := VR_C(NumParams, ErmCmd, SubCmd);
     'Z':                     result := VR_Z(NumParams, ErmCmd, SubCmd);
     'R', 'T':                result := VR_Random(Cmd, NumParams, ErmCmd, SubCmd);
+    'H':                     result := VR_Strings(Cmd, NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
