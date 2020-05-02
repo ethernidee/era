@@ -3975,6 +3975,88 @@ begin
   end;
 end; // .function SetErmParamValue
 
+var
+  InterpolationBuf: array [0..999999] of char;
+
+(* Interpolates string with ERM placeholders like %VZ3 or %T(json_key). If code is executed in ERM trigger, the result
+   will be current receiver or trigger local memory buffer. Otherwise the result is global interpolation buffer. *)
+function InterpolateErmStr (Str: pchar): pchar;
+var
+  OutCarret:   pchar;
+  OutBufEnd:   pchar;
+  SavedStates: array [0..3] of pchar;
+  StateInd:    integer;
+  Anchor:      pchar;
+  ChunkSize:   integer;
+  ResSize:     integer;
+
+
+begin
+  OutCarret := InterpolationBuf;
+  OutBufEnd := @InterpolationBuf[High(InterpolationBuf)];
+  StateInd  := -1;
+
+  // Repeat until root buffer end
+  while (Str^ <> #0) or (StateInd > 0) do begin
+    // Proceed only if there is a character to process
+    if Str^ = #0 then begin
+      Str := SavedStates[StateInd];
+      Dec(StateInd);
+      continue;
+    end;
+
+    // Find interpolation marker '%' or buffer end
+    Anchor := Str;
+
+    while not (Str^ in [#0, '%']) do begin
+      Inc(Str);
+    end;
+
+    ChunkSize := Math.Min(OutBufEnd - OutCarret, Str - Anchor);
+
+    // Copy leading regular characters to output buffer
+    if ChunkSize > 0 then begin
+      Utils.CopyMem(ChunkSize, Anchor, OutCarret);
+      Inc(OutCarret, ChunkSize);
+    end;
+
+    // Handle value to interpolate
+    Anchor := Str;
+
+    if Str[1] = '%' then begin
+      if OutCarret < OutBufEnd then begin
+        OutCarret^ := '%';
+        Inc(OutCarret);
+      end;
+
+      Inc(Str, 2);
+      continue;
+    end else begin
+      Inc(Str);
+
+      case Str^ of
+        #0: continue;
+      else
+        if OutCarret < OutBufEnd then begin
+          OutCarret^ := '%';
+          Inc(OutCarret);
+        end;
+
+        continue;
+      end; // .switch Str^
+    end; // .else
+  end; // .while
+
+  ResSize := OutCarret - pchar(@InterpolationBuf);
+
+  if ErmTriggerDepth > 0 then begin
+    result  := AdvErm.ServiceMemAllocator.AllocStr(ResSize);
+    Utils.CopyMem(ResSize, @InterpolationBuf, result);
+  end else begin
+    result := @InterpolationBuf;
+  end;  
+end; // .function InterpolateErmStr
+
 function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
 const
   INDEXABLE_PAR_TYPES = ['v', 'y', 'x', 'z', 'e', 'w'];
@@ -5621,6 +5703,9 @@ begin
   ArgsAreFloat   := not ResIsInt or not SecondIsInt;
   Value.v        := GetErmParamValue(VarParam, ValType);
   SecondValue.v  := SubCmd.Nums[0];
+
+  ShowMessage(InterpolateErmStr('This is %V500, %Z300, %%percentage'));
+  {!} Assert(InterpolateErmStr('') <> @InterpolationBuf);
 
   // Handle string concatenations
   if (Cmd = '+') and (VarParamType in PARAM_VARTYPES_STRINGS) then begin
