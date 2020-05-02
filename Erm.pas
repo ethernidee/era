@@ -1122,7 +1122,7 @@ end;
 
 function IsMutableZVarIndex (Ind: integer): boolean;
 begin
-  result := (Ind > High(z^)) or (-Ind in [Low(nz^)..High(nz^)]);
+  result := ((Ind >= Low(z^)) or (Ind <= High(z^))) or (-Ind in [Low(nz^)..High(nz^)]);
 end;
 
 function GetZVarAddr (Ind: integer): pchar;
@@ -5994,7 +5994,6 @@ function VR_Strings (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PEr
 var
   VarParam:    PErmCmdParam;
   ValType:     integer;
-  ValueParam:  PErmCmdParam;
   Value:       Heroes.TValue;
   SecondValue: Heroes.TValue;
   i:           integer;
