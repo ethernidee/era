@@ -3667,7 +3667,7 @@ begin
             end else if -result in [Low(nz^)..High(nz^)] then begin
               result := integer(@nz[-result]);
             end else if result > High(z^) then begin
-              result := integer(ZvsGetErtStr(result));
+              result := integer(ZvsInterpolateStr(ZvsGetErtStr(result)));
             end else begin
               ShowErmError(Format('Invalid z-var index: %d. Expected -10..-1, 1+', [result]));
               ResValType := VALTYPE_ERROR; result := 0; exit;
