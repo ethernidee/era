@@ -587,6 +587,7 @@ const
   ZvsGetCurrDay:      function: integer cdecl = Ptr($7103D2);
   ZvsVnCopy:          procedure ({n} Src, Dst: PErmCmdParam) cdecl = Ptr($73E83B);
   ZvsFindMacro:       function (SubCmd: PErmSubCmd; IsSet: integer): {n} pchar cdecl = Ptr($734072);
+  ZvsFindMacro2:      function (Str: pchar; IsSet: integer; var TokenLen: integer): {n} pchar cdecl = Ptr($734203);
   ZvsGetMacro:        function ({n} Macro: pchar): {n} PErmCmdParam cdecl = Ptr($7343E4);
   FireErmEvent:       TFireErmEvent    = Ptr($74CE30);
   ZvsDumpErmVars:     TZvsDumpErmVars  = Ptr($72B8C0);
@@ -3975,86 +3976,249 @@ begin
   end;
 end; // .function SetErmParamValue
 
+function ConvertVarTypeCharToId (VarTypeChar: char; var Res: integer): boolean;
+begin
+  result := true;
+
+  case VarTypeChar of
+    'y': Res := PARAM_VARTYPE_Y;
+    'x': Res := PARAM_VARTYPE_X;
+    'f'..'t': Res := PARAM_VARTYPE_QUICK;
+    'z': Res := PARAM_VARTYPE_Z;
+    'v': Res := PARAM_VARTYPE_V;
+    'e': Res := PARAM_VARTYPE_E;
+    'w': Res := PARAM_VARTYPE_W;
+    'F': Res := PARAM_VARTYPE_FLAG;
+  else
+    Res    := PARAM_VARTYPE_NUM;
+    result := false;
+    ShowErmError('ConvertVarTypeCharToId: invalid argument: ' + VarTypeChar);
+  end;
+end; // .function ConvertParamTypeCharToId
+
+const
+  MAX_INTERPOLATION_LEVEL = 5;
+
 var
-  InterpolationBuf: array [0..999999] of char;
+  InterpolationBuf:   array [0..999999] of char;
+  InterpolationLevel: integer = 0;
 
 (* Interpolates string with ERM placeholders like %VZ3 or %T(json_key). If code is executed in ERM trigger, the result
    will be current receiver or trigger local memory buffer. Otherwise the result is global interpolation buffer. *)
 function InterpolateErmStr (Str: pchar): pchar;
-var
-  OutCarret:   pchar;
-  OutBufEnd:   pchar;
-  SavedStates: array [0..3] of pchar;
-  StateInd:    integer;
-  Anchor:      pchar;
-  ChunkSize:   integer;
-  ResSize:     integer;
+const
+  OPTIONALLY_UPPERCASE_TYPES = ['V', 'Y', 'X', 'Z', 'E', 'W'];
+  INDEXABLE_PAR_TYPES        = ['v', 'y', 'x', 'z', 'e', 'w', 'F'];
+  INDEXING_PAR_TYPES         = ['v', 'y', 'x', 'w', 'f'..'t'];
+  NATIVE_PAR_TYPES           = ['v', 'y', 'x', 'z', 'e', 'w', 'f'..'t', 'F'];
+  SUPPORTED_PAR_TYPES        = ['v', 'y', 'x', 'z', 'e', 'w', 'f'..'t', 'F', 's', 'i', '$'];
 
+label
+  Error;
+
+var
+{O} Res:                StrLib.TStrBuilder;
+    ResSize:            integer;
+    Caret:              pchar;
+    ChunkStart:         pchar;
+    ChunkSize:          integer;
+    c:                  char;
+    TokenLen:           integer;
+    ParamValue:         Heroes.TValue;
+    BaseTypeChar:       char;
+    IndexTypeChar:      char;
+    IsIndexed:          longbool;
+    BaseVarType:        integer;
+    IndexVarType:       integer;
+    ValType:            integer;
+    NeedsInterpolation: longbool;
+    MacroParam:         PErmCmdParam;
+    Param:              TErmCmdParam;
 
 begin
-  OutCarret := InterpolationBuf;
-  OutBufEnd := @InterpolationBuf[High(InterpolationBuf)];
-  StateInd  := -1;
+  Inc(InterpolationLevel);
 
-  // Repeat until root buffer end
-  while (Str^ <> #0) or (StateInd > 0) do begin
-    // Proceed only if there is a character to process
-    if Str^ = #0 then begin
-      Str := SavedStates[StateInd];
-      Dec(StateInd);
-      continue;
+  // Do not interpolate last level string, copy instead
+  if InterpolationLevel >= MAX_INTERPOLATION_LEVEL then begin
+    ResSize := Windows.LStrLen(Str);
+
+    if ErmTriggerDepth > 0 then begin
+      result := AdvErm.ServiceMemAllocator.AllocStr(ResSize);
+      Utils.CopyMem(ResSize, Str, result);
+    end else begin
+      result := @InterpolationBuf;
+      Utils.CopyMem(Math.Min(sizeof(InterpolationBuf) - 1, ResSize), Str, result);
+      result[Math.Min(sizeof(InterpolationBuf) - 1, ResSize)] := #0;
     end;
 
+    exit;
+  end; // .if
+
+  Res   := StrLib.TStrBuilder.Create;
+  Caret := Str;
+  // * * * * * //
+  while Caret^ <> #0 do begin
     // Find interpolation marker '%' or buffer end
-    Anchor := Str;
+    ChunkStart := Caret;
 
-    while not (Str^ in [#0, '%']) do begin
-      Inc(Str);
+    while not (Caret^ in [#0, '%']) do begin
+      Inc(Caret);
     end;
 
-    ChunkSize := Math.Min(OutBufEnd - OutCarret, Str - Anchor);
+    ChunkSize := Caret - ChunkStart;
 
     // Copy leading regular characters to output buffer
     if ChunkSize > 0 then begin
-      Utils.CopyMem(ChunkSize, Anchor, OutCarret);
-      Inc(OutCarret, ChunkSize);
+      Res.AppendBuf(ChunkSize, ChunkStart);
     end;
 
     // Handle value to interpolate
-    Anchor := Str;
+    ChunkStart := Caret;
 
-    if Str[1] = '%' then begin
-      if OutCarret < OutBufEnd then begin
-        OutCarret^ := '%';
-        Inc(OutCarret);
-      end;
-
-      Inc(Str, 2);
+    if Caret[1] = '%' then begin
+      Res.WriteByte(ord('%'));
+      Inc(Caret, 2);
       continue;
     end else begin
-      Inc(Str);
+      Inc(Caret);
+      c := Caret^;
 
-      case Str^ of
-        #0: continue;
-      else
-        if OutCarret < OutBufEnd then begin
-          OutCarret^ := '%';
-          Inc(OutCarret);
+      // Support for old %Z3 syntax instead of %z3
+      if c in OPTIONALLY_UPPERCASE_TYPES then begin
+        c := chr(ord(c) + (ord('a') - ord('A')));
+      end;
+
+      if c = 'D' then begin
+      end else if c = 'G' then begin
+      end else if c in SUPPORTED_PAR_TYPES then begin
+        Param.Value   := 0;
+        Param.ValType := 0;
+        BaseTypeChar  := c;
+        IsIndexed     := BaseTypeChar in INDEXABLE_PAR_TYPES;
+
+        if IsIndexed then begin
+          Inc(Caret);
+          IndexTypeChar := Caret^;
+        end else begin
+          IndexTypeChar := c;
+        end;        
+
+        if (IndexTypeChar = '^') or ((IndexTypeChar in ['i', 's']) and (Caret[1] = '^')) then begin
+          if IndexTypeChar = '^' then begin
+            Inc(Caret);
+            IndexVarType := PARAM_VARTYPE_STR;
+          end else begin
+            Inc(Caret, 2);
+
+            if IndexTypeChar = 'i' then begin
+              IndexVarType := PARAM_VARTYPE_I;
+            end else begin
+              IndexVarType := PARAM_VARTYPE_S;
+            end;
+          end;
+
+          Param.Value        := integer(Caret);
+          NeedsInterpolation := false;
+
+          while not (Caret^ in ['^', #0]) do begin
+            if Caret^ = '%' then begin
+              NeedsInterpolation := true;
+            end;
+
+            Inc(Caret);
+          end;
+
+          if Caret^ <> '^' then begin
+            ShowErmError('*InterpolateErmStr: string end marker (^) not found');
+            goto Error;
+          end;
+
+          if NeedsInterpolation then begin
+            Param.SetNeedsInterpolation(true);
+          end;
+
+          Inc(Caret);
+        end else if IndexTypeChar in ['f'..'t'] then begin
+          IndexVarType := PARAM_VARTYPE_QUICK;
+          Param.Value  := ord(IndexTypeChar) - ord('f') + Low(QuickVars^);
+          Inc(Caret);
+        end else if IndexTypeChar = '$' then begin
+          MacroParam := ZvsGetMacro(ZvsFindMacro2(Caret, 0, TokenLen));
+
+          if MacroParam <> nil then begin
+            IndexVarType := MacroParam.GetType();
+            Param.Value  := MacroParam.Value;
+          end;
+
+          Inc(Caret, TokenLen);
+        end else begin
+          if IndexTypeChar in ['+', '-', '0'..'9'] then begin
+            // Ok
+          end else if IndexTypeChar in NATIVE_PAR_TYPES then begin
+            if not ConvertVarTypeCharToId(IndexTypeChar, IndexVarType) then begin
+              goto Error;
+            end;
+
+            Inc(Caret);
+          end;
+
+          if not StrLib.ParseIntFromPchar(Caret, Param.Value) and (IndexTypeChar in ['+', '-']) then begin
+            ShowErmError('*InterpolateErmStr: expected digit after number sign (+/-). Got: ' + Caret^);
+            goto Error;
+          end;
+        end; // .elseif
+
+        if IsIndexed then begin
+          ConvertVarTypeCharToId(BaseTypeChar, BaseVarType);
+          Param.SetType(BaseVarType);
+          Param.SetIndexedPartType(IndexVarType);
+
+          // Optimize known safe int vars like y3, x15 or v600
+          if (IndexVarType = PARAM_VARTYPE_NUM) and (BaseTypeChar in FAST_INT_TYPE_CHARS) and
+             (Param.Value >= FastIntVarSets[BaseVarType].MinInd) and (Param.Value <= FastIntVarSets[BaseVarType].MaxInd)
+          then begin
+            Param.SetCanBeFastIntEvaled(true);
+          end;
+        end else begin
+          Param.SetType(IndexVarType);
         end;
 
-        continue;
-      end; // .switch Str^
+        ParamValue.v := GetErmParamValue(@Param, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
+
+        if ValType = VALTYPE_INT then begin
+          Res.Append(SysUtils.IntToStr(ParamValue.v));
+        end else if ValType = VALTYPE_STR then begin
+          Res.AppendBuf(Windows.LStrLen(ParamValue.pc), ParamValue.pc);
+        end else if ValType = VALTYPE_FLOAT then begin
+          Res.Append(Format('%.3f', [ParamValue.f]));
+        end else if ValType = VALTYPE_BOOL then begin
+          if ParamValue.v <> 0 then begin
+            Res.WriteByte(ord('1'));
+          end else begin
+            Res.WriteByte(ord('0'));
+          end;
+        end else begin
+          Error:
+            Res.AppendBuf(Caret - ChunkStart, ChunkStart);
+        end; // .else
+      end else begin
+        Res.WriteByte(ord('%'));
+      end; // .else
     end; // .else
   end; // .while
 
-  ResSize := OutCarret - pchar(@InterpolationBuf);
-
   if ErmTriggerDepth > 0 then begin
-    result  := AdvErm.ServiceMemAllocator.AllocStr(ResSize);
-    Utils.CopyMem(ResSize, @InterpolationBuf, result);
+    result := AdvErm.ServiceMemAllocator.AllocStr(Res.Size);
+    Res.BuildTo(result, Res.Size);
   end else begin
     result := @InterpolationBuf;
-  end;  
+    Res.BuildTo(result, sizeof(InterpolationBuf) - 1);
+    result[Math.Min(sizeof(InterpolationBuf) - 1, Res.Size)] := #0;
+  end;
+
+  Dec(InterpolationLevel);
+  // * * * * * //
+  SysUtils.FreeAndNil(Res);
 end; // .function InterpolateErmStr
 
 function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
@@ -4082,25 +4246,6 @@ var
 
 label
   Error;
-
-  function ConvertVarTypeCharToId (VarTypeChar: char; var Res: integer): boolean;
-  begin
-    result := true;
-
-    case VarTypeChar of
-      'y': Res := PARAM_VARTYPE_Y;
-      'x': Res := PARAM_VARTYPE_X;
-      'f'..'t': Res := PARAM_VARTYPE_QUICK;
-      'z': Res := PARAM_VARTYPE_Z;
-      'v': Res := PARAM_VARTYPE_V;
-      'e': Res := PARAM_VARTYPE_E;
-      'w': Res := PARAM_VARTYPE_W;
-    else
-      Res    := PARAM_VARTYPE_NUM;
-      result := false;
-      ShowErmError('ConvertVarTypeCharToId: invalid argument: ' + VarTypeChar);
-    end;
-  end; // .function ConvertParamTypeCharToId
 
 begin
   StartPtr      := @SubCmd.Code.Value[SubCmd.Pos];
