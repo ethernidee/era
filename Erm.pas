@@ -4005,7 +4005,7 @@ var
 
 (* Interpolates string with ERM placeholders like %VZ3 or %T(json_key). If code is executed in ERM trigger, the result
    will be current receiver or trigger local memory buffer. Otherwise the result is global interpolation buffer. *)
-function InterpolateErmStr (Str: pchar): pchar;
+function InterpolateErmStr (Str: pchar): pchar; cdecl;
 const
   OPTIONALLY_UPPERCASE_TYPES = ['V', 'Y', 'X', 'Z', 'E', 'W'];
   INDEXABLE_PAR_TYPES        = ['v', 'y', 'x', 'z', 'e', 'w', 'F'];
@@ -5849,9 +5849,6 @@ begin
   Value.v        := GetErmParamValue(VarParam, ValType);
   SecondValue.v  := SubCmd.Nums[0];
 
-  ShowMessage(InterpolateErmStr('This is %V500, %Z300, %%percentage'));
-  {!} Assert(InterpolateErmStr('') <> @InterpolationBuf);
-
   // Handle string concatenations
   if (Cmd = '+') and (VarParamType in PARAM_VARTYPES_STRINGS) then begin
     if not ValueParamType in PARAM_VARTYPES_STRINGS then begin
@@ -6995,6 +6992,9 @@ begin
   (* Set ProcessCmd enter/leave hooks *)
   Core.ApiHook(@Hook_ProcessCmd, Core.HOOKTYPE_BRIDGE, Ptr($741E3F));
   ApiJack.HookCode(Ptr($749702), @Hook_ProcessCmd_End);
+
+  (* Replace ERM interpolation function *)
+  Core.ApiHook(@InterpolateErmStr, Core.HOOKTYPE_JUMP, @ZvsInterpolateStr);
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
