@@ -4078,7 +4078,6 @@ begin
     if Caret[1] = '%' then begin
       Res.WriteByte(ord('%'));
       Inc(Caret, 2);
-      continue;
     end else begin
       Inc(Caret);
       c := Caret^;
@@ -4093,6 +4092,7 @@ begin
       end else if c in SUPPORTED_PAR_TYPES then begin
         Param.Value   := 0;
         Param.ValType := 0;
+        IndexVarType  := PARAM_VARTYPE_NUM;
         BaseTypeChar  := c;
         IsIndexed     := BaseTypeChar in INDEXABLE_PAR_TYPES;
 
