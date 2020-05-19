@@ -4072,6 +4072,10 @@ begin
       Res.AppendBuf(ChunkSize, ChunkStart);
     end;
 
+    if Caret^ = #0 then begin
+      break;
+    end;
+
     // Handle value to interpolate
     ChunkStart := Caret;
 
