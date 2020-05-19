@@ -4263,6 +4263,11 @@ begin
   end; // .else  
 end; // .function Hook_ERM2String
 
+function Hook_ERM2String2 (BufInd: integer; Str: pchar): pchar; cdecl;
+begin
+  result := InterpolateErmStr(Str);
+end;
+
 function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
 const
   INDEXABLE_PAR_TYPES = ['v', 'y', 'x', 'z', 'e', 'w'];
@@ -7039,8 +7044,8 @@ begin
   Core.ApiHook(@InterpolateErmStr, Core.HOOKTYPE_JUMP, @ZvsInterpolateStr);
 
   (* Replace ERM2String and ERM2String2 WoG functions *)
-  Core.ApiHook(@Hook_ERM2String, Core.HOOKTYPE_JUMP, Ptr($73DF05));
-  //Core.ApiHook(@Hook_ERM2String, Core.HOOKTYPE_JUMP, Ptr($73DF05));
+  Core.ApiHook(@Hook_ERM2String,  Core.HOOKTYPE_JUMP, Ptr($73DF05));
+  Core.ApiHook(@Hook_ERM2String2, Core.HOOKTYPE_JUMP, Ptr($741D32));
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
