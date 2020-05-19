@@ -4225,6 +4225,44 @@ begin
   SysUtils.FreeAndNil(Res);
 end; // .function InterpolateErmStr
 
+function Hook_ERM2String (Str: pchar; IsZStr: integer; var TokenLen: integer): pchar; cdecl;
+var
+  Caret:   pchar;
+  Start:   pchar;
+  EndChar: char;
+
+begin
+  if IsZStr <> 0 then begin
+    result := InterpolateErmStr(Str);
+  end else begin
+    Caret := Str;
+
+    // Find string literal start ....^....^
+    while not (Caret^ in [#0, '^']) do begin
+      Inc(Caret);
+    end;
+
+    if Caret^ = #0 then begin
+      result := '';
+      exit;
+    end;
+
+    Inc(Caret);
+    Start := Caret;
+
+    // Find string literal end ....^
+    while not (Caret^ in [#0, '^']) do begin
+      Inc(Caret);
+    end;
+
+    EndChar  := Caret^;
+    Caret^   := #0;
+    result   := InterpolateErmStr(Start);
+    Caret^   := EndChar;
+    TokenLen := Caret - Start;
+  end; // .else  
+end; // .function Hook_ERM2String
+
 function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
 const
   INDEXABLE_PAR_TYPES = ['v', 'y', 'x', 'z', 'e', 'w'];
@@ -6999,6 +7037,10 @@ begin
 
   (* Replace ERM interpolation function *)
   Core.ApiHook(@InterpolateErmStr, Core.HOOKTYPE_JUMP, @ZvsInterpolateStr);
+
+  (* Replace ERM2String and ERM2String2 WoG functions *)
+  Core.ApiHook(@Hook_ERM2String, Core.HOOKTYPE_JUMP, Ptr($73DF05));
+  //Core.ApiHook(@Hook_ERM2String, Core.HOOKTYPE_JUMP, Ptr($73DF05));
 
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
