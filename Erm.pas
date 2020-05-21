@@ -3449,13 +3449,21 @@ end;
 (* Extract i^...^ or s^...^ variable name. BufPos must point to first name character *)
 function ExtractErmStrLiteral (BufPos: pchar): string;
 var
-  StartPos: pchar;
+  StartPos:  pchar;
+  Delimiter: char;
 
 begin
   {!} Assert(BufPos <> nil);
   StartPos := BufPos;
 
-  while not (BufPos^ in ['^', #0]) do begin
+  // Determine delimiter to handle both ^....^ and %s(...)
+  if pchar(integer(BufPos) - 1)^ = '^' then begin
+    Delimiter := '^';
+  end else begin
+    Delimiter := ')';
+  end;
+
+  while not (BufPos^ in [#0, Delimiter]) do begin
     Inc(BufPos);
   end;
 
@@ -3463,17 +3471,27 @@ begin
 end;
 
 function GetInterpolatedErmStrLiteral (BufPos: pchar): pchar;
+var
+  Delimiter: char;
+
 begin
   {!} Assert(BufPos <> nil);
   result := BufPos;
+  
+  // Determine delimiter to handle both ^....^ and %s(...)
+  if pchar(integer(BufPos) - 1)^ = '^' then begin
+    Delimiter := '^';
+  end else begin
+    Delimiter := ')';
+  end;
 
-  while BufPos^ <> '^' do begin
+  while not (BufPos^ in [#0, Delimiter]) do begin
     Inc(BufPos);
   end;
 
   BufPos^ := #0;
   result  := ZvsInterpolateStr(result);
-  BufPos^ := '^';
+  BufPos^ := Delimiter;
 end;
 
 function GetErmStrLiteralLen (BufPos: pchar): integer;
@@ -3521,14 +3539,18 @@ begin
       PARAM_VARTYPE_Y:     result := result + 'y';
       PARAM_VARTYPE_Z:     result := result + 'z';
       PARAM_VARTYPE_E:     result := result + 'e';
-      PARAM_VARTYPE_I:     result := result + 'i^';
-      PARAM_VARTYPE_S:     result := result + 's^';
+      PARAM_VARTYPE_I:     result := result + 'i' + pchar(Param.Value - 1)^;
+      PARAM_VARTYPE_S:     result := result + 's' + pchar(Param.Value - 1)^;
       PARAM_VARTYPE_STR:   result := result + '^';
     end;
   end;
 
   if (Types[0] = PARAM_VARTYPE_I) or (Types[1] = PARAM_VARTYPE_I) or (Types[0] = PARAM_VARTYPE_S) or (Types[1] = PARAM_VARTYPE_S) or (Types[0] = PARAM_VARTYPE_STR) or (Types[1] = PARAM_VARTYPE_STR) then begin
-    result := result + ExtractErmStrLiteral(pchar(Param.Value)) + '^';
+    if pchar(Param.Value - 1)^ = '^' then begin
+      result := result + ExtractErmStrLiteral(pchar(Param.Value)) + '^';
+    end else begin
+      result := result + ExtractErmStrLiteral(pchar(Param.Value)) + ')';
+    end;
   end else if (Types[0] <> PARAM_VARTYPE_QUICK) and (Types[1] <> PARAM_VARTYPE_QUICK) then begin
     result := result + IntToStr(Param.Value);
   end;
@@ -4007,7 +4029,7 @@ var
    will be current receiver or trigger local memory buffer. Otherwise the result is global interpolation buffer. *)
 function InterpolateErmStr (Str: pchar): pchar; cdecl;
 const
-  OPTIONALLY_UPPERCASE_TYPES = ['V', 'Y', 'X', 'Z', 'E', 'W'];
+  OPTIONALLY_UPPERCASE_TYPES = ['V', 'Y', 'X', 'Z', 'E', 'W', 'S', 'I'];
   INDEXABLE_PAR_TYPES        = ['v', 'y', 'x', 'z', 'e', 'w', 'F'];
   INDEXING_PAR_TYPES         = ['v', 'y', 'x', 'w', 'f'..'t'];
   NATIVE_PAR_TYPES           = ['v', 'y', 'x', 'z', 'e', 'w', 'f'..'t', 'F'];
@@ -4107,24 +4129,19 @@ begin
           IndexTypeChar := c;
         end;        
 
-        if (IndexTypeChar = '^') or ((IndexTypeChar in ['i', 's']) and (Caret[1] = '^')) then begin
-          if IndexTypeChar = '^' then begin
-            Inc(Caret);
-            IndexVarType := PARAM_VARTYPE_STR;
-          end else begin
-            Inc(Caret, 2);
+        if (IndexTypeChar in ['i', 's']) and (Caret[1] = '(') then begin
+          Inc(Caret, 2);
 
-            if IndexTypeChar = 'i' then begin
-              IndexVarType := PARAM_VARTYPE_I;
-            end else begin
-              IndexVarType := PARAM_VARTYPE_S;
-            end;
+          if IndexTypeChar = 'i' then begin
+            IndexVarType := PARAM_VARTYPE_I;
+          end else begin
+            IndexVarType := PARAM_VARTYPE_S;
           end;
 
           Param.Value        := integer(Caret);
           NeedsInterpolation := false;
 
-          while not (Caret^ in ['^', #0]) do begin
+          while not (Caret^ in [')', #0]) do begin
             if Caret^ = '%' then begin
               NeedsInterpolation := true;
             end;
@@ -4132,8 +4149,8 @@ begin
             Inc(Caret);
           end;
 
-          if Caret^ <> '^' then begin
-            ShowErmError('*InterpolateErmStr: string end marker (^) not found');
+          if Caret^ <> ')' then begin
+            ShowErmError('*InterpolateErmStr: missing s/i-var closing parenthesis ")"');
             goto Error;
           end;
 
