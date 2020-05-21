@@ -135,6 +135,7 @@ type
     function  Alloc (Size: integer): pointer;
     function  AllocStr (StrLen: integer): pchar;
     procedure FreePage;
+    function  OwnsPtr (Addr: pointer): boolean;
   end;
 
   PErmCmdWrapper = ^TErmCmdWrapper;
@@ -257,6 +258,11 @@ procedure TServiceMemAllocator.FreePage;
 begin
   {!} Assert(Self.BufPos > 0, 'TServiceMemAllocator.FreePage failed. No page allocated');
   Dec(Self.BufPos, pinteger(@Self.Buf[Self.BufPos])^ + sizeof(integer));
+end;
+
+function TServiceMemAllocator.OwnsPtr (Addr: pointer): boolean;
+begin
+  result := (cardinal(Addr) >= cardinal(@Self.Buf)) and (cardinal(Addr) <= cardinal(@Self.Buf[High(Self.Buf)]));
 end;
 
 procedure TServiceParam.RetPchar ({n} Str: pchar; StrLen: integer = -1);
