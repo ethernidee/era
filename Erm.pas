@@ -4250,7 +4250,16 @@ var
 
 begin
   if IsZStr <> 0 then begin
-    result := InterpolateErmStr(Str);
+    // Optimization: do not interpolate z-1..z-10, z1..z1000, temporary ert variables
+    if
+      AdvErm.ServiceMemAllocator.OwnsPtr(Str)                                                    or
+      ((cardinal(Str) >= cardinal(@z[Low(nz^)])) and (cardinal(Str) <= cardinal(@z[High(nz^)]))) or
+      ((cardinal(Str) >= cardinal(@z[Low(z^)]))  and (cardinal(Str) <= cardinal(@z[High(z^)])))
+    then begin
+      result := Str;
+    end else begin
+      result := InterpolateErmStr(Str);
+    end;
   end else begin
     Caret := Str;
 
@@ -4282,7 +4291,16 @@ end; // .function Hook_ERM2String
 
 function Hook_ERM2String2 (BufInd: integer; Str: pchar): pchar; cdecl;
 begin
-  result := InterpolateErmStr(Str);
+  // Optimization: do not interpolate z-1..z-10, z1..z1000, temporary ert variables
+  if
+    AdvErm.ServiceMemAllocator.OwnsPtr(Str)                                                    or
+    ((cardinal(Str) >= cardinal(@z[Low(nz^)])) and (cardinal(Str) <= cardinal(@z[High(nz^)]))) or
+    ((cardinal(Str) >= cardinal(@z[Low(z^)]))  and (cardinal(Str) <= cardinal(@z[High(z^)])))
+  then begin
+    result := Str;
+  end else begin
+    result := InterpolateErmStr(Str);
+  end;
 end;
 
 function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl;
