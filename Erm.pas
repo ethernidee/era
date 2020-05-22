@@ -1468,6 +1468,8 @@ const
   IDENT_TYPE_FUNC  = 2;
   IDENT_TYPE_VAR   = 3;
 
+  IS_INDIRECT_ADDRESSING = true;
+
   SUPPORTED_LOCAL_VAR_TYPES = ['x', 'y', 'e', 'z'];
   LOCAL_VAR_TYPE_ID_Y = 0;
   LOCAL_VAR_TYPE_ID_X = 1;
@@ -1941,7 +1943,7 @@ var
     end; // .if
   end; // .unction GetLocalVar
 
-  procedure HandleLocalVar (const VarName: string; VarStartPos: integer);
+  procedure HandleLocalVar (const VarName: string; VarStartPos: integer; IsIndirectAddressing: longbool);
   var
   {U} LocalVar: TErmLocalVar;
       VarIndex: integer;
@@ -1952,7 +1954,7 @@ var
     VarPos := VarStartPos;
 
     if not GetLocalVar(VarName, LocalVar, ArrIndex, IsAddr) then begin
-      Buf.Add('q');
+      Buf.Add('0');
     end
     // It it's not free var operation
     else if LocalVar <> nil then begin
@@ -1964,7 +1966,11 @@ var
 
       if not IsAddr then begin
         if IsInStr then begin
-          Buf.Add('%' + UpCase(LocalVar.VarType) + IntToStr(VarIndex));
+          if not IsIndirectAddressing then begin
+            Buf.Add('%');
+          end;
+          
+          Buf.Add(LocalVar.VarType + IntToStr(VarIndex));
         end else begin
           Buf.Add(LocalVar.VarType + IntToStr(VarIndex));
         end;
@@ -2093,7 +2099,7 @@ var
     end; // .if
   end; // .function DetectIdentType
 
-  procedure ParseIdent;
+  procedure ParseIdent (IsIndirectAddressing: longbool = false);
   var
     StartPos:   integer;
     IdentType:  integer;
@@ -2122,7 +2128,7 @@ var
         end else begin
           case IdentType of
             IDENT_TYPE_VAR: begin
-              HandleLocalVar(Ident, StartPos);
+              HandleLocalVar(Ident, StartPos, IsIndirectAddressing);
             end;
 
             IDENT_TYPE_CONST: begin
@@ -2156,6 +2162,7 @@ var
   procedure ParseCmd (CmdType: TCmdType);
   var
     c:              char;
+    NextChar:       char;
     DummyCmdBufPos: integer;
 
   begin
@@ -2202,20 +2209,31 @@ var
 
           '%': begin
             if IsInStr then begin
-              case Scanner.CharsRel[1] of
-                '(': begin
-                  FlushMarked;
-                  Scanner.GotoNextChar;
-                  ParseIdent;
-                  MarkPos;
-                end;
+              NextChar := Scanner.CharsRel[1];
 
-                '%': begin
-                  Scanner.GotoRelPos(+2);
-                end;
-              else
-                Scanner.GotoNextChar;
-              end; // .switch
+              // Special support for indirect addressing using local variables in interpolated strings
+              // Example: %y(artPtr) may be equal to %yx%(@artPtr) and compile to %yx3
+              if (NextChar in (['a'..'z', 'A'..'Z'] - ['s', 'S', 'i', 'I', 'T'])) and (Scanner.CharsRel[2] = '(') then begin
+                Scanner.GotoRelPos(+2);
+                FlushMarked;
+                ParseIdent(IS_INDIRECT_ADDRESSING);
+                MarkPos;
+              end else begin
+                case NextChar of
+                  '(': begin
+                    FlushMarked;
+                    Scanner.GotoNextChar;
+                    ParseIdent;
+                    MarkPos;
+                  end;
+
+                  '%': begin
+                    Scanner.GotoRelPos(+2);
+                  end;
+                else
+                  Scanner.GotoNextChar;
+                end; // .switch
+              end; // .else
             end else begin
               Scanner.GotoNextChar;
             end;
@@ -4058,8 +4076,6 @@ var
     Param:              TErmCmdParam;
 
 begin
-  Inc(InterpolationLevel);
-
   // Do not interpolate last level string, copy instead
   if InterpolationLevel >= MAX_INTERPOLATION_LEVEL then begin
     ResSize := Windows.LStrLen(Str);
@@ -4079,6 +4095,8 @@ begin
   Res   := StrLib.TStrBuilder.Create;
   Caret := Str;
   // * * * * * //
+  Inc(InterpolationLevel);
+
   while Caret^ <> #0 do begin
     // Find interpolation marker '%' or buffer end
     ChunkStart := Caret;
@@ -4115,6 +4133,21 @@ begin
 
       if c = 'D' then begin
       end else if c = 'G' then begin
+      end else if (c = 'T') and (Caret[1] = '(') then begin
+        // Inc(Caret, 2);
+
+        // while not (Caret^ in [')', #0]) do begin
+        //   if Caret^ = '%' then begin
+        //     NeedsInterpolation := true;
+        //   end;
+
+        //   Inc(Caret);
+        // end;
+
+        // Str := Trans.tr(Ident, []);
+        // Utils.CopyMem(Length(Str), pchar(Str), @f.OutStr[f.j]);
+        // Inc(f.j, Length(Str) - 1);
+
       end else if c in SUPPORTED_PAR_TYPES then begin
         Param.Value   := 0;
         Param.ValType := 0;
