@@ -4064,6 +4064,7 @@ var
     ChunkSize:          integer;
     c:                  char;
     TokenLen:           integer;
+    TokenStart:         pchar;
     ParamValue:         Heroes.TValue;
     BaseTypeChar:       char;
     IndexTypeChar:      char;
@@ -4134,20 +4135,20 @@ begin
       if c = 'D' then begin
       end else if c = 'G' then begin
       end else if (c = 'T') and (Caret[1] = '(') then begin
-        // Inc(Caret, 2);
+        Inc(Caret, 2);
+        TokenStart := Caret;
 
-        // while not (Caret^ in [')', #0]) do begin
-        //   if Caret^ = '%' then begin
-        //     NeedsInterpolation := true;
-        //   end;
+        while not (Caret^ in [')', #0]) do begin
+          Inc(Caret);
+        end;
 
-        //   Inc(Caret);
-        // end;
+        if Caret^ <> ')' then begin
+          ShowErmError('*InterpolateErmStr: missing %T closing parenthesis ")"');
+          goto Error;
+        end;
 
-        // Str := Trans.tr(Ident, []);
-        // Utils.CopyMem(Length(Str), pchar(Str), @f.OutStr[f.j]);
-        // Inc(f.j, Length(Str) - 1);
-
+        Res.Append(Trans.tr(StrLib.ExtractFromPchar(TokenStart, Caret - TokenStart), []));
+        Inc(Caret);
       end else if c in SUPPORTED_PAR_TYPES then begin
         Param.Value   := 0;
         Param.ValType := 0;
