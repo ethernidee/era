@@ -437,7 +437,7 @@ type
   TZvsLoadErmScript = function (ScriptId: integer): integer; cdecl;
   TZvsLoadErmTxt    = function (IsNewLoad: integer): integer; cdecl;
   TZvsLoadErtFile   = function (Dummy, FileName: pchar): integer; cdecl;
-  TZvsShowMessage   = function (Mes: pchar; MesType: integer; DummyZero: integer): integer; cdecl;
+  TZvsShowMessage   = function (Mes: pchar; MesType: integer; DummyZero: integer = 0): integer; cdecl;
   TZvsCheckFlags    = function (Flags: PErmCmdConditions): longbool; cdecl;
   TFireErmEvent     = function (EventId: integer): integer; cdecl;
   TZvsDumpErmVars   = procedure (Error, {n} ErmCmdPtr: pchar); cdecl;
@@ -1135,7 +1135,8 @@ begin
   end else if -Ind in [Low(nz^)..High(nz^)] then begin
     result := @nz[-Ind];
   end else begin
-    result := 'INVALID Z-INDEX';
+    ShowErmError('Invalid z-var index: ' + SysUtils.IntToStr(Ind));
+    result := 'STRING NOT FOUND';
   end;
 end;
 
@@ -5573,7 +5574,7 @@ var
 
 begin
   // OK result
-  Context.RetAddr := Ptr($746F00);
+  Context.RetAddr := Ptr($74943B);
   NumParams       := pinteger(Context.EBP - $10)^;
   Hero            := ppointer(Context.EBP - $380)^;
   SubCmd          := pointer(Context.EBP - $300);
@@ -5623,7 +5624,7 @@ var
 
 begin
   // OK result
-  Context.RetAddr := Ptr($746F00);
+  Context.RetAddr := Ptr($74943B);
   NumParams       := pinteger(Context.EBP - $10)^;
   Hero            := ppointer(Context.EBP - $380)^;
   SubCmd          := pointer(Context.EBP - $300);
@@ -5698,7 +5699,7 @@ var
 
 begin
   // OK result
-  Context.RetAddr := Ptr($746F00);
+  Context.RetAddr := Ptr($74943B);
   NumParams       := pinteger(Context.EBP - $10)^;
   Hero            := ppointer(Context.EBP - $380)^;
   SubCmd          := pointer(Context.EBP - $300);
@@ -5722,7 +5723,7 @@ begin
     SubCmd          := pointer(Context.EBP - $300);
     Hero            := ppointer(Context.EBP - $380)^;
     ZvsApply(@Hero, sizeof(Hero), SubCmd, 0);
-    Context.RetAddr := Ptr($746F00);
+    Context.RetAddr := Ptr($74943B);
   end;
 end; // .function Hook_HE_Z
 
@@ -5854,6 +5855,19 @@ begin
     Context.RetAddr := Ptr($75F2D1);
   end;
 end;
+
+function Hook_IF_M (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd: PErmSubCmd;
+
+begin
+  // OK result
+  Context.RetAddr := Ptr($74943B);
+  SubCmd          := pointer(Context.EBP - $300);
+  result          := false;
+
+  ZvsShowMessage(GetZVarAddr(SubCmd.Nums[0]), ord(Heroes.MES_MES));
+end; // .function Hook_IF_M
 
 (* Rounds given value to one of the following directions: -1 for floor, 1 for ceil, 0 for away from zero *)
 function RoundFloat32 (Value: single; Direction: integer): integer;
@@ -7069,6 +7083,9 @@ begin
 
   (* Add BM:U6/?$ command to get final stack speed, including slow effect *)
   ApiJack.HookCode(Ptr($75F2B1), @Hook_BM_U6);
+
+  (* Fix IF:M# command: allow any string *)
+  ApiJack.HookCode(Ptr($74751A), @Hook_IF_M);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
