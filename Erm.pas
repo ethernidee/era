@@ -5869,6 +5869,19 @@ begin
   ZvsShowMessage(GetZVarAddr(SubCmd.Nums[0]), ord(Heroes.MES_MES));
 end; // .function Hook_IF_M
 
+function Hook_IF_N (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd: PErmSubCmd;
+
+begin
+  Context.RetAddr := Ptr($74913A);
+  SubCmd          := pointer(Context.EBP - $300);
+  result          := false;
+  
+  // txt = @z
+  ppointer(Context.EBP - $520)^ := GetZVarAddr(SubCmd.Nums[0]);
+end; // .function Hook_IF_N
+
 (* Rounds given value to one of the following directions: -1 for floor, 1 for ceil, 0 for away from zero *)
 function RoundFloat32 (Value: single; Direction: integer): integer;
 begin
@@ -7086,6 +7099,15 @@ begin
 
   (* Fix IF:M# command: allow any string *)
   ApiJack.HookCode(Ptr($74751A), @Hook_IF_M);
+
+  (* Fix ERM bug: IF:N worked with z1 only *)
+  Core.p.WriteDataPatch(Ptr($749093), ['B0']);
+  Core.p.WriteDataPatch(Ptr($74909C), ['B0']);
+  Core.p.WriteDataPatch(Ptr($7490B0), ['B0']);
+  Core.p.WriteDataPatch(Ptr($7490B6), ['B0']);
+
+  (* Fix IF:N# to support any string *)
+  ApiJack.HookCode(Ptr($749116), @Hook_IF_N);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
