@@ -4065,6 +4065,7 @@ var
     c:                  char;
     TokenLen:           integer;
     TokenStart:         pchar;
+    TempStr:            pchar;
     ParamValue:         Heroes.TValue;
     BaseTypeChar:       char;
     IndexTypeChar:      char;
@@ -4133,7 +4134,24 @@ begin
       end;
 
       if c = 'D' then begin
-      end else if c = 'G' then begin
+        case Caret[1] of
+          'd': Res.Append(SysUtils.IntToStr(Heroes.GameDate^.Day));
+          'w': Res.Append(SysUtils.IntToStr(Heroes.GameDate^.Week));
+          'm': Res.Append(SysUtils.IntToStr(Heroes.GameDate^.Month));
+          'a': Res.Append(SysUtils.IntToStr(ZvsGetCurrDay()));
+        else
+          ShowErmError('*InterpolateErmStr: invalid %Dx syntax');
+          goto Error;
+        end;
+
+        Inc(Caret, 2);
+      end else if (c = 'G') and (Caret[1] = 'c') then begin
+        Inc(Caret, 2);
+        TempStr := Heroes.ZvsGetTxtValue(62 + Heroes.GetCurrentPlayer(), 0, Heroes.PTxtFile($7C8E3C));
+
+        if TempStr <> nil then begin
+          Res.AppendBuf(Windows.LStrLen(TempStr), TempStr);
+        end;
       end else if (c = 'T') and (Caret[1] = '(') then begin
         Inc(Caret, 2);
         TokenStart := Caret;
