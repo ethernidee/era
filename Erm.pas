@@ -4295,6 +4295,24 @@ begin
   SysUtils.FreeAndNil(Res);
 end; // .function InterpolateErmStr
 
+function GetInterpolatedZVarAddr (Ind: integer): pchar;
+begin
+  if Ind > High(z^) then begin
+    result := ZvsGetErtStr(Ind);
+
+    if (Ind < FIRST_LOCAL_ERT_INDEX) or (Ind > LAST_LOCAL_ERT_INDEX) then begin
+      result := InterpolateErmStr(result);
+    end;
+  end else if Ind >= Low(z^) then begin
+    result := @z[Ind];
+  end else if -Ind in [Low(nz^)..High(nz^)] then begin
+    result := @nz[-Ind];
+  end else begin
+    ShowErmError('Invalid z-var index: ' + SysUtils.IntToStr(Ind));
+    result := 'STRING NOT FOUND';
+  end;
+end;
+
 function Hook_ERM2String (Str: pchar; IsZStr: integer; var TokenLen: integer): pchar; cdecl;
 var
   Caret:   pchar;
@@ -5869,7 +5887,7 @@ begin
   SubCmd          := pointer(Context.EBP - $300);
   result          := false;
 
-  ZvsShowMessage(GetZVarAddr(SubCmd.Nums[0]), ord(Heroes.MES_MES));
+  ZvsShowMessage(GetInterpolatedZVarAddr(SubCmd.Nums[0]), ord(Heroes.MES_MES));
 end; // .function Hook_IF_M
 
 function Hook_IF_N (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -5882,7 +5900,7 @@ begin
   result          := false;
   
   // txt = @z
-  ppointer(Context.EBP - $520)^ := GetZVarAddr(SubCmd.Nums[0]);
+  ppointer(Context.EBP - $520)^ := GetInterpolatedZVarAddr(SubCmd.Nums[0]);
 end; // .function Hook_IF_N
 
 function Hook_BA_B (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -5919,7 +5937,7 @@ begin
       end;
     end else if Param.GetType() in PARAM_VARTYPES_STRINGS then begin
       pinteger(BATTLEFIELD_ID_PTR)^ := 0;
-      Utils.SetPcharValue(pchar(BATTLEFIELD_PIC_NAME_PTR), GetZVarAddr(ParamValue), BATTLEFIELD_PIC_NAME_BUF_SIZE);
+      Utils.SetPcharValue(pchar(BATTLEFIELD_PIC_NAME_PTR), GetInterpolatedZVarAddr(ParamValue), BATTLEFIELD_PIC_NAME_BUF_SIZE);
     end else begin
       Context.EAX := 0;
       ShowErmError('!!BA:B - invalid parameter type. Expected integer or string. Got: ' + ErmParamToCode(Param));
@@ -6024,7 +6042,7 @@ begin
   end else begin
     // VR(str):S(str)
     if ValueParamType in PARAM_VARTYPES_STRINGS then begin
-      result := ord(SetErmParamValue(VarParam, integer(GetZVarAddr(SubCmd.Nums[0])), FLAG_ASSIGNABLE_STRINGS));
+      result := ord(SetErmParamValue(VarParam, integer(GetInterpolatedZVarAddr(SubCmd.Nums[0])), FLAG_ASSIGNABLE_STRINGS));
     end else begin
       ShowErmError('"!!VR:S" - cannot set string variable to non-string value');
       result := 0; exit;
@@ -6068,7 +6086,7 @@ begin
       result := 0; exit;
     end;
 
-    SecondValue.pc := GetZVarAddr(SecondValue.v);
+    SecondValue.pc := GetInterpolatedZVarAddr(SecondValue.v);
 
     if VarParamType = PARAM_VARTYPE_Z then begin
       if not IsMutableZVarIndex(Value.v) then begin
@@ -6240,7 +6258,7 @@ begin
     result := 0; exit;
   end;
 
-  SecondValue.pc := GetZVarAddr(SubCmd.Nums[0]);
+  SecondValue.pc := GetInterpolatedZVarAddr(SubCmd.Nums[0]);
 
   if VarParamType = PARAM_VARTYPE_E then begin
     SecondValue.f := Heroes.a2f(SecondValue.pc);
@@ -6342,7 +6360,7 @@ begin
     result := 0; exit;
   end;
 
-  result := ord(SetErmParamValue(VarParam, CreateTriggerLocalErt(GetZVarAddr(Value.v))));
+  result := ord(SetErmParamValue(VarParam, CreateTriggerLocalErt(GetInterpolatedZVarAddr(Value.v))));
 end; // .function VR_Z
 
 function VR_Random (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
@@ -6467,7 +6485,7 @@ begin
             result := 0; exit;
           end;
           
-          result := ord(SetErmParamValue(VarParam, integer(pchar(StrLib.Substr(GetZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2], SubCmd.Nums[3]))), FLAG_ASSIGNABLE_STRINGS));
+          result := ord(SetErmParamValue(VarParam, integer(pchar(StrLib.Substr(GetInterpolatedZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2], SubCmd.Nums[3]))), FLAG_ASSIGNABLE_STRINGS));
         end;
 
         // M2/z#1/#2; get nth word
@@ -6477,7 +6495,7 @@ begin
             result := 0; exit;
           end;
           
-          result := ord(SetErmParamValue(VarParam, integer(pchar(VrGetNthToken(GetZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2]))), FLAG_ASSIGNABLE_STRINGS));
+          result := ord(SetErmParamValue(VarParam, integer(pchar(VrGetNthToken(GetInterpolatedZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2]))), FLAG_ASSIGNABLE_STRINGS));
         end;
 
         // M3/#1[/#2]; convert integer to string
