@@ -5910,7 +5910,7 @@ begin
     ParamValue := SubCmd.Nums[0];
 
     if Param.GetType() in PARAM_VARTYPES_INTS then begin
-      Context.EAX := ord((ParamValue >= 0) and (ParamValue <= 25));
+      Context.EAX := ord((ParamValue >= -1) and (ParamValue <= 25));
 
       if Context.EAX <> 0 then begin
         pinteger(BATTLEFIELD_ID_PTR)^ := ParamValue;
