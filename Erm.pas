@@ -6472,7 +6472,7 @@ begin
         result := 0; exit;
       end;
 
-      f[SubCmd.Nums[0]] := StrLib.IsEmpty(pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX)));
+      f[SubCmd.Nums[0]] := not StrLib.IsEmpty(pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX)));
       result            := ord(ValType <> VALTYPE_ERROR);
     end;
 
