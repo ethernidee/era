@@ -4662,11 +4662,14 @@ begin
     end else begin
       Inc(result);
 
-      if SubCmd.Code.Value[SubCmd.Pos] <> '/' then begin
+      // Support old-style IF:Q#^...^ like syntax, when # and ^...^ are no separated as different arguments
+      // Treat them as two standalone arguments
+      case SubCmd.Code.Value[SubCmd.Pos] of
+        '^': continue;
+        '/': Inc(SubCmd.Pos);
+      else
         goto Quit;
       end;
-
-      Inc(SubCmd.Pos);
     end; // .else
   end; // .while
 
