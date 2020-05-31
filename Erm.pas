@@ -5885,6 +5885,54 @@ begin
   ppointer(Context.EBP - $520)^ := GetZVarAddr(SubCmd.Nums[0]);
 end; // .function Hook_IF_N
 
+function Hook_BA_B (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  BATTLEFIELD_ID_PTR            = $7A04E4;
+  BATTLEFIELD_PIC_NAME_PTR      = $2846908;
+  BATTLEFIELD_PIC_NAME_BUF_SIZE = 256;
+
+var
+  NumParams:  integer;
+  SubCmd:     PErmSubCmd;
+  Param:      PErmCmdParam;
+  ParamValue: integer;
+
+begin
+  result      := false;
+  NumParams   := pinteger(Context.EBP + $0C)^;
+  SubCmd      := ppointer(Context.EBP + $14)^;
+  Context.EAX := ord(NumParams = 1);
+
+  if Context.EAX = 0 then begin
+    ShowErmError('!!BA:B - wrong number of parameters');
+  end else begin
+    Param      := @SubCmd.Params[0];
+    ParamValue := SubCmd.Nums[0];
+
+    if Param.GetType() in PARAM_VARTYPES_INTS then begin
+      Context.EAX := ord((ParamValue >= 0) and (ParamValue <= 25));
+
+      if Context.EAX <> 0 then begin
+        pinteger(BATTLEFIELD_ID_PTR)^ := ParamValue;
+      end else begin
+        ShowErmError('!!BA:B - battlefield ID must be in -1..25 range. Given: ' + SysUtils.IntToStr(ParamValue));
+      end;
+    end else if Param.GetType() in PARAM_VARTYPES_STRINGS then begin
+      pinteger(BATTLEFIELD_ID_PTR)^ := 0;
+      Utils.SetPcharValue(pchar(BATTLEFIELD_PIC_NAME_PTR), GetZVarAddr(ParamValue), BATTLEFIELD_PIC_NAME_BUF_SIZE);
+    end else begin
+      Context.EAX := 0;
+      ShowErmError('!!BA:B - invalid parameter type. Expected integer or string. Got: ' + ErmParamToCode(Param));
+    end;
+  end; // .else
+
+  Context.RetAddr := Ptr($762595);
+
+  if Context.EAX = 0 then begin
+    Context.RetAddr := Ptr($76259F);
+  end;
+end; // .function Hook_BA_B
+
 (* Rounds given value to one of the following directions: -1 for floor, 1 for ceil, 0 for away from zero *)
 function RoundFloat32 (Value: single; Direction: integer): integer;
 begin
@@ -7111,6 +7159,9 @@ begin
 
   (* Fix IF:N# to support any string *)
   ApiJack.HookCode(Ptr($749116), @Hook_IF_N);
+
+  (* Fix BA:B to allow both numeric field ID and string as the only argument *)
+  ApiJack.HookCode(Ptr($76242B), @Hook_BA_B);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
