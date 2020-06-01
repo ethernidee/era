@@ -2182,6 +2182,7 @@ var
     IdentAsInt:   integer;
     SavedPos:     integer;
     LineStartPos: integer;
+    CodeExcerpt:  string;
     c:            char;
 
   begin
@@ -2217,7 +2218,11 @@ var
 
               if (IdentAsInt = LITERAL_FILE) or (IdentAsInt = LITERAL_LINE) or (IdentAsInt = LITERAL_CODE) then begin
                 if IdentAsInt = LITERAL_FILE then begin
-                  Buf.Add(ScriptName);
+                  if IsInStr then begin
+                    Buf.Add(ScriptName);
+                  end else begin
+                    Buf.Add('^' + ScriptName + '^');
+                  end;                  
                 end else if IdentAsInt = LITERAL_LINE then begin
                   Buf.Add(SysUtils.IntToStr(Scanner.LineN));
                 end else begin
@@ -2229,7 +2234,13 @@ var
                   end;
 
                   if Scanner.Pos > LineStartPos then begin
-                    Buf.Add(EscapeErmLiteralContents(Copy(Scanner.GetSubstrAtPos(LineStartPos, Scanner.Pos - LineStartPos), 1, 100)));
+                    CodeExcerpt := EscapeErmLiteralContents(Copy(Scanner.GetSubstrAtPos(LineStartPos, Scanner.Pos - LineStartPos), 1, 100));
+
+                    if IsInStr then begin
+                      Buf.Add(CodeExcerpt);
+                    end else begin
+                      Buf.Add('^' + CodeExcerpt + '^');
+                    end;
                   end;
                   
                   Scanner.GotoPos(SavedPos);
