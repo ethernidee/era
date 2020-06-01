@@ -5111,9 +5111,11 @@ label
   AfterTriggers, TriggersProcessed;
 
 begin
-  StartTrigger := nil;
-  Trigger      := nil;
-  EventManager := EventMan.GetInstance;
+  StartTrigger             := nil;
+  Trigger                  := nil;
+  SavedTriggerLocalObjects := nil;
+  PrevTriggerCmdIndPtr     := nil;
+  EventManager             := EventMan.GetInstance;
   // * * * * * //
   if not ErmEnabled^ then begin
     RetXVars := ArgXVars;
