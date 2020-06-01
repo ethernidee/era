@@ -1140,6 +1140,26 @@ begin
   end;
 end;
 
+function InterpolateErmStr (Str: pchar): pchar; cdecl; forward;
+
+function GetInterpolatedZVarAddr (Ind: integer): pchar;
+begin
+  if Ind > High(z^) then begin
+    result := ZvsGetErtStr(Ind);
+
+    if (Ind < FIRST_LOCAL_ERT_INDEX) or (Ind > LAST_LOCAL_ERT_INDEX) then begin
+      result := InterpolateErmStr(result);
+    end;
+  end else if Ind >= Low(z^) then begin
+    result := @z[Ind];
+  end else if -Ind in [Low(nz^)..High(nz^)] then begin
+    result := @nz[-Ind];
+  end else begin
+    ShowErmError('Invalid z-var index: ' + SysUtils.IntToStr(Ind));
+    result := 'STRING NOT FOUND';
+  end;
+end;
+
 procedure ClearErmCmdCache;
 begin
   with DataLib.IterateDict(ErmCmdCache) do begin
@@ -1442,6 +1462,53 @@ begin
     end;
   end; // .if
 end; // .function AddrToLineAndPos
+
+function EscapeErmLiteralContents (const Literal: string): string;
+var
+{O} Buf:      TStrBuilder;
+    Str:      pchar;
+    StartPos: pchar;
+    c:        char;
+
+begin
+  Buf := TStrBuilder.Create;
+  Str := pchar(Literal);
+  // * * * * * //
+  while Str^ <> #0 do begin
+    StartPos := Str;
+
+    while not (Str^ in [#0, ';', '^', '%']) do begin
+      Inc(Str);
+    end;
+
+    if Str > StartPos then begin
+      Buf.AppendBuf(Str - StartPos, StartPos);
+    end;
+
+    c := Str^;
+
+    case c of
+      ';': begin
+        Buf.Append('%\:');
+        Inc(Str);
+      end;
+
+      '^': begin
+        Buf.Append('%\"');
+        Inc(Str);
+      end;
+
+      '%': begin
+        Buf.Append('%%');
+        Inc(Str);
+      end;
+    end;
+  end; // .while
+
+  result := Buf.BuildStr;
+  // * * * * * //
+  SysUtils.FreeAndNil(Buf);
+end; // .function EscapeErmLiteralContents
 
 type
   TErmLocalVar = class
@@ -2101,13 +2168,21 @@ var
   end; // .function DetectIdentType
 
   procedure ParseIdent (IsIndirectAddressing: longbool = false);
+  CONST
+    LITERAL_FILE = integer($454C4946);
+    LITERAL_LINE = integer($454E494C);
+    LITERAL_CODE = integer($45444F43);
+
   var
-    StartPos:   integer;
-    IdentType:  integer;
-    ConstValue: integer;
-    FuncId:     integer;
-    Ident:      string;
-    c:          char;
+    StartPos:     integer;
+    IdentType:    integer;
+    ConstValue:   integer;
+    FuncId:       integer;
+    Ident:        string;
+    IdentAsInt:   integer;
+    SavedPos:     integer;
+    LineStartPos: integer;
+    c:            char;
 
   begin
     StartPos := Scanner.Pos;
@@ -2134,9 +2209,33 @@ var
 
             IDENT_TYPE_CONST: begin
               ConstValue := 0;
+              IdentAsInt := 0;
 
-              if GlobalConsts.GetExistingValue(Ident, pointer(ConstValue)) then begin
-                Buf.Add(IntToStr(ConstValue));
+              if Length(Ident) = 4 then begin
+                IdentAsInt := pinteger(Ident)^;
+              end;
+
+              if (IdentAsInt = LITERAL_FILE) or (IdentAsInt = LITERAL_LINE) or (IdentAsInt = LITERAL_CODE) then begin
+                if IdentAsInt = LITERAL_FILE then begin
+                  Buf.Add(ScriptName);
+                end else if IdentAsInt = LITERAL_LINE then begin
+                  Buf.Add(SysUtils.IntToStr(Scanner.LineN));
+                end else begin
+                  SavedPos     := Scanner.Pos;
+                  LineStartPos := Scanner.LineStartPos + 1;
+
+                  if Scanner.GotoNextLine() then begin
+                    Scanner.GotoPrevChar();
+                  end;
+
+                  if Scanner.Pos > LineStartPos then begin
+                    Buf.Add(EscapeErmLiteralContents(Copy(Scanner.GetSubstrAtPos(LineStartPos, Scanner.Pos - LineStartPos), 1, 100)));
+                  end;
+                  
+                  Scanner.GotoPos(SavedPos);
+                end; // .else
+              end else if GlobalConsts.GetExistingValue(Ident, pointer(ConstValue)) then begin
+                Buf.Add(SysUtils.IntToStr(ConstValue));
               end else begin
                 ShowError(StartPos, 'Unknown global constant name: "' + Ident + '". Assuming 0');
                 GlobalConsts[Ident] := Ptr(0);
@@ -3708,7 +3807,7 @@ begin
             end else if -result in [Low(nz^)..High(nz^)] then begin
               result := integer(@nz[-result]);
             end else if result > High(z^) then begin
-              result := integer(ZvsInterpolateStr(ZvsGetErtStr(result)));
+              result := integer(GetInterpolatedZVarAddr(result));
             end else begin
               ShowErmError(Format('Invalid z-var index: %d. Expected -10..-1, 1+', [result]));
               ResValType := VALTYPE_ERROR; result := 0; exit;
@@ -4125,6 +4224,17 @@ begin
     if Caret[1] = '%' then begin
       Res.WriteByte(ord('%'));
       Inc(Caret, 2);
+    end else if Caret[1] = '\' then begin
+      if Caret[2] = ':' then begin
+        Res.Append(';');
+        Inc(Caret, 3);
+      end else if Caret[2] = '"' then begin
+        Res.Append('^');
+        Inc(Caret, 3);
+      end else begin
+        Res.Append('%\');
+        Inc(Caret, 2);
+      end;
     end else begin
       Inc(Caret);
       c := Caret^;
@@ -4294,24 +4404,6 @@ begin
   // * * * * * //
   SysUtils.FreeAndNil(Res);
 end; // .function InterpolateErmStr
-
-function GetInterpolatedZVarAddr (Ind: integer): pchar;
-begin
-  if Ind > High(z^) then begin
-    result := ZvsGetErtStr(Ind);
-
-    if (Ind < FIRST_LOCAL_ERT_INDEX) or (Ind > LAST_LOCAL_ERT_INDEX) then begin
-      result := InterpolateErmStr(result);
-    end;
-  end else if Ind >= Low(z^) then begin
-    result := @z[Ind];
-  end else if -Ind in [Low(nz^)..High(nz^)] then begin
-    result := @nz[-Ind];
-  end else begin
-    ShowErmError('Invalid z-var index: ' + SysUtils.IntToStr(Ind));
-    result := 'STRING NOT FOUND';
-  end;
-end;
 
 function Hook_ERM2String (Str: pchar; IsZStr: integer; var TokenLen: integer): pchar; cdecl;
 var
