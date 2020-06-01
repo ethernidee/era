@@ -1995,7 +1995,6 @@ begin
       end;
     end;
 
-
     result := GetCmdResult;
     Cleanup;
   end;
