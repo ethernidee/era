@@ -6787,6 +6787,11 @@ begin
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
+  for i := NumParams to High(ArgXVars) - 1 do begin
+    ArgXVars[i + 1]              := 0;
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (1 shl (i shl 1));
+  end;
+
   NumFuncArgsPassed := NumParams;
   FireErmEvent(FuncId);
   ApplyFuncByRefRes(SubCmd, NumParams);
@@ -6848,6 +6853,11 @@ begin
   for i := 0 to NumParams - 1 do begin
     ArgXVars[i + 1]              := GetErmParamValue(@SubCmd.Params[i], ValType);
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
+  end;
+
+  for i := NumParams to High(ArgXVars) - 1 do begin
+    ArgXVars[i + 1]              := 0;
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (1 shl (i shl 1));
   end;
 
   if ((LoopContext.Step >= 0) and (ArgXVars[16] <= LoopContext.EndValue)) or ((LoopContext.Step < 0) and (ArgXVars[16] >= LoopContext.EndValue)) then begin
