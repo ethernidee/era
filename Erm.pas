@@ -4714,10 +4714,13 @@ const
   CMD_MP = $504D;
   CMD_RD = $4452;
   CMD_VR = $5256;
+  CMD_FU = $5546;
+  CMD_DO = $4F44;
 
 var
   CmdId:          integer;
   ParamsAddrHash: integer;
+  PrevSubCmdPos:  integer;
   CacheEntry:     PCachedSubCmdParams;
   Param:          PErmCmdParam;
   ValType:        integer;
@@ -4771,8 +4774,10 @@ begin
   result := 0;
 
   while result < Length(SubCmd.Params) do begin
+    PrevSubCmdPos := SubCmd.Pos;
+
     if Hook_ZvsGetNum(SubCmd, result, DO_EVAL) then begin
-      result := 0;
+      result := -1;
 
       // Do not cache erroreous commands
       if UseCaching then begin
@@ -4781,7 +4786,9 @@ begin
 
       exit;
     end else begin
-      Inc(result);
+      if (SubCmd.Pos <> PrevSubCmdPos) or ((CmdId <> CMD_FU) and (CmdId <> CMD_DO)) then begin
+        Inc(result);
+      end;
 
       // Support old-style IF:Q#^...^ like syntax, when # and ^...^ are no separated as different arguments
       // Treat them as two standalone arguments
@@ -7331,7 +7338,7 @@ begin
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF909090890D0C0E84008885' +
-                                       'E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF528B45089090909050E8C537C01190908945F0837DF0007575E9167800' +
+                                       'E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF528B45089090909050E8C537C01190908945F0837DF0007D75E9167800' +
                                        '0090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
                                        '9090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
                                        '90909090909090909090909090']);
