@@ -108,6 +108,7 @@ type
     IsTemp:    boolean;
     IntItems:  array of integer;
     StrItems:  array of string;
+    NumItems:  integer;
   end;
 
   TSlotReleaser = class
@@ -1067,28 +1068,65 @@ end; // .function CheckCmdParamsEx
 function GetSlotItemsCount (Slot: TSlot): integer;
 begin
   {!} Assert(Slot <> nil);
-  if Slot.ItemsType = INT_VAR then begin
-    result := Length(Slot.IntItems);
-  end else begin
-    result := Length(Slot.StrItems);
-  end;
+  result := Slot.NumItems;
 end;
 
 procedure SetSlotItemsCount (NewNumItems: integer; Slot: TSlot);
+const
+  MIN_SLOT_CAPACITY = 8;
+  GROWTH_RATE       = 2;
+
+var
+  i: integer;
+
 begin
   {!} Assert(NewNumItems >= 0);
   {!} Assert(Slot <> nil);
 
   if Slot.ItemsType = INT_VAR then begin
-    if NewNumItems <> Length(Slot.IntItems) then begin
-      SetLength(Slot.IntItems, NewNumItems);
-    end;
+    if NewNumItems <> Slot.NumItems then begin
+      // Shrinking
+      if NewNumItems < Slot.NumItems then begin
+        if (NewNumItems > MIN_SLOT_CAPACITY) and (NewNumItems * (GROWTH_RATE * 2) <= Length(Slot.IntItems)) then begin
+          SetLength(Slot.IntItems, NewNumItems * GROWTH_RATE);
+        end;
+
+        for i := NewNumItems to Slot.NumItems - 1 do begin
+          Slot.IntItems[i] := 0;
+        end;
+      end
+      // Growing
+      else begin
+        // Lack of capacity
+        if NewNumItems > Length(Slot.IntItems) then begin
+          SetLength(Slot.IntItems, Math.Max(MIN_SLOT_CAPACITY, Math.Max(NewNumItems, Slot.NumItems * GROWTH_RATE)));
+        end;
+      end; // .else
+    end; // .if
   end else begin
-    if NewNumItems <> Length(Slot.StrItems) then begin
-      SetLength(Slot.StrItems, NewNumItems);
-    end;
-  end;
-end;
+    if NewNumItems <> Slot.NumItems then begin
+      // Shrinking
+      if NewNumItems < Slot.NumItems then begin
+        if (NewNumItems > MIN_SLOT_CAPACITY) and (NewNumItems * (GROWTH_RATE * 2) <= Length(Slot.StrItems)) then begin
+          SetLength(Slot.StrItems, NewNumItems * GROWTH_RATE);
+        end;
+
+        for i := NewNumItems to Slot.NumItems - 1 do begin
+          Slot.StrItems[i] := '';
+        end;
+      end
+      // Growing
+      else begin
+        // Lack of capacity
+        if NewNumItems > Length(Slot.StrItems) then begin
+          SetLength(Slot.StrItems, Math.Max(MIN_SLOT_CAPACITY, Math.Max(NewNumItems, Slot.NumItems * GROWTH_RATE)));
+        end;
+      end; // .else
+    end; // .if
+  end; // .else
+
+  Slot.NumItems := NewNumItems;
+end; // .procedure SetSlotItemsCount
 
 function NewSlot (ItemsCount: integer; ItemsType: TVarType; IsTemp: boolean): TSlot;
 begin
@@ -1096,6 +1134,7 @@ begin
   result           := TSlot.Create;
   result.ItemsType := ItemsType;
   result.IsTemp    := IsTemp;
+  result.NumItems  := 0;
   
   SetSlotItemsCount(ItemsCount, result);
 end;
@@ -1577,7 +1616,7 @@ begin
           result := false;
           Error  := 'Invalid number of command parameters';
         end; // .switch NumParams
-      end; // .case "M"
+      end; // .case "M"  
     'K':
       begin
         case NumParams of 
@@ -1905,7 +1944,7 @@ begin
   end; // .if
 end; // .function SN_X
 
-function SN_U (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+function SN_V (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 const
   FIRST_ITEM_PARAM_IND = 2;
 
@@ -1967,7 +2006,7 @@ begin
       end; // .else
     end; // .for
   end; // .if
-end; // .function SN_U
+end; // .function SN_V
 
 function SN_Receiver (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer; cdecl;
 var
@@ -1975,7 +2014,7 @@ var
 
 begin
   with WrapErmCmd('SN', SubCmd, CmdWrapper)^ do begin
-    while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R', 'U']) do begin
+    while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R', 'V']) do begin
       case Cmd of
         'G': begin
           Success := (Erm.CurrentTriggerCmdIndPtr <> nil) and (NumParams = 1) and not Params[0].OperGet and not Params[0].IsStr and (Params[0].Value.v >= 0) and (Params[0].Value.v < High(integer));
@@ -2000,7 +2039,7 @@ begin
         'I': begin Success := SN_I(NumParams, @Params, Error); end;
         'R': begin Success := SN_R(NumParams, @Params, Error); end;
         'F': begin Success := SN_F(NumParams, @Params, Error); end;
-        'U': begin Success := SN_U(NumParams, @Params, Error); end;
+        'V': begin Success := SN_V(NumParams, @Params, Error); end;
         
         'M', 'K', 'W', 'D', 'O': begin
           Success := ExtendedEraService(Cmd, NumParams, @Params, Error);
@@ -2149,7 +2188,6 @@ begin
       NumItems          := ReadInt;
       Slot              := NewSlot(NumItems, ItemsType, IsTempSlot);
       Slots[Ptr(SlotN)] := Slot;
-      SetSlotItemsCount(NumItems, Slot);
 
       if not IsTempSlot and (NumItems > 0) then begin
         if ItemsType = INT_VAR then begin
