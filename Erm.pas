@@ -6855,7 +6855,7 @@ begin
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
-  for i := NumParams to High(ArgXVars) - 1 do begin
+  for i := NumParams to High(ArgXVars) - 2 do begin
     ArgXVars[i + 1]              := 0;
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (1 shl (i shl 1));
   end;
