@@ -4762,6 +4762,11 @@ begin
           SubCmd.Nums[i] := FastIntVarAddrs[Param.GetType()][Param.Value];
         end else begin
           SubCmd.Nums[i] := GetErmParamValue(Param, ValType);
+
+          if ValType = VALTYPE_ERROR then begin
+            result := -1;
+            break;
+          end;
         end;
       end;
     end;
@@ -4786,6 +4791,7 @@ begin
 
       exit;
     end else begin
+      // Allow FU/DO receivers to handle zero number of parameters
       if (SubCmd.Pos <> PrevSubCmdPos) or ((CmdId <> CMD_FU) and (CmdId <> CMD_DO)) then begin
         Inc(result);
       end;
