@@ -1427,6 +1427,7 @@ function ExtendedEraService (Cmd: char; NumParams: integer; Params: PServicePara
 var
 {U} Slot:              TSlot;
     SlotId:            integer;
+    SlotItemInd:       integer;
 {U} AssocVarValue:     TAssocVar;
     AssocVarName:      string;
     NewSlotItemsCount: integer;
@@ -1491,23 +1492,35 @@ begin
               
               if result then begin
                 if Params[1].OperGet then begin
-                  result  :=
+                  SlotItemInd := Params[2].Value.v;
+
+                  if SlotItemInd < 0 then begin
+                    Inc(SlotItemInd, GetSlotItemsCount(Slot));
+                  end;
+
+                  result :=
                     (not Params[2].OperGet) and
                     (not Params[2].IsStr)   and
-                    Math.InRange(Params[2].Value.v, 0, GetSlotItemsCount(Slot) - 1);
+                    Math.InRange(SlotItemInd, 0, GetSlotItemsCount(Slot) - 1);
 
                   if result then begin
                     if Slot.ItemsType = INT_VAR then begin
-                      Params[1].RetInt(integer(@Slot.IntItems[Params[2].Value.v]));
+                      Params[1].RetInt(integer(@Slot.IntItems[SlotItemInd]));
                     end else begin
-                      Params[1].RetInt(integer(pointer(Slot.StrItems[Params[2].Value.v])));
+                      Params[1].RetInt(integer(pointer(Slot.StrItems[SlotItemInd])));
                     end;
                   end;
                 end else begin
-                  result  :=
+                  SlotItemInd := Params[1].Value.v;
+
+                  if SlotItemInd < 0 then begin
+                    Inc(SlotItemInd, GetSlotItemsCount(Slot));
+                  end;
+
+                  result :=
                     (not Params[1].OperGet) and
                     (not Params[1].IsStr)   and
-                    Math.InRange(Params[1].Value.v, 0, GetSlotItemsCount(Slot) - 1);
+                    Math.InRange(SlotItemInd, 0, GetSlotItemsCount(Slot) - 1);
 
                   if result and (Params[2].IsStr <> (Slot.ItemsType = STR_VAR)) then begin
                     Error  := 'Cannot get INTEGER/STRING item into variable of not appropriate type';
@@ -1517,15 +1530,15 @@ begin
                   if result then begin
                     if Params[2].OperGet then begin
                       if Slot.ItemsType = INT_VAR then begin
-                        Params[2].RetInt(Slot.IntItems[Params[1].Value.v]);
+                        Params[2].RetInt(Slot.IntItems[SlotItemInd]);
                       end else begin
-                        Params[2].RetStr(Slot.StrItems[Params[1].Value.v]);
+                        Params[2].RetStr(Slot.StrItems[SlotItemInd]);
                       end;
                     end else begin
                       if Slot.ItemsType = INT_VAR then begin
-                        ApplyIntParam(Params[2], Slot.IntItems[Params[1].Value.v]);
+                        ApplyIntParam(Params[2], Slot.IntItems[SlotItemInd]);
                       end else begin
-                        AssignStrFromParam(Params[2], Slot.StrItems[Params[1].Value.v]);
+                        AssignStrFromParam(Params[2], Slot.StrItems[SlotItemInd]);
                       end;
                     end; // .else
                   end; // .if
