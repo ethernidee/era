@@ -4703,6 +4703,8 @@ Error:
   end;
 
   Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
+
+  result := true;
 end; // .function Hook_ZvsGetNum
 
 function CustomGetNumAuto (Cmd: PErmCmd; SubCmd: PErmSubCmd): integer; stdcall;
