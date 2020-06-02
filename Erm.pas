@@ -4343,6 +4343,9 @@ begin
           if MacroParam <> nil then begin
             IndexVarType := MacroParam.GetType();
             Param.Value  := MacroParam.Value;
+          end else begin
+            ShowErmError('*GetNum: unknown macro name $...$');
+            goto Error;
           end;
 
           Inc(Caret, TokenLen);
@@ -4637,14 +4640,16 @@ begin
     PrevCmdPos := SubCmd.Pos;
     Inc(SubCmd.Pos, integer(Caret) - integer(StartPtr));
     MacroParam := ZvsGetMacro(ZvsFindMacro(SubCmd, 0));
+    Caret      := @SubCmd.Code.Value[SubCmd.Pos];
+    SubCmd.Pos := PrevCmdPos;
 
     if MacroParam <> nil then begin
       IndexVarType := MacroParam.GetType();
       Param.Value  := MacroParam.Value;
+    end else begin
+      ShowErmError('*GetNum: unknown macro name $...$');
+      goto Error;
     end;
-
-    Caret      := @SubCmd.Code.Value[SubCmd.Pos];
-    SubCmd.Pos := PrevCmdPos;
   end else begin
     if IndexTypeChar in ['+', '-', '0'..'9'] then begin
       if not IsIndexed and (CheckType = PARAM_CHECK_GET) then begin
