@@ -6889,6 +6889,7 @@ var
   NumParams: integer;
   Shift:     integer;
   ResValue:  integer;
+  i:         integer;
 
 begin
   CmdChar := chr(Context.ECX + $43);
@@ -6899,13 +6900,19 @@ begin
     NumParams := pinteger(Context.EBP + $0C)^;
     // * * * * * //
     if CmdChar = 'A' then begin
-      if (NumParams <> 1) or (SubCmd.Params[0].GetCheckType() <> PARAM_CHECK_GET) then begin
-        ShowErmError('Invalid !!FU:A syntax');
-        Context.RetAddr := Ptr($72D19A);
-        exit;
-      end;
-
-      ZvsApply(@NumFuncArgsReceived, 4, SubCmd, 0);
+      if NumParams = 1 then begin
+        if SubCmd.Params[0].GetCheckType() <> PARAM_CHECK_GET then begin
+          if NumFuncArgsReceived = 0 then begin
+            x[1] := SubCmd.Nums[0];
+          end;
+        end else begin
+          ZvsApply(@NumFuncArgsReceived, 4, SubCmd, 0);
+        end;
+      end else begin
+        for i := NumFuncArgsReceived to NumParams - 1 do begin
+          x[i + 1] := SubCmd.Nums[i];
+        end;
+      end; // .else      
     end else if CmdChar = 'S' then begin
       if (NumParams <> 2) or (SubCmd.Params[0].GetCheckType() = PARAM_CHECK_GET) or (SubCmd.Params[1].GetCheckType() <> PARAM_CHECK_GET) or
          not Math.InRange(SubCmd.Nums[0], Low(x^), High(x^))
