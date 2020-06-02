@@ -6809,6 +6809,10 @@ begin
     ArgXVars[i + 1] := Args[i];
   end;
 
+  for i := NumArgs to High(ArgXVars) - 1 do begin
+    ArgXVars[i + 1] := 0;
+  end;
+
   FuncArgsGetSyntaxFlagsPassed := $55555555;
   NumFuncArgsPassed            := NumArgs;
   FireErmEvent(FuncId);
