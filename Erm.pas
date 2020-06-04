@@ -4289,6 +4289,10 @@ begin
 
         Res.Append(Trans.tr(StrLib.ExtractFromPchar(TokenStart, Caret - TokenStart), []));
         Inc(Caret);
+      end else if (Caret^ = 'V') and (Caret[1] in ['f'..'t']) then begin
+        // Provide support for old %Vi..%Vf syntax
+        Res.Append(SysUtils.IntToStr(QuickVars[Low(QuickVars^) + ord(Caret[1]) - ord('f')]));
+        Inc(Caret, 2);
       end else if c in SUPPORTED_PAR_TYPES then begin
         Param.Value   := 0;
         Param.ValType := 0;
