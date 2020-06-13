@@ -5840,6 +5840,10 @@ begin
 end; // .function Hook_HE_C
 
 function Hook_HE_X (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  SPEC_UPGRADES = 6;
+  SPEC_DRAGONS  = 7;
+
 var
   NumParams:   integer;
   Hero:        Heroes.PHero;
@@ -5856,8 +5860,32 @@ begin
   SpecRecord      := @HeroSpecsTable[Hero.Id];
   result          := false;
 
-  for i := 0 to Math.Min(NumParams, Length(SpecRecord.Setup)) - 1 do begin
-    ZvsApply(@SpecRecord.Setup[i], sizeof(SpecRecord.Setup[i]), SubCmd, i);
+  if (NumParams < 7) and (SubCmd.Params[0].GetCheckType() = PARAM_CHECK_NONE) and (SubCmd.Modifiers[0] = PARAM_MODIFIER_NONE) and
+    ((SubCmd.Nums[0] = SPEC_UPGRADES) or (SubCmd.Nums[0] = SPEC_DRAGONS))
+  then begin
+    if NumParams < 2 then begin
+      ShowErmError('HE:X wrong number of parameters');
+      result := true;
+    end else begin
+      SpecRecord.Setup[0] := SubCmd.Nums[0];
+
+      if SubCmd.Nums[0] = SPEC_UPGRADES then begin
+        ZvsApply(@SpecRecord.Setup[1], sizeof(SpecRecord.Setup[1]), SubCmd, 1);
+        ZvsApply(@SpecRecord.Setup[5], sizeof(SpecRecord.Setup[5]), SubCmd, 2);
+        ZvsApply(@SpecRecord.Setup[6], sizeof(SpecRecord.Setup[6]), SubCmd, 3);
+      end else if SubCmd.Nums[0] = SPEC_DRAGONS then begin
+        ZvsApply(@SpecRecord.Setup[2], sizeof(SpecRecord.Setup[2]), SubCmd, 1);
+        ZvsApply(@SpecRecord.Setup[3], sizeof(SpecRecord.Setup[3]), SubCmd, 2);
+      end;
+    end;
+  end else begin
+    for i := 0 to Math.Min(NumParams, Length(SpecRecord.Setup)) - 1 do begin
+      ZvsApply(@SpecRecord.Setup[i], sizeof(SpecRecord.Setup[i]), SubCmd, i);
+    end;
+  end; // .else
+
+  if result then begin
+    Context.RetAddr := Ptr($7496D9);
   end;
 end; // .function Hook_HE_X
 
