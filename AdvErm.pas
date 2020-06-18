@@ -2344,22 +2344,29 @@ begin
 end;
 
 function Hook_ZvsCheckObjHint (C: Core.PHookContext): longbool; stdcall;
+const
+  HINT_BUF = $697428;
+
 var
 {U} HintSection: TObjDict;
 {U} StrValue:    TString;
     Code:        integer;
+    x, y, z:     integer;
     ObjType:     integer;
     ObjSubtype:  integer;
+    OldHint:     array of char;
 
 begin
   HintSection := TObjDict(Hints['object']);
-  Code        := pinteger(C.EBP - 12)^ or (pinteger(C.EBP - 8)^ shl 8)
-                 or (pinteger(C.EBP - 24)^ shl 16);
+  x           := pinteger(C.EBP - 12)^;
+  y           := pinteger(C.EBP - 8)^;
+  z           := pinteger(C.EBP - 24)^;
+  ObjType     := pword(pinteger(C.EBP + 8)^ + $1E)^;
+  ObjSubtype  := pword(pinteger(C.EBP + 8)^ + $22)^;
+  Code        := x or (y shl 8) or (z shl 16);
   StrValue    := HintSection[Ptr(Code)];
   
   if StrValue = nil then begin
-    ObjType    := pword(pinteger(C.EBP + 8)^ + $1E)^;
-    ObjSubtype := pword(pinteger(C.EBP + 8)^ + $22)^;
     Code       := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
     StrValue   := HintSection[Ptr(Code)];
 
@@ -2384,6 +2391,15 @@ begin
     result    := not Core.EXEC_DEF_CODE;
   end else begin
     result := Core.EXEC_DEF_CODE;
+  end;
+
+  SetLength(OldHint, Windows.LStrLen(pchar(HINT_BUF)) + 1);
+  Utils.CopyMem(Length(OldHint), pchar(HINT_BUF), pointer(OldHint));
+  Erm.FireErmEventEx(TRIGGER_ADVMAP_TILE_HINT, [x, y, z, ObjType, ObjSubtype]);
+
+  if result and (Windows.LStrCmp(pchar(HINT_BUF), pchar(OldHint)) <> 0) then begin
+    C.RetAddr := Ptr($74DFFB);
+    result    := not Core.EXEC_DEF_CODE;
   end;
 end; // .function Hook_ZvsCheckObjHint
 

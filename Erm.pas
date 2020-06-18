@@ -176,46 +176,47 @@ const
   TRIGGER_INVALID   = -1;
 
   (* Era Triggers *)
-  FIRST_ERA_TRIGGER                    = 77001;
-  TRIGGER_SAVEGAME_WRITE               = 77001;
-  TRIGGER_SAVEGAME_READ                = 77002;
-  TRIGGER_KEYPRESS                     = 77003;
-  TRIGGER_OPEN_HEROSCREEN              = 77004;
-  TRIGGER_CLOSE_HEROSCREEN             = 77005;
-  TRIGGER_STACK_OBTAINS_TURN           = 77006;
-  TRIGGER_REGENERATE_PHASE             = 77007;
-  TRIGGER_AFTER_SAVE_GAME              = 77008;
-  TRIGGER_BEFOREHEROINTERACT           = 77010;
-  TRIGGER_AFTERHEROINTERACT            = 77011;
-  TRIGGER_ONSTACKTOSTACKDAMAGE         = 77012;
-  TRIGGER_ONAICALCSTACKATTACKEFFECT    = 77013;
-  TRIGGER_ONCHAT                       = 77014;
-  TRIGGER_ONGAMEENTER                  = 77015;
-  TRIGGER_ONGAMELEAVE                  = 77016;
-  TRIGGER_ONREMOTEEVENT                = 77017;
-  TRIGGER_DAILY_TIMER                  = 77018;
-  TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE = 77019;
-  TRIGGER_BATTLEFIELD_VISIBLE          = 77020;
-  TRIGGER_AFTER_TACTICS_PHASE          = 77021;
-  TRIGGER_COMBAT_ROUND                 = 77022;
-  TRIGGER_OPEN_RECRUIT_DLG             = 77023;
-  TRIGGER_CLOSE_RECRUIT_DLG            = 77024;
-  TRIGGER_RECRUIT_DLG_MOUSE_CLICK      = 77025;
-  TRIGGER_TOWN_HALL_MOUSE_CLICK        = 77026;
-  TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK = 77027;
-  TRIGGER_RECRUIT_DLG_RECALC           = 77028;
-  TRIGGER_RECRUIT_DLG_ACTION           = 77029;
-  TRIGGER_LOAD_HERO_SCREEN             = 77030;
-  TRIGGER_BUILD_TOWN_BUILDING          = 77031;
-  TRIGGER_OPEN_TOWN_SCREEN             = 77032;
-  TRIGGER_CLOSE_TOWN_SCREEN            = 77033;
-  TRIGGER_SWITCH_TOWN_SCREEN           = 77034;
-  TRIGGER_PRE_TOWN_SCREEN              = 77035;
-  TRIGGER_POST_TOWN_SCREEN             = 77036;
-  TRIGGER_PRE_HEROSCREEN               = 77037;
-  TRIGGER_POST_HEROSCREEN              = 77038;
+  FIRST_ERA_TRIGGER                      = 77001;
+  TRIGGER_SAVEGAME_WRITE                 = 77001;
+  TRIGGER_SAVEGAME_READ                  = 77002;
+  TRIGGER_KEYPRESS                       = 77003;
+  TRIGGER_OPEN_HEROSCREEN                = 77004;
+  TRIGGER_CLOSE_HEROSCREEN               = 77005;
+  TRIGGER_STACK_OBTAINS_TURN             = 77006;
+  TRIGGER_REGENERATE_PHASE               = 77007;
+  TRIGGER_AFTER_SAVE_GAME                = 77008;
+  TRIGGER_BEFOREHEROINTERACT             = 77010;
+  TRIGGER_AFTERHEROINTERACT              = 77011;
+  TRIGGER_ONSTACKTOSTACKDAMAGE           = 77012;
+  TRIGGER_ONAICALCSTACKATTACKEFFECT      = 77013;
+  TRIGGER_ONCHAT                         = 77014;
+  TRIGGER_ONGAMEENTER                    = 77015;
+  TRIGGER_ONGAMELEAVE                    = 77016;
+  TRIGGER_ONREMOTEEVENT                  = 77017;
+  TRIGGER_DAILY_TIMER                    = 77018;
+  TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE   = 77019;
+  TRIGGER_BATTLEFIELD_VISIBLE            = 77020;
+  TRIGGER_AFTER_TACTICS_PHASE            = 77021;
+  TRIGGER_COMBAT_ROUND                   = 77022;
+  TRIGGER_OPEN_RECRUIT_DLG               = 77023;
+  TRIGGER_CLOSE_RECRUIT_DLG              = 77024;
+  TRIGGER_RECRUIT_DLG_MOUSE_CLICK        = 77025;
+  TRIGGER_TOWN_HALL_MOUSE_CLICK          = 77026;
+  TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK   = 77027;
+  TRIGGER_RECRUIT_DLG_RECALC             = 77028;
+  TRIGGER_RECRUIT_DLG_ACTION             = 77029;
+  TRIGGER_LOAD_HERO_SCREEN               = 77030;
+  TRIGGER_BUILD_TOWN_BUILDING            = 77031;
+  TRIGGER_OPEN_TOWN_SCREEN               = 77032;
+  TRIGGER_CLOSE_TOWN_SCREEN              = 77033;
+  TRIGGER_SWITCH_TOWN_SCREEN             = 77034;
+  TRIGGER_PRE_TOWN_SCREEN                = 77035;
+  TRIGGER_POST_TOWN_SCREEN               = 77036;
+  TRIGGER_PRE_HEROSCREEN                 = 77037;
+  TRIGGER_POST_HEROSCREEN                = 77038;
   TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE = 77039;
-  {!} LAST_ERA_TRIGGER                 = TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE;
+  TRIGGER_ADVMAP_TILE_HINT               = 77040;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_ADVMAP_TILE_HINT;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1067,6 +1068,7 @@ begin
     {*} TRIGGER_PRE_HEROSCREEN:               result := 'OnPreHeroScreen';
     {*} TRIGGER_POST_HEROSCREEN:              result := 'OnPostHeroScreen';
     {*} TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE: result := 'OnDetermineMonInfoDlgUpgrade';
+    {*} TRIGGER_ADVMAP_TILE_HINT:             result := 'OnAdvMapTileHint';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -3434,6 +3436,7 @@ begin
   NameTrigger(TRIGGER_PRE_HEROSCREEN,               'OnPreHeroScreen');
   NameTrigger(TRIGGER_POST_HEROSCREEN,              'OnPostHeroScreen');
   NameTrigger(TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, 'OnDetermineMonInfoDlgUpgrade');
+  NameTrigger(TRIGGER_ADVMAP_TILE_HINT,             'OnAdvMapTileHint');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
@@ -6108,6 +6111,52 @@ begin
   end;
 end; // .function Hook_BA_B
 
+function Hook_MM_M (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  HINT_BUF = $697428;
+
+var
+  NumParams: integer;
+  SubCmd:    PErmSubCmd;
+  Param:     PErmCmdParam;
+  ZVarInd:   integer;
+  i:         integer;
+
+begin
+  result      := false;
+  NumParams   := pinteger(Context.EBP + $0C)^;
+  SubCmd      := ppointer(Context.EBP + $14)^;
+  Param       := @SubCmd.Params[0];
+  ZVarInd     := SubCmd.Nums[0];
+  Context.EAX := ord(NumParams = 1);
+
+  if Context.EAX = 0 then begin
+    ShowErmError('!!MM:M - insufficient parameters');
+  end else begin
+    Context.EAX := ord(Param.GetType() in PARAM_VARTYPES_STRINGS);
+
+    if Context.EAX = 0 then begin
+      ShowErmError('!!MM:M - the parameter must be string. Given: ' + ErmParamToCode(Param));
+    end else begin
+      Context.EAX := ord((Param.GetCheckType() <> PARAM_CHECK_GET) or IsMutableZVarIndex(ZVarInd));
+
+      if Context.EAX = 0 then begin
+        ShowErmError('!!MM:M - string variable must be mutable for GET syntax. Given: ' + ErmParamToCode(Param));
+      end else if Param.GetCheckType() = PARAM_CHECK_GET then begin
+        Context.EAX := ord(SetErmParamValue(Param, HINT_BUF, FLAG_ASSIGNABLE_STRINGS));
+      end else begin
+        Utils.SetPcharValue(pchar(HINT_BUF), GetZVarAddr(ZVarInd), sizeof(z[1]));
+      end;
+    end;
+  end; // .else
+
+  if Context.EAX <> 0 then begin
+    Context.RetAddr := Ptr($75008C);
+  end else begin
+    Context.RetAddr := Ptr($75008C);
+  end;
+end; // .function Hook_MM_M
+
 (* Rounds given value to one of the following directions: -1 for floor, 1 for ceil, 0 for away from zero *)
 function RoundFloat32 (Value: single; Direction: integer): integer;
 begin
@@ -7358,6 +7407,9 @@ begin
 
   (* Fix BA:B to allow both numeric field ID and string as the only argument *)
   ApiJack.HookCode(Ptr($76242B), @Hook_BA_B);
+  
+  (* Fix MM:M to allow all strings *)
+  ApiJack.HookCode(Ptr($74FD94), @Hook_MM_M);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
