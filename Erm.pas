@@ -767,7 +767,7 @@ var
     NumUniqueTriggers:     integer                = 0;
     CompiledErmOptimized:  boolean                = false;
 
-    (* Speed up loops with nativ ERM receivers *)
+    (* Speed up loops with native ERM receivers *)
     SubCmdCache: array [0..511] of TCachedSubCmdParams;
 
     (* Fast known integer variables like y3, x15 or v600 compilation optimization *)
@@ -7208,7 +7208,7 @@ begin
       if StrLen >= 0 then begin
         Buf := Heroes.MemAllocFunc(StrLen + 1);
         Read(StrLen, pbyte(Buf));
-        Buf[StrLen - 1]        := #0;
+        Buf[StrLen]            := #0;
         ErtStrings[Ptr(Index)] := Buf;
       end;
     end; // .for
