@@ -5742,7 +5742,8 @@ begin
 
   if (x <> Hero.x) or (y <> Hero.y) or (z <> Hero.l) then begin
     // Flag 4 is set and hero belongs to current player - do teleport with sound and redraw
-    if (NumParams > 3) and (SubCmd.Nums[3] <> 0) and (Heroes.GetCurrentPlayer = Hero.Owner) then begin
+    // If Flag 4 is not specified, for compatibility reasons apply smart auto behavior
+    if (Heroes.GetCurrentPlayer = Hero.Owner) and ((NumParams <= 3) or ((NumParams > 3) and (SubCmd.Nums[3] <> 0))) then begin
       PatchApi.Call(CDECL_, Ptr($712008), [Hero, x, y, z, 1]);
     end else begin
       Heroes.HideHero(Hero);
