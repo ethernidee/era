@@ -732,6 +732,26 @@ type
     Day:   word;
   end;
 
+  PArtInfo = ^TArtInfo;
+  TArtInfo = packed record
+    Name:           pchar;                // +00
+    Cost:           integer;              // +04
+    Pos:            integer;              // +08
+    ArtType:        integer;              // +0C
+    Desc:           pchar;                // +10
+    ComboArtId:     integer;              // +14
+    ComboArtPartId: integer;              // +18
+    IsDisabled:     boolean;              // +1C
+    GivesSpell:     boolean;              // +1D
+    Reserved:       array [1..2] of byte; // +1E
+
+    // 0 for name, 1 for description
+    function GetTextField (Ind: integer): PValue;
+  end;
+
+  PArtInfos = ^TArtInfos;
+  TArtInfos = array [0..99999] of TArtInfo;
+
   TTextTableCells = array of Utils.TArrayOfStr;
 
   TTextTable = class
@@ -787,6 +807,8 @@ const
 
   MonInfos:       PMonInfos = Ptr($7D0C90);
   NumMonstersPtr: pinteger  = Ptr($733326);
+  ArtInfos:       PArtInfos = Ptr($660B68);
+  NumArtsPtr:     pinteger  = Ptr($7324BD);
   NumHeroes:      pinteger  = Ptr($7116B2);
 
   (* Variable is protected with two crit sections: pint(SOUND_MANAGER)^ + $a8 and pint(SOUND_MANAGER)^ + $c0 *)
@@ -861,6 +883,18 @@ function ParseTextTable (const TextTable: string): TTextTableCells;
 (***) implementation (***)
 
 uses GameExt, EventMan;
+
+function TArtInfo.GetTextField (Ind: integer): PValue;
+begin
+  if Ind = 0 then begin
+    result := @Self.Name;
+  end else if Ind = 1 then begin
+    result := @Self.Desc;
+  end else begin
+    result := nil;
+    {!} Assert(false, 'Cannot get TArtInfo field with invalid index ' + SysUtils.IntToStr(Ind));
+  end;
+end;
 
 constructor TTextTable.Create (Cells: TTextTableCells);
 var
@@ -1573,6 +1607,7 @@ begin
   SecSkillDescs := GameExt.GetRealAddr(SecSkillDescs);
   SecSkillTexts := GameExt.GetRealAddr(SecSkillTexts);
   MonInfos      := GameExt.GetRealAddr(MonInfos);
+  ArtInfos      := ppointer(ArtInfos)^;
 end;
 
 begin
