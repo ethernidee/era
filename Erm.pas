@@ -9,7 +9,7 @@ uses
   SysUtils, Math, Windows,
   Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
   Lists, StrLib, Alg, RandMt,
-  Core, Heroes, GameExt, Trans, RscLists, EventMan;
+  Core, Heroes, GameExt, Trans, RscLists, EventMan, DlgMes;
 
 type
   (* Import *)
@@ -625,7 +625,7 @@ const
 
 
 var
-{O} LoadedErsFiles:  {O} TList {of Heroes.PTxtFile};
+{O} LoadedErsFiles:  {O} TList {of Heroes.TTextTable};
 {O} ErtStrings:      {O} AssocArrays.TObjArray {of Index => pchar}; // use H3 Alloc/Free
 {O} ScriptMan:       TScriptMan;
     ErmTriggerDepth: integer = 0;
@@ -1381,53 +1381,51 @@ end;
 
 function Hook_LoadErsFiles (Context: ApiJack.PHookContext): longbool; stdcall;
 var
-{O} TxtFilePtr: Heroes.PTxtFile;
-    TxtFile:    Heroes.TTxtFile;
+{O} TextTable:         Heroes.TTextTable;
+    TextTableCells:    Heroes.TTextTableCells;
+    TextTableContents: string;
 
 begin
-  TxtFilePtr := nil;
+  TextTable := nil;
   // * * * * * //
   with Files.Locate(GameExt.GameDir + '\' + ERS_FILES_PATH + '\*.ers', Files.ONLY_FILES) do begin
     while FindNext do begin
-      System.FillChar(TxtFile, sizeof(TxtFile), #0);
-
-      if not Heroes.ZvsLoadTxtFile(pchar('..\' + ERS_FILES_PATH + '\' + FoundName), TxtFile) then begin
-        GetMem(TxtFilePtr, sizeof(TxtFilePtr^));
-        TxtFilePtr^ := TxtFile;
-        LoadedErsFiles.Add(TxtFilePtr); TxtFilePtr := nil;
+      if Files.ReadFileContents(FoundPath, TextTableContents) then begin
+        TextTable := Heroes.TTextTable.Create(Heroes.ParseTextTable(TextTableContents));
+        LoadedErsFiles.Add(TextTable); TextTable := nil;
       end;
     end;
-  end; // .with
+  end;
 
   Context.RetAddr := Ptr($77941A);
   result          := false;
   // * * * * * //
-  FreeMem(TxtFilePtr);
+  SysUtils.FreeAndNil(TextTable);
 end; // .function Hook_LoadErsFiles
 
 function Hook_ApplyErsOptions (Context: ApiJack.PHookContext): longbool; stdcall;
 var
-{U} TxtFile: Heroes.PTxtFile;
-    i, j:    integer;
+{U} TextTable: Heroes.TTextTable;
+    i, j:      integer;
 
 begin
-  TxtFile := nil;
+  TextTable := nil;
   // * * * * * //
   for i := 0 to LoadedErsFiles.Count - 1 do begin
-    TxtFile := Heroes.PTxtFile(LoadedErsFiles[i]);
+    TextTable := Heroes.TTextTable(LoadedErsFiles[i]);
 
-    for j := 0 to TxtFile.NumLines - 1 do begin
+    for j := 0 to TextTable.NumRows - 1 do begin
       ZvsAddItemToWogOptions(
-        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 1, TxtFile)),
-        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 2, TxtFile)),
-        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 3, TxtFile)),
-        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 4, TxtFile)),
-        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 5, TxtFile)),
-        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 6, TxtFile)),
-        Heroes.a2i(Heroes.ZvsGetTxtValue(j, 7, TxtFile)),
-        Heroes.ZvsGetTxtValue(j, 8, TxtFile),
-        Heroes.ZvsGetTxtValue(j, 9, TxtFile),
-        Heroes.ZvsGetTxtValue(j, 10, TxtFile),
+        Heroes.a2i(pchar(TextTable[j, 1])),
+        Heroes.a2i(pchar(TextTable[j, 2])),
+        Heroes.a2i(pchar(TextTable[j, 3])),
+        Heroes.a2i(pchar(TextTable[j, 4])),
+        Heroes.a2i(pchar(TextTable[j, 5])),
+        Heroes.a2i(pchar(TextTable[j, 6])),
+        Heroes.a2i(pchar(TextTable[j, 7])),
+        pchar(TextTable[j, 8]),
+        pchar(TextTable[j, 9]),
+        pchar(TextTable[j, 10]),
       );
     end;
   end; // .for
@@ -7520,7 +7518,7 @@ begin
 end; // .procedure OnAfterStructRelocations
 
 begin
-  LoadedErsFiles  := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
+  LoadedErsFiles  := DataLib.NewList(Utils.OWNS_ITEMS);
   ErtStrings      := AssocArrays.NewObjArr(not Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
   ScriptMan       := TScriptMan.Create;
   FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
