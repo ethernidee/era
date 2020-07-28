@@ -1198,7 +1198,8 @@ var
     Hero:     integer;
     NameType: integer;
     Skill:    integer;
-    Monster:  integer;
+    Monster:  integer absolute Skill;
+    Art:      integer absolute Skill;
 
   (* Returns new hint address or nil if hint was deleted *)
   function UpdateHint (HintParamN: integer): {n} pchar;
@@ -1394,6 +1395,36 @@ begin
                   end else begin
                     Heroes.MonInfos[Monster].Names.Texts[NameType] := HintRaw;
                     Erm.MonNamesTables[NameType][Monster]          := HintRaw;
+                  end;
+                end; // .else
+              end; // .if
+            end; // .if
+          end else begin
+            result := false;
+            Error  := 'Invalid number of command parameters';
+          end; // .else
+        // SN:H^art^/art/name (0) or description (1)/text
+        end else if SectionName = 'art' then begin
+          if NumParams = 4 then begin
+            result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, TYPE_STR]);
+
+            if result then begin
+              Art      := Params[1].Value.v;
+              NameType := Params[2].Value.v;
+              result   := Math.InRange(Art, 0, Heroes.NumArtsPtr^ - 1) and Math.InRange(NameType, 0, 1);
+              
+              if result then begin
+                if Params[3].OperGet then begin
+                  Params[3].RetPchar(Heroes.ArtInfos[Art].GetTextField(NameType).pc);
+                end else begin
+                  Code    := Art or (NameType shl 16);
+                  HintRaw := UpdateHint(3);
+                  Erm.ArtNamesSettingsTable[Art].Texts[NameType] := 0;
+
+                  if DeleteHint then begin
+                    Heroes.ArtInfos[Art].GetTextField(NameType).pc := Erm.ArtInfosBack[Art].GetTextField(NameType).pc;
+                  end else begin
+                    Heroes.ArtInfos[Art].GetTextField(NameType).pc := HintRaw;
                   end;
                 end; // .else
               end; // .if
@@ -1917,7 +1948,6 @@ begin
   end;
 end;
 
-
 function SN_X (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
   i: integer;
@@ -2239,7 +2269,8 @@ var
 {U} Name:     pchar;
     Hero:     integer;
     Skill:    integer;
-    Monster:  integer;
+    Monster:  integer absolute Skill;
+    Art:      integer absolute Skill;
     NameType: integer;
 
 begin
@@ -2316,6 +2347,22 @@ begin
         Erm.MonNamesSettingsTable[Monster].Texts[NameType] := 0;
         Heroes.MonInfos[Monster].Names.Texts[NameType]     := Name;
         Erm.MonNamesTables[NameType][Monster]              := Name;
+      end; // .while
+    end; // .with
+  end; // .if
+
+  (* Apply artifacts texts *)
+  HintSection := TObjDict(Hints['art']);
+
+  if HintSection <> nil then begin
+    with DataLib.IterateObjDict(HintSection) do begin
+      while IterNext do begin
+        Art      := integer(IterKey) and $FFFF;
+        NameType := integer(IterKey) shr 16;
+        Name     := pchar(TString(IterValue).Value);
+
+        Erm.ArtNamesSettingsTable[Art].Texts[NameType] := 0;
+        Heroes.ArtInfos[Art].GetTextField(NameType).pc := Name;
       end; // .while
     end; // .with
   end; // .if
@@ -3077,6 +3124,7 @@ begin
   Hints['spec']     := DataLib.NewObjDict(Utils.OWNS_ITEMS);
   Hints['secskill'] := DataLib.NewObjDict(Utils.OWNS_ITEMS);
   Hints['monname']  := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  Hints['art']      := DataLib.NewObjDict(Utils.OWNS_ITEMS);
 end;
 
 begin

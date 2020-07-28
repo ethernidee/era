@@ -516,6 +516,21 @@ type
   PMonNamesSettingsTable = ^TMonNamesSettingsTable;
   TMonNamesSettingsTable = array [0..high(integer) div sizeof(TMonNamesSettings) div 3 - 1] of TMonNamesSettings;
 
+  TArtNamesSettings = packed record
+    case byte of
+      0: (
+        Name: integer; // z-index
+        Desc: integer; // z-index
+      );
+
+      1: (
+        Texts: array [0..1] of integer;
+      );
+  end;
+
+  PArtNamesSettingsTable = ^TArtNamesSettingsTable;
+  TArtNamesSettingsTable = array [0..high(integer) div sizeof(TArtNamesSettings) div 3 - 1] of TArtNamesSettings;
+
   TFireRemoteEventProc = procedure (EventId: integer; Data: pinteger; NumInts: integer); cdecl;
   TZvsPlaceMapObject   = function (x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; cdecl;
   TZvsCheckEnabled     = array [0..19] of integer;
@@ -571,6 +586,8 @@ const
   MonNamesSingularTableBack:  Utils.PEndlessPcharArr = Ptr($A498A8);
   MonNamesPluralTableBack:    Utils.PEndlessPcharArr = Ptr($A48128);
   MonNamesSpecialtyTableBack: Utils.PEndlessPcharArr = Ptr($A88E78);
+  ArtNamesSettingsTable:      PArtNamesSettingsTable = Ptr($A4A588);
+  ArtInfosBack:               Heroes.PArtInfos       = Ptr($2731070);
 
   (* WoG funcs *)
   ZvsProcessCmd:      procedure (Cmd: PErmCmd; Dummy: integer = 0; IsPostInstr: longbool = false) cdecl = Ptr($741DF0);
@@ -7509,6 +7526,8 @@ begin
   MonNamesSingularTableBack  := GameExt.GetRealAddr(MonNamesSingularTableBack);
   MonNamesPluralTableBack    := GameExt.GetRealAddr(MonNamesPluralTableBack);
   MonNamesSpecialtyTableBack := GameExt.GetRealAddr(MonNamesSpecialtyTableBack);
+  ArtNamesSettingsTable      := GameExt.GetRealAddr(ArtNamesSettingsTable);
+  ArtInfosBack               := GameExt.GetRealAddr(ArtInfosBack);
   MonNamesTables[0]          := MonNamesSingularTable;
   MonNamesTables[1]          := MonNamesPluralTable;
   MonNamesTables[2]          := MonNamesSpecialtyTable;
