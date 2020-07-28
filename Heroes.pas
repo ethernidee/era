@@ -5,7 +5,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
-uses Windows, SysUtils, Utils, PatchApi, DataLib, TypeWrappers, Alg, Core;
+uses Windows, SysUtils, Utils, PatchApi, DataLib, TypeWrappers, Alg, Core, StrLib;
 
 type
   (* Import *)
@@ -732,6 +732,24 @@ type
     Day:   word;
   end;
 
+  TTextTableCells = array of Utils.TArrayOfStr;
+
+  TTextTable = class
+   protected
+    fCells:   TTextTableCells;
+    fNumCols: integer;
+    fNumRows: integer;
+
+   public
+    constructor Create (Cells: TTextTableCells);
+
+    function GetItem (Row, Col: integer): string;
+
+    property Items[Row, Col: integer]: string read GetItem; default;
+    property NumCols: integer read fNumCols;
+    property NumRows: integer read fNumRows;
+  end; // .class TTextTable
+
 const
   MAlloc:    TMAlloc = Ptr($617492);
   MFree:     TMFree  = Ptr($60B0F0);
@@ -837,10 +855,44 @@ procedure ResumeMp3Theme;
 procedure PlaySound (FileName: pchar); stdcall; overload;
 procedure PlaySound (FileName: string); overload;
 
+function ParseTextTable (const TextTable: string): TTextTableCells;
+
 
 (***) implementation (***)
 
 uses GameExt, EventMan;
+
+constructor TTextTable.Create (Cells: TTextTableCells);
+var
+  i: integer;
+
+begin
+  Self.fCells   := Cells;
+  Self.fNumRows := Length(Cells);
+  Self.fNumCols := 0;
+
+  for i := 0 to Self.fNumRows - 1 do begin
+    if Length(Cells[i]) > Self.fNumCols then begin
+      Self.fNumCols := Length(Cells[i]);
+    end;
+  end;
+end;
+
+function TTextTable.GetItem (Row, Col: integer): string;
+var
+  RowItems: Utils.TArrayOfStr;
+
+begin
+  result := '';
+
+  if (Row >= 0) and (Row < Self.fNumRows) then begin
+    RowItems := Self.fCells[Row];
+
+    if (Col >= 0) and (Col < Length(RowItems)) then begin
+      result := RowItems[Col];
+    end;
+  end;
+end;
 
 procedure PrintChatMsg (const Msg: string);
 var
@@ -1490,6 +1542,30 @@ procedure PlaySound (FileName: string); overload;
 begin
   PlaySound(pchar(FileName));
 end;
+
+function ParseTextTable (const TextTable: string): TTextTableCells;
+const
+  ROW_DELIM = #13#10;
+  COL_DELIM = #9;
+
+var
+  Lines: Utils.TArrayOfStr;
+  i:     integer;
+
+begin
+  result := nil;
+
+  if TextTable <> '' then begin
+    Lines := StrLib.Explode(TextTable, ROW_DELIM);
+
+    // Always exclude the last empty row
+    SetLength(result, Length(Lines) - 1);
+
+    for i := 0 to Length(Lines) - 2 do begin
+      result[i] := StrLib.Explode(Lines[i], COL_DELIM);
+    end;
+  end;
+end; // .function ParseTextTable
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
 begin
