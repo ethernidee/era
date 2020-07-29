@@ -45,7 +45,7 @@ const
   STACK_FLAGS       = $84;
   STACK_HP          = $C0;
   STACK_SIDE        = $F4;
-  STACK_ID          = $F8;
+  STACK_IND         = $F8;
 
   (* Game version *)
   ROE         = 0;
@@ -838,7 +838,7 @@ function  GetCurrentPlayer: integer;
 function  IsThisPcTurn: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
 procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
-function  StackProp (StackInd: integer; PropOfs: integer): PValue;
+function  StackProp (StackId: integer; PropOfs: integer): PValue;
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
 function  GetStackIdByPos (StackPos: integer): integer;
 procedure RedrawHeroMeetingScreen;
@@ -1413,9 +1413,9 @@ begin
   end;
 end; // .function GetBattleCellStackId
 
-function StackProp (StackInd: integer; PropOfs: integer): PValue; inline;
+function StackProp (StackId: integer; PropOfs: integer): PValue; inline;
 begin
-  result := Utils.PtrOfs(ppointer(COMBAT_MANAGER)^, 21708 + 1352 * StackInd + PropOfs);
+  result := Utils.PtrOfs(ppointer(COMBAT_MANAGER)^, 21708 + 1352 * StackId + PropOfs);
 end;
 
 function GetStackIdByPos (StackPos: integer): integer;
