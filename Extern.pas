@@ -76,18 +76,18 @@ var
   ResStr: string;
 
 begin
-  result := Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr);
+  result := longbool(ord(Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr)));
   Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
 end;
 
 function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): longbool; stdcall;
 begin
-  result := Ini.WriteStrToIni(Key, Value, SectionName, FilePath);
+  result := longbool(ord(Ini.WriteStrToIni(Key, Value, SectionName, FilePath)));
 end;
 
 function SaveIni (FilePath: pchar): longbool; stdcall;
 begin
-  result := Ini.SaveIni(FilePath);
+  result := longbool(ord(Ini.SaveIni(FilePath)));
 end;
 
 procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
@@ -137,12 +137,12 @@ end;
 
 function PatchExists (PatchName: pchar): longbool; stdcall;
 begin
-  result := GameExt.PatchExists(PatchName);
+  result := longbool(ord(GameExt.PatchExists(PatchName)));
 end;
 
 function PluginExists (PluginName: pchar): longbool; stdcall;
 begin
-  result := GameExt.PluginExists(PluginName);
+  result := longbool(ord(GameExt.PluginExists(PluginName)));
 end;
 
 procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
@@ -197,7 +197,7 @@ end;
 
 function Ask (Question: pchar): longbool; stdcall;
 begin
-  result := Heroes.Ask(Question);
+  result := longbool(ord(Heroes.Ask(Question)));
 end;
 
 procedure ReportPluginVersion (const VersionLine: pchar); stdcall;
