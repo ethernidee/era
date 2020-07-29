@@ -408,12 +408,36 @@ begin
   result := true;
 end;
 
+function Hook_BeforeBattleStackTurn (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  PARAM_STACK_ID = 1;
+
+var
+  Stack:      pointer;
+  StackId:    integer;
+  NewStackId: integer;
+
+begin
+  Stack      := Ptr(Context.EDI);
+  StackId    := Heroes.GetVal(Stack, STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(Stack, STACK_IND).v;
+  Erm.FireErmEventEx(Erm.TRIGGER_BEFORE_STACK_TURN, [StackId]);
+  NewStackId := Erm.RetXVars[PARAM_STACK_ID];
+  
+  if (NewStackId >= 0) and (NewStackId < Heroes.NUM_BATTLE_STACKS) then begin
+    // Replace active stack pointer both in register and local variable
+    Context.EDI                 := integer(Heroes.StackProp(0, 0)) + Heroes.STACK_STRUCT_SIZE * NewStackId;
+    pinteger(Context.EBP - $8)^ := Context.EDI;
+  end else begin
+    ShowMessage('OnBeforeBattleStackTurn: invalid stack ID. Expected 0..41. Got: ' + SysUtils.IntToStr(NewStackId));
+  end;
+ 
+  result := true;
+end; // .function Hook_BeforeBattleStackTurn
+
 function Hook_Battle_StackObtainsTurn (OrigFunc: pointer; CombatManager: pointer; Side, StackInd: integer): integer; stdcall;
 const
   PARAM_SIDE      = 1;
   PARAM_STACK_IND = 2;
-
-  MAX_STACKS_PER_SIDE = Heroes.NUM_BATTLE_STACKS div 2;
 
 var
   NewSide:     integer;
@@ -427,13 +451,13 @@ begin
   if (NewSide >= 0) and (NewSide <= 1) then begin
     Side := NewSide;
   end else begin
-    ShowMessage('OnBattleStackObtainsTurn: invalid side, set in event handler. Expected 0..1. Got: ' + IntToStr(NewSide));
+    ShowMessage('OnBattleStackObtainsTurn: invalid side, set in event handler. Expected 0..1. Got: ' + SysUtils.IntToStr(NewSide));
   end;
 
-  if (NewStackInd >= 0) and (NewStackInd < MAX_STACKS_PER_SIDE) then begin
+  if (NewStackInd >= 0) and (NewStackInd < Heroes.NUM_BATTLE_STACKS_PER_SIDE) then begin
     StackInd := NewStackInd;
   end else begin
-    ShowMessage('OnBattleStackObtainsTurn: invalid new stack index, set in event handler. Expected: 0..20. Got: = ' + IntToStr(NewStackInd));
+    ShowMessage('OnBattleStackObtainsTurn: invalid new stack index, set in event handler. Expected: 0..20. Got: = ' + SysUtils.IntToStr(NewStackInd));
   end;
  
   result := PatchApi.Call(THISCALL_, OrigFunc, [CombatManager, Side, StackInd]);
@@ -454,7 +478,7 @@ var
   StackInd: integer;
 
 begin
-  StackInd     := Heroes.GetVal(Ptr(Context.ECX), STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(Ptr(Context.ECX), STACK_ID).v;
+  StackInd     := Heroes.GetVal(Ptr(Context.ECX), STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(Ptr(Context.ECX), STACK_IND).v;
   Erm.FireErmEventEx(Erm.TRIGGER_REGENERATE_PHASE, [StackInd, Context.ECX, 0]);
   DisableRegen := Erm.RetXVars[PARAM_DISABLE_REGEN] <> 0;
   result       := true;
@@ -604,6 +628,7 @@ begin
   ApiJack.HookCode(Ptr($4E1CC0), @Hook_UpdateHeroScreen);
 
   (* OnBattleStackObtainsTurn event *)
+  ApiJack.HookCode(Ptr($464DF1), @Hook_BeforeBattleStackTurn);
   ApiJack.StdSplice(Ptr($464F10), @Hook_Battle_StackObtainsTurn, ApiJack.CONV_THISCALL, 3);
 
   (* OnBattleRegeneratePhase event *)

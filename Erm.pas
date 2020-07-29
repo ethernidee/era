@@ -216,7 +216,8 @@ const
   TRIGGER_POST_HEROSCREEN                = 77038;
   TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE = 77039;
   TRIGGER_ADVMAP_TILE_HINT               = 77040;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_ADVMAP_TILE_HINT;
+  TRIGGER_BEFORE_STACK_TURN              = 77041;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_BEFORE_STACK_TURN;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1086,6 +1087,7 @@ begin
     {*} TRIGGER_POST_HEROSCREEN:              result := 'OnPostHeroScreen';
     {*} TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE: result := 'OnDetermineMonInfoDlgUpgrade';
     {*} TRIGGER_ADVMAP_TILE_HINT:             result := 'OnAdvMapTileHint';
+    {*} TRIGGER_BEFORE_STACK_TURN:            result := 'OnBeforeBattleStackTurn';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -3452,6 +3454,7 @@ begin
   NameTrigger(TRIGGER_POST_HEROSCREEN,              'OnPostHeroScreen');
   NameTrigger(TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, 'OnDetermineMonInfoDlgUpgrade');
   NameTrigger(TRIGGER_ADVMAP_TILE_HINT,             'OnAdvMapTileHint');
+  NameTrigger(TRIGGER_BEFORE_STACK_TURN,            'OnBeforeBattleStackTurn');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
@@ -6034,7 +6037,7 @@ end; // .function Hook_CM3
 
 function Hook_MR_N (c: Core.PHookContext): longbool; stdcall;
 begin
-  c.eax     := Heroes.GetVal(MrMonPtr^, STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(MrMonPtr^, STACK_ID).v;
+  c.eax     := Heroes.GetVal(MrMonPtr^, STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(MrMonPtr^, STACK_IND).v;
   c.RetAddr := Ptr($75DC76);
   result    := not Core.EXEC_DEF_CODE;
 end;
@@ -7417,6 +7420,7 @@ begin
   Core.p.WriteDataPatch(Ptr($74909C), ['B0']);
   Core.p.WriteDataPatch(Ptr($7490B0), ['B0']);
   Core.p.WriteDataPatch(Ptr($7490B6), ['B0']);
+  Core.p.WriteDataPatch(Ptr($7490CD), ['B0']);
 
   (* Fix IF:N# to support any string *)
   ApiJack.HookCode(Ptr($749116), @Hook_IF_N);
