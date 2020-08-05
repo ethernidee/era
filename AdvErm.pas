@@ -313,7 +313,12 @@ end;
 
 procedure ZVarStrReturner (Param: PServiceParam; Str: pchar; StrLen: integer);
 begin
-  Utils.CopyMem(Math.Min(sizeof(TErmZVar) - 1, StrLen) + 1, Str, Param.Value.pc);
+  if StrLen >= sizeof(TErmZVar) then begin
+    StrLen := sizeof(TErmZVar) - 1;
+  end;
+
+  Utils.CopyMem(StrLen, Str, Param.Value.pc);
+  Str[StrLen] := #0;
 end;
 
 procedure AssocStrReturner (Param: PServiceParam; Str: pchar; StrLen: integer);
@@ -1667,9 +1672,9 @@ begin
              
               if result then begin
                 if Params[2].OperGet then begin
-                  Params[2].RetPchar(pchar(Utils.PtrOfs(Params[0].Value.p, Params[1].Value.v)), 1);
+                  Params[2].RetPchar(pchar(@Params[0].Value.pc[Params[1].Value.v]), 1);
                 end else begin
-                  PEndlessCharArr(Params[0].Value.v)[Params[1].Value.v] := pchar(Params[2].Value.v)^;
+                  Params[0].Value.pc[Params[1].Value.v] := pchar(Params[2].Value.v)^;
                 end;
               end;
             end; // .case 3
