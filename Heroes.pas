@@ -569,9 +569,9 @@ type
   (* Ported from WoG. Needs refactoring *)
   PHero = ^THero;
   THero = packed record
-    X:            word;                           // +00  dw    = x position
-    Y:            word;                           // +02  dw    = y position
-    L:            word;                           // +04  dw    = ? uroven' starshaya chast' y (y<<2>>C)
+    X:            smallint;                       // +00  dw    = x position
+    Y:            smallint;                       // +02  dw    = y position
+    L:            smallint;                       // +04  dw    = ? uroven' starshaya chast' y (y<<2>>C)
     Visible:      byte;                           // +06  db    = 1 - est' na karte (vnutri goroda ili ne aktiven)
                                                   // Byte  _u1[17];
                                                   // +07 db - x
