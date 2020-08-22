@@ -2426,7 +2426,7 @@ begin
               end;
             end; // .case '!'
 
-            '?': begin
+            '?', '$': begin
               if IsErm2 then begin
                 FinalizeLocalVarsPools;
                 InitLocalVarsPools;
