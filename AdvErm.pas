@@ -318,7 +318,7 @@ begin
   end;
 
   Utils.CopyMem(StrLen, Str, Param.Value.pc);
-  Str[StrLen] := #0;
+  Param.Value.pc[StrLen] := #0;
 end;
 
 procedure AssocStrReturner (Param: PServiceParam; Str: pchar; StrLen: integer);
