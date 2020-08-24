@@ -584,6 +584,18 @@ begin
   result := true;
 end; // .function Hook_InitMonInfoDlg
 
+function Hook_CalculateTownIncome (OrigFunc: pointer; Town: Heroes.PTown; WithResourceSilo: integer): integer; stdcall;
+const
+  ARG_TOWN                  = 1;
+  ARG_INCOME                = 2;
+  ARG_ACCOUNT_RESOURCE_SILO = 3;
+
+begin
+  result := PatchApi.Call(THISCALL_, OrigFunc, [Town, WithResourceSilo]);
+  Erm.FireErmEventEx(Erm.TRIGGER_CALC_TOWN_INCOME, [Town.Id, result, WithResourceSilo]);
+  result := Erm.RetXVars[ARG_INCOME];
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -646,6 +658,15 @@ begin
 
   (* OnDetermineMonInfoDlgUpgrade *)
   ApiJack.HookCode(Ptr($4C6B1C), @Hook_InitMonInfoDlg);
+
+  (* OnCalculateTownIncome + widen result from int16 to int32 *)
+  Core.p.WriteDataPatch(Ptr($4C76AD), ['909090']);
+  Core.p.WriteDataPatch(Ptr($45246F), ['8BD090']);
+  Core.p.WriteDataPatch(Ptr($51C858), ['909090']);
+  Core.p.WriteDataPatch(Ptr($52A20E), ['8BD090']);
+  Core.p.WriteDataPatch(Ptr($530AE6), ['909090']);
+  Core.p.WriteDataPatch(Ptr($5C6C19), ['909090']);
+  ApiJack.StdSplice(Ptr($5BFA00), @Hook_CalculateTownIncome, ApiJack.CONV_THISCALL, 1);
 end; // .procedure OnAfterWoG
 
 begin
