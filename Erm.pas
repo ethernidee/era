@@ -6077,7 +6077,7 @@ var
   SubCmd: PErmSubCmd;
 
 begin
-  Context.RetAddr := Ptr($74913A);
+  Context.RetAddr := Ptr($74914C);
   SubCmd          := pointer(Context.EBP - $300);
   result          := false;
   

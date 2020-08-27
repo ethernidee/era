@@ -182,7 +182,7 @@ var
       WriteIndentation;
 
       if Event.EventType = TRACKEDEVENT_START_TRIGGER then begin
-        Write('!?(');
+        Write('!?FU(');
       end else begin
         Write('; END FU(');
       end;
