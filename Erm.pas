@@ -2903,7 +2903,7 @@ begin
     Question := Format('%s'#10'Location: %s:%d:%d', [Question, ScriptName, Line, LinePos]);
   end;
 
-  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10'Save ERM memory dump?';
+  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10'Save debug information?';
 
   if Ask(Question) then begin
     ZvsDumpErmVars(pchar(Error), ErrCmd);
@@ -4803,8 +4803,10 @@ begin
             break;
           end;
         end;
-      end;
-    end;
+      end else begin
+        SubCmd.Nums[i] := Param.Value;
+      end; // .else
+    end; // .for
 
     SubCmd.Pos := CacheEntry.Pos;
 

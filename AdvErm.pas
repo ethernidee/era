@@ -2883,7 +2883,7 @@ end; // .procedure DumpErmMemory
 
 function Hook_DumpErmVars (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  DumpErmMemory(ERM_MEMORY_DUMP_FILE);
+  GameExt.GenerateDebugInfo;
   Context.RetAddr := Core.Ret(0);
   result          := not Core.EXEC_DEF_CODE;
 end;
