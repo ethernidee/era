@@ -5334,6 +5334,10 @@ begin
                     FlowOper.Step := ZvsGetVarVal(@Cmd.Params[3]);
                   end;
 
+                  if Cmd.NumParams >= 5 then begin
+                    Inc(FlowOper.Stop, ZvsGetVarVal(@Cmd.Params[4]));
+                  end;
+
                   if FlowOper.Step >= 0 then begin
                     if LoopVarValue > FlowOper.Stop then begin
                       FlowOper.State := STATE_INACTIVE;
