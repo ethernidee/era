@@ -4967,7 +4967,7 @@ begin
   end; // .if
 end; // .function ApplyFloatModifier
 
-function Hook_ZvsApply (ValuePtr: pointer; ValueSize: integer; SubCmd: PErmSubCmd; ParamInd: integer): integer; cdecl;
+function Hook_ZvsApply (ValuePtr: pointer; ValueSize: integer; SubCmd: PErmSubCmd; ParamInd: byte): integer; cdecl;
 var
   Param:       PErmCmdParam;
   Value:       integer;
