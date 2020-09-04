@@ -1121,6 +1121,10 @@ begin
   // Use CombatRound instead of combat manager field to summon creatures every nth turn via creature experience system
   Core.p.WriteDataPatch(Ptr($71DFBE), ['8B15 %d', @CombatRound]);
 
+  // Restore Nagash and Jeddite specialties
+  Core.p.WriteDataPatch(Ptr($753E0B), ['E9990000009090']); // PrepareSpecWoG => ignore new WoG settings
+  Core.p.WriteDataPatch(Ptr($79C3D8), ['FFFFFFFF']);       // HeroSpecWoG[0].Ind = -1
+
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
   Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
   Core.p.WriteDataPatch(Ptr($6067E2), ['E809000000']);       // Disable WoG GZ functions hooks
