@@ -59,6 +59,7 @@ const
   PARAM_VARTYPE_I     = 9;
   PARAM_VARTYPE_S     = 11;
   PARAM_VARTYPE_STR   = 12;
+  PARAM_VARTYPE_NONE  = 15; // Special marker for non-initialized parameters to be ignored in Apply-like functions
 
   PARAM_VARTYPES_MUTABLE       = [PARAM_VARTYPE_QUICK, PARAM_VARTYPE_V, PARAM_VARTYPE_W, PARAM_VARTYPE_X, PARAM_VARTYPE_Y, PARAM_VARTYPE_Z, PARAM_VARTYPE_E, PARAM_VARTYPE_I, PARAM_VARTYPE_S];
   PARAM_VARTYPES_VALUES        = [PARAM_VARTYPE_NUM, PARAM_VARTYPE_STR];
@@ -3734,6 +3735,11 @@ begin
   ValTypes[1] := Param.GetType();
   result      := Param.Value;
 
+  // Treat non-initialized parameters as 0 in X# syntax
+  if ValTypes[1] = PARAM_VARTYPE_NONE then begin
+    exit;
+  end;
+
   for i := Low(ValTypes) to High(ValTypes) do begin
     ValType := ValTypes[i];
 
@@ -3783,7 +3789,7 @@ begin
             ResValType := VALTYPE_ERROR; result := 0; exit;
           end;
 
-          result  := v[result];
+          result := v[result];
         end;
 
         PARAM_VARTYPE_I: begin
@@ -3968,6 +3974,11 @@ begin
   ValTypes[1] := Param.GetType();
   result      := true;
   Value       := Param.Value;
+
+  // Ignore non-initialized ERM parameters
+  if ValTypes[1] = PARAM_VARTYPE_NONE then begin
+    exit;
+  end;
 
   for i := Low(ValTypes) to High(ValTypes) do begin
     ValType := ValTypes[i];
@@ -4778,6 +4789,12 @@ begin
   CacheEntry     := @SubCmdCache[integer(cardinal(ParamsAddrHash) mod cardinal(Length(SubCmdCache)))];
   UseCaching     := not Cmd.IsGenerated;
 
+  // Initialize all subcommand parameters to NONE value to improve ERM stability
+  for i := 0 to High(SubCmd.Params) do begin
+    SubCmd.Params[i].Value   := 0;
+    SubCmd.Params[i].ValType := PARAM_VARTYPE_NONE;
+  end;
+
   // Caching is ON and HIT
   if UseCaching and (CacheEntry.AddrHash = ParamsAddrHash) then begin
     result := CacheEntry.NumParams;
@@ -4975,35 +4992,39 @@ var
   CheckType:   integer;
 
 begin
-  Param     := @SubCmd.Params[ParamInd];
-  CheckType := Param.GetCheckType();
-  result    := 1;
+  Param  := @SubCmd.Params[ParamInd];
+  result := 1;
 
-  if CheckType = PARAM_CHECK_NONE then begin
-    result := 0;
-    PutVal(ValuePtr, ValueSize, SubCmd.Nums[ParamInd], SubCmd.Modifiers[ParamInd]);
-  end else begin
-    Value := ZvsGetVal(ValuePtr, ValueSize);
+  // Ignore not used parameters at all, improving ERM stability
+  if Param.GetType() <> PARAM_VARTYPE_NONE then begin
+    CheckType := Param.GetCheckType();
 
-    if CheckType = PARAM_CHECK_GET then begin
-      if not SetErmParamValue(Param, Value) then begin
-        result := -1;
-      end;
-
-      exit;
+    if CheckType = PARAM_CHECK_NONE then begin
+      result := 0;
+      PutVal(ValuePtr, ValueSize, SubCmd.Nums[ParamInd], SubCmd.Modifiers[ParamInd]);
     end else begin
-      SecondValue := SubCmd.Nums[ParamInd];
+      Value := ZvsGetVal(ValuePtr, ValueSize);
 
-      case CheckType of
-        PARAM_CHECK_EQUAL:         f[1] := Value = SecondValue;
-        PARAM_CHECK_NOT_EQUAL:     f[1] := Value <> SecondValue;
-        PARAM_CHECK_GREATER:       f[1] := Value > SecondValue;
-        PARAM_CHECK_LOWER:         f[1] := Value < SecondValue;
-        PARAM_CHECK_GREATER_EQUAL: f[1] := Value >= SecondValue;
-        PARAM_CHECK_LOWER_EQUAL:   f[1] := Value <= SecondValue;
-      end; // switch CheckType
+      if CheckType = PARAM_CHECK_GET then begin
+        if not SetErmParamValue(Param, Value) then begin
+          result := -1;
+        end;
+
+        exit;
+      end else begin
+        SecondValue := SubCmd.Nums[ParamInd];
+
+        case CheckType of
+          PARAM_CHECK_EQUAL:         f[1] := Value = SecondValue;
+          PARAM_CHECK_NOT_EQUAL:     f[1] := Value <> SecondValue;
+          PARAM_CHECK_GREATER:       f[1] := Value > SecondValue;
+          PARAM_CHECK_LOWER:         f[1] := Value < SecondValue;
+          PARAM_CHECK_GREATER_EQUAL: f[1] := Value >= SecondValue;
+          PARAM_CHECK_LOWER_EQUAL:   f[1] := Value <= SecondValue;
+        end; // switch CheckType
+      end; // .else
     end; // .else
-  end; // .else
+  end; // .if
 end; // .function Hook_ZvsApply
 
 procedure ProcessErm;
