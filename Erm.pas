@@ -5318,24 +5318,24 @@ begin
                   FlowOper.CmdInd  := i + 1;
 
                   if Cmd.NumParams >= 2 then begin
-                    LoopVarValue := ZvsGetVarVal(@Cmd.Params[1]);
+                    LoopVarValue := GetErmParamValue(@Cmd.Params[1], ParamValType);
                     ZvsSetVarVal(FlowOper.LoopVar, LoopVarValue);
                   end else begin
-                    LoopVarValue := ZvsGetVarVal(FlowOper.LoopVar);
+                    LoopVarValue := GetErmParamValue(FlowOper.LoopVar, ParamValType);
                   end;
 
                   if Cmd.NumParams >= 3 then begin
-                    FlowOper.Stop := ZvsGetVarVal(@Cmd.Params[2]);
+                    FlowOper.Stop := GetErmParamValue(@Cmd.Params[2], ParamValType);
                   end else begin
                     FlowOper.Step := 0;
                   end;
 
                   if Cmd.NumParams >= 4 then begin
-                    FlowOper.Step := ZvsGetVarVal(@Cmd.Params[3]);
+                    FlowOper.Step := GetErmParamValue(@Cmd.Params[3], ParamValType);
                   end;
 
                   if Cmd.NumParams >= 5 then begin
-                    Inc(FlowOper.Stop, ZvsGetVarVal(@Cmd.Params[4]));
+                    Inc(FlowOper.Stop, GetErmParamValue(@Cmd.Params[4], ParamValType));
                   end;
 
                   if FlowOper.Step >= 0 then begin
