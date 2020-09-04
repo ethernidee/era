@@ -1404,7 +1404,6 @@ end;
 function Hook_LoadErsFiles (Context: ApiJack.PHookContext): longbool; stdcall;
 var
 {O} TextTable:         Heroes.TTextTable;
-    TextTableCells:    Heroes.TTextTableCells;
     TextTableContents: string;
 
 begin
@@ -6169,7 +6168,6 @@ var
   SubCmd:    PErmSubCmd;
   Param:     PErmCmdParam;
   ZVarInd:   integer;
-  i:         integer;
 
 begin
   result      := false;
@@ -6205,6 +6203,24 @@ begin
     Context.RetAddr := Ptr($75008C);
   end;
 end; // .function Hook_MM_M
+
+function Hook_DL_A (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd: PErmSubCmd;
+  Param:  PErmCmdParam;
+
+begin
+  result := false;
+  SubCmd := ppointer(Context.EBP + $14)^;
+  Param  := @SubCmd.Params[2];
+
+  if Param.GetType() in PARAM_VARTYPES_STRINGS then begin
+    ppointer(Context.EBP - $2C)^ := GetInterpolatedZVarAddr(SubCmd.Nums[2]);
+    Context.RetAddr := Ptr($72B14A);
+  end else begin
+    Context.RetAddr := Ptr($72B144);
+  end;
+end; // .function Hook_DL_A
 
 (* Rounds given value to one of the following directions: -1 for floor, 1 for ceil, 0 for away from zero *)
 function RoundFloat32 (Value: single; Direction: integer): integer;
@@ -7460,6 +7476,9 @@ begin
   
   (* Fix MM:M to allow all strings *)
   ApiJack.HookCode(Ptr($74FD94), @Hook_MM_M);
+
+  (* Fix DL:A to allow all strings and assume 0 as the forth parameter value *)
+  ApiJack.HookCode(Ptr($72B093), @Hook_DL_A);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
