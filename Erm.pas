@@ -1898,7 +1898,7 @@ var
     if LocalVar = nil then begin
       ShowError(VarPos, 'Cannot free local ERM variable, which was never allocated. Variable name: ' + VarName);
     end else begin
-      VarsPool := @LocalVarsPools[LocalVarCharToId(VarName[1])];
+      VarsPool := @LocalVarsPools[LocalVarCharToId(LocalVar.VarType)];
 
       if VarsPool.StartIndex = (LocalVar.StartIndex + LocalVar.Count) then begin
         Dec(VarsPool.StartIndex, LocalVar.Count);
