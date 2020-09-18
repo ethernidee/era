@@ -1496,161 +1496,170 @@ begin
   result := true;
 end; // .function SN_T
 
-function ExtendedEraService (Cmd: char; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+function SN_M (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
 {U} Slot:              TSlot;
     SlotId:            integer;
     SlotItemInd:       integer;
-{U} AssocVarValue:     TAssocVar;
-    AssocVarName:      string;
     NewSlotItemsCount: integer;
-    GameState:         TGameState;
-{U} Tile:              Heroes.PMapTile;
-    Coords:            Heroes.TMapCoords;
-    MapSize:           integer;
 
 begin
-  Slot          := nil;
+  Slot := nil;
+  // * * * * * //
+  result := true;
+
+  case NumParams of
+    // M; delete all slots
+    0:
+      begin
+        Slots.Clear;
+      end; // .case 0
+    // M(Slot); delete specified slot
+    1:
+      begin
+        result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET]) and (Params[0].Value.v <> AUTO_ALLOC_SLOT);
+        
+        if result then begin
+          Slots.DeleteItem(Ptr(Params[0].Value.v));
+        end;
+      end; // .case 1
+    // M(Slot)/[?]ItemsCount; analog of SetLength/Length
+    2:
+      begin
+        result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT]) and (Params[1].OperGet or (Params[1].Value.v >= 0));
+
+        if result then begin          
+          if Params[1].OperGet then begin
+            Slot := Slots[Ptr(Params[0].Value.v)];
+            
+            if Slot <> nil then begin
+              Params[1].RetInt(GetSlotItemsCount(Slot));
+            end else begin
+              Params[1].RetInt(NO_SLOT);
+            end;
+          end else begin
+            result := GetSlot(Params[0].Value.v, Slot, Error);
+            
+            if result then begin
+              NewSlotItemsCount := GetSlotItemsCount(Slot);
+              ApplyIntParam(Params[1], NewSlotItemsCount);
+              SetSlotItemsCount(NewSlotItemsCount, Slot);
+            end;
+          end; // .else
+        end; // .if
+      end; // .case 2
+    // SN:M(Slot)/(VarN)/[?](Value) or M(Slot)/?addr/(VarN)
+    3:
+      begin
+        result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT]) and GetSlot(Params[0].Value.v, Slot, Error);
+        
+        if result then begin
+          if Params[1].OperGet then begin
+            SlotItemInd := Params[2].Value.v;
+
+            if SlotItemInd < 0 then begin
+              Inc(SlotItemInd, GetSlotItemsCount(Slot));
+            end;
+
+            result :=
+              (not Params[2].OperGet) and
+              (not Params[2].IsStr)   and
+              Math.InRange(SlotItemInd, 0, GetSlotItemsCount(Slot) - 1);
+
+            if result then begin
+              if Slot.ItemsType = INT_VAR then begin
+                Params[1].RetInt(integer(@Slot.IntItems[SlotItemInd]));
+              end else begin
+                Params[1].RetInt(integer(pointer(Slot.StrItems[SlotItemInd])));
+              end;
+            end;
+          end else begin
+            SlotItemInd := Params[1].Value.v;
+
+            if SlotItemInd < 0 then begin
+              Inc(SlotItemInd, GetSlotItemsCount(Slot));
+            end;
+
+            result :=
+              (not Params[1].OperGet) and
+              (not Params[1].IsStr)   and
+              Math.InRange(SlotItemInd, 0, GetSlotItemsCount(Slot) - 1);
+
+            if result and (Params[2].IsStr <> (Slot.ItemsType = STR_VAR)) then begin
+              Error  := 'Cannot get INTEGER/STRING item into variable of not appropriate type';
+              result := false;
+            end;
+            
+            if result then begin
+              if Params[2].OperGet then begin
+                if Slot.ItemsType = INT_VAR then begin
+                  Params[2].RetInt(Slot.IntItems[SlotItemInd]);
+                end else begin
+                  Params[2].RetStr(Slot.StrItems[SlotItemInd]);
+                end;
+              end else begin
+                if Slot.ItemsType = INT_VAR then begin
+                  ApplyIntParam(Params[2], Slot.IntItems[SlotItemInd]);
+                end else begin
+                  AssignStrFromParam(Params[2], Slot.StrItems[SlotItemInd]);
+                end;
+              end; // .else
+            end; // .if
+          end; // .else
+        end; // .if
+      end; // .case 3
+    // SN:M#slot/#count/#type/#persistInSaves or -1 for trigger-local array[/?slotID]
+    // ALT: SN:M#slot/(?)#count/(?)#type/(?)#persistInSaves
+    4..5:
+      begin
+        result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_GET or PARAM_OPTIONAL]) and
+        (Params[0].Value.v >= AUTO_ALLOC_SLOT)                  and
+        (Params[1].Value.v >= 0)                                and
+        Math.InRange(Params[2].Value.v, 0, ord(High(TVarType))) and
+        ((Params[3].Value.v = ord(SLOT_TEMP)) or (Params[3].Value.v = ord(SLOT_STORED)) or ((Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL)) and (Params[0].Value.v = AUTO_ALLOC_SLOT)));
+        
+        if result then begin
+          SlotId := Params[0].Value.v;
+
+          if SlotId = AUTO_ALLOC_SLOT then begin
+            SlotId   := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
+            Erm.v[1] := SlotId;
+          end else begin
+            Slots[Ptr(SlotId)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
+          end;
+
+          if NumParams >= 5 then begin
+            Params[4].RetInt(SlotId);
+          end;
+
+          if Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL) then begin
+            Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(Erm.v[1]));
+          end;
+        end; // .if
+      end; // .case 4..5
+  else
+    result := false;
+    Error  := 'Invalid number of command parameters';
+  end; // .switch NumParams
+end; // .function SN_M
+
+function ExtendedEraService (Cmd: char; NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+var
+{U} AssocVarValue: TAssocVar;
+    AssocVarName:  string;
+    GameState:     TGameState;
+{U} Tile:          Heroes.PMapTile;
+    Coords:        Heroes.TMapCoords;
+    MapSize:       integer;
+
+begin
   AssocVarValue := nil;
   // * * * * * //
   result := true;
   
-  case Cmd of  
-    'M':
-      begin
-        case NumParams of
-          // M; delete all slots
-          0:
-            begin
-              Slots.Clear;
-            end; // .case 0
-          // M(Slot); delete specified slot
-          1:
-            begin
-              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET]) and (Params[0].Value.v <> AUTO_ALLOC_SLOT);
-              
-              if result then begin
-                Slots.DeleteItem(Ptr(Params[0].Value.v));
-              end;
-            end; // .case 1
-          // M(Slot)/[?]ItemsCount; analog of SetLength/Length
-          2:
-            begin
-              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT]) and (Params[1].OperGet or (Params[1].Value.v >= 0));
-
-              if result then begin          
-                if Params[1].OperGet then begin
-                  Slot := Slots[Ptr(Params[0].Value.v)];
-                  
-                  if Slot <> nil then begin
-                    Params[1].RetInt(GetSlotItemsCount(Slot));
-                  end else begin
-                    Params[1].RetInt(NO_SLOT);
-                  end;
-                end else begin
-                  result := GetSlot(Params[0].Value.v, Slot, Error);
-                  
-                  if result then begin
-                    NewSlotItemsCount := GetSlotItemsCount(Slot);
-                    ApplyIntParam(Params[1], NewSlotItemsCount);
-                    SetSlotItemsCount(NewSlotItemsCount, Slot);
-                  end;
-                end; // .else
-              end; // .if
-            end; // .case 2
-          // SN:M(Slot)/(VarN)/[?](Value) or M(Slot)/?addr/(VarN)
-          3:
-            begin
-              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT]) and GetSlot(Params[0].Value.v, Slot, Error);
-              
-              if result then begin
-                if Params[1].OperGet then begin
-                  SlotItemInd := Params[2].Value.v;
-
-                  if SlotItemInd < 0 then begin
-                    Inc(SlotItemInd, GetSlotItemsCount(Slot));
-                  end;
-
-                  result :=
-                    (not Params[2].OperGet) and
-                    (not Params[2].IsStr)   and
-                    Math.InRange(SlotItemInd, 0, GetSlotItemsCount(Slot) - 1);
-
-                  if result then begin
-                    if Slot.ItemsType = INT_VAR then begin
-                      Params[1].RetInt(integer(@Slot.IntItems[SlotItemInd]));
-                    end else begin
-                      Params[1].RetInt(integer(pointer(Slot.StrItems[SlotItemInd])));
-                    end;
-                  end;
-                end else begin
-                  SlotItemInd := Params[1].Value.v;
-
-                  if SlotItemInd < 0 then begin
-                    Inc(SlotItemInd, GetSlotItemsCount(Slot));
-                  end;
-
-                  result :=
-                    (not Params[1].OperGet) and
-                    (not Params[1].IsStr)   and
-                    Math.InRange(SlotItemInd, 0, GetSlotItemsCount(Slot) - 1);
-
-                  if result and (Params[2].IsStr <> (Slot.ItemsType = STR_VAR)) then begin
-                    Error  := 'Cannot get INTEGER/STRING item into variable of not appropriate type';
-                    result := false;
-                  end;
-                  
-                  if result then begin
-                    if Params[2].OperGet then begin
-                      if Slot.ItemsType = INT_VAR then begin
-                        Params[2].RetInt(Slot.IntItems[SlotItemInd]);
-                      end else begin
-                        Params[2].RetStr(Slot.StrItems[SlotItemInd]);
-                      end;
-                    end else begin
-                      if Slot.ItemsType = INT_VAR then begin
-                        ApplyIntParam(Params[2], Slot.IntItems[SlotItemInd]);
-                      end else begin
-                        AssignStrFromParam(Params[2], Slot.StrItems[SlotItemInd]);
-                      end;
-                    end; // .else
-                  end; // .if
-                end; // .else
-              end; // .if
-            end; // .case 3
-          // SN:M#slot/#count/#type/#persistInSaves or -1 for trigger-local array[/?slotID]
-          4..5:
-            begin
-              result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_GET or PARAM_OPTIONAL]) and
-              (Params[0].Value.v >= AUTO_ALLOC_SLOT)                  and
-              (Params[1].Value.v >= 0)                                and
-              Math.InRange(Params[2].Value.v, 0, ord(High(TVarType))) and
-              ((Params[3].Value.v = ord(SLOT_TEMP)) or (Params[3].Value.v = ord(SLOT_STORED)) or ((Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL)) and (Params[0].Value.v = AUTO_ALLOC_SLOT)));
-              
-              if result then begin
-                SlotId := Params[0].Value.v;
-
-                if SlotId = AUTO_ALLOC_SLOT then begin
-                  SlotId   := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
-                  Erm.v[1] := SlotId;
-                end else begin
-                  Slots[Ptr(SlotId)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
-                end;
-
-                if NumParams >= 5 then begin
-                  Params[4].RetInt(SlotId);
-                end;
-
-                if Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL) then begin
-                  Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(Erm.v[1]));
-                end;
-              end; // .if
-            end; // .case 4..5
-        else
-          result := false;
-          Error  := 'Invalid number of command parameters';
-        end; // .switch NumParams
-      end; // .case "M"  
+  case Cmd of
+    'M': result := SN_M(NumParams, Params, Error);
+    
     'K':
       begin
         case NumParams of 
