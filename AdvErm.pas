@@ -12,10 +12,6 @@ uses
 const
   AUTO_ALLOC_SLOT = -1;
   NO_SLOT         = -1;
-  
-  IS_TEMP          = 0;
-  NOT_TEMP         = 1;
-  IS_TRIGGER_LOCAL = -1;
 
   (* For CheckCmdParamsEx *)
   TYPE_INT       = 1;
@@ -102,13 +98,15 @@ type
   TErmCmdHandler = function (Cmd: char; NumParams: integer; ErmCmd: PErmCmd; SubCmd: Erm.PErmSubCmd): integer cdecl;
 
   TVarType = (INT_VAR, STR_VAR);
+
+  TSlotStorageType = (SLOT_TRIGGER_LOCAL = -1, SLOT_STORED = 0, SLOT_TEMP = 1);
   
   TSlot = class
-    ItemsType: TVarType;
-    IsTemp:    boolean;
-    IntItems:  array of integer;
-    StrItems:  array of string;
-    NumItems:  integer;
+    ItemsType:   TVarType;
+    StorageType: TSlotStorageType;
+    IntItems:    array of integer;
+    StrItems:    array of string;
+    NumItems:    integer;
   end;
 
   TSlotReleaser = class
@@ -1133,13 +1131,13 @@ begin
   Slot.NumItems := NewNumItems;
 end; // .procedure SetSlotItemsCount
 
-function NewSlot (ItemsCount: integer; ItemsType: TVarType; IsTemp: boolean): TSlot;
+function NewSlot (ItemsCount: integer; ItemsType: TVarType; StorageType: TSlotStorageType): TSlot;
 begin
   {!} Assert(ItemsCount >= 0);
-  result           := TSlot.Create;
-  result.ItemsType := ItemsType;
-  result.IsTemp    := IsTemp;
-  result.NumItems  := 0;
+  result             := TSlot.Create;
+  result.ItemsType   := ItemsType;
+  result.StorageType := StorageType;
+  result.NumItems    := 0;
   
   SetSlotItemsCount(ItemsCount, result);
 end;
@@ -1155,7 +1153,7 @@ begin
   end;
 end;
 
-function AllocSlot (ItemsCount: integer; ItemsType: TVarType; IsTemp: boolean): integer;
+function AllocSlot (ItemsCount: integer; ItemsType: TVarType; StorageType: TSlotStorageType): integer;
 begin
   while Slots[Ptr(FreeSlotN)] <> nil do begin
     Dec(FreeSlotN);
@@ -1165,7 +1163,7 @@ begin
     end;
   end;
   
-  Slots[Ptr(FreeSlotN)] := NewSlot(ItemsCount, ItemsType, IsTemp);
+  Slots[Ptr(FreeSlotN)] := NewSlot(ItemsCount, ItemsType, StorageType);
   result                := FreeSlotN;
   Dec(FreeSlotN);
   
@@ -1627,23 +1625,23 @@ begin
               (Params[0].Value.v >= AUTO_ALLOC_SLOT)                  and
               (Params[1].Value.v >= 0)                                and
               Math.InRange(Params[2].Value.v, 0, ord(High(TVarType))) and
-              ((Params[3].Value.v = IS_TEMP) or (Params[3].Value.v = NOT_TEMP) or ((Params[3].Value.v = IS_TRIGGER_LOCAL) and (Params[0].Value.v = AUTO_ALLOC_SLOT)));
+              ((Params[3].Value.v = ord(SLOT_TEMP)) or (Params[3].Value.v = ord(SLOT_STORED)) or ((Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL)) and (Params[0].Value.v = AUTO_ALLOC_SLOT)));
               
               if result then begin
                 SlotId := Params[0].Value.v;
 
                 if SlotId = AUTO_ALLOC_SLOT then begin
-                  SlotId   := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v <> NOT_TEMP);
+                  SlotId   := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
                   Erm.v[1] := SlotId;
                 end else begin
-                  Slots[Ptr(SlotId)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), Params[3].Value.v <> NOT_TEMP);
+                  Slots[Ptr(SlotId)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
                 end;
 
                 if NumParams >= 5 then begin
                   Params[4].RetInt(SlotId);
                 end;
 
-                if Params[3].Value.v = IS_TRIGGER_LOCAL then begin
+                if Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL) then begin
                   Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(Erm.v[1]));
                 end;
               end; // .if
@@ -2007,6 +2005,10 @@ begin
   StartInd   := Params[1].Value.v;
   SlotLength := GetSlotItemsCount(Slot);
 
+  if StartInd < 0 then begin
+    Inc(StartInd, SlotLength);
+  end;
+
   if not Math.InRange(StartInd, 0, SlotLength - 1) then begin
     Error  := Format('Invalid starting dynamical array index: %d for array with ID %d and length %d', [StartInd, Params[0].Value.v, SlotLength]);
     result := false; exit;
@@ -2120,10 +2122,10 @@ begin
         NumItems := GetSlotItemsCount(Slot);
         WriteInt(integer(IterKey));
         WriteByte(ord(Slot.ItemsType));
-        WriteByte(ord(Slot.IsTemp));
+        WriteByte(ord(Slot.StorageType));
         WriteInt(NumItems);
         
-        if (NumItems > 0) and not Slot.IsTemp then begin
+        if (NumItems > 0) and (Slot.StorageType = SLOT_STORED) then begin
           if Slot.ItemsType = INT_VAR then begin
             Write(NumItems * sizeof(integer), @Slot.IntItems[0])
           end else begin
@@ -2202,13 +2204,13 @@ end;
 
 procedure LoadSlots;
 var
-{U} Slot:       TSlot;
-    SlotN:      integer;
-    ItemsType:  TVarType;
-    IsTempSlot: boolean;
-    NumItems:   integer;
-    i:          integer;
-    j:          integer;
+{U} Slot:            TSlot;
+    SlotN:           integer;
+    ItemsType:       TVarType;
+    SlotStorageType: TSlotStorageType;
+    NumItems:        integer;
+    i:               integer;
+    j:               integer;
 
 begin
   Slot := nil;
@@ -2219,12 +2221,12 @@ begin
     for i := 0 to ReadInt - 1 do begin
       SlotN             := ReadInt;
       ItemsType         := TVarType(ReadByte);
-      IsTempSlot        := ReadByte <> 0;
+      SlotStorageType   := TSlotStorageType(smallint(ReadByte()));
       NumItems          := ReadInt;
-      Slot              := NewSlot(NumItems, ItemsType, IsTempSlot);
+      Slot              := NewSlot(NumItems, ItemsType, SlotStorageType);
       Slots[Ptr(SlotN)] := Slot;
 
-      if not IsTempSlot and (NumItems > 0) then begin
+      if (SlotStorageType = SLOT_STORED) and (NumItems > 0) then begin
         if ItemsType = INT_VAR then begin
           Read(NumItems * sizeof(integer), @Slot.IntItems[0]);
         end else begin
@@ -2778,10 +2780,10 @@ var
       Slot    := Slots[Ptr(SlotInd)];
       LineEnd; Append('; ');
 
-      if Slot.IsTemp then begin
-        Append('Temporal array (#');
-      end else begin
-        Append('Permanent array (#');
+      case Slot.StorageType of
+        SLOT_TRIGGER_LOCAL: Append('Trigger local array (#');
+        SLOT_STORED:        Append('Stored array (#');
+        SLOT_TEMP:          Append('Temporary array (#');
       end;
       
       Append(IntToStr(SlotInd) + ') of ');
