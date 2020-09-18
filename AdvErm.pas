@@ -99,7 +99,7 @@ type
 
   TVarType = (INT_VAR, STR_VAR);
 
-  TSlotStorageType = (SLOT_TRIGGER_LOCAL = -1, SLOT_STORED = 0, SLOT_TEMP = 1);
+  TSlotStorageType = (SLOT_TRIGGER_LOCAL = -1, SLOT_TEMP = 0, SLOT_STORED = 1);
   
   TSlot = class
     ItemsType:   TVarType;
@@ -1608,11 +1608,36 @@ begin
           end; // .else
         end; // .if
       end; // .case 3
-    // SN:M#slot/#count/#type/#persistInSaves or -1 for trigger-local array[/?slotID]
-    // ALT: SN:M#slot/(?)#count/(?)#type/(?)#persistInSaves
-    4..5:
-      begin
-        result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_GET or PARAM_OPTIONAL]) and
+    
+    4..5: begin
+      // SN:M#slot/(?)#count/(?)#type/(?)#persistInSaves - query slot information
+      if (NumParams = 4) and ((Params[1].OperGet) or (Params[2].OperGet) or (Params[3].OperGet)) then begin
+        result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT, TYPE_INT, TYPE_INT]);
+
+        if result then begin
+          Slot := Slots[Ptr(Params[0].Value.v)];
+          
+          if Slot <> nil then begin
+            if Params[1].OperGet then begin
+              Params[1].RetInt(GetSlotItemsCount(Slot));
+            end;
+            
+            if Params[2].OperGet then begin
+              Params[2].RetInt(ord(Slot.ItemsType));
+            end;
+
+            if Params[3].OperGet then begin
+              Params[3].RetInt(ord(Slot.StorageType));
+            end;
+          end else begin
+            result := false;
+            Error  := 'Slot #' + SysUtils.IntToStr(Params[0].Value.v) + ' does not exist';
+          end;
+        end; // .if
+      end
+      // SN:M#slot/#count/#type/#persistInSaves or -1 for trigger-local array[/?slotID]
+      else begin
+        result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_SET, TYPE_INT or ACTION_GET or PARAM_OPTIONAL]) and
         (Params[0].Value.v >= AUTO_ALLOC_SLOT)                  and
         (Params[1].Value.v >= 0)                                and
         Math.InRange(Params[2].Value.v, 0, ord(High(TVarType))) and
@@ -1636,7 +1661,8 @@ begin
             Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(Erm.v[1]));
           end;
         end; // .if
-      end; // .case 4..5
+      end; // .else
+    end; // .case 4..5
   else
     result := false;
     Error  := 'Invalid number of command parameters';
@@ -2113,6 +2139,29 @@ begin
   end;
 end;
 
+(* These functions are necessary for compatibility reasons to be able to load old saved games *)
+function SerializeSlotStorageType (StorageType: TSlotStorageType): byte;
+begin
+  if StorageType = SLOT_STORED then begin
+    StorageType := SLOT_TEMP;
+  end else if StorageType = SLOT_TEMP then begin
+    StorageType := SLOT_STORED;
+  end;
+
+  result := byte(ord(StorageType));
+end;
+
+function UnserializeSlotStorageType (StorageType: byte): TSlotStorageType;
+begin
+  result := TSlotStorageType(smallint(StorageType));
+
+  if result = SLOT_STORED then begin
+    result := SLOT_TEMP;
+  end else if result = SLOT_TEMP then begin
+    result := SLOT_STORED;
+  end;
+end;
+
 procedure SaveSlots;
 var
 {U} Slot:     TSlot;
@@ -2131,7 +2180,7 @@ begin
         NumItems := GetSlotItemsCount(Slot);
         WriteInt(integer(IterKey));
         WriteByte(ord(Slot.ItemsType));
-        WriteByte(ord(Slot.StorageType));
+        WriteByte(SerializeSlotStorageType(Slot.StorageType));
         WriteInt(NumItems);
         
         if (NumItems > 0) and (Slot.StorageType = SLOT_STORED) then begin
@@ -2230,7 +2279,7 @@ begin
     for i := 0 to ReadInt - 1 do begin
       SlotN             := ReadInt;
       ItemsType         := TVarType(ReadByte);
-      SlotStorageType   := TSlotStorageType(smallint(ReadByte()));
+      SlotStorageType   := UnserializeSlotStorageType(ReadByte());
       NumItems          := ReadInt;
       Slot              := NewSlot(NumItems, ItemsType, SlotStorageType);
       Slots[Ptr(SlotN)] := Slot;
