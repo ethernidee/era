@@ -9,7 +9,7 @@ unit Extern;
 
 uses
   SysUtils,
-  Utils, Core, ApiJack,
+  Utils, Alg, StrLib, Core, ApiJack,
   GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
   EraButtons, Lodman, Graph, Trans, EventMan;
 
@@ -252,6 +252,54 @@ begin
   AdvErm.RegisterErmReceiver(Cmd[0] + Cmd[1], Handler, ParamsConfig);
 end;
 
+procedure Erm_SortInt32Array (Arr: Utils.PEndlessIntArr; MinInd, MaxInd: integer); stdcall;
+begin
+  Alg.CustomMergeSortInt32(Arr, MinInd, MaxInd, Alg.IntCompare);
+end;
+
+function CustomStrComparator (Str1, Str2: integer; {n} State: pointer): integer;
+begin
+  result := StrLib.ComparePchars(pchar(Str1), pchar(Str2));
+end;
+
+procedure Erm_SortStrArray (Arr: Utils.PEndlessIntArr; MinInd, MaxInd: integer); stdcall;
+begin
+  Alg.CustomMergeSortInt32(Arr, MinInd, MaxInd, CustomStrComparator);
+end;
+
+type
+  PErmCustomCompareFuncInfo = ^TErmCustomCompareFuncInfo;
+  TErmCustomCompareFuncInfo = record
+    FuncId: integer;
+    State:  pointer;
+  end;
+
+function _ErmCustomCompareFuncBridge (Value1, Value2: integer; {n} State: pointer): integer;
+const
+  ARG_VALUE1 = 1;
+  ARG_VALUE2 = 2;
+  ARG_STATE  = 3;
+  ARG_RESULT = 4;
+
+begin
+  Erm.ArgXVars[ARG_VALUE1] := Value1;
+  Erm.ArgXVars[ARG_VALUE2] := Value2;
+  Erm.ArgXVars[ARG_STATE]  := integer(PErmCustomCompareFuncInfo(State).State);
+  Erm.ArgXVars[ARG_RESULT] := 0;
+  Erm.FireErmEvent(PErmCustomCompareFuncInfo(State).FuncId);
+  result := Erm.RetXVars[ARG_RESULT];
+end;
+
+procedure Erm_CustomStableSortInt32Array (Arr: Utils.PEndlessIntArr; MinInd, MaxInd: integer; ComparatorFuncId: integer; {n} State: pointer); stdcall;
+var
+  CompareFuncInfo: TErmCustomCompareFuncInfo;
+
+begin
+  CompareFuncInfo.FuncId := ComparatorFuncId;
+  CompareFuncInfo.State  := State;
+  Alg.CustomMergeSortInt32(Arr, MinInd, MaxInd, _ErmCustomCompareFuncBridge, @CompareFuncInfo);
+end;
+
 exports
   Ask,
   ClearIniCache,
@@ -260,6 +308,9 @@ exports
   Core.WriteAtCode,
   Erm.ExtractErm,
   Erm.ReloadErm,
+  Erm_CustomStableSortInt32Array,
+  Erm_SortInt32Array,
+  Erm_SortStrArray,
   ExecErmCmd,
   FatalError,
   FireErmEvent,
