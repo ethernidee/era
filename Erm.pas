@@ -5219,9 +5219,9 @@ begin
     SaveVars;
     ResetLocalVars;
 
-    EventX   := ZvsEventX^;
-    EventY   := ZvsEventY^;
-    EventZ   := ZvsEventZ^;
+    EventX := ZvsEventX^;
+    EventY := ZvsEventY^;
+    EventZ := ZvsEventZ^;
 
     SetTriggerQuickVarsAndFlags;
 

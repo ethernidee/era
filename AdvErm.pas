@@ -1586,7 +1586,7 @@ begin
               Math.InRange(SlotItemInd, 0, GetSlotItemsCount(Slot) - 1);
 
             if result and (Params[2].IsStr <> (Slot.ItemsType = STR_VAR)) then begin
-              Error  := 'Cannot get INTEGER/STRING item into variable of not appropriate type';
+              Error  := 'Cannot assign SN:M item a value of an inappropriate type (string/integer)';
               result := false;
             end;
             
@@ -1610,8 +1610,8 @@ begin
       end; // .case 3
     
     4..5: begin
-      // SN:M#slot/(?)#count/(?)#type/(?)#persistInSaves - query slot information
-      if (NumParams = 4) and ((Params[1].OperGet) or (Params[2].OperGet) or (Params[3].OperGet)) then begin
+      // SN:M#slot/(?)#count/(?)#type/(?)#persistInSaves[/?$arrayAddr] - query slot information
+      if (NumParams >= 4) and ((Params[1].OperGet) or (Params[2].OperGet) or (Params[3].OperGet)) then begin
         result := CheckCmdParamsEx(Params, NumParams, [TYPE_INT or ACTION_SET, TYPE_INT, TYPE_INT, TYPE_INT]);
 
         if result then begin
@@ -1628,6 +1628,14 @@ begin
 
             if Params[3].OperGet then begin
               Params[3].RetInt(ord(Slot.StorageType));
+            end;
+
+            if (NumParams >= 5) and Params[4].OperGet then begin
+              if Slot.ItemsType = INT_VAR then begin
+                Params[4].RetInt(integer(pointer(Slot.IntItems)));
+              end else begin
+                Params[4].RetInt(integer(pointer(Slot.StrItems)));
+              end;              
             end;
           end else begin
             result := false;
