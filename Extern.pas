@@ -300,6 +300,37 @@ begin
   Alg.CustomMergeSortInt32(Arr, MinInd, MaxInd, _ErmCustomCompareFuncBridge, @CompareFuncInfo);
 end;
 
+procedure Erm_RevertInt32Array (Arr: Utils.PEndlessIntArr; MinInd, MaxInd: integer); stdcall;
+var
+  LeftInd:  integer;
+  RightInd: integer;
+  Temp:     integer;
+
+begin
+  LeftInd  := MinInd;
+  RightInd := MaxInd;
+
+  while LeftInd < RightInd do begin
+    Temp          := Arr[LeftInd];
+    Arr[LeftInd]  := Arr[RightInd];
+    Arr[RightInd] := Temp;
+
+    Inc(LeftInd);
+    Dec(RightInd);
+  end;
+end; // .procedure Erm_RevertInt32Array
+
+procedure Erm_FillInt32Array (Arr: Utils.PEndlessIntArr; MinInd, MaxInd, StartValue, Step: integer); stdcall;
+var
+  i: integer;
+
+begin
+  for i := MinInd to MaxInd do begin
+    Arr[i] := StartValue;
+    Inc(StartValue, Step);
+  end;
+end;
+
 exports
   Ask,
   ClearIniCache,
@@ -309,6 +340,8 @@ exports
   Erm.ExtractErm,
   Erm.ReloadErm,
   Erm_CustomStableSortInt32Array,
+  Erm_FillInt32Array,
+  Erm_RevertInt32Array,
   Erm_SortInt32Array,
   Erm_SortStrArray,
   ExecErmCmd,

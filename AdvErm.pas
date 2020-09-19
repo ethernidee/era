@@ -1655,14 +1655,15 @@ begin
           SlotId := Params[0].Value.v;
 
           if SlotId = AUTO_ALLOC_SLOT then begin
-            SlotId   := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
-            Erm.v[1] := SlotId;
+            SlotId := AllocSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
           end else begin
             Slots[Ptr(SlotId)] := NewSlot(Params[1].Value.v, TVarType(Params[2].Value.v), TSlotStorageType(Params[3].Value.v));
           end;
 
           if NumParams >= 5 then begin
             Params[4].RetInt(SlotId);
+          end else begin
+            Erm.v[1] := SlotId;
           end;
 
           if Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL) then begin
