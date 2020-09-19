@@ -2136,6 +2136,7 @@ end; // .function SN_Receiver
 procedure ResetMemory;
 begin
   Slots.Clear;
+  FreeSlotN := AUTO_ALLOC_SLOT - 1;
   AssocMem.Clear;
 end;
 
