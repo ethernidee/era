@@ -973,6 +973,18 @@ begin
   end;
 end; // .function AllocErmFunc
 
+procedure RegisterStdGlobalConsts;
+var
+  Temp: Heroes.TValue;
+
+begin
+  Temp.f := Infinity;
+  GlobalConsts['FLOAT_INF'] := Ptr(Temp.v);
+
+  Temp.f := -Infinity;
+  GlobalConsts['FLOAT_NEG_INF'] := Ptr(Temp.v);
+end;
+
 function GetTriggerReadableName (EventID: integer): string;
 var
   BaseEventName: string;
@@ -2676,6 +2688,7 @@ begin
   Self.ClearScripts;
   ZvsClearErtStrings;
   GlobalConsts.Clear;
+  RegisterStdGlobalConsts;
 
   Self.LoadMapInternalScripts;
 
@@ -7596,6 +7609,7 @@ begin
   FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   GlobalConsts    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   FuncIdToNameMap := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  RegisterStdGlobalConsts;
 
   ErmScanner  := TextScan.TTextScanner.Create;
   ErmCmdCache := AssocArrays.NewSimpleAssocArr
