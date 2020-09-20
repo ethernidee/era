@@ -1667,7 +1667,7 @@ begin
           end;
 
           if Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL) then begin
-            Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(Erm.v[1]));
+            Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(SlotId));
           end;
         end; // .if
       end; // .else
