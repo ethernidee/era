@@ -2814,6 +2814,7 @@ var
   {O} SlotList:     {U} DataLib.TList {IF SlotInd: POINTER};
   {U} Slot:         TSlot;
       SlotInd:      integer;
+      NumSlotItems: integer;
       RangeStart:   integer;
       StartIntVal:  integer;
       StartStrVal:  string;
@@ -2829,7 +2830,7 @@ var
       
       result := result + '] = ';
     end;
-     
+
   begin
     SlotList := DataLib.NewList(not Utils.OWNS_ITEMS);
     // * * * * * //
@@ -2855,32 +2856,33 @@ var
       end;
       
       Append(IntToStr(SlotInd) + ') of ');
+      NumSlotItems := GetSlotItemsCount(Slot);
       
       if Slot.ItemsType = AdvErm.INT_VAR then begin
-        Line(IntToStr(Length(Slot.IntItems)) + ' integers');
+        Line(IntToStr(NumSlotItems) + ' integers');
         k := 0;
         
-        while k < Length(Slot.IntItems) do begin
+        while k < NumSlotItems do begin
           RangeStart  := k;
           StartIntVal := Slot.IntItems[k];
           Inc(k);
           
-          while (k < Length(Slot.IntItems)) and (Slot.IntItems[k] = StartIntVal) do begin
+          while (k < NumSlotItems) and (Slot.IntItems[k] = StartIntVal) do begin
             Inc(k);
           end;
           
           Line(GetVarName(RangeStart, k) + IntToStr(StartIntVal));
         end; // .while
       end else begin
-        Line(IntToStr(Length(Slot.StrItems)) + ' strings');
+        Line(IntToStr(NumSlotItems) + ' strings');
         k := 0;
         
-        while k < Length(Slot.StrItems) do begin
+        while k < NumSlotItems do begin
           RangeStart  := k;
           StartStrVal := Slot.StrItems[k];
           Inc(k);
           
-          while (k < Length(Slot.StrItems)) and (Slot.StrItems[k] = StartStrVal) do begin
+          while (k < NumSlotItems) and (Slot.StrItems[k] = StartStrVal) do begin
             Inc(k);
           end;
           
