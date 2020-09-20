@@ -211,15 +211,15 @@ var
 
       LastNonZeroSnxInd := high(Event.x);
 
-      while (LastNonZeroSnxInd >= 0) and (Event.x[LastNonZeroSnxInd] = 0) do begin
+      while (LastNonZeroSnxInd >= Low(Event.x)) and (Event.x[LastNonZeroSnxInd] = 0) do begin
         dec(LastNonZeroSnxInd);
       end;
 
-      if LastNonZeroSnxInd >= 0 then begin
-        Write(', sn:x = [');
+      if LastNonZeroSnxInd >= Low(Event.x) then begin
+        Write(', x = [');
 
-        for j := 0 to LastNonZeroSnxInd do begin
-          if j > low(Event.x) then begin
+        for j := Low(Event.x) to LastNonZeroSnxInd do begin
+          if j > Low(Event.x) then begin
             Write(', ');
           end;
 
