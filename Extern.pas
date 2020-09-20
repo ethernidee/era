@@ -8,7 +8,7 @@ unit Extern;
 
 
 uses
-  SysUtils,
+  SysUtils, Math,
   Utils, Alg, StrLib, Core, ApiJack,
   GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
   EraButtons, Lodman, Graph, Trans, EventMan;
@@ -331,6 +331,21 @@ begin
   end;
 end;
 
+function Erm_Sqrt (Value: single): single; stdcall;
+begin
+  result := Sqrt(Value);
+end;
+
+function Erm_Pow (Base, Power: single): single; stdcall;
+begin
+  result := Math.Power(Base, Power);
+end;
+
+function Erm_IntLog2 (Value: integer): integer; stdcall;
+begin
+  result := Alg.IntLog2(Value);
+end;
+
 exports
   Ask,
   ClearIniCache,
@@ -341,9 +356,12 @@ exports
   Erm.ReloadErm,
   Erm_CustomStableSortInt32Array,
   Erm_FillInt32Array,
+  Erm_IntLog2,
+  Erm_Pow,
   Erm_RevertInt32Array,
   Erm_SortInt32Array,
   Erm_SortStrArray,
+  Erm_Sqrt,
   ExecErmCmd,
   FatalError,
   FireErmEvent,
