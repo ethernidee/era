@@ -346,6 +346,11 @@ begin
   result := Alg.IntLog2(Value);
 end;
 
+function Erm_CompareStrings (Addr1, Addr2: pchar): integer; stdcall;
+begin
+  result := StrLib.ComparePchars(Addr1, Addr2);
+end;
+
 exports
   Ask,
   ClearIniCache,
@@ -354,6 +359,7 @@ exports
   Core.WriteAtCode,
   Erm.ExtractErm,
   Erm.ReloadErm,
+  Erm_CompareStrings,
   Erm_CustomStableSortInt32Array,
   Erm_FillInt32Array,
   Erm_IntLog2,
