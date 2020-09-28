@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   SysUtils, Utils, StrLib, WinSock, Windows, Math,
   CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes, WinNative, RandMt, Stores,
-  PatchApi, Core, GameExt, Heroes, Lodman, Erm, EventMan;
+  PatchApi, ApiJack, Core, GameExt, Heroes, Lodman, Erm, EventMan;
 
 type
   (* Import *)
@@ -780,6 +780,32 @@ begin
   end;
 end;
 
+function Hook_PostBattle_OnAddCreaturesExp (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  ExpToAdd: integer;
+  FinalExp: integer;
+
+begin
+  // EAX: Old experience value
+  // EBP - $C: addition
+  ExpToAdd := pinteger(Context.EBP - $C)^;
+
+  if ExpToAdd < 0 then begin
+    ExpToAdd := High(integer);
+  end;
+
+  FinalExp := Math.Max(0, Context.EAX) + ExpToAdd;
+
+  if FinalExp < 0 then begin
+    FinalExp := High(integer);
+  end;
+
+  ppinteger(Context.EBP - 8)^^ := FinalExp;
+
+  Context.RetAddr := Ptr($71922D);
+  result          := false;
+end; // .function Hook_PostBattle_OnAddCreaturesExp
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1124,6 +1150,12 @@ begin
   // Restore Nagash and Jeddite specialties
   Core.p.WriteDataPatch(Ptr($753E0B), ['E9990000009090']); // PrepareSpecWoG => ignore new WoG settings
   Core.p.WriteDataPatch(Ptr($79C3D8), ['FFFFFFFF']);       // HeroSpecWoG[0].Ind = -1
+
+  // Fix check for multiplayer in attack type selection dialog, causing wrong "This feature does not work in Human vs Human network baced battle" message
+  Core.p.WriteDataPatch(Ptr($762604), ['C5']);
+
+  // Fix creature experience overflow after battle
+  ApiJack.HookCode(Ptr($719225), @Hook_PostBattle_OnAddCreaturesExp);
 
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
   Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
