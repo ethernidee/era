@@ -351,6 +351,15 @@ begin
   result := StrLib.ComparePchars(Addr1, Addr2);
 end;
 
+procedure ShowErmError (Error: pchar); stdcall;
+begin
+  if Error = nil then begin
+    Error := '';
+  end;
+
+  Erm.ZvsErmError(nil, 0, Error);
+end;
+
 exports
   Ask,
   ClearIniCache,
@@ -400,6 +409,7 @@ exports
   RegisterHandler,
   ReportPluginVersion,
   SaveIni,
+  ShowErmError,
   ShowMessage,
   Splice,
   tr,
