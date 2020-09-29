@@ -6025,7 +6025,7 @@ begin
       ValueParamInd := 3;
     end;
 
-    Context.EAX := ord((Size = 4) or (Size = 1) or (Size = 2));
+    Context.EAX := ord((Size = 4) or (Size = 1) or (Size = 2) or (Size = -1) or (Size = -2) or (Size = -4));
 
     if Context.EAX = 0 then begin
       ShowErmError('!!UN:C - wrong Size parameter: ' + SysUtils.IntToStr(Size));
