@@ -242,22 +242,31 @@ const
   ERM_FLAG_HUMAN_VISITOR_OR_REAL_BATTLE = 1000;
 
   (* WoG Options *)
-  NUM_WOG_OPTIONS                           = 1000;
-  CURRENT_WOG_OPTIONS                       = 0;
-  GLOBAL_WOG_OPTIONS                        = 1;
-  WOG_OPTION_TOWERS_EXP_DISABLED            = 1;
-  WOG_OPTION_LEAVE_MONS_ON_ADV_MAP_DISABLED = 2;
-  WOG_OPTION_COMMANDERS_DISABLED            = 3;
-  WOG_OPTION_TOWN_DESTRUCT_DISABLED         = 4;
-  WOG_OPTION_WOGIFY                         = 5;
-  WOG_OPTION_COMMANDERS_NEED_HIRING         = 6;
-  WOG_OPTION_MAP_RULES                      = 101;
-  WOG_OPTION_ERROR                          = 905;
-  WOG_OPTION_DISABLE_ERRORS                 = 904;
-  DONT_WOGIFY                               = 0;
-  WOGIFY_WOG_MAPS_ONLY                      = 1;
-  WOGIFY_ALL                                = 2;
-  WOGIFY_AFTER_ASKING                       = 3;
+  NUM_WOG_OPTIONS                                    = 1000;
+  CURRENT_WOG_OPTIONS                                = 0;
+  GLOBAL_WOG_OPTIONS                                 = 1;
+  WOG_OPTION_TOWERS_EXP_DISABLED                     = 1;
+  WOG_OPTION_LEAVE_MONS_ON_ADV_MAP_DISABLED          = 2;
+  WOG_OPTION_COMMANDERS_DISABLED                     = 3;
+  WOG_OPTION_TOWN_DESTRUCT_DISABLED                  = 4;
+  WOG_OPTION_WOGIFY                                  = 5;
+  WOG_OPTION_COMMANDERS_NEED_HIRING                  = 6;
+  WOG_OPTION_CREATURE_DWELLINGS_ACCUMULATE_CREATURES = 7;
+  WOG_OPTION_CREATURE_DWELLINGS_ACCUMULATE_GUARDS    = 8;
+  WOG_OPTION_SYLVAN_CENTAUR_CREATION                 = 9;
+  WOG_OPTION_LEFT_TROOPS_REJOIN_OWNER                = 10;
+  WOG_OPTION_MAP_RULES                               = 101;
+  WOG_OPTION_STACK_EXPERIENCE                        = 900;
+  WOG_OPTION_STACK_EXPERIENCE_ALGO                   = 901;
+  WOG_OPTION_LEAVE_ART_ON_MAP                        = 902;
+  WOG_OPTION_DISABLE_CHEATING                        = 903;
+  WOG_OPTION_DISABLE_ERRORS                          = 904;
+  WOG_OPTION_ERROR                                   = 905;
+  WOG_OPTION_DISABLE_STACK_EXP_FROM_BATTLES          = 906;
+  DONT_WOGIFY                                        = 0;
+  WOGIFY_WOG_MAPS_ONLY                               = 1;
+  WOGIFY_ALL                                         = 2;
+  WOGIFY_AFTER_ASKING                                = 3;
 
   NUM_WOG_HEROES = 156;
 
