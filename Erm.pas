@@ -7474,6 +7474,9 @@ begin
   (* Fix IF:M# command: allow any string *)
   ApiJack.HookCode(Ptr($74751A), @Hook_IF_M);
 
+  (* Fix TR:T command: allow any number of arguments *)
+  Core.p.WriteDataPatch(Ptr($73B771), ['EB']);
+
   (* Fix ERM bug: IF:N worked with z1 only *)
   Core.p.WriteDataPatch(Ptr($749093), ['B0']);
   Core.p.WriteDataPatch(Ptr($74909C), ['B0']);
