@@ -6577,15 +6577,16 @@ var
 
   begin
     result := nil;
-    EndInd := StartInd + NumItems - 1;
+
+    if StartInd >= 0 then begin
+      EndInd := StartInd + NumItems - 1;
+    end else begin
+      EndInd := StartInd - NumItems + 1;
+    end;
 
     if VarType = PARAM_VARTYPE_V then begin
       if (StartInd >= Low(v^)) and (EndInd <= High(v^)) then begin
         result := @v[StartInd];
-      end;
-    end else if VarType = PARAM_VARTYPE_W then begin
-      if (StartInd >= Low(w[1])) and (EndInd <= High(w[1])) then begin
-        result := @w[ZvsWHero^][StartInd];
       end;
     end else if VarType = PARAM_VARTYPE_X then begin
       if (StartInd >= Low(x^)) and (EndInd <= High(x^)) then begin
@@ -6597,6 +6598,16 @@ var
       end else if (-StartInd >= Low(ny^)) and (-EndInd <= High(ny^)) then begin
         result := @ny[-StartInd];
       end;
+    end else if VarType = PARAM_VARTYPE_E then begin
+      if (StartInd >= Low(e^)) and (EndInd <= High(e^)) then begin
+        result := @e[StartInd];
+      end else if (-StartInd >= Low(ne^)) and (-EndInd <= High(ne^)) then begin
+        result := @ne[-StartInd];
+      end;
+    end else if VarType = PARAM_VARTYPE_W then begin
+      if (StartInd >= Low(w[1])) and (EndInd <= High(w[1])) then begin
+        result := @w[ZvsWHero^][StartInd];
+      end;
     end;
   end; // .function GetVarArrayAddr
 
@@ -6605,8 +6616,8 @@ begin
   VarParam     := @ErmCmd.Params[0];
   VarParamType := VarParam.GetType();
 
-  if not (VarParamType in PARAM_VARTYPES_ARRAYISH_INTS) then begin
-    ShowErmError('"!!VR:C" - only x, y, v, w variables are supported for mass assignment');
+  if not (VarParamType in (PARAM_VARTYPES_ARRAYISH_INTS + [PARAM_VARTYPE_E])) then begin
+    ShowErmError('"!!VR:C" - only x, y, v, w, e variables are supported for mass assignment');
     result := 0; exit;
   end;
   
