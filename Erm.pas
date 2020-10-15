@@ -5978,6 +5978,19 @@ begin
   end;
 end; // .function Hook_HE_Z
 
+function Hook_HE (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  Cmd:        PErmCmd;
+  ResValType: integer;
+
+begin
+  Cmd                           := ppointer(Context.EBP + $8)^;
+  // Get HeroId
+  pinteger(Context.EBP - $384)^ := GetErmParamValue(@Cmd.Params[0], ResValType);
+  result                        := false;
+  Context.RetAddr               := Ptr($743A2F);
+end; // .function Hook_HE
+
 function Hook_BM_Z (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   SubCmd:      PErmSubCmd;
@@ -7515,6 +7528,9 @@ begin
 
   (* Fix DL:A to allow all strings and assume 0 as the forth parameter value *)
   ApiJack.HookCode(Ptr($72B093), @Hook_DL_A);
+
+  (* Fix HE(xxx) GetVarVal call to allow new variable types *)
+  ApiJack.HookCode(Ptr($743A17), @Hook_HE);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
