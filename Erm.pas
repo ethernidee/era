@@ -1770,7 +1770,7 @@ var
 
     with LocalVarsPools[LOCAL_VAR_TYPE_ID_X] do begin
       StartIndex := 1;
-      Count      := 15;
+      Count      := 16;
       IsNegative := false;
       FreeRanges := nil;
     end;
@@ -1783,7 +1783,7 @@ var
     end;
 
     with LocalVarsPools[LOCAL_VAR_TYPE_ID_E] do begin
-      StartIndex := 1;
+      StartIndex := 2;
       Count      := 100;
       IsNegative := false;
       FreeRanges := nil;
