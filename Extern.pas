@@ -8,7 +8,7 @@ unit Extern;
 
 
 uses
-  SysUtils, Math,
+  Windows, SysUtils, Math,
   Utils, Alg, StrLib, Core, ApiJack,
   GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
   EraButtons, Lodman, Graph, Trans, EventMan;
@@ -351,6 +351,20 @@ begin
   result := StrLib.ComparePchars(Addr1, Addr2);
 end;
 
+procedure Erm_StrToLower ({n} Str: pchar); stdcall;
+begin
+  if Str <> nil then begin
+    Windows.CharLowerA(Str);
+  end;
+end;
+
+procedure Erm_StrToUpper ({n} Str: pchar); stdcall;
+begin
+  if Str <> nil then begin
+    Windows.CharUpperA(Str);
+  end;
+end;
+
 procedure ShowErmError (Error: pchar); stdcall;
 begin
   if Error = nil then begin
@@ -358,6 +372,11 @@ begin
   end;
 
   Erm.ZvsErmError(nil, 0, Error);
+end;
+
+function FindNextObject (ObjType, ObjSubtype: integer; var x, y, z: integer; Direction: integer): integer; stdcall;
+begin
+  result := ord(not Heroes.ZvsFindNextObjects(ObjType, ObjSubtype, x, y, z, Direction));
 end;
 
 exports
@@ -377,8 +396,11 @@ exports
   Erm_SortInt32Array,
   Erm_SortStrArray,
   Erm_Sqrt,
+  Erm_StrToLower,
+  Erm_StrToUpper,
   ExecErmCmd,
   FatalError,
+  FindNextObject,
   FireErmEvent,
   FireEvent,
   GameExt.GenerateDebugInfo,

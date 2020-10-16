@@ -791,6 +791,7 @@ const
   ZvsCountTowns:  function: integer = Ptr($711C0E);
   ZvsLoadTxtFile: function (FilePath: pchar; var TxtFile: TTxtFile): longbool cdecl = Ptr($777030); // true on error
   ZvsGetTxtValue: function (Row, Col: integer; TxtFile: PTxtFile): pchar cdecl = Ptr($77710B);
+  ZvsFindNextObjects: function (ObjType, ObjSubtype: integer; var x, y, z: integer; Direction: integer): longbool cdecl = Ptr($72F67B);
   a2i:            function (Str: pchar): int cdecl = Ptr($6184D9);
   a2f:            function (Str: pchar): single cdecl = Ptr($619366);
   
