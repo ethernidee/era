@@ -725,7 +725,7 @@ procedure FireErmEventEx (EventId: integer; const Params: array of integer);
 procedure NameTrigger (const TriggerId: integer; const FuncName: string);
 
 (* Registers object as trigger local object. It will be freed on exit from current trigger *)
-procedure RegisterTriggerLocalObject ({O} Obj: TObject);
+procedure RegisterTriggerLocalObject (TriggerData: PTriggerLocalData; {O} Obj: TObject);
 
 (* Returns true if default reaction is allowed *)
 function  FireMouseEvent (TriggerId: integer; MouseEventInfo: Heroes.PMouseEventInfo): boolean;
@@ -3565,14 +3565,14 @@ begin
   end;
 end;
 
-procedure RegisterTriggerLocalObject ({O} Obj: TObject);
+procedure RegisterTriggerLocalObject (TriggerData: PTriggerLocalData; {O} Obj: TObject);
 begin
-  {!} Assert(TriggerLocalData <> nil);
-  if TriggerLocalData.Items = nil then begin
-    TriggerLocalData.Items := DataLib.NewList(Utils.OWNS_ITEMS);
+  {!} Assert(TriggerData <> nil);
+  if TriggerData.Items = nil then begin
+    TriggerData.Items := DataLib.NewList(Utils.OWNS_ITEMS);
   end;
 
-  TriggerLocalData.Items.Add(Obj);
+  TriggerData.Items.Add(Obj);
 end;
 
 procedure RegisterCmdLocalObject (ErtIndex: integer);
@@ -3625,7 +3625,7 @@ var
 begin
   TriggerLocalStr := TTriggerLocalStr.Create(Str, StrLen);
   result          := TriggerLocalStr.zIndex;
-  RegisterTriggerLocalObject(TriggerLocalStr);
+  RegisterTriggerLocalObject(TriggerLocalData, TriggerLocalStr);
 end;
 
 (* Extract i^...^ or s^...^ variable name. BufPos must point to first name character *)

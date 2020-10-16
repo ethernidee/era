@@ -113,6 +113,9 @@ type
    protected
     fSlotN: integer;
 
+   property
+    SlotN: integer read fSlotN;
+
    public
     constructor Create (SlotN: integer);
     destructor Destroy; override;
@@ -166,6 +169,9 @@ procedure ApplyIntParam (var Param: TServiceParam; var Dest: integer);
 procedure AssignPcharFromParam (var Param: TServiceParam; {n} Buf: pchar; BufSize: integer);
 procedure AssignStrFromParam (var Param: TServiceParam; var Str: string);
 function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const ParamConstraints: array of integer): boolean;
+
+(* Extended lifetime of trigger-local arrays (SN:M slots in Era 2 terms) to parent trigger scope *)
+procedure ExtendArrayLifetime (ArrayId: integer); stdcall;
 
 
 var
@@ -1068,6 +1074,29 @@ begin
   end; // .for
 end; // .function CheckCmdParamsEx
 
+(* Extended lifetime of trigger-local arrays (SN:M slots in Era 2 terms) to parent trigger scope *)
+procedure ExtendArrayLifetime (ArrayId: integer); stdcall;
+var
+{U} Item: TObject;
+    i:    integer;
+
+begin
+  Item := nil;
+  // * * * * * //
+  if (Erm.TriggerLocalData <> nil) and ((Erm.TriggerLocalData.Items <> nil)) and (Erm.TriggerLocalData.PrevTriggerData <> nil) then begin
+    for i := 0 to Erm.TriggerLocalData.Items.Count - 1 do begin
+      Item := TObject(TriggerLocalData.Items[i]);
+
+      if (Item <> nil) and (Item is TSlotReleaser) and (TSlotReleaser(Item).SlotN = ArrayId) then begin
+        Erm.TriggerLocalData.Items.Take(i);
+        Erm.RegisterTriggerLocalObject(Erm.TriggerLocalData.PrevTriggerData, Item); Item := nil;
+
+        break;
+      end;
+    end;
+  end;
+end;
+
 function GetSlotItemsCount (Slot: TSlot): integer;
 begin
   {!} Assert(Slot <> nil);
@@ -1667,7 +1696,7 @@ begin
           end;
 
           if Params[3].Value.v = ord(SLOT_TRIGGER_LOCAL) then begin
-            Erm.RegisterTriggerLocalObject(TSlotReleaser.Create(SlotId));
+            Erm.RegisterTriggerLocalObject(Erm.TriggerLocalData, TSlotReleaser.Create(SlotId));
           end;
         end; // .if
       end; // .else

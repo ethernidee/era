@@ -380,6 +380,7 @@ begin
 end;
 
 exports
+  AdvErm.ExtendArrayLifetime,
   Ask,
   ClearIniCache,
   Core.ApiHook,
