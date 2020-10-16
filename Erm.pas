@@ -6962,8 +6962,10 @@ var
   Cmd:       PErmCmd;
   SubCmd:    PErmSubCmd;
   FuncId:    integer;
+  Param:     PErmCmdParam;
   NumParams: integer;
   ValType:   integer;
+  Str:       pchar;
   i:         integer;
 
 begin
@@ -6975,8 +6977,20 @@ begin
   FuncArgsGetSyntaxFlagsPassed := 0;
 
   for i := 0 to NumParams - 1 do begin
-    ArgXVars[i + 1]              := GetErmParamValue(@SubCmd.Params[i], ValType);
-    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
+    Param           := @SubCmd.Params[i];
+    ArgXVars[i + 1] := SubCmd.Nums[i];
+
+    // Handle P?(someVar) syntax. Pass by reference (VAR-parameter)
+    if Param.GetCheckType() = PARAM_CHECK_GET then begin
+      ArgXVars[i + 1] := GetErmParamValue(Param, ValType);
+    end
+    // Handle passing local strings as arguments
+    else if (Param.GetType() = PARAM_VARTYPE_Z) and (ArgXVars[i + 1] < 0) then begin
+      Str             := GetInterpolatedZVarAddr(ArgXVars[i + 1]);
+      ArgXVars[i + 1] := CreateCmdLocalErt(Str, Windows.LStrLen(Str));
+    end;
+
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@Param, SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
   for i := NumParams to High(ArgXVars) - 1 do begin
@@ -7029,7 +7043,9 @@ function DO_P (NumParams: integer; Cmd: PErmCmd; SubCmd: PErmSubCmd): boolean;
 var
   FuncId:      integer;
   LoopContext: TLoopContext;
+  Param:       PErmCmdParam;
   ValType:     integer;
+  Str:         pchar;
   i:           integer;
 
 begin
@@ -7047,7 +7063,19 @@ begin
 
   // Initialize x-paramaters
   for i := 0 to NumParams - 1 do begin
-    ArgXVars[i + 1]              := GetErmParamValue(@SubCmd.Params[i], ValType);
+    Param           := @SubCmd.Params[i];
+    ArgXVars[i + 1] := SubCmd.Nums[i];
+
+    // Handle P?(someVar) syntax. Pass by reference (VAR-parameter)
+    if Param.GetCheckType() = PARAM_CHECK_GET then begin
+      ArgXVars[i + 1] := GetErmParamValue(Param, ValType);
+    end
+    // Handle passing local strings as arguments
+    else if (Param.GetType() = PARAM_VARTYPE_Z) and (ArgXVars[i + 1] < 0) then begin
+      Str             := GetInterpolatedZVarAddr(ArgXVars[i + 1]);
+      ArgXVars[i + 1] := CreateCmdLocalErt(Str, Windows.LStrLen(Str));
+    end;
+    
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
