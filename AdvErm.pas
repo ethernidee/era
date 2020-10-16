@@ -120,6 +120,16 @@ type
     constructor Create (SlotN: integer);
     destructor Destroy; override;
   end;
+
+  TErmCustomObject = class
+    protected
+     fDestructorFuncId: integer;
+     fState:            integer;
+
+    public
+     constructor Create (DestructorFuncId, State: integer);
+     destructor Destroy; override;
+  end;
   
   TAssocVar = class
     IntValue: integer;
@@ -223,6 +233,17 @@ end;
 destructor TSlotReleaser.Destroy;
 begin
   Slots.DeleteItem(Ptr(Self.fSlotN));
+end;
+
+constructor TErmCustomObject.Create (DestructorFuncId, State: integer);
+begin
+  Self.fDestructorFuncId := DestructorFuncId;
+  Self.fState            := State;
+end;
+
+destructor TErmCustomObject.Destroy;
+begin
+  Erm.FireErmEventEx(Self.fDestructorFuncId, [integer(Self), Self.fState]);
 end;
 
 procedure TServiceMemAllocator.Init;
