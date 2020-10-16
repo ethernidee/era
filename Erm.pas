@@ -553,6 +553,13 @@ type
   {n} Prev:     PCmdLocalObject;
   end;
 
+  PTriggerLocalData = ^TTriggerLocalData;
+  TTriggerLocalData = record
+      PrevTriggerData: PTriggerLocalData;
+      CmdIndPtr:       pinteger;
+  {O} Items:           {O} TList {of TObject};
+  end;
+
 const
   (* WoG vars *)
   QuickVars: PErmQuickVars = Ptr($27718D0);
@@ -664,13 +671,12 @@ var
     MonNamesTables:     array [0..2] of Utils.PEndlessPcharArr;
     MonNamesTablesBack: array [0..2] of Utils.PEndlessPcharArr;
 
-    ErmCmdOptimizer:         procedure (Cmd: PErmCmd) = nil;
-    CurrentTriggerCmdIndPtr: pinteger = nil;
-    QuitTriggerFlag:         boolean = false;
-    TriggerLoopCallback:     TTriggerLoopCallback;
+    ErmCmdOptimizer:     procedure (Cmd: PErmCmd) = nil;
+    QuitTriggerFlag:     boolean = false;
+    TriggerLoopCallback: TTriggerLoopCallback;
 
-    // List of objects, that will be freed on current trigger end
-    {Un} TriggerLocalObjects: {O} TList {of TObject} = nil;
+    // Single linked list of trigger local items, that will be freed on particular trigger end
+    TriggerLocalData: PTriggerLocalData = nil;
 
     // Linked list of objects, that will be freed on ProcessCmd end. Currently optimized temporary ERT strings only.
     {Un} CmdLocalObjects: {U} PCmdLocalObject = nil;
@@ -3561,11 +3567,12 @@ end;
 
 procedure RegisterTriggerLocalObject ({O} Obj: TObject);
 begin
-  if TriggerLocalObjects = nil then begin
-    TriggerLocalObjects := DataLib.NewList(Utils.OWNS_ITEMS);
+  {!} Assert(TriggerLocalData <> nil);
+  if TriggerLocalData.Items = nil then begin
+    TriggerLocalData.Items := DataLib.NewList(Utils.OWNS_ITEMS);
   end;
 
-  TriggerLocalObjects.Add(Obj);
+  TriggerLocalData.Items.Add(Obj);
 end;
 
 procedure RegisterCmdLocalObject (ErtIndex: integer);
@@ -5079,9 +5086,7 @@ type
   end;
 
 var
-{Un} SavedTriggerLocalObjects: {O} TList {of TObject};
-
-  PrevTriggerCmdIndPtr: pinteger;
+  LocalData:            TTriggerLocalData;
   NumericEventName:     string;
   HumanEventName:       string;
   EventX:               integer;
@@ -5214,11 +5219,9 @@ label
   AfterTriggers, TriggersProcessed;
 
 begin
-  StartTrigger             := nil;
-  Trigger                  := nil;
-  SavedTriggerLocalObjects := nil;
-  PrevTriggerCmdIndPtr     := nil;
-  EventManager             := EventMan.GetInstance;
+  StartTrigger := nil;
+  Trigger      := nil;
+  EventManager := EventMan.GetInstance;
   // * * * * * //
   if not ErmEnabled^ then begin
     RetXVars := ArgXVars;
@@ -5251,10 +5254,10 @@ begin
       EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, TriggerId);
     end;
 
-    PrevTriggerCmdIndPtr     := CurrentTriggerCmdIndPtr;
-    CurrentTriggerCmdIndPtr  := @i;
-    SavedTriggerLocalObjects := TriggerLocalObjects;
-    TriggerLocalObjects      := nil;
+    LocalData.PrevTriggerData := TriggerLocalData;
+    LocalData.CmdIndPtr       := @i;
+    LocalData.Items           := nil;
+    TriggerLocalData          := @LocalData;
 
     // Repeat executing all triggers with specified ID, unless TriggerLoopCallback is not set or returns false
     while true do begin
@@ -5468,9 +5471,10 @@ begin
           end; // .if
         end; // .if
 
-        if TriggerLocalObjects <> nil then begin
-          TriggerLocalObjects.Free;
-          TriggerLocalObjects := nil;
+        if LocalData.Items <> nil then begin
+          for j := LocalData.Items.Count - 1 downto 0 do begin
+            LocalData.Items[j] := nil;
+          end;
         end;
 
         Trigger := Trigger.Next;
@@ -5495,13 +5499,16 @@ begin
     end;
 
     RestoreVars;
-    CurrentTriggerCmdIndPtr := PrevTriggerCmdIndPtr;
 
-    if TriggerLocalObjects <> nil then begin
-      TriggerLocalObjects.Free;
+    if LocalData.Items <> nil then begin
+      for j := LocalData.Items.Count - 1 downto 0 do begin
+        LocalData.Items[j] := nil;
+      end;
+
+      LocalData.Items.Free;
     end;
 
-    TriggerLocalObjects := SavedTriggerLocalObjects;
+    TriggerLocalData := LocalData.PrevTriggerData;
   end else begin
     RetXVars := ArgXVars;
   end;
