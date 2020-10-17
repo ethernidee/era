@@ -1974,7 +1974,7 @@ begin
     result  := ApiFunc <> nil;
 
     if not result then begin
-      Error := 'Unknown Era/Kernel32 API function: "' + ApiName + '"';
+      Error := 'Unknown Era/Kernel32/User32 API function: "' + ApiName + '"';
     end else begin
       for i := 1 to NumParams do begin
         ApiArgs[i - 1] := Params[i].Value.v;
