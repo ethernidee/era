@@ -2074,10 +2074,10 @@ var
     end
     // It it's not free var operation
     else if LocalVar <> nil then begin
-      VarIndex := LocalVar.StartIndex + ArrIndex;
-
       if LocalVar.IsNegative then begin
-        VarIndex := -VarIndex;
+        VarIndex := -LocalVar.StartIndex - LocalVar.Count + 1 + ArrIndex;
+      end else begin
+        VarIndex := LocalVar.StartIndex + ArrIndex;
       end;
 
       if not IsAddr then begin
