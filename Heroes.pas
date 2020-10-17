@@ -673,6 +673,54 @@ type
   THeroes = packed array [0..999] of THero;
   PHeroes = ^THeroes;
 
+  (*
+  struct H3Boat // size 0x28 from 0x4CE5C0
+  {
+  INT16 x;
+  INT16 y;
+  INT16 z;
+  INT8 visible;
+  H3MapItem* item; // 7
+  h3unk _f_0B;
+  INT32 object_type; // C
+  INT8 object_flag;
+  h3unk _f_11[3];
+  INT32 object_setup; // 14h
+  INT8 exists; // 18h
+  INT8 index; // 19h
+  INT8 par1;
+  INT8 par2;
+  INT8 owner; // 1Ch
+  h3unk _f_1D[3];
+  INT32 hero_id; // 20h
+  INT8 has_hero; //24h
+  h3unk _f_25[3];
+  };
+  *)
+  PBoat = ^TBoat;
+
+  TBoat = record
+    x:                 word;                 // +0h
+    y:                 word;                 // +2h
+    z:                 word;                 // +4h
+    IsVisible:         boolean;              // +6h
+    MapTile:           PMapTile;             // +7h
+    _1:                byte;                 // +0Bh
+    ObjType:           integer;              // +0Ch
+    ObjFlag:           byte;                 // +10h
+    _2:                array [1..3] of byte; // +11h
+    ObjSetup:          integer;              // +14h
+    IsPresentOnAdvMap: boolean;              // +18h
+    Index:             byte;                 // +19h
+    Param1:            byte;                 // +1Ah
+    Param2:            byte;                 // +1Bh
+    Owner:             byte;                 // +1Ch
+    _3:                array [1..3] of byte; // +1Dh
+    HeroId:            integer;              // +20h
+    HasHero:           boolean;              // +24h
+    _4:                array[1..3] of byte;  // +25h
+  end;
+
   (* Ported from WoG. Needs refactoring *)
   PTown = ^TTown;
   TTown = packed record
@@ -845,6 +893,7 @@ function  GetStackIdByPos (StackPos: integer): integer;
 procedure RedrawHeroMeetingScreen;
 procedure HideHero (Hero: PHero);
 procedure ShowHero (Hero: PHero);
+procedure ShowBoat (Boat: PBoat);
 function  IsCampaign: boolean;
 function  GetMapFileName: string;
 function  GetCampaignFileName: string;
@@ -1363,22 +1412,34 @@ begin
   end;
 end;
 
-function GetObjectEntranceTile (MapTile: PMapTile): PMapTile; assembler; {W+}
-asm
-  PUSH EBP
-  MOV EBP, ESP
-  PUSH 0
-  PUSH 0
-  PUSH 0
-  MOV ECX, ESP
-  PUSH 0
-  PUSH 0
-  PUSH MapTile
-  MOV EAX, $40AF10
-  CALL EAX
-  MOV ESP, EBP
-  POP EBP
-end; // .function GetObjectEntranceTile
+function GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
+type
+  TExtendedResult = packed record
+    Hero:         PHero;
+    Boat:         PBoat;
+    MustHideHero: longbool;
+  end;
+
+var
+  ExtendedRes: TExtendedResult;
+
+begin
+  with ExtendedRes do begin
+    Hero         := nil;
+    Boat         := nil;
+    MustHideHero := false;
+  end;
+
+  result := PMapTile(PatchApi.Call(THISCALL_, Ptr($40AF10), [integer(@ExtendedRes), integer(MapTile), 0, 0]));
+
+  if ExtendedRes.Hero <> nil then begin
+    ShowHero(ExtendedRes.Hero);
+  end else if ExtendedRes.Boat <> nil then begin
+    ShowBoat(ExtendedRes.Boat);
+  end else if ExtendedRes.MustHideHero then begin
+    HideHero(ExtendedRes.Hero);
+  end;
+end;
 
 procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
 var
@@ -1492,6 +1553,14 @@ const
 
 begin
   PatchApi.Call(THISCALL_, Ptr($4D7840), [Hero, TYPE_HERO, Hero.Id]);
+end;
+
+procedure ShowBoat (Boat: PBoat);
+const
+  TYPE_BOAT = 8;
+
+begin
+  PatchApi.Call(THISCALL_, Ptr($4D7840), [Boat, TYPE_BOAT, Boat.Index]);
 end;
 
 function IsCampaign: boolean;
