@@ -212,6 +212,7 @@ var
 (* Cached exported stdcall API of Era.dll and kernel32.dll *)
 {O} ApiCache:       {U} TDict {of command name => API function address};
     Kernel32Handle: Windows.THandle;
+    User32Handle:   Windows.THandle;
     
     AdditionalCmds:    array [0..199] of TErmAdditionalCmd;
     NumAdditionalCmds: integer = 67;
@@ -880,6 +881,10 @@ begin
 
     if result = nil then begin
       result := Windows.GetProcAddress(Kernel32Handle, pchar(ApiName));
+
+      if result = nil then begin
+        result := Windows.GetProcAddress(User32Handle, pchar(ApiName));
+      end;
     end;
 
     if result <> nil then begin
@@ -3259,6 +3264,7 @@ begin
   Erm.ErmCmdOptimizer := @OptimizeErmCmd;
 
   Kernel32Handle := Windows.LoadLibraryW('kernel32.dll');
+  User32Handle   := Windows.LoadLibraryW('user32.dll');
   ApiCache       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
 
   New(Mp3TriggerContext);
