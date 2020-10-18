@@ -806,6 +806,29 @@ begin
   result          := false;
 end; // .function Hook_PostBattle_OnAddCreaturesExp
 
+function Hook_ShowComplexDialog_GetTimeout (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  Opts:      integer;
+  Timeout:   integer;
+  MsgType:   integer;
+  StrConfig: integer;
+
+begin
+  Opts      := pinteger(Context.EBP + $10)^;
+  Timeout   := Opts and $FFFF;
+  StrConfig := (Opts shr 24) and $FF;
+  MsgType   := (Opts shr 16) and $0F;
+
+  if MsgType = 0 then begin
+    MsgType := ord(Heroes.MES_MES);
+  end;
+  
+  pinteger(Context.EBP - $24)^ := Timeout;
+  pinteger(Context.EBP - $2C)^ := MsgType;
+  pbyte(Context.EBP - $2C0)^   := StrConfig;
+  result                       := true;
+end;
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1156,6 +1179,16 @@ begin
 
   // Fix creature experience overflow after battle
   ApiJack.HookCode(Ptr($719225), @Hook_PostBattle_OnAddCreaturesExp);
+  
+  // Fix ShowComplexDialog to overload the last argument
+  // closeTimeoutMsec is now TComplexDialogOpts
+  // 16 bits for closeTimeoutMsec, 4 bits for msgType (1 - ok, 2 - question, 4 - popup, etc), 0 is treated as 1.
+  // Last 8 bits are used for H3 string initialization
+  ApiJack.HookCode(Ptr($4F7D83), @Hook_ShowComplexDialog_GetTimeout);
+  // Nop dlg.closeTimeoutMsec := closeTimeoutMsec
+  Core.p.WriteDataPatch(Ptr($4F7E19), ['909090']);
+  // Nop dlg.msgType := MSG_TYPE_MES
+  Core.p.WriteDataPatch(Ptr($4F7E4A), ['90909090909090']);
 
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
   Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
