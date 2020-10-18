@@ -27,6 +27,14 @@ const
   RES_TYPE_PCX_24 = $11;
   RES_TYPE_PCX_16 = $12;
 
+  (* Text alignment in dialogs *)
+  TEXT_ALIGN_LEFT   = 0;
+  TEXT_ALIGN_CENTER = 1;
+  TEXT_ALIGN_RIGHT  = 2;
+  TEXT_ALIGN_TOP    = 0;
+  TEXT_ALIGN_MIDDLE = 4;
+  TEXT_ALIGN_BOTTOM = 8;
+
   (* Game settings *)
   GAME_SETTINGS_FILE    = 'heroes3.ini';
   GAME_SETTINGS_SECTION = 'Settings';
@@ -342,7 +350,9 @@ type
   
   PWndManager = ^TWndManager;
   TWndManager = packed record
-    Dummy:        array [0..63] of byte;
+    _1:           array [1..55] of byte;
+    DlgResItemId: integer;
+    _2:           array [60..64] of byte;
     ScreenPcx16:  PScreenPcx16;
     (* Dummy *)
   end; // .record TWndManager
@@ -928,6 +938,9 @@ procedure PlaySound (FileName: pchar); stdcall; overload;
 procedure PlaySound (FileName: string); overload;
 
 function ParseTextTable (const TextTable: string): TTextTableCells;
+
+(* Show H3 complex dialog with up to 8 pictures and text. Returns 0/1 for question or 0..7 for selected picture or -1 for cancel *)
+function DisplayComplexDialog (Text: pchar; PicsConfig: pointer; MsgType: TMesType = MES_MES; TextAlignment: integer = -1; Timeout: integer = 15000): integer;
 
 
 (***) implementation (***)
@@ -1670,6 +1683,34 @@ begin
     end;
   end;
 end; // .function ParseTextTable
+
+function DisplayComplexDialog (Text: pchar; PicsConfig: pointer; MsgType: TMesType = MES_MES; TextAlignment: integer = -1; Timeout: integer = 15000): integer;
+const
+  ITEM_OK        = 30725;
+  ITEM_PIC_FIRST = 30729;
+  ITEM_PIC_LAST  = 30737;
+
+var
+  Opts:      integer;
+  ResItemId: integer;
+
+begin
+  Opts      := (((TextAlignment + 1) and $0F) shl 20) or ((ord(MsgType) and $0F) shl 16) or (Timeout and $FFFF);
+  PatchApi.Call(FASTCALL_, Ptr($4F7D20), [Text, PicsConfig, -1, -1, Opts]);
+  ResItemId := WndManagerPtr^.DlgResItemId shr 8;
+
+  result := -1;
+
+  if MsgType = MES_QUESTION then begin
+    result := ord(ResItemId = ITEM_OK);
+  end else if MsgType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
+    if (ResItemId >= ITEM_PIC_FIRST) and (ResItemId <= ITEM_PIC_LAST) then begin
+      result := ResItemId - ITEM_PIC_FIRST;
+    end else begin
+      result := -1;
+    end;
+  end;
+end; // .function DisplayComplexDialog
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
 begin

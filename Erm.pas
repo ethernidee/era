@@ -617,6 +617,7 @@ const
   ZvsLoadErmTxt:      TZvsLoadErmTxt    = Ptr($72C8B1);
   ZvsLoadErtFile:     TZvsLoadErtFile   = Ptr($72C641);
   ZvsShowMessage:     TZvsShowMessage   = Ptr($70FB63);
+  ZvsDisplay8Dialog:  function (Message: pchar; DialogPics: pointer; MsgType: Heroes.TMesType; TextAlignment: integer): integer cdecl = Ptr($7169A8);
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   ZvsGetNum:          function (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool cdecl = Ptr($73E970);
   ZvsGetVal:          function (ValuePtr: pointer; ValueSize: byte): integer cdecl = Ptr($7418B0);
@@ -741,6 +742,12 @@ procedure SetErmCurrHero ({n} NewHero: Heroes.PHero); overload;
 function  GetErmCurrHero: {n} Heroes.PHero;
 function  GetErmCurrHeroInd: integer; // or -1
 
+(* Integration with WoG Native Dialogs: possibility to set preselected item for DisplayComplexDialog and text alignment for ShowParsedDlg8Items *)
+function  GetPreselectedDialog8ItemId: integer; stdcall;
+procedure SetPreselectedDialog8ItemId (ItemId: integer); stdcall;
+function  GetDialog8TextAlignment: integer; stdcall;
+procedure SetDialog8TextAlignment (Alignment: integer); stdcall;
+
 
 (***) implementation (***)
 uses PatchApi, Stores, AdvErm, ErmTracking;
@@ -785,6 +792,10 @@ type
   end;
 
 var
+    (* Integration with WoG Native Dialogs: possibility to set preselected item for DisplayComplexDialog and text alignment for ShowParsedDlg8Items *)
+    Dialog8PreselectedItemId: integer = -1;
+    Dialog8TextAlignment:     integer = Heroes.TEXT_ALIGN_CENTER;
+
 {O} FuncNames:         DataLib.TDict {OF FuncId: integer};
 {O} FuncIdToNameMap:   DataLib.TObjDict {O} {OF TString};
     FuncAutoId:        integer;
@@ -6140,6 +6151,28 @@ begin
   ZvsShowMessage(GetInterpolatedZVarAddr(SubCmd.Nums[0]), ord(Heroes.MES_MES));
 end; // .function Hook_IF_M
 
+function GetPreselectedDialog8ItemId: integer; stdcall;
+begin
+  result                   := Dialog8PreselectedItemId;
+  Dialog8PreselectedItemId := -1;
+end;
+
+procedure SetPreselectedDialog8ItemId (ItemId: integer); stdcall;
+begin
+  Dialog8PreselectedItemId := ItemId;
+end;
+
+function GetDialog8TextAlignment: integer; stdcall;
+begin
+  result               := Dialog8TextAlignment;
+  Dialog8TextAlignment := Heroes.TEXT_ALIGN_CENTER;
+end;
+
+procedure SetDialog8TextAlignment (Alignment: integer); stdcall;
+begin
+  Dialog8TextAlignment := Alignment;
+end;
+
 function Hook_IF_N (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   SubCmd: PErmSubCmd;
@@ -6152,6 +6185,96 @@ begin
   // txt = @z
   ppointer(Context.EBP - $520)^ := GetInterpolatedZVarAddr(SubCmd.Nums[0]);
 end; // .function Hook_IF_N
+
+function Hook_IF_N_ShowDialog (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams:        integer;
+  SubCmd:           PErmSubCmd;
+  MsgType:          Heroes.TMesType;
+  TextAlignment:    integer;
+  PreselectedPicId: integer;
+  DlgRes:           integer;
+
+begin
+  NumParams := pinteger(Context.EBP - $10)^;
+  SubCmd    := pointer(Context.EBP - $300);
+
+  MsgType := Heroes.MES_MES;
+
+  if NumParams >= 2 then begin
+    MsgType := Heroes.TMesType(SubCmd.Nums[0] and $0F);
+  end;
+
+  TextAlignment := -1;
+
+  if NumParams >= 4 then begin
+    TextAlignment := SubCmd.Nums[3] and $0F;
+  end;
+
+  PreselectedPicId := -1;
+
+  if NumParams >= 5 then begin
+    PreselectedPicId := SubCmd.Nums[4];
+  end;
+
+  SetPreselectedDialog8ItemId(PreselectedPicId);
+
+  DlgRes := ZvsDisplay8Dialog(ppointer(Context.EBP - $520)^, Ptr($2734978), MsgType, TextAlignment);
+
+  if (NumParams >= 3) and (SubCmd.Params[2].GetCheckType() = PARAM_CHECK_GET) and (SubCmd.Params[2].GetType() in PARAM_VARTYPES_INTS) then begin
+    SetErmParamValue(@SubCmd.Params[2], DlgRes);
+  end;
+
+  result          := false;
+  Context.RetAddr := Ptr($74926D); // 749483 for error
+end; // .function Hook_IF_N_ShowDialog
+
+function Hook_IF_N_ShowDialog_DecideSetupOrShow (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams: integer;
+  SubCmd:    PErmSubCmd;
+
+begin
+  NumParams := pinteger(Context.EBP - $10)^;
+  SubCmd    := pointer(Context.EBP - $300);
+
+  result := false;
+
+  if (NumParams < 4) or (SubCmd.Params[1].GetType() in PARAM_VARTYPES_STRINGS) then begin
+    Context.RetAddr := Ptr($749081);
+  end else begin
+    Context.RetAddr := Ptr($749165);
+  end;
+end; // .function Hook_IF_N_ShowDialog_DecideSetupOrShow
+
+function Hook_Request3Pic (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  ITEM_OK        = 30725;
+  ITEM_PIC_FIRST = 30729;
+  ITEM_PIC_LAST  = 30737;
+
+var
+  MsgType: Heroes.TMesType;
+  ItemId:  integer;
+
+begin
+  MsgType     := Heroes.TMesType(pinteger(Context.EBP + $24)^);
+  ItemId      := pinteger(Context.EBP - $4)^;
+  Context.EAX := 0;
+
+  if MsgType = Heroes.MES_QUESTION then begin
+    Context.EAX := ord(ItemId = ITEM_OK);
+  end else begin
+    if (ItemId >= ITEM_PIC_FIRST) and (ItemId <= ITEM_PIC_LAST) then begin
+      Context.EAX := ItemId - ITEM_PIC_FIRST + 1;
+    end else begin
+      Context.EAX := -1;
+    end;
+  end;
+
+  result          := false;
+  Context.RetAddr := Ptr($7103CB);
+end; // .function Hook_Request3Pic
 
 function Hook_BA_B (Context: ApiJack.PHookContext): longbool; stdcall;
 const
@@ -7552,8 +7675,17 @@ begin
   Core.p.WriteDataPatch(Ptr($7490B6), ['B0']);
   Core.p.WriteDataPatch(Ptr($7490CD), ['B0']);
 
-  (* Fix IF:N# to support any string *)
+  (* Fix IF:N to support any string *)
   ApiJack.HookCode(Ptr($749116), @Hook_IF_N);
+
+  (* Fix IF:N to support new syntax: IF:N(msgType)/(text)/[?choice]/[textAlignment]/[preselectedPicId] and call ZvsDisplay8Dialog with 4 arguments *)
+  ApiJack.HookCode(Ptr($74914C), @Hook_IF_N_ShowDialog);
+  ApiJack.HookCode(Ptr($749077), @Hook_IF_N_ShowDialog_DecideSetupOrShow);
+  Core.p.WriteDataPatch(Ptr($749086), ['8C']);
+  Core.p.WriteDataPatch(Ptr($74908B), ['909090909090']);
+
+  (* Fix dialog result parsing in Request3Pic to support 3 pictures selection *)
+  ApiJack.HookCode(Ptr($710352), @Hook_Request3Pic);
 
   (* Fix BA:B to allow both numeric field ID and string as the only argument *)
   ApiJack.HookCode(Ptr($76242B), @Hook_BA_B);
