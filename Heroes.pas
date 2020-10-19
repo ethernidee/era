@@ -853,9 +853,10 @@ const
   a2i:            function (Str: pchar): int cdecl = Ptr($6184D9);
   a2f:            function (Str: pchar): single cdecl = Ptr($619366);
   
-  GetBattleCellByPos: TGetBattleCellByPos = Ptr($715872);
-  MemAllocFunc:       TMemAllocFunc       = Ptr($617492);
-  MemFree:            TMemFreeFunc        = Ptr($60B0F0);
+  GetBattleCellByPos:  TGetBattleCellByPos = Ptr($715872);
+  MemAllocFunc:        TMemAllocFunc       = Ptr($617492);
+  MemFree:             TMemFreeFunc        = Ptr($60B0F0);
+  ComplexDlgResItemId: pinteger            = Ptr($699424);
   
   MapItemToCoords:  TMapItemToCoords  = Ptr($711EC6);
   CoordsToMixedPos: TCoordsToMixedPos = Ptr($711E7F);

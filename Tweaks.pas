@@ -843,6 +843,13 @@ begin
   result := true;
 end;
 
+function Hook_ShowParsedDlg8Items_Init (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  // WoG Native Dialogs uses imported function currently and manually determines selected item
+  // Heroes.ComplexDlgResItemId^ := Erm.GetPreselectedDialog8ItemId();
+  result := true;
+end;
+
 function Hook_ZvsDisplay8Dialog_BeforeShow (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.EAX     := DisplayComplexDialog(ppointer(Context.EBP + $8)^, Ptr($8403BC), Heroes.TMesType(pinteger(Context.EBP + $10)^),
@@ -850,6 +857,46 @@ begin
   result          := false;
   Context.RetAddr := Ptr($716A04);
 end;
+
+const
+  PARSE_PICTURE_VAR_SHOW_ZERO_QUANTITIES = -$C0;
+
+function Hook_ParsePicture_Start (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  PIC_TYPE_ARG = +$8;
+
+var
+  PicType: integer;
+
+begin
+  PicType := pinteger(Context.EBP + PIC_TYPE_ARG)^;
+
+  if PicType <> -1 then begin
+    pinteger(Context.EBP + PARSE_PICTURE_VAR_SHOW_ZERO_QUANTITIES)^ := PicType shr 31;
+    pinteger(Context.EBP + PIC_TYPE_ARG)^                           := PicType and not (1 shl 31);
+  end else begin
+    pinteger(Context.EBP + PARSE_PICTURE_VAR_SHOW_ZERO_QUANTITIES)^ := 0;
+  end;
+
+  (* Not ideal but still solution. Apply runtime patches to allow/disallow displaying of zero quantities *)
+  if pinteger(Context.EBP + PARSE_PICTURE_VAR_SHOW_ZERO_QUANTITIES)^ <> 0 then begin
+    pbyte($4F55EC)^ := $7C;   // resources
+    pbyte($4F5EB3)^ := $EB;   // experience
+    pword($4F5BCA)^ := $9090; // monsters
+    pbyte($4F5ACC)^ := $EB;   // primary skills
+    pbyte($4F5725)^ := $7C;   // money
+    pbyte($4F5765)^ := $EB;   // money
+  end else begin
+    pbyte($4F55EC)^ := $7E;   // resources
+    pbyte($4F5EB3)^ := $75;   // experience
+    pword($4F5BCA)^ := $7A74; // monsters
+    pbyte($4F5ACC)^ := $75;   // primary skills
+    pbyte($4F5725)^ := $7E;   // money
+    pbyte($4F5765)^ := $75;   // money
+  end;
+
+  result := true;
+end; // .function Hook_ParsePicture_Start
 
 procedure DumpWinPeModuleList;
 const
@@ -1214,11 +1261,18 @@ begin
   // Nop dlg.msgType := MSG_TYPE_MES
   Core.p.WriteDataPatch(Ptr($4F7E4A), ['90909090909090']);
 
-  (* Fix ShowParsedDlg8Items function to allow custom text alignment *)
+  (* Fix ShowParsedDlg8Items function to allow custom text alignment and preselected item *)
   ApiJack.HookCode(Ptr($4F72B5), @Hook_ShowParsedDlg8Items_CreateTextField);
+  ApiJack.HookCode(Ptr($4F7136), @Hook_ShowParsedDlg8Items_Init);
 
   (* Fix ZvsDisplay8Dialog to 2 extra arguments (msgType, alignment) and return -1 or 0..7 for chosen picture or 0/1 for question *)
   ApiJack.HookCode(Ptr($7169EB), @Hook_ZvsDisplay8Dialog_BeforeShow);
+
+  (* Patch ParsePicture function to allow "0 something" values in generic h3 dialogs *)
+  // Allocate new local variables EBP - $0B4
+  Core.p.WriteDataPatch(Ptr($4F555A), ['B4000000']);
+  // Unpack highest bit of Type parameter as "display 0 quantities" flag into new local variable
+  ApiJack.HookCode(Ptr($4F5564), @Hook_ParsePicture_Start);
 
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
   Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
