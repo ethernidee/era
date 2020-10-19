@@ -2131,7 +2131,7 @@ var
       result := Scanner.c = ')';
 
       if not result then begin
-        ShowError(Scanner.Pos, 'Invalid constant name. Expected [A-Z_] characters');
+        ShowError(Scanner.Pos, 'Invalid constant name. Expected [A-Z0-9_] characters');
       end;
     end;
 
