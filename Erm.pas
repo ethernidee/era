@@ -1590,6 +1590,8 @@ const
   SAFE_BLANKS         = [#1..#32];
   NUMBER_START_CHARS  = ['+', '-', '0'..'9'];
   DIGITS              = ['0'..'9'];
+  CONST_START_CHARS   = ['A'..'Z'];
+  CONST_CHARS         = ['A'..'Z', '0'..'9', '_'];
 
   IDENT_TYPE_CONST = 1;
   IDENT_TYPE_FUNC  = 2;
@@ -2109,7 +2111,9 @@ var
 
   function HandleConstDeclaration: boolean;
   var
-    ConstName: string;
+    ConstName:      string;
+    Token:          string;
+    IsConstAlias:   boolean;
 
   begin
     Scanner.GotoRelPos(-2);
@@ -2155,17 +2159,25 @@ var
       Scanner.GotoNextChar;
       Scanner.SkipCharset(SAFE_BLANKS);
 
-      result := Scanner.c in NUMBER_START_CHARS;
+      IsConstAlias := Scanner.c = '(';
+      result       := IsConstAlias or (Scanner.c in NUMBER_START_CHARS);
 
       if not result then begin
-        ShowError(Scanner.Pos, 'Expected valid integer as constant value');
+        ShowError(Scanner.Pos, 'Expected valid integer or existing constant name as constant value');
       end;
     end;
 
     if result then begin
-      StartPos := Scanner.Pos;
-      Scanner.GotoNextChar;
-      Scanner.SkipCharset(DIGITS);
+      if IsConstAlias then begin
+        Scanner.GotoNextChar;
+        StartPos := Scanner.Pos;
+        Scanner.SkipCharset(CONST_CHARS + [')']);
+      end else begin
+        StartPos := Scanner.Pos;
+        Scanner.GotoNextChar;
+        Scanner.SkipCharset(DIGITS);
+      end;
+      
       result := Scanner.c = ';';
 
       if not result then begin
@@ -2174,14 +2186,27 @@ var
     end;
 
     if result then begin
-      result := TryStrToInt(Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos), ConstValue);
+      Token := Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos - ord(IsConstAlias));
 
-      if not result then begin
-        ShowError(StartPos, 'Expected valid integer as constant value');
+      if IsConstAlias then begin
+        ExistingConstValue := 0;
+        result             := GlobalConsts.GetExistingValue(Token, pointer(ExistingConstValue));
+
+        if not result then begin
+          ShowError(StartPos, Format('Global constant "%s" is not defined', [Token, ExistingConstValue]));
+        end else begin
+          GlobalConsts[ConstName] := Ptr(ExistingConstValue);
+        end;
       end else begin
-        GlobalConsts[ConstName] := Ptr(ConstValue);
+        result := TryStrToInt(Token, ConstValue);
+
+        if not result then begin
+          ShowError(StartPos, 'Expected valid integer as constant value');
+        end else begin
+          GlobalConsts[ConstName] := Ptr(ConstValue);
+        end;
       end;
-    end;
+    end; // .if
 
     // Recover from error
     if not result then begin
