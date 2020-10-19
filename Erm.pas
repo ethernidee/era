@@ -2183,6 +2183,8 @@ var
       end;
     end;
 
+    IsConstAlias := false;
+
     if result then begin
       Scanner.GotoNextChar;
       Scanner.SkipCharset(SAFE_BLANKS);
@@ -5798,6 +5800,74 @@ begin
   end;
 end;
 
+function Hook_UN_U (Context: Core.PHookContext): longbool; stdcall;
+var
+  NumParams:   integer;
+  SubCmd:      PErmSubCmd;
+  ObjectN:     integer;
+  FirstVarInd: integer;
+  cx, cy, cz:  integer;
+  SearchRes:   boolean;
+
+begin
+  NumParams   := pinteger(Context.EBP + $0C)^;
+  SubCmd      := ppointer(Context.EBP + $14)^;
+  ObjectN     := pinteger(Context.EBP - $30)^;
+  FirstVarInd := pinteger(Context.EBP - $0C)^;
+  Context.EAX := 1;
+
+  if NumParams >= 6 then begin
+    Context.EAX := ord((SubCmd.Params[3].GetType() in PARAM_VARTYPES_INTS) and (SubCmd.Params[3].GetCheckType() = PARAM_CHECK_NONE) and
+                       (SubCmd.Params[4].GetType() in PARAM_VARTYPES_INTS) and (SubCmd.Params[4].GetCheckType() = PARAM_CHECK_NONE) and
+                       (SubCmd.Params[5].GetType() in PARAM_VARTYPES_INTS) and (SubCmd.Params[5].GetCheckType() = PARAM_CHECK_NONE));
+    
+    if Context.EAX = 0 then begin
+      ShowErmError('"UN:U" - Invalid parameters for search coordinates' + SysUtils.IntToStr(FirstVarInd));
+    end else begin
+      cx := SubCmd.Nums[3];
+      cy := SubCmd.Nums[4];
+      cz := SubCmd.Nums[5];
+    end;
+  end else begin
+    Context.EAX := ord((FirstVarInd >= Low(v^)) and (FirstVarInd <= High(v^) - 2));
+
+    if Context.EAX = 0 then begin
+      ShowErmError('"UN:U" - Invalid v-var index. Expected 1..9998, got ' + SysUtils.IntToStr(FirstVarInd));
+    end else begin
+      cx := v[FirstVarInd];
+      cy := v[FirstVarInd + 1];
+      cz := v[FirstVarInd + 2];
+    end; // .else
+  end; // .else
+
+  if Context.EAX <> 0 then begin
+    if ObjectN < 0 then begin
+      SearchRes := not Heroes.ZvsFindNextObjects(SubCmd.Nums[0], SubCmd.Nums[1], cx, cy, cz, ObjectN);
+    end else begin
+      SearchRes := not Heroes.ZvsFindObjects(SubCmd.Nums[0], SubCmd.Nums[1], ObjectN, cx, cy, cz);
+    end;
+
+    if not SearchRes then begin
+      cx := -1;
+    end;
+
+    if NumParams >= 6 then begin
+      Context.EAX := ord(SetErmParamValue(@SubCmd.Params[3], cx) and SetErmParamValue(@SubCmd.Params[4], cy) and SetErmParamValue(@SubCmd.Params[5], cz));
+
+      if Context.EAX = 0 then begin
+        ShowErmError('"UN:U" - failed to update coordinates');
+      end;
+    end else begin
+      v[FirstVarInd]     := cx;
+      v[FirstVarInd + 1] := cy;
+      v[FirstVarInd + 2] := cz;
+    end;
+  end; // .if
+
+  result := false;
+  Context.RetAddr := Ptr($733F57);
+end; // .function Hook_UN_U
+
 function Hook_UN_P3 (Context: Core.PHookContext): longbool; stdcall;
 begin
   if WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_COMMANDERS_DISABLED] = 0 then begin
@@ -7706,8 +7776,11 @@ begin
   (* Add UN:J13 command: Reset Commanders *)
   ApiJack.HookCode(Ptr($733F11), @Hook_UN_J13);
 
+  (* Improve UN:U: no error if objects is not found (x < 0 on error). UN:U(type)/(subType)/(direction)/(x)/(y)/(z) *)
+  ApiJack.HookCode(Ptr($733F11), @Hook_UN_J13);
+
   (* Fix UN:P3 command: reset/enable commanders must disable/enable commander chests *)
-  ApiJack.HookCode(Ptr($732EA5), @Hook_UN_P3);
+  ApiJack.HookCode(Ptr($732A55), @Hook_UN_U);
 
   (* Fix MR:N in !?MR1 !?MR2 *)
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
