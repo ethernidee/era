@@ -1846,7 +1846,10 @@ var
 
   function ParseLocalVar (VarName: pchar; var ParsedVar: TParsedLocalVar): boolean;
   var
-    StartPtr: pchar;
+    StartPtr:           pchar;
+    HasNumericSize:     boolean;
+    ExistingConstValue: integer;
+    Token:              string;
 
   begin
     ParsedVar.IsFreeing     := VarName^ = '-';
@@ -1890,12 +1893,37 @@ var
       Inc(VarName);
       ParsedVar.HasIndex := true;
       StartPtr           := VarName;
+      HasNumericSize     := VarName^ in ['-', '0'..'9'];
 
-      while (VarName^ in ['-', '0'..'9']) do begin
-        Inc(VarName);
+      if HasNumericSize then begin
+        while (VarName^ in ['-', '0'..'9']) do begin
+          Inc(VarName);
+        end;
+      end else begin
+        while (VarName^ in CONST_CHARS) do begin
+          Inc(VarName);
+        end;
       end;
 
-      result := (VarName^ = ']') and SysUtils.TryStrToInt(StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr)), ParsedVar.Index);
+      result := (VarName^ = ']');
+
+      if result then begin
+        Token := StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr));
+        
+        if HasNumericSize then begin
+          result := SysUtils.TryStrToInt(Token, ParsedVar.Index);
+        end else begin
+          ExistingConstValue := 0;
+          result             := GlobalConsts.GetExistingValue(Token, pointer(ExistingConstValue));
+
+          if not result then begin
+            ShowError(VarPos, Format('Global constant "%s" is not defined', [Token]));
+            exit;
+          end else begin
+            ParsedVar.Index := ExistingConstValue;
+          end;
+        end; // .else
+      end; // .if
 
       if result then begin
         Inc(VarName);
@@ -2193,7 +2221,7 @@ var
         result             := GlobalConsts.GetExistingValue(Token, pointer(ExistingConstValue));
 
         if not result then begin
-          ShowError(StartPos, Format('Global constant "%s" is not defined', [Token, ExistingConstValue]));
+          ShowError(StartPos, Format('Global constant "%s" is not defined', [Token]));
         end else begin
           GlobalConsts[ConstName] := Ptr(ExistingConstValue);
         end;
@@ -2238,7 +2266,7 @@ var
       end else if FirstChar in ['@', '-'] then begin
         IdentType := IDENT_TYPE_VAR;
       end else if FirstChar in ['a'..'z'] then begin
-        if not StrLib.FindChar('_', Ident, CharPos) then begin
+        if not StrLib.FindChar('_', Ident, CharPos) or StrLib.FindChar('[', Ident, CharPos) then begin
           IdentType := IDENT_TYPE_VAR;
         end else if not StrLib.SkipCharsetEx(['A'..'Z', 'a'..'z', '0'..'9', '_'], Ident, 1, CharPos) then begin
           IdentType := IDENT_TYPE_FUNC;
