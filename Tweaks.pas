@@ -733,21 +733,44 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_SRand: integer; stdcall; assembler;
-asm
-  mov eax, ecx
-  call RandMt.InitMt
+var
+  UseNativePrng: boolean = false;
+
+function Hook_SRand (OrigFunc: pointer; Seed: integer): integer; stdcall;
+begin
+  if UseNativePrng then begin
+    result := PatchApi.Call(THISCALL_, OrigFunc, [Seed]);
+  end else begin
+    RandMt.InitMt(Seed);
+    result := 0;
+  end;
 end;
 
-function Hook_Rand: integer; stdcall; assembler;
-asm
-  mov eax, ecx
-  call RandMt.RandomRangeMt
+function Hook_Rand (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
+begin
+  if UseNativePrng then begin
+    result := PatchApi.Call(FASTCALL_, OrigFunc, [MinValue, MaxValue]);
+  end else begin
+    result := RandMt.RandomRangeMt(MinValue, MaxValue);
+  end;
 end;
 
 procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
 begin
-  CombatRound := -1000000000;
+  UseNativePrng := true;
+  CombatRound   := -1000000000;
+end;
+
+procedure OnBattlefieldVisible (Event: GameExt.PEvent); stdcall;
+begin
+  if Heroes.IsLocalGame then begin
+    UseNativePrng := false;
+  end;
+end;
+
+procedure OnAfterBattleUniversal (Event: GameExt.PEvent); stdcall;
+begin
+  UseNativePrng := false;
 end;
 
 procedure OnSavegameWrite (Event: PEvent); stdcall;
@@ -1354,12 +1377,9 @@ begin
   Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
 
-  if FALSE then begin
-    (* Replace VR:T number number generator with thread-safe Mersenne Twister *)
-    (* Direct replacement produces hard-to-fix bugs, cancelled *)
-    Core.ApiHook(@Hook_SRand, Core.HOOKTYPE_JUMP, Ptr($50C7B0));
-    Core.ApiHook(@Hook_Rand,  Core.HOOKTYPE_JUMP, Ptr($50C7C0));
-  end;
+  (* Replace Heroes 3 PRNG with thread-safe Mersenne Twister, except of multiplayer battles *)
+  ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
+  ApiJack.StdSplice(Ptr($50C7C0), @Hook_Rand, ApiJack.CONV_FASTCALL, 2);
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
@@ -1381,6 +1401,8 @@ begin
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
+  EventMan.GetInstance.On('OnBattlefieldVisible', OnBattlefieldVisible);
+  EventMan.GetInstance.On('OnAfterBattleUniversal', OnAfterBattleUniversal);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 
   if FALSE then begin
