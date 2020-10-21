@@ -1640,10 +1640,10 @@ begin
               (not Params[1].IsStr)   and
               Math.InRange(SlotItemInd, 0, GetSlotItemsCount(Slot) - 1);
 
-            if result and (Params[2].IsStr <> (Slot.ItemsType = STR_VAR)) then begin
-              Error  := 'Cannot assign SN:M item a value of an inappropriate type (string/integer)';
-              result := false;
-            end;
+            // if result and (Params[2].IsStr <> (Slot.ItemsType = STR_VAR)) then begin
+            //   Error  := 'Cannot assign SN:M item a value of an inappropriate type (string/integer)';
+            //   result := false;
+            // end;
             
             if result then begin
               if Params[2].OperGet then begin
@@ -1663,7 +1663,7 @@ begin
           end; // .else
         end; // .if
       end; // .case 3
-    
+
     4..5: begin
       // SN:M#slot/(?)#count/(?)#type/(?)#persistInSaves[/?$arrayAddr] - query slot information
       if (NumParams >= 4) and ((Params[1].OperGet) or (Params[2].OperGet) or (Params[3].OperGet)) then begin
