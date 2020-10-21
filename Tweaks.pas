@@ -898,6 +898,61 @@ begin
   result := true;
 end; // .function Hook_ParsePicture_Start
 
+function Hook_HandleMonsterCast_End (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  CASTER_MON         = 1;
+  NO_EXT_TARGET_POS  = -1;
+  
+  FIELD_ACTIVE_SPELL = $4E0;
+  FIELD_NUM_MONS     = $4C;
+  FIELD_MON_ID       = $34;
+
+  MON_FAERIE_DRAGON   = 134;
+  MON_SANTA_GREMLIN   = 173;
+  MON_COMMANDER_FIRST = 174;
+  MON_COMMANDER_LAST  = 191;
+
+  WOG_GET_NPC_MAGIC_POWER = $76BEEA;
+
+var
+  Spell:      integer;
+  TargetPos:  integer;
+  Stack:      pointer;
+  MonId:      integer;
+  NumMons:    integer;
+  SkillLevel: integer;
+  SpellPower: integer;
+
+begin
+  TargetPos  := pinteger(Context.EBP + $8)^;
+  Stack      := Ptr(Context.ESI);
+  MonId      := pinteger(integer(Stack) + FIELD_MON_ID)^;
+  Spell      := pinteger(integer(Stack) + FIELD_ACTIVE_SPELL)^;
+  NumMons    := pinteger(integer(Stack) + FIELD_NUM_MONS)^;
+  SpellPower := NumMons;
+  SkillLevel := 2;
+
+  if (TargetPos >= 0) and (TargetPos < 187) then begin
+    if MonId = MON_FAERIE_DRAGON then begin
+      SpellPower := NumMons * 5;
+    end else if MonId = MON_SANTA_GREMLIN then begin
+      SkillLevel := 0;
+      SpellPower := (NumMons - 1) div 2;
+
+      if (((NumMons - 1) and 1) <> 0) and (ZvsRandom(0, 1) = 1) then begin
+        Inc(SpellPower);
+      end;
+    end else if Math.InRange(MonId, MON_COMMANDER_FIRST, MON_COMMANDER_LAST) then begin
+      SpellPower := PatchApi.Call(CDECL_, Ptr(WOG_GET_NPC_MAGIC_POWER), [Ptr($282A36C)]);
+    end;
+    
+    Context.EAX := PatchApi.Call(THISCALL_, Ptr($5A0140), [Heroes.CombatManagerPtr^, Spell, TargetPos, CASTER_MON, NO_EXT_TARGET_POS, SkillLevel, SpellPower]);
+  end;
+
+  result          := false;
+  Context.RetAddr := Ptr($4483DD);
+end; // .function Hook_HandleMonsterCast_End
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1273,6 +1328,18 @@ begin
   Core.p.WriteDataPatch(Ptr($4F555A), ['B4000000']);
   // Unpack highest bit of Type parameter as "display 0 quantities" flag into new local variable
   ApiJack.HookCode(Ptr($4F5564), @Hook_ParsePicture_Start);
+
+  (* Fix Santa-Gremlins *)
+  // Remove WoG FairePower hook
+  Core.p.WriteDataPatch(Ptr($44836D), ['8B464C8D0480']);
+  // Add new FairePower hook
+  ApiJack.HookCode(Ptr($44836D), @Hook_HandleMonsterCast_End);
+  // Disable Santa's every day growth
+  Core.p.WriteDataPatch(Ptr($760D6D), ['EB']);
+  // Restore Santa's normal growth
+  Core.p.WriteDataPatch(Ptr($760C56), ['909090909090']);
+  // Disable Santa's gifts
+  Core.p.WriteDataPatch(Ptr($75A964), ['9090']);
 
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
   Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
