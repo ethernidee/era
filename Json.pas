@@ -1645,19 +1645,21 @@ var
   {$IFDEF FPC}inline;
   {$ENDIF}
   begin
-    while (xe(idx)) and (ord(txt[idx]) < 33) do Inc(idx);
-    
-    if xe(idx + 1) and (txt[idx] = '/') and (txt[idx + 1] = '/') then begin
-      Inc(idx, 2);
+    while (idx <= Length(txt)) and ((ord(txt[idx]) < 33) or ((txt[idx] = '/') and (idx + 1 <= Length(txt)) and (txt[idx + 1] = '/'))) do begin
+      while (xe(idx)) and (ord(txt[idx]) < 33) do Inc(idx);
+      
+      if xe(idx + 1) and (txt[idx] = '/') and (txt[idx + 1] = '/') then begin
+        Inc(idx, 2);
 
-      while xe(idx) and (txt[idx] <> #10) do begin
-        Inc(idx);
-      end;
+        while xe(idx) and (txt[idx] <> #10) do begin
+          Inc(idx);
+        end;
 
-      if xe(idx) then begin
-        Inc(idx);
-      end;
-    end; // .if
+        if xe(idx) then begin
+          Inc(idx);
+        end;
+      end; // .if
+    end;
   end;
 
   procedure add_child(var o, c: TlkJSONbase);
