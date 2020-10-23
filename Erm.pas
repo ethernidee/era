@@ -7243,7 +7243,7 @@ begin
       ArgXVars[i + 1] := CreateCmdLocalErt(Str, Windows.LStrLen(Str));
     end;
 
-    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@Param, SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(Param, SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
   for i := NumParams to High(ArgXVars) - 1 do begin
@@ -7329,7 +7329,7 @@ begin
       ArgXVars[i + 1] := CreateCmdLocalErt(Str, Windows.LStrLen(Str));
     end;
     
-    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(@SubCmd.Params[i], SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(Param, SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
   for i := NumParams to High(ArgXVars) - 2 do begin
