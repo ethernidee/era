@@ -23,6 +23,7 @@ type
 const
   ERM_SCRIPTS_SECTION      = 'Era.ErmScripts';
   ERT_STRINGS_SECTION      = 'Era.ErtStrings';
+  GLOBAL_CONSTS_SECTION    = 'Era.GlobalConsts';
   FUNC_NAMES_SECTION       = 'Era.FuncNames';
   ERM_SCRIPTS_PATH         = 'Data\s';
   ERS_FILES_PATH           = 'Data\s';
@@ -198,7 +199,7 @@ const
   TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE   = 77019;
   TRIGGER_BATTLEFIELD_VISIBLE            = 77020;
   TRIGGER_AFTER_TACTICS_PHASE            = 77021;
-  TRIGGER_COMBAT_ROUND                   = 77022;
+  // TRIGGER_COMBAT_ROUND                = 77022; DELETED, joined with TRIGGER_BATTLE_ROUND
   TRIGGER_OPEN_RECRUIT_DLG               = 77023;
   TRIGGER_CLOSE_RECRUIT_DLG              = 77024;
   TRIGGER_RECRUIT_DLG_MOUSE_CLICK        = 77025;
@@ -1108,7 +1109,6 @@ begin
     {*} TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE: result := 'OnBeforeBattlefieldVisible';
     {*} TRIGGER_BATTLEFIELD_VISIBLE:          result := 'OnBattlefieldVisible';
     {*} TRIGGER_AFTER_TACTICS_PHASE:          result := 'OnAfterTacticsPhase';
-    {*} TRIGGER_COMBAT_ROUND:                 result := 'OnCombatRound';
     {*} TRIGGER_OPEN_RECRUIT_DLG:             result := 'OnOpenRecruitDlg';
     {*} TRIGGER_CLOSE_RECRUIT_DLG:            result := 'OnCloseRecruitDlg';
     {*} TRIGGER_RECRUIT_DLG_MOUSE_CLICK:      result := 'OnRecruitDlgMouseClick';
@@ -3462,6 +3462,7 @@ procedure RegisterErmEventNames;
 begin
   NameTrigger(TRIGGER_BA0,  'OnBeforeBattle');
   NameTrigger(TRIGGER_BA1,  'OnAfterBattle');
+  NameTrigger(TRIGGER_BR,   'OnCombatRound'); // name alias firsts
   NameTrigger(TRIGGER_BR,   'OnBattleRound');
   NameTrigger(TRIGGER_BG0,  'OnBeforeBattleAction');
   NameTrigger(TRIGGER_BG1,  'OnAfterBattleAction');
@@ -3531,7 +3532,6 @@ begin
   NameTrigger(TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE, 'OnBeforeBattlefieldVisible');
   NameTrigger(TRIGGER_BATTLEFIELD_VISIBLE,          'OnBattlefieldVisible');
   NameTrigger(TRIGGER_AFTER_TACTICS_PHASE,          'OnAfterTacticsPhase');
-  NameTrigger(TRIGGER_COMBAT_ROUND,                 'OnCombatRound');
   NameTrigger(TRIGGER_OPEN_RECRUIT_DLG,             'OnOpenRecruitDlg');
   NameTrigger(TRIGGER_CLOSE_RECRUIT_DLG,            'OnCloseRecruitDlg');
   NameTrigger(TRIGGER_RECRUIT_DLG_MOUSE_CLICK,      'OnRecruitDlgMouseClick');
@@ -6794,16 +6794,16 @@ end; // .function VR_Bits
 
 function VR_V (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
-  VarParam:        PErmCmdParam;
-  VarParamType:    integer;
+  VarParam:       PErmCmdParam;
+  VarParamType:   integer;
   ValueParam:     PErmCmdParam;
   ValueParamType: integer;
   SecondValue:    Heroes.TValue;
 
 begin
   result         := 1;
-  VarParam        := @ErmCmd.Params[0];
-  VarParamType    := VarParam.GetType();
+  VarParam       := @ErmCmd.Params[0];
+  VarParamType   := VarParam.GetType();
   ValueParam     := @SubCmd.Params[0];
   ValueParamType := ValueParam.GetType();
 
@@ -7582,6 +7582,13 @@ begin
   end; // .with
 end;
 
+procedure DoSaveGlobalConsts;
+begin
+  with Stores.NewRider(GLOBAL_CONSTS_SECTION) do begin
+    WriteStr(DataLib.SerializeDict(GlobalConsts));
+  end;
+end;
+
 procedure DoLoadErtStrings;
 var
   Index:  integer;
@@ -7607,14 +7614,33 @@ begin
   end; // .with
 end; // .procedure DoLoadErtStrings
 
+procedure DoLoadGlobalConsts;
+var
+  SerializedDict: string;
+
+begin
+  GlobalConsts.Clear;
+
+  with Stores.NewRider(GLOBAL_CONSTS_SECTION) do begin
+    SerializedDict := ReadStr;
+  end;
+
+  if SerializedDict <> '' then begin
+    SysUtils.FreeAndNil(GlobalConsts);
+    GlobalConsts := DataLib.UnserializeDict(SerializedDict, not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  end;
+end; // .procedure DoLoadGlobalConsts
+
 procedure OnSavegameWrite (Event: PEvent); stdcall;
 begin
   DoSaveErtStrings;
+  DoSaveGlobalConsts;
 end;
 
 procedure OnSavegameRead (Event: PEvent); stdcall;
 begin
   DoLoadErtStrings;
+  DoLoadGlobalConsts;
 end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;

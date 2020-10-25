@@ -694,7 +694,7 @@ begin
   
   Erm.FireErmEvent(Erm.TRIGGER_BATTLEFIELD_VISIBLE);
   Erm.v[997] := CombatRound;
-  Erm.FireErmEventEx(Erm.TRIGGER_COMBAT_ROUND, [CombatRound]);
+  Erm.FireErmEventEx(Erm.TRIGGER_BR, [CombatRound]);
 
   if not HadTacticsPhase then begin
     Erm.v[997] := CombatRound;
@@ -711,7 +711,7 @@ begin
   if HadTacticsPhase then begin
     CombatRound := 0;
     Erm.v[997]  := CombatRound;
-    Erm.FireErmEvent(Erm.TRIGGER_COMBAT_ROUND);
+    Erm.FireErmEvent(Erm.TRIGGER_BR);
   end;
   
   result := Core.EXEC_DEF_CODE;
@@ -729,7 +729,7 @@ end;
 function Hook_OnCombatRound_End (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   Erm.v[997] := CombatRound;
-  Erm.FireErmEvent(Erm.TRIGGER_COMBAT_ROUND);
+  Erm.FireErmEvent(Erm.TRIGGER_BR);
   result := Core.EXEC_DEF_CODE;
 end;
 
@@ -1310,6 +1310,8 @@ begin
   Core.ApiHook(@Hook_OnAfterTacticsPhase,        Core.HOOKTYPE_BRIDGE, Ptr($75D137));
   Core.ApiHook(@Hook_OnCombatRound_Start,        Core.HOOKTYPE_BRIDGE, Ptr($76065B));
   Core.ApiHook(@Hook_OnCombatRound_End,          Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
+  // Disable BACall2 function, generating !?BR event, because !?BR will be the same as OnCombatRound now
+  Core.p.WriteDataPatch(Ptr($74D1AB), ['C3']);
 
   // Disable WoG AppearAfterTactics hook. We will call BR0 manually a bit after to reduce crashing probability
   Core.p.WriteDataPatch(Ptr($462C19), ['E8F2051A00']);
