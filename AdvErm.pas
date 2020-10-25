@@ -2050,6 +2050,26 @@ begin
   end;
 end;
 
+function SN_C (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+var
+  ExistingConstValue: integer;
+  ConstExists:        boolean;
+
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_STR or ACTION_SET, TYPE_INT or ACTION_GET, TYPE_INT or ACTION_GET or PARAM_OPTIONAL]);
+
+  if result then begin
+    ExistingConstValue := 0;
+    ConstExists        := Erm.GlobalConsts.GetExistingValue(Params[0].Value.pc, pointer(ExistingConstValue));
+
+    if NumParams >= 3 then begin
+      Params[2].RetInt(ord(ConstExists));
+    end;
+    
+    Params[1].RetInt(ExistingConstValue);
+  end;
+end;
+
 function SN_X (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
   i: integer;
@@ -2150,8 +2170,13 @@ var
 
 begin
   with WrapErmCmd('SN', SubCmd, CmdWrapper)^ do begin
-    while FindNextSubcmd(['P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R', 'V']) do begin
+    while FindNextSubcmd(['C', 'P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R', 'V']) do begin
       case Cmd of
+        'A': begin Success := SN_A(NumParams, @Params, Error); end;
+        'C': begin Success := SN_C(NumParams, @Params, Error); end;
+        'E': begin Success := SN_E(NumParams, @Params, Error); end;
+        'F': begin Success := SN_F(NumParams, @Params, Error); end;
+
         'G': begin
           Success := (Erm.TriggerLocalData.CmdIndPtr <> nil) and (NumParams = 1) and not Params[0].OperGet and not Params[0].IsStr and (Params[0].Value.v >= 0) and (Params[0].Value.v < High(integer));
 
@@ -2160,24 +2185,22 @@ begin
           end;
         end;
 
+        'H': begin Success := SN_H(NumParams, @Params, Error); end;
+        'I': begin Success := SN_I(NumParams, @Params, Error); end;
+        'L': begin Success := SN_L(NumParams, @Params, Error); end;
+        'P': begin Success := SN_P(NumParams, @Params, Error); end;
+
         'Q': begin
           Erm.QuitTriggerFlag := true;
         end;
-        
-        'X': begin Success := SN_X(NumParams, @Params, Error); end;
-        'L': begin Success := SN_L(NumParams, @Params, Error); end;
-        'A': begin Success := SN_A(NumParams, @Params, Error); end;
-        'E': begin Success := SN_E(NumParams, @Params, Error); end;
-        'P': begin Success := SN_P(NumParams, @Params, Error); end;
-        'S': begin Success := SN_S(NumParams, @Params, Error); end;
-        'H': begin Success := SN_H(NumParams, @Params, Error); end;
-        'T': begin Success := SN_T(NumParams, @Params, Error); end;
-        'I': begin Success := SN_I(NumParams, @Params, Error); end;
+
         'R': begin Success := SN_R(NumParams, @Params, Error); end;
-        'F': begin Success := SN_F(NumParams, @Params, Error); end;
+        'S': begin Success := SN_S(NumParams, @Params, Error); end;
+        'T': begin Success := SN_T(NumParams, @Params, Error); end;
         'V': begin Success := SN_V(NumParams, @Params, Error); end;
-        
-        'M', 'K', 'W', 'D', 'O': begin
+        'X': begin Success := SN_X(NumParams, @Params, Error); end;
+
+        'D', 'K', 'M', 'O', 'W': begin
           Success := ExtendedEraService(Cmd, NumParams, @Params, Error);
         end;
       end;

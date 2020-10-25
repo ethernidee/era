@@ -666,6 +666,7 @@ var
 {O} LoadedErsFiles:  {O} TList {of Heroes.TTextTable};
 {O} ErtStrings:      {O} AssocArrays.TObjArray {of Index => pchar}; // use H3 Alloc/Free
 {O} ScriptMan:       TScriptMan;
+{O} GlobalConsts:    DataLib.TDict {OF Value: integer};
     ErmTriggerDepth: integer = 0;
 
     FreezedWogOptionWogify: integer = WOGIFY_ALL;
@@ -800,7 +801,6 @@ var
 {O} FuncNames:         DataLib.TDict {OF FuncId: integer};
 {O} FuncIdToNameMap:   DataLib.TObjDict {O} {OF TString};
     FuncAutoId:        integer;
-{O} GlobalConsts:      DataLib.TDict {OF Value: integer};
 {O} ScriptNames:       Lists.TStringList;
 {O} ErmScanner:        TextScan.TTextScanner;
 {O} ErmCmdCache:       {O} TAssocArray {OF PErmCmd};
