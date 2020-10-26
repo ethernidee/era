@@ -689,6 +689,12 @@ var
     ArgXVars: TErmXVars;
     RetXVars: TErmXVars;
 
+    // Here function return values are stored for ?(someStr) syntaxes
+    RetStrVars: array [low(TErmXVars)..high(TErmXVars)] of string;
+
+    // If set, then it's function call and it's a pointer to function subcmd parameters
+    FuncArgs: PErmCmdParams = nil;
+
     // May be set by function caller to signal, how many arguments are initialized
     NumFuncArgsPassed: integer = 0;
 
@@ -4227,7 +4233,7 @@ begin
             AssocVarValue.StrValue := pchar(NewValue);
           end; // .if
         end else begin
-          ShowErmError(Format('SetErmParamValue: Unsupported variable type: %d', [ValType]));
+          ShowErmError(Format('SetErmParamValue: Unsupported value type: %d', [ValType]));
           result := false; exit;
         end; // .else
       end; // .case PARAM_VARTYPE_S
@@ -4237,7 +4243,7 @@ begin
         result := false; exit;
       end;
     else
-      ShowErmError(Format('SetErmParamValue: Unsupported variable type: %d', [ValType]));
+      ShowErmError(Format('SetErmParamValue: Unsupported value type: %d', [ValType]));
       result := false; exit;
     end; // .switch
 
@@ -5173,6 +5179,7 @@ var
   SavedV:               array [997..1000] of integer;
   SavedNumArgsReceived: integer;
   SavedArgsGetSyntaxFlagsReceived: integer;
+  FuncArgs:             PErmCmdParams;
   LoopCallback:         TTriggerLoopCallback;
   FlowOpers:            array [0..15] of TFlowControlOper;
   FlowOpersLevel:       integer;
@@ -5301,6 +5308,8 @@ begin
 
   LoopCallback                := TriggerLoopCallback;
   TriggerLoopCallback.Handler := nil;
+  FuncArgs                    := Erm.FuncArgs;
+  Erm.FuncArgs                := nil;
 
   NumericEventName := 'OnTrigger ' + SysUtils.IntToStr(TriggerId);
   HumanEventName   := GetTriggerReadableName(TriggerId);
@@ -5537,12 +5546,6 @@ begin
           end; // .if
         end; // .if
 
-        if LocalData.Items <> nil then begin
-          for j := LocalData.Items.Count - 1 downto 0 do begin
-            LocalData.Items[j] := nil;
-          end;
-        end;
-
         Trigger := Trigger.Next;
       end; // .while
 
@@ -5564,13 +5567,22 @@ begin
       EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_END_TRIGGER, TriggerId);
     end;
 
+    // It's a function call, save result string variables
+    if FuncArgs <> nil then begin
+      for j := 0 to NumFuncArgsReceived - 1 do begin
+        if (FuncArgs[j].GetCheckType() = PARAM_CHECK_GET) and (FuncArgs[j].GetType() in PARAM_VARTYPES_STRINGS) then begin
+          RetStrVars[j + 1] := GetInterpolatedZVarAddr(x[j + 1]);
+        end;
+      end;
+    end;
+
     RestoreVars;
 
     if LocalData.Items <> nil then begin
       for j := LocalData.Items.Count - 1 downto 0 do begin
         LocalData.Items[j] := nil;
       end;
-
+      
       LocalData.Items.Free;
     end;
 
@@ -7189,12 +7201,19 @@ end; // .function New_VR_Receiver
 
 procedure ApplyFuncByRefRes (SubCmd: PErmSubCmd; NumParams: integer);
 var
-  i: integer;
+  Param: PErmCmdParam;
+  i:     integer;
 
 begin
   for i := 0 to NumParams - 1 do begin
-    if SubCmd.Params[i].GetCheckType() = PARAM_CHECK_GET then begin
-      ZvsApply(@RetXVars[i + 1], sizeof(integer), SubCmd, i);
+    Param := @SubCmd.Params[i];
+
+    if Param.GetCheckType() = PARAM_CHECK_GET then begin
+      if Param.GetType() in PARAM_VARTYPES_STRINGS then begin
+        SetErmParamValue(Param, integer(pchar(RetStrVars[i + 1])), FLAG_ASSIGNABLE_STRINGS);
+      end else begin
+        SetErmParamValue(Param, RetXVars[i + 1]);
+      end;
     end;
   end;
 end;
@@ -7216,6 +7235,7 @@ var
   SubCmd:    PErmSubCmd;
   FuncId:    integer;
   Param:     PErmCmdParam;
+  ParamType: integer;
   NumParams: integer;
   ValType:   integer;
   Str:       pchar;
@@ -7231,20 +7251,28 @@ begin
 
   for i := 0 to NumParams - 1 do begin
     Param           := @SubCmd.Params[i];
+    ParamType       := Param.GetType();
     ArgXVars[i + 1] := SubCmd.Nums[i];
 
-    // Handle P?(someVar) syntax. Pass by reference (VAR-parameter)
     if Param.GetCheckType() = PARAM_CHECK_GET then begin
-      ArgXVars[i + 1] := GetErmParamValue(Param, ValType);
+      // Handle P?(someStr) syntax. Initialize string pointer to zero to catch non-initialized results
+      if ParamType in PARAM_VARTYPES_STRINGS then begin
+        ArgXVars[i + 1] := 0;
+        Erm.FuncArgs    := @SubCmd.Params
+      end
+      // Handle P?(someNumber) syntax. Pass by reference (VAR-parameter) for numeric variables
+      else begin
+        ArgXVars[i + 1] := GetErmParamValue(Param, ValType);
+      end;
     end
     // Handle passing local strings as arguments
-    else if (Param.GetType() = PARAM_VARTYPE_Z) and (ArgXVars[i + 1] < 0) then begin
+    else if (ParamType = PARAM_VARTYPE_Z) and (ArgXVars[i + 1] < 0) then begin
       Str             := GetInterpolatedZVarAddr(ArgXVars[i + 1]);
       ArgXVars[i + 1] := CreateCmdLocalErt(Str, Windows.LStrLen(Str));
     end;
 
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(Param, SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
-  end;
+  end; // .for
 
   for i := NumParams to High(ArgXVars) - 1 do begin
     ArgXVars[i + 1]              := 0;
@@ -7297,6 +7325,7 @@ var
   FuncId:      integer;
   LoopContext: TLoopContext;
   Param:       PErmCmdParam;
+  ParamType:   integer;
   ValType:     integer;
   Str:         pchar;
   i:           integer;
@@ -7317,14 +7346,22 @@ begin
   // Initialize x-paramaters
   for i := 0 to NumParams - 1 do begin
     Param           := @SubCmd.Params[i];
+    ParamType       := Param.GetType();
     ArgXVars[i + 1] := SubCmd.Nums[i];
 
-    // Handle P?(someVar) syntax. Pass by reference (VAR-parameter)
     if Param.GetCheckType() = PARAM_CHECK_GET then begin
-      ArgXVars[i + 1] := GetErmParamValue(Param, ValType);
+      // Handle P?(someStr) syntax. Initialize string pointer to zero to catch non-initialized results
+      if ParamType in PARAM_VARTYPES_STRINGS then begin
+        ArgXVars[i + 1] := 0;
+        Erm.FuncArgs    := @SubCmd.Params
+      end
+      // Handle P?(someNumber) syntax. Pass by reference (VAR-parameter) for numeric variables
+      else begin
+        ArgXVars[i + 1] := GetErmParamValue(Param, ValType);
+      end;
     end
     // Handle passing local strings as arguments
-    else if (Param.GetType() = PARAM_VARTYPE_Z) and (ArgXVars[i + 1] < 0) then begin
+    else if (ParamType = PARAM_VARTYPE_Z) and (ArgXVars[i + 1] < 0) then begin
       Str             := GetInterpolatedZVarAddr(ArgXVars[i + 1]);
       ArgXVars[i + 1] := CreateCmdLocalErt(Str, Windows.LStrLen(Str));
     end;
