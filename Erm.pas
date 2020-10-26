@@ -640,7 +640,6 @@ const
   ZvsGetVarValIndex:  function (Param: PErmCmdParam): integer cdecl = Ptr($72DCB0);
   ZvsGetVarVal:       function (Param: PErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsSetVarVal:       function (Param: PErmCmdParam; NewValue: integer): integer cdecl = Ptr($72E301);
-  ZvsGetParamValue:   function (var Param: TErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsReparseParam:    function (var Param: TErmCmdParam): integer cdecl = Ptr($72D573);
 
   ZvsCrExpoSet_GetExpM: function (ItemType, ItemId, Modifier: integer): integer cdecl = Ptr($718D34);
@@ -4050,6 +4049,14 @@ begin
   ResValType := ValType;
 end; // .function GetErmParamValue
 
+function Hook_ZvsGetVarVal (var Param: TErmCmdParam): integer; cdecl;
+var
+  ValType: integer;
+
+begin
+  result := GetErmParamValue(@Param, ValType);
+end;
+
 function SetErmParamValue (Param: PErmCmdParam; NewValue: integer; Flags: integer = 0): boolean;
 const
   IND_INDEX = 0;
@@ -5406,7 +5413,7 @@ begin
                 if (FlowOper.State <> STATE_TRUE) or (FlowOper.OperType = OPER_IF) then begin
                   Dec(FlowOpersLevel);
                 end else if FlowOper.OperType = OPER_RE then begin
-                  LoopVarValue := ZvsGetVarVal(FlowOper.LoopVar) + FlowOper.Step;
+                  LoopVarValue := GetErmParamValue(FlowOper.LoopVar, ParamValType) + FlowOper.Step;
 
                   if FlowOper.Step <> 0 then begin
                     ZvsSetVarVal(FlowOper.LoopVar, LoopVarValue);
@@ -5518,7 +5525,7 @@ begin
                   if CmdId.Id = CMD_BR then begin
                     FlowOper.State := STATE_INACTIVE;
                   end else if CmdId.Id = CMD_CO then begin
-                    LoopVarValue := ZvsGetVarVal(FlowOper.LoopVar) + FlowOper.Step;
+                    LoopVarValue := GetErmParamValue(FlowOper.LoopVar, ParamValType) + FlowOper.Step;
 
                     if FlowOper.Step <> 0 then begin
                       ZvsSetVarVal(FlowOper.LoopVar, LoopVarValue);
@@ -7244,7 +7251,7 @@ var
 begin
   Cmd       := PErmCmd(ppointer(Context.EBP + $10)^);
   SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
-  FuncId    := ZvsGetParamValue(Cmd.Params[0]);
+  FuncId    := GetErmParamValue(@Cmd.Params[0], ValType);
   NumParams := pinteger(Context.EBP + $0C)^;
   // * * * * * //
   FuncArgsGetSyntaxFlagsPassed := 0;
@@ -7331,10 +7338,10 @@ var
   i:           integer;
 
 begin
-  FuncId               := ZvsGetParamValue(Cmd.Params[0]);
-  ArgXVars[16]         := ZvsGetParamValue(Cmd.Params[1]);
-  LoopContext.EndValue := ZvsGetParamValue(Cmd.Params[2]);
-  LoopContext.Step     := ZvsGetParamValue(Cmd.Params[3]);
+  FuncId               := GetErmParamValue(@Cmd.Params[0], ValType);
+  ArgXVars[16]         := GetErmParamValue(@Cmd.Params[1], ValType);
+  LoopContext.EndValue := GetErmParamValue(@Cmd.Params[2], ValType);
+  LoopContext.Step     := GetErmParamValue(@Cmd.Params[3], ValType);
   result               := true;
 
   if NumParams > 15 then begin
@@ -7930,6 +7937,9 @@ begin
 
   // Replace Apply with own implementation, capable to process named global variables
   Core.ApiHook(@Hook_ZvsApply, Core.HOOKTYPE_JUMP, @ZvsApply);
+
+  // Replace ZvsGetVarVal with GetErmParamValue
+  Core.ApiHook(@Hook_ZvsGetVarVal, Core.HOOKTYPE_JUMP, @ZvsGetVarVal);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF909090890D0C0E84008885' +
