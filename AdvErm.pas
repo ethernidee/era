@@ -786,10 +786,7 @@ begin
   result := Pos;
 end; // .function GetServiceParams
 
-procedure CallProc (Addr: integer; Convention: integer; PParams: pointer; NumParams: integer); stdcall; assembler;
-const
-  SERVICE_PARAM_SIZE = sizeof(TServiceParam); // Offset to the next parameter in parameters array
-
+procedure CallProc (Addr: integer; Convention: integer; PParams: pointer; NumParams: integer; ParamRecSize: integer); stdcall; assembler;
 var
   SavedEsp: integer;
   IsIntRes: integer;
@@ -803,7 +800,9 @@ asm
   MOV IsIntRes, 0
 @@IntConvention:
   PUSH EBX
+  PUSH ESI
   MOV SavedEsp, ESP
+  MOV ESI, ParamRecSize
 
   // Execute function without parameters immediately
   MOV ECX, NumParams
@@ -819,7 +818,7 @@ asm
 @@PascalConversion:
   @@PascalLoop:
     PUSH DWORD [EDX]
-    ADD EDX, SERVICE_PARAM_SIZE
+    ADD EDX, ESI
     DEC ECX
     JNZ @@PascalLoop
   JMP @@CallFunc
@@ -833,23 +832,21 @@ asm
   JS @@InitThisOrFastCall
   
   // Otherwise push arguments in stack in reversed order
-  ADD ECX, EBX
-  PUSH ECX
-  IMUL ECX, ECX, SERVICE_PARAM_SIZE
-  LEA EDX, [EDX + ECX - SERVICE_PARAM_SIZE]
-  POP ECX
-  SUB ECX, EBX
+  LEA EAX, [ECX + EBX]
+  DEC EAX
+  IMUL EAX, ESI
+  ADD EDX, EAX
 
   @@CdeclLoop:
     PUSH DWORD [EDX]
-    SUB EDX, SERVICE_PARAM_SIZE
+    SUB EDX, ESI
     DEC ECX
     JNZ @@CdeclLoop
   @@InitThisOrFastCall:
   
   // Initialize ThisCall and FastCall arguments
   MOV ECX, PParams
-  MOV EDX, [ECX + SERVICE_PARAM_SIZE]
+  MOV EDX, [ECX + ESI]
   MOV ECX, [ECX]
 @@CallFunc:
   // Calling function
@@ -867,6 +864,7 @@ asm
 
 @@Ret:
   MOV ESP, SavedEsp
+  POP ESI
   POP EBX
   // RET
 end; // .procedure CallProc
@@ -1933,34 +1931,11 @@ begin
   end;
 end;
 
-type
-  PStdcallFuncArgs = ^TStdcallFuncArgs;
-  TStdcallFuncArgs = array [0..High(TServiceParams)] of integer;
-
-function CallStdcallFunc (Addr: pointer; Args: PStdcallFuncArgs; NumArgs: integer): integer; assembler; stdcall;
-asm
-  mov ecx, NumArgs
-  mov edx, Args
-  mov eax, NumArgs
-  lea edx, [edx + eax * 4]
-@push_params:
-  test ecx, ecx
-  jz @push_params_end
-  sub edx, 4
-  push [edx]
-  dec ecx
-  jmp @push_params
-@push_params_end:
-  mov eax, Addr
-  call eax
-end;
-
 function SN_F (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
-    ApiName: string;
-{n} ApiFunc: pointer;
-    ApiArgs: TStdcallFuncArgs;
-    i:       integer;
+    ApiName:  string;
+{n} ApiFunc:  pointer;
+    CallConv: integer;
 
 begin
   // SN:F#funcName/#params...
@@ -1969,18 +1944,22 @@ begin
   if not result then begin
     Error := 'Invalid command syntax. Valid syntax is !!SN:F^API function name^/possible parameters...';
   end else begin
-    ApiName := Params[0].Value.pc;
+    CallConv := ERA_CALLCONV_CDECL_OR_STDCALL;
+
+    if (Params[0].Value.pc <> nil) and (Params[0].Value.pc^ = '.') then begin
+      CallConv := ERA_CALLCONV_CDECL_OR_STDCALL + ERA_CALLCONV_FLOAT_RES;
+      ApiName  := pchar(@Params[0].Value.pc[1]);
+    end else begin
+      ApiName  := Params[0].Value.pc;
+    end;
+
     ApiFunc := GetCombinedApiAddr(ApiName);
     result  := ApiFunc <> nil;
 
     if not result then begin
       Error := 'Unknown Era/Kernel32/User32 API function: "' + ApiName + '"';
     end else begin
-      for i := 1 to NumParams do begin
-        ApiArgs[i - 1] := Params[i].Value.v;
-      end;
-      
-      Erm.v[1] := CallStdcallFunc(ApiFunc, @ApiArgs, NumParams - 1);
+      CallProc(integer(ApiFunc), CallConv, @Params[1].Value.v, NumParams - 1, sizeof(Params[0]));
     end;
   end; // .else
 end; // .function SN_F
@@ -2028,7 +2007,7 @@ begin
             Alg.InRange(Params[1].Value.v, ERA_CALLCONV_PASCAL, ERA_CALLCONV_FASTCALL + ERA_CALLCONV_FLOAT_RES);
 
   if result then begin
-    CallProc(Params[0].Value.v, Params[1].Value.v, @Params[2].Value.v, NumParams - 2);
+    CallProc(Params[0].Value.v, Params[1].Value.v, @Params[2].Value.v, NumParams - 2, sizeof(TServiceParam));
   end;
 end;
 
