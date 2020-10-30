@@ -2180,15 +2180,6 @@ var
       end;
     end;
 
-    if result then begin
-      ExistingConstValue := 0;
-      result             := not GlobalConsts.GetExistingValue(ConstName, pointer(ExistingConstValue));
-
-      if not result then begin
-        ShowError(StartPos, Format('Global constant "%s" is already defined with value %d', [ConstName, ExistingConstValue]));
-      end;
-    end;
-
     IsConstAlias := false;
 
     if result then begin
@@ -2225,24 +2216,31 @@ var
       Token := Scanner.GetSubstrAtPos(StartPos, Scanner.Pos - StartPos - ord(IsConstAlias));
 
       if IsConstAlias then begin
-        ExistingConstValue := 0;
-        result             := GlobalConsts.GetExistingValue(Token, pointer(ExistingConstValue));
+        ConstValue := 0;
+        result     := GlobalConsts.GetExistingValue(Token, pointer(ConstValue));
 
         if not result then begin
           ShowError(StartPos, Format('Global constant "%s" is not defined', [Token]));
-        end else begin
-          GlobalConsts[ConstName] := Ptr(ExistingConstValue);
         end;
       end else begin
         result := TryStrToInt(Token, ConstValue);
 
         if not result then begin
           ShowError(StartPos, 'Expected valid integer as constant value');
-        end else begin
-          GlobalConsts[ConstName] := Ptr(ConstValue);
         end;
       end;
     end; // .if
+
+    if result then begin
+      ExistingConstValue := 0;
+      result             := not GlobalConsts.GetExistingValue(ConstName, pointer(ExistingConstValue)) or (ExistingConstValue = ConstValue);
+
+      if not result then begin
+        ShowError(StartPos, Format('Global constant "%s" is already defined with value %d', [ConstName, ExistingConstValue]));
+      end else begin
+        GlobalConsts[ConstName] := Ptr(ConstValue);
+      end;
+    end;
 
     // Recover from error
     if not result then begin
