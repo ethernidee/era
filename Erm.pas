@@ -69,6 +69,7 @@ const
   PARAM_VARTYPES_FLOATS        = [PARAM_VARTYPE_E];
   PARAM_VARTYPES_NUMERIC       = PARAM_VARTYPES_INTS + PARAM_VARTYPES_FLOATS;
   PARAM_VARTYPES_STRINGS       = [PARAM_VARTYPE_Z, PARAM_VARTYPE_S, PARAM_VARTYPE_STR];
+  PARAM_VARTYPES_BOOLS         = [PARAM_VARTYPE_FLAG];
 
   PARAM_MODIFIER_NONE    = 0;
   PARAM_MODIFIER_ADD     = 1;
@@ -3809,6 +3810,25 @@ begin
   end;
 end; // .function ErmParamToCode
 
+function GetErmParamValType (Param: PErmCmdParam): integer;
+var
+  ParamType: integer;
+
+begin
+  result    := VALTYPE_ERROR;
+  ParamType := Param.GetType();
+
+  if ParamType in PARAM_VARTYPES_INTS then begin
+    result := VALTYPE_INT;
+  end else if ParamType in PARAM_VARTYPES_STRINGS then begin
+    result := VALTYPE_STR;
+  end else if ParamType in PARAM_VARTYPES_FLOATS then begin
+    result := VALTYPE_FLOAT;
+  end else if ParamType in PARAM_VARTYPES_BOOLS then begin
+    result := VALTYPE_BOOL;
+  end;
+end;
+
 function GetErmParamValue (Param: PErmCmdParam; out ResValType: integer; Flags: integer = 0): integer;
 const
   IND_INDEX = 0;
@@ -6928,6 +6948,58 @@ begin
   end;
 end; // .function VR_C
 
+function VR_F (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
+var
+  VarParam:        PErmCmdParam;
+  VarParamValType: integer;
+  MinValueValType: integer;
+  MaxValueValType: integer;
+  MinValue:        Heroes.TValue;
+  MaxValue:        Heroes.TValue;
+  FinalValue:      Heroes.TValue;
+
+begin
+  if NumParams <> 2 then begin
+    ShowErmError('"!!VR:F" - expected exactly two parameters');
+    result := 0; exit;
+  end;
+
+  VarParam        := @ErmCmd.Params[0];
+  FinalValue.v    := GetErmParamValue(VarParam, VarParamValType);
+  MinValueValType := GetErmParamValType(@SubCmd.Params[0]);
+  MaxValueValType := GetErmParamValType(@SubCmd.Params[1]);
+
+  if not ((VarParamValType in [VALTYPE_INT, VALTYPE_FLOAT]) and (MinValueValType = VarParamValType) and (MaxValueValType = VarParamValType)) then begin
+    ShowErmError('"!!VR:F" - only numeric variables of the same type are supported');
+    result := 0; exit;
+  end;
+
+  MinValue.v := SubCmd.Nums[0];
+  MaxValue.v := SubCmd.Nums[1];
+
+  if VarParamValType = VALTYPE_INT then begin
+    if FinalValue.v > MaxValue.v then begin
+      FinalValue.v := MaxValue.v;
+    end;
+
+    if FinalValue.v < MinValue.v then begin
+      FinalValue.v := MinValue.v;
+    end;
+
+    result := ord(SetErmParamValue(VarParam, FinalValue.v));
+  end else begin    
+    if FinalValue.f > MaxValue.f then begin
+      FinalValue.f := MaxValue.f;
+    end;
+
+    if FinalValue.f < MinValue.f then begin
+      FinalValue.f := MinValue.f;
+    end;
+
+    result := ord(SetErmParamValue(VarParam, FinalValue.v));
+  end; // .else
+end; // .function VR_F
+
 function VR_Z (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
   VarParam:       PErmCmdParam;
@@ -7197,14 +7269,15 @@ begin
   end;
 
   case Cmd of
-    'S':                     result := VR_S(NumParams, ErmCmd, SubCmd);
-    '+', '-', '*', ':', '%': result := VR_Arithmetic(Cmd, NumParams, ErmCmd, SubCmd);
-    '&', '|', 'X', '~':      result := VR_Bits(Cmd, NumParams, ErmCmd, SubCmd);
-    'V':                     result := VR_V(NumParams, ErmCmd, SubCmd);
+    '&', 'X', '|', '~':      result := VR_Bits(Cmd, NumParams, ErmCmd, SubCmd);
+    '%', '*', '+', '-', ':': result := VR_Arithmetic(Cmd, NumParams, ErmCmd, SubCmd);
     'C':                     result := VR_C(NumParams, ErmCmd, SubCmd);
-    'Z':                     result := VR_Z(NumParams, ErmCmd, SubCmd);
-    'R', 'T':                result := VR_Random(Cmd, NumParams, ErmCmd, SubCmd);
+    'F':                     result := VR_F(NumParams, ErmCmd, SubCmd);
     'H', 'M', 'U':           result := VR_Strings(Cmd, NumParams, ErmCmd, SubCmd);
+    'R', 'T':                result := VR_Random(Cmd, NumParams, ErmCmd, SubCmd);
+    'S':                     result := VR_S(NumParams, ErmCmd, SubCmd);
+    'V':                     result := VR_V(NumParams, ErmCmd, SubCmd);
+    'Z':                     result := VR_Z(NumParams, ErmCmd, SubCmd);
   else
     ShowErmError('Unknown ERM command !!VR:' + Cmd);
     result := 0;
