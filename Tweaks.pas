@@ -1403,6 +1403,7 @@ begin
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
+  EventMan.GetInstance.On('OnBeforeBattleReplay', OnBeforeBattleUniversal);
   EventMan.GetInstance.On('OnBattlefieldVisible', OnBattlefieldVisible);
   EventMan.GetInstance.On('OnAfterBattleUniversal', OnAfterBattleUniversal);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
