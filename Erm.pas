@@ -6408,7 +6408,12 @@ begin
     Context.EAX := ord(ItemId = ITEM_OK);
   end else begin
     if (ItemId >= ITEM_PIC_FIRST) and (ItemId <= ITEM_PIC_LAST) then begin
-      Context.EAX := ItemId - ITEM_PIC_FIRST + 1;
+      Context.EAX := ItemId - ITEM_PIC_FIRST;
+
+      // IF:Q with message type 7 expects 1 for LEFT picture and 0 for RIGHT
+      if MsgType = Heroes.MES_CHOOSE then begin
+        Context.EAX := 1 - Context.EAX;
+      end;
     end else begin
       Context.EAX := -1;
     end;
