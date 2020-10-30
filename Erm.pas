@@ -221,7 +221,9 @@ const
   TRIGGER_ADVMAP_TILE_HINT               = 77040;
   TRIGGER_BEFORE_STACK_TURN              = 77041;
   TRIGGER_CALC_TOWN_INCOME               = 77042;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_CALC_TOWN_INCOME;
+  TRIGGER_BEFORE_BATTLE_REPLAY           = 77043;
+  TRIGGER_AFTER_BATTLE_REPLAY            = 77044;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_AFTER_BATTLE_REPLAY;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1135,6 +1137,8 @@ begin
     {*} TRIGGER_ADVMAP_TILE_HINT:             result := 'OnAdvMapTileHint';
     {*} TRIGGER_BEFORE_STACK_TURN:            result := 'OnBeforeBattleStackTurn';
     {*} TRIGGER_CALC_TOWN_INCOME:             result := 'OnCalculateTownIncome';
+    {*} TRIGGER_BEFORE_BATTLE_REPLAY:         result := 'OnBeforeBattleReplay';
+    {*} TRIGGER_AFTER_BATTLE_REPLAY:          result := 'OnAfterBattleReplay';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -3556,6 +3560,8 @@ begin
   NameTrigger(TRIGGER_ADVMAP_TILE_HINT,             'OnAdvMapTileHint');
   NameTrigger(TRIGGER_BEFORE_STACK_TURN,            'OnBeforeBattleStackTurn');
   NameTrigger(TRIGGER_CALC_TOWN_INCOME,             'OnCalculateTownIncome');
+  NameTrigger(TRIGGER_BEFORE_BATTLE_REPLAY,         'OnBeforeBattleReplay');
+  NameTrigger(TRIGGER_AFTER_BATTLE_REPLAY,          'OnAfterBattleReplay');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
