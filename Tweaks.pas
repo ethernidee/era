@@ -695,11 +695,6 @@ begin
   Erm.FireErmEvent(Erm.TRIGGER_BATTLEFIELD_VISIBLE);
   Erm.v[997] := CombatRound;
   Erm.FireErmEventEx(Erm.TRIGGER_BR, [CombatRound]);
-
-  if not HadTacticsPhase then begin
-    Erm.v[997] := CombatRound;
-    Erm.FireErmEvent(Erm.TRIGGER_BR);
-  end;
   
   result := true;
 end; // .function Hook_OnBattlefieldVisible
