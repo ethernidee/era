@@ -6434,14 +6434,26 @@ begin
     if (ItemId >= ITEM_PIC_FIRST) and (ItemId <= ITEM_PIC_LAST) then begin
       Context.EAX := ItemId - ITEM_PIC_FIRST;
 
-      // IF:Q with message type 7 expects 1 for LEFT picture and 0 for RIGHT
+      // IF:Q with Heroes.MES_CHOOSE expects ERM flag 1 (left) or 0 (right)
       if MsgType = Heroes.MES_CHOOSE then begin
-        Context.EAX := 1 - Context.EAX;
+        if Context.EAX in [0, 1] then begin
+          Context.EAX := 1 - Context.EAX;
+        end else begin
+          Context.EAX := 1;
+        end;
+      end
+      // IF:Q with Heroes.MES_MAY_CHOOSE expects v-var to be set to 1 (left), 2 (right) or 0 (cancel)
+      else if MsgType = Heroes.MES_MAY_CHOOSE then begin
+        if Context.EAX in [0, 1] then begin
+          Inc(Context.EAX);
+        end else begin
+          Context.EAX := 0;
+        end;
       end;
     end else begin
       Context.EAX := -1;
     end;
-  end;
+  end; // .else
 
   result          := false;
   Context.RetAddr := Ptr($7103CB);
