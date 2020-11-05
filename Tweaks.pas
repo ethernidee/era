@@ -1104,7 +1104,7 @@ const
 
 begin
   DumpExceptionContext(ExceptionPtrs.ExceptionRecord, ExceptionPtrs.ContextRecord);
-  GameExt.FireEvent('OnGenerateDebugInfo', nil, 0);
+  EventMan.GetInstance.Fire('OnGenerateDebugInfo');
   DlgMes.Msg('Game crashed. All debug information is inside ' + DEBUG_DIR + ' subfolder');
   
   result := EXCEPTION_CONTINUE_SEARCH;

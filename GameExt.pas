@@ -84,11 +84,6 @@ function  LoadMapRscFile (const RelResourcePath: string; out FileContents: strin
 procedure GenerateDebugInfo;
 procedure ReportPluginVersion (const VersionLine: string);
 
-// DEPRECATED
-procedure RegisterHandler (Handler: EventMan.TEventHandler; const EventName: string);
-// DEPRECATED
-procedure FireEvent (const EventName: string; {n} EventData: pointer = nil; DataSize: integer = 0);
-
 procedure Init (hDll: integer);
 
 
@@ -279,18 +274,6 @@ begin
     result      := Utils.PtrOfs(Redirection.NewAddr, integer(Addr) - integer(Redirection.OldAddr));
   end;
 end; // .function GetRealAddr
-
-// DEPRECATED
-procedure RegisterHandler (Handler: EventMan.TEventHandler; const EventName: string);
-begin
-  EventMan.GetInstance.On(EventName, Handler);
-end;
-
-// DEPRECATED
-procedure FireEvent (const EventName: string; {n} EventData: pointer; DataSize: integer);
-begin
-  EventMan.GetInstance.Fire(EventName, EventData, DataSize);
-end;
 
 function GetMapDir: string;
 begin

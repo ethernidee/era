@@ -117,7 +117,7 @@ end;
 
 procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer); stdcall;
 begin
-  GameExt.FireEvent(EventName, EventData, DataSize);
+  EventMan.GetInstance.Fire(EventName, EventData, DataSize);
 end;
 
 procedure FatalError (Err: pchar); stdcall;
@@ -364,6 +364,7 @@ function FindNextObject (ObjType, ObjSubtype: integer; var x, y, z: integer; Dir
 begin
   result := ord(not Heroes.ZvsFindNextObjects(ObjType, ObjSubtype, x, y, z, Direction));
 end;
+
 
 exports
   AdvErm.ExtendArrayLifetime,

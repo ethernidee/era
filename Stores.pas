@@ -356,7 +356,7 @@ begin
 
   WritingStorage.Clear;
   Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_WRITE, []);
-  GameExt.FireEvent('$OnEraSaveScripts', GameExt.NO_EVENT_DATA, 0);
+  EventMan.GetInstance.Fire('$OnEraSaveScripts', GameExt.NO_EVENT_DATA, 0);
   
   TotalWritten := 0;
   NumSections  := WritingStorage.ItemCount;
@@ -432,7 +432,7 @@ begin
     ReadingStorage[SectionName] := StoredData;
   end; // .for
   
-  GameExt.FireEvent('$OnEraLoadScripts', GameExt.NO_EVENT_DATA, 0);
+  EventMan.GetInstance.Fire('$OnEraLoadScripts', GameExt.NO_EVENT_DATA, 0);
   Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_READ, []);
   
   // default code

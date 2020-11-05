@@ -96,7 +96,7 @@ end; // .procedure PatchSquaresRefs
 
 function Hook_BeforeResetErmFunc (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
-  GameExt.FireEvent('$OnBeforeResetErmFunc', nil, 0);
+  EventMan.GetInstance.Fire('$OnBeforeResetErmFunc');
   result := Core.EXEC_DEF_CODE;
 end;
 
