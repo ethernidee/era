@@ -755,6 +755,8 @@ function  GetErmCurrHeroInd: integer; // or -1
 (* Integration with WoG Native Dialogs: possibility to set preselected item for DisplayComplexDialog and text alignment for ShowParsedDlg8Items *)
 function  GetPreselectedDialog8ItemId: integer; stdcall;
 procedure SetPreselectedDialog8ItemId (ItemId: integer); stdcall;
+function  GetDialog8SelectablePicsMask: integer; stdcall;
+procedure SetDialog8SelectablePicsMask (PicsMask: integer); stdcall;
 function  GetDialog8TextAlignment: integer; stdcall;
 procedure SetDialog8TextAlignment (Alignment: integer); stdcall;
 
@@ -803,8 +805,9 @@ type
 
 var
     (* Integration with WoG Native Dialogs: possibility to set preselected item for DisplayComplexDialog and text alignment for ShowParsedDlg8Items *)
-    Dialog8PreselectedItemId: integer = -1;
-    Dialog8TextAlignment:     integer = Heroes.TEXT_ALIGN_CENTER;
+    Dialog8PreselectedItemId:  integer = -1;
+    Dialog8TextAlignment:      integer = Heroes.TEXT_ALIGN_CENTER;
+    Dialog8SelectablePicsMask: integer = 3;
 
 {O} FuncNames:         DataLib.TDict {OF FuncId: integer};
 {O} FuncIdToNameMap:   DataLib.TObjDict {O} {OF TString};
@@ -6323,6 +6326,17 @@ begin
   Dialog8PreselectedItemId := -1;
 end;
 
+function GetDialog8SelectablePicsMask: integer; stdcall;
+begin
+  result                    := Dialog8SelectablePicsMask;
+  Dialog8SelectablePicsMask := 3;
+end;
+
+procedure SetDialog8SelectablePicsMask (PicsMask: integer); stdcall;
+begin
+  Dialog8SelectablePicsMask := PicsMask;
+end;
+
 procedure SetPreselectedDialog8ItemId (ItemId: integer); stdcall;
 begin
   Dialog8PreselectedItemId := ItemId;
@@ -6354,12 +6368,13 @@ end; // .function Hook_IF_N
 
 function Hook_IF_N_ShowDialog (Context: ApiJack.PHookContext): longbool; stdcall;
 var
-  NumParams:        integer;
-  SubCmd:           PErmSubCmd;
-  MsgType:          Heroes.TMesType;
-  TextAlignment:    integer;
-  PreselectedPicId: integer;
-  DlgRes:           integer;
+  NumParams:          integer;
+  SubCmd:             PErmSubCmd;
+  MsgType:            Heroes.TMesType;
+  TextAlignment:      integer;
+  PreselectedPicId:   integer;
+  SelectablePicsMask: integer;
+  DlgRes:             integer;
 
 begin
   NumParams := pinteger(Context.EBP - $10)^;
@@ -6384,6 +6399,14 @@ begin
   end;
 
   SetPreselectedDialog8ItemId(PreselectedPicId);
+
+  SelectablePicsMask := -1;
+
+  if NumParams >= 6 then begin
+    SelectablePicsMask := SubCmd.Nums[5];
+  end;
+
+  SetDialog8SelectablePicsMask(SelectablePicsMask);
 
   DlgRes := ZvsDisplay8Dialog(ppointer(Context.EBP - $520)^, Ptr($2734978), MsgType, TextAlignment);
 
