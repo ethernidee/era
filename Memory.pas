@@ -33,7 +33,7 @@ type
 
   TUniqueStrings = class
    const
-    MIN_CAPACITY                 = 1;
+    MIN_CAPACITY                 = 100;
     CRITICAL_SIZE_CAPACITY_RATIO = 0.75;
     GROWTH_FACTOR                = 1.5;
     MIN_CAPACITY_GROWTH          = 16;
@@ -202,25 +202,6 @@ begin
   end;
 end; // .procedure TUniqueStrings.Grow
 
-var
-strs: array [0..999] of string;
-ptrs: array [0..999] of pchar;
-i: integer;
-
 begin
   UniqueStrings := TUniqueStrings.Create;
-
-  Randomize;
-  for i := 0 to 999 do begin
-    strs[i] := 'some str' + inttostr(random(high(integer)));
-    ptrs[i] := UniqueStrings[pchar(strs[i])];
-  end;
-
-  for i := 0 to 999 do begin
-    {!} Assert(ptrs[i] = UniqueStrings[pchar(strs[i])], ptrs[i] + ' <> ' + strs[i] + ' but = ' + UniqueStrings[pchar(strs[i])]);
-  end;
-
-  for i := 0 to 999 do begin
-    {!} Assert(ptrs[i] = UniqueStrings[pchar(strs[i])], ptrs[i] + ' <> ' + strs[i]);
-  end;
 end.
