@@ -28,6 +28,13 @@ const
 function  tr (const Key: string; const Params: array of string): string;
 
 
+var
+  LocalDecimalSeparator: char = '.';
+  NonBreakingSpace:      char = #160;
+  DefMetricSuffixes:     array [0..2] of string = ('K', 'M', 'G');
+  MetricSuffixes:        array [0..2] of string = ('K', 'M', 'G');
+
+
 (***) implementation (***)
 
 
@@ -52,6 +59,57 @@ begin
     result := Key;
   end;
 end; // .function tr
+
+function trDef (const Key: string; const Params: array of string; const DefValue: string): string;
+var
+{Un} Translation: TString;
+
+begin
+  Translation := LangDict[Key];
+  // * * * * * //
+  if Translation <> nil then begin
+    result := StrLib.BuildStr(Translation.Value, Params, TEMPL_CHAR);
+  end else begin
+    result := DefValue;
+  end;
+end; // .function trDef
+
+procedure UpdateLocaleConfig;
+var
+  Str: string;
+  i:   integer;
+
+begin
+  Str := trDef('era.locale.decimal_separator', [], '.');
+
+  if Str = '' then begin
+    Str := '.';    
+  end;
+
+  LocalDecimalSeparator := Str[1];
+
+  // ---------------------------------
+
+  Str := trDef('era.locale.non_breaking_space', [], #160);
+
+  if Str = '' then begin
+    Str := #160;    
+  end;
+
+  NonBreakingSpace := Str[1];
+
+  // ---------------------------------
+
+  for i := Low(MetricSuffixes) to High(MetricSuffixes) do begin
+    Str := trDef('era.locale.metric_suffixes.' + SysUtils.IntToStr(i), [], DefMetricSuffixes[i]);
+
+    if Str = '' then begin
+      Str := DefMetricSuffixes[i];    
+    end;
+
+    MetricSuffixes[i] := Str;
+  end;
+end; // .procedure UpdateLocaleConfig
 
 procedure LoadLangData (const ItemName, FileContents: string; OverrideExistingKeys: boolean);
 var
@@ -125,6 +183,7 @@ end;
 procedure LoadGlobalLangFiles;
 begin
   LoadLangFiles(GameExt.GameDir + '\' + LANG_DIR, DONT_OVERRIDE_KEYS);
+  UpdateLocaleConfig;
 end;
 
 (* Loads map langauge files as resource list without any parsing *)
