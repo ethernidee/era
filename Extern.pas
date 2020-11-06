@@ -365,6 +365,10 @@ begin
   result := ord(not Heroes.ZvsFindNextObjects(ObjType, ObjSubtype, x, y, z, Direction));
 end;
 
+function ToStaticStr ({n} Str: pchar): {n} pchar; stdcall;
+begin
+  result := Memory.UniqueStrings[Str];
+end;
 
 exports
   AdvErm.ExtendArrayLifetime,
@@ -424,6 +428,7 @@ exports
   ShowErmError,
   ShowMessage,
   Splice,
+  ToStaticStr,
   tr,
   WriteSavegameSection,
   WriteStrToIni;

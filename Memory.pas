@@ -15,11 +15,6 @@ type
   (* Import *)
   TDict = DataLib.TDict;
 
-
-(***)  implementation  (***)
-
-
-type
   PUniqueStringsItemValue = ^TUniqueStringsItemValue;
   TUniqueStringsItemValue = record
   {O} Str:  pchar;
@@ -38,7 +33,7 @@ type
 
   TUniqueStrings = class
    const
-    MIN_CAPACITY                 = 16;
+    MIN_CAPACITY                 = 1;
     CRITICAL_SIZE_CAPACITY_RATIO = 0.75;
     GROWTH_FACTOR                = 1.5;
     MIN_CAPACITY_GROWTH          = 16;
@@ -50,6 +45,7 @@ type
 
     function Find ({n} Str: pchar; out StrLen: integer; out KeyHash: integer; out ItemInd: integer): {n} pchar;
     function GetItem ({n} Str: pchar): {n} pchar;
+    procedure AddValue (var Value: TUniqueStringsItemValue);
     procedure Grow;
 
    public
@@ -57,10 +53,14 @@ type
     destructor Destroy; override;
 
     property Items[Str: pchar]: pchar read GetItem; default;
-  end;
+  end; // .class TUniqueStrings
+
 
 var
   UniqueStrings: TUniqueStrings;
+
+
+(***)  implementation  (***)
 
 
 constructor TUniqueStrings.Create;
@@ -95,9 +95,11 @@ begin
   result := nil;
 
   if Str <> nil then begin
+    {!} Assert(integer(Str) > 100);
     StrLen  := SysUtils.StrLen(Str);
     KeyHash := Crypto.Crc32(Str, StrLen);
-    ItemInd := KeyHash mod Self.fCapacity;
+    
+    ItemInd := integer(cardinal(KeyHash) mod cardinal(Self.fCapacity));
     Item    := @Self.fItems[ItemInd];
 
     if Item.Value.Str <> nil then begin
@@ -128,12 +130,12 @@ begin
   result := nil;
 
   if Str <> nil then begin
-    result := Find(Str, StrLen, KeyHash, ItemInd);
+    result := Self.Find(Str, StrLen, KeyHash, ItemInd);  
 
     if result = nil then begin
       GetMem(result, StrLen + 1);
       Utils.CopyMem(StrLen + 1, Str, result);
-      
+
       Item := @Self.fItems[ItemInd];
 
       if Item.Value.Str = nil then begin
@@ -150,86 +152,75 @@ begin
       Inc(Self.fSize);
 
       if (Self.fSize / Self.fCapacity >= CRITICAL_SIZE_CAPACITY_RATIO) then begin
-        Grow;
+        Self.Grow;
       end;
     end; // .if
   end; // .if
 end; // .function TUniqueStrings.GetItem
 
-procedure TUniqueStrings.Grow;
+procedure TUniqueStrings.AddValue (var Value: TUniqueStringsItemValue);
 var
-  NewCapacity: integer;
-  OldItems:    TUniqueStringsItems;
-  Item:        PUniqueStringsItem;
-  NewItem:     PUniqueStringsItem;
-  NumValues:   integer;
-  i:           integer;
+  Item:      PUniqueStringsItem;
+  NumValues: integer;
 
 begin
-  NewCapacity := Max(Self.fCapacity + MIN_CAPACITY_GROWTH, trunc(Self.fCapacity * GROWTH_FACTOR));
-  OldItems    := Self.fItems;
-  Self.fItems := nil;
-  SetLength(Self.fItems, NewCapacity);
+  Item := @Self.fItems[integer(cardinal(Value.Hash) mod cardinal(Self.fCapacity))];
 
-  for i := 0 to Self.fCapacity - 1 do begin
+  if Item.Value.Str = nil then begin
+    Item.Value := Value;
+  end else begin
+    NumValues := Length(Item.ValueChain);
+    SetLength(Item.ValueChain, NumValues + 1);
+    Item.ValueChain[NumValues] := Value;
+  end;
+end;
+
+procedure TUniqueStrings.Grow;
+var
+  OldCapacity: integer;
+  OldItems:    TUniqueStringsItems;
+  Item:        PUniqueStringsItem;
+  i, j:        integer;
+
+begin
+  OldItems       := Self.fItems;
+  Self.fItems    := nil;
+  OldCapacity    := Self.fCapacity;
+  Self.fCapacity := Max(Self.fCapacity + MIN_CAPACITY_GROWTH, trunc(Self.fCapacity * GROWTH_FACTOR));
+  SetLength(Self.fItems, Self.fCapacity);
+
+  for i := 0 to OldCapacity - 1 do begin
     Item := @OldItems[i];
 
     if Item.Value.Str <> nil then begin
-      NewItem := @Self.fItems[Item.Value.Hash mod NewCapacity];
+      Self.AddValue(Item.Value);
 
-      if NewItem.Value.Str = nil then begin
-        NewItem.Value := Item.Value;
-      end else begin
-        NumValues := Length(NewItem.ValueChain);
-        SetLength(NewItem.ValueChain, NumValues + 1);
-        NewItem.ValueChain[NumValues] := Item.Value;
+      for j := 0 to Length(Item.ValueChain) - 1 do begin
+        Self.AddValue(Item.ValueChain[j]);
       end;
     end;
   end;
-
-  Self.fCapacity := NewCapacity;
 end; // .procedure TUniqueStrings.Grow
 
-(* For string literal S returns the same static readonly string, thus saving memory and allowing to compare such strings by addresses *)
-function ToStaticStr (const Str: string): string; overload;
-begin
-  
-end;
-
-function ToStaticStr (Str: pchar): pchar; overload;
 var
-  Key: string;
+strs: array [0..999] of string;
+ptrs: array [0..999] of pchar;
+i: integer;
 
 begin
-  // result := nil;
+  UniqueStrings := TUniqueStrings.Create;
 
-  // if Str <> nil then begin
-  //   Key    := Str;
-  //   result := UniqueStrings[Key];
+  Randomize;
+  for i := 0 to 999 do begin
+    strs[i] := 'some str' + inttostr(random(high(integer)));
+    ptrs[i] := UniqueStrings[pchar(strs[i])];
+  end;
 
-  //   if result = nil then begin
-  //     GetMem(result, Length(Key) + 1);
-  //     Utils.CopyMem(Length(Str) + 1, pchar(Key), result);
-  //     UniqueStrings[Key] := 
-  //   end;
-  // end;
-end;
+  for i := 0 to 999 do begin
+    {!} Assert(ptrs[i] = UniqueStrings[pchar(strs[i])], ptrs[i] + ' <> ' + strs[i] + ' but = ' + UniqueStrings[pchar(strs[i])]);
+  end;
 
-var
-s: string;
-p1, p2: pchar;
-
-begin
-  // UniqueStrings := TUniqueStrings.Create;
-  // UniqueStrings['do it right now'];
-  // UniqueStrings['hope you are alive'];
-  // p1 := UniqueStrings['take it, Bers'];
-  // p2 := UniqueStrings['take it, Bers'];
-  // {!} Assert(UniqueStrings['take it, Bers'] = p1);
-  // {!} Assert(p1 = p2);
-  // s := 'take it';
-  // s := s + ', Bers';
-  // {!} Assert(UniqueStrings[pchar(s)] = p1);
-  // s := 'alive';
-  // {!} Assert(UniqueStrings['hope you are alive'] = UniqueStrings[pchar('hope you are ' + s)]);
+  for i := 0 to 999 do begin
+    {!} Assert(ptrs[i] = UniqueStrings[pchar(strs[i])], ptrs[i] + ' <> ' + strs[i]);
+  end;
 end.
