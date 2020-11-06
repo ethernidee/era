@@ -11,7 +11,8 @@ uses
   Windows, SysUtils, Math,
   Utils, Alg, StrLib, Core, ApiJack,
   GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
-  EraButtons, Lodman, Graph, Trans, Memory, EventMan;
+  EraButtons, Lodman, Graph, Trans, Memory, EraUtils,
+  EventMan;
 
 type
   (* Import *)
@@ -370,6 +371,16 @@ begin
   result := Memory.UniqueStrings[Str];
 end;
 
+function DecorateInt (Value: integer; Buf: pchar; IgnoreSmallNumbers: integer): integer; stdcall;
+var
+  Str: string;
+
+begin
+  Str := EraUtils.DecorateInt(Value, IgnoreSmallNumbers <> 0);
+  Utils.SetPcharValue(Buf, Str, High(integer));
+  result := Length(Str);
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -377,6 +388,7 @@ exports
   Core.ApiHook,
   Core.Hook,
   Core.WriteAtCode,
+  DecorateInt,
   Erm.ExtractErm,
   Erm.GetDialog8SelectablePicsMask name '_GetDialog8SelectablePicsMask',
   Erm.GetPreselectedDialog8ItemId name '_GetPreselectedDialog8ItemId',
