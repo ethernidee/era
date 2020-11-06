@@ -11,7 +11,7 @@ uses
   Windows, SysUtils, Math,
   Utils, Alg, StrLib, Core, ApiJack,
   GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
-  EraButtons, Lodman, Graph, Trans, EventMan;
+  EraButtons, Lodman, Graph, Trans, Memory, EventMan;
 
 type
   (* Import *)

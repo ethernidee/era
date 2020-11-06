@@ -1,8 +1,6 @@
 unit Memory;
 (*
-  Description: Memory management.
-  Author:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-  DEVELOPMENT IS FROZEN
+  Game memory tools and enhancements.
 *)
 
 
@@ -10,181 +8,228 @@ unit Memory;
 
 uses
   SysUtils, Math,
-  Utils, DataLib;
+  Utils, Crypto, AssocArrays, StrLib, DataLib;
 
-const
-  IS_STATIC  = true;
-  IS_DYNAMIC = not IS_STATIC;
 
 type
   (* Import *)
-  TList = DataLib.TList;
-
-  TBuffer = class
-  {OU} Addr:     Utils.PEndlessByteArr;
-       Size:     integer;
-       IsStatic: boolean;
-
-    constructor Create (Size: integer; Addr: pointer; IsStatic: boolean);
-  end;
-
-  (* Simple contiguous memory manager *)
-  TContiguousMemManager = class
-   protected const
-    NUM_BLOCKS_PER_SYS_ALLOCATION = 30;
-
-   protected
-    {O}  fBufs:                     TList {of TBuffer};
-    {Un} fBuf:                      Utils.PEndlessByteArr;
-         fBufSize:                  integer;
-         fBufPos:                   integer;
-         fBufInd:                   integer;
-         fGuaranteedContiguousSize: integer;
-
-    (* Makes next available buffer active at position 0. Updates cached buffer variables. Returns true on success *)
-    function SwitchToNextBuf: boolean;
-
-   public
-    constructor Create (GuaranteedContiguousSize: integer);
-    destructor Destroy; override;
-    
-    (* Allocates new block of memory, not dependent on the previous one *)
-    function AllocNew (Size: integer): pointer;
-
-    (* Allocates block of memory right after the previous one *)
-    function AllocContinue (Size: integer): pointer;
-
-    (* Adds static buffer to memory buffers pool, if buffer has sufficient size. An exception is raised
-       if any allocation was performed before calling this method *)
-    function AddStaticBuf (Size: integer; {n} Buf: pointer): TContiguousMemManager;
-
-    (* Releases all allocated memory, fills static buffers with zeroes *)
-    function Release: TContiguousMemManager;
-  end;
-
+  TDict = DataLib.TDict;
 
 
 (***)  implementation  (***)
 
 
-constructor TBuffer.Create (Size: integer; Addr: pointer; IsStatic: boolean);
-begin
-  {!} Assert(Size > 0);
-  {!} Assert(Addr <> nil);
-  Self.Size     := Size;
-  Self.Addr     := Addr;
-  Self.IsStatic := IsStatic;
-end;
+type
+  PUniqueStringsItemValue = ^TUniqueStringsItemValue;
+  TUniqueStringsItemValue = record
+  {O} Str:  pchar;
+      Hash: integer;
+  end;
 
-constructor TContiguousMemManager.Create (GuaranteedContiguousSize: integer);
-begin
-  {!} Assert(GuaranteedContiguousSize > 0);
-  inherited Create;
-  Self.fGuaranteedContiguousSize := GuaranteedContiguousSize;
-  Self.fBufs                     := DataLib.NewList(Utils.OWNS_ITEMS);
-end;
+  TUniqueStringsValueChain = array of TUniqueStringsItemValue;
 
-destructor TContiguousMemManager.Destroy; override;
-begin
-  SysUtils.FreeAndNil(Self.fBufs);
-  inherited Destroy;
-end;
+  PUniqueStringsItem = ^TUniqueStringsItem;
+  TUniqueStringsItem = record
+    Value:      TUniqueStringsItemValue;
+    ValueChain: TUniqueStringsValueChain;
+  end;
 
-function TContiguousMemManager.AllocNew (Size: integer): pointer;
+  TUniqueStringsItems = array of TUniqueStringsItem;
+
+  TUniqueStrings = class
+   const
+    MIN_CAPACITY                 = 16;
+    CRITICAL_SIZE_CAPACITY_RATIO = 0.75;
+    GROWTH_FACTOR                = 1.5;
+    MIN_CAPACITY_GROWTH          = 16;
+
+   protected
+    fItems:    TUniqueStringsItems;
+    fSize:     integer;
+    fCapacity: integer;
+
+    function Find ({n} Str: pchar; out StrLen: integer; out KeyHash: integer; out ItemInd: integer): {n} pchar;
+    function GetItem ({n} Str: pchar): {n} pchar;
+    procedure Grow;
+
+   public
+    constructor Create;
+    destructor Destroy; override;
+
+    property Items[Str: pchar]: pchar read GetItem; default;
+  end;
+
 var
-{On} AllocatedBuf:     pointer;
-     AllocatedBufSize: integer;
-     ReservedSize:     integer;
+  UniqueStrings: TUniqueStrings;
 
+
+constructor TUniqueStrings.Create;
 begin
-  {!} Assert(Size > 0);
-  result       := nil;
-  AllocatedBuf := nil;
-  // * * * * * //
-  ReservedSize := Math.Max(Self.fGuaranteedContiguousSize, Size);
-
-  while (Self.fBufPos + ReservedSize > Self.fBufSize) and Self.SwitchToNextBuf do begin
-    // Next
-  end;
-
-  if Self.fBufPos + ReservedSize > Self.fBufSize then begin
-    AllocatedBufSize := Math.Max(Self.fGuaranteedContiguousSize * Self.NUM_BLOCKS_PER_SYS_ALLOCATION, Size);
-    System.GetMem(AllocatedBuf, AllocatedBufSize);
-    Self.fBufs.Add(TBuffer.Create(AllocatedBufSize, AllocatedBuf, IS_DYNAMIC));
-    Self.SwitchToNextBuf;
-  end;
-  
-  result := @Self.fBuf[Self.fBufPos];
-  Inc(Self.fBufPos, Size);
-end; // .function TContiguousMemManager.AllocNew
-
-function TContiguousMemManager.AllocContinue (Size: integer): pointer;
-begin
-  {!} Assert(Size > 0, 'Cannot continue allocating block of size 0');
-
-  if Self.fBuf = nil then begin
-    result := Self.AllocNew(Size);
-  end else begin
-    Inc(Self.fBufPos, Size);
-    result := @Self.fBuf[Self.fBufPos];
-    {!} Assert(Self.fBufPos <= Self.fBufSize, Format('Cannot continue allocating contiguous block of memory. Requested: %d bytes. Buffer of size %d is exhausted', [Size, Self.fBufSize]));
-  end;
+  SetLength(Self.fItems, MIN_CAPACITY);
+  Self.fSize     := 0;
+  Self.fCapacity := MIN_CAPACITY;
 end;
 
-function TContiguousMemManager.AddStaticBuf (Size: integer; {n} Buf: pointer): TContiguousMemManager;
-begin
-  {!} Assert(Utils.IsValidBuf(Buf, Size));
-  {!} Assert(Self.fBuf = nil, 'Cannot add static buffer to pool. Allocations were already performed');
-
-  if Buf <> nil then begin
-    Self.fBufs.Add(TBuffer.Create(Size, Buf, IS_STATIC));
-  end;
-
-  result := Self;
-end;
-
-function TContiguousMemManager.Release: TContiguousMemManager;
+destructor TUniqueStrings.Destroy;
 var
-  i: integer;
+  Item: PUniqueStringsItem;
+  i, j: integer;
 
 begin
-  for i := 0 to Self.fBufs.Count - 1 do begin
-    if not TBuffer(Self.fBufs[i]).IsStatic then begin
-      System.FreeMem(TBuffer(Self.fBufs[i]).Addr);
-      Self.fBufs[i] := nil;
+  for i := 0 to Self.fSize - 1 do begin
+    Item := @fItems[i];
+    FreeMem(Item.Value.Str);
+
+    for j := 0 to Length(Item.ValueChain) - 1 do begin
+      FreeMem(Item.ValueChain[j].Str);
+    end;
+  end;
+end; // .destructor TUniqueStrings.Destroy
+
+function TUniqueStrings.Find ({n} Str: pchar; out StrLen: integer; out KeyHash: integer; out ItemInd: integer): {n} pchar;
+var
+  Item: PUniqueStringsItem;
+  i:    integer;
+
+begin
+  result := nil;
+
+  if Str <> nil then begin
+    StrLen  := SysUtils.StrLen(Str);
+    KeyHash := Crypto.Crc32(Str, StrLen);
+    ItemInd := KeyHash mod Self.fCapacity;
+    Item    := @Self.fItems[ItemInd];
+
+    if Item.Value.Str <> nil then begin
+      if StrLib.ComparePchars(Str, Item.Value.Str) = 0 then begin
+        result := Item.Value.Str;
+        exit;
+      end;
+
+      for i := 0 to Length(Item.ValueChain) - 1 do begin
+        if StrLib.ComparePchars(Str, Item.ValueChain[i].Str) = 0 then begin
+          result := Item.ValueChain[i].Str;
+          exit;
+        end;
+      end;
+    end; // .if
+  end; // .if
+end; // .function TUniqueStrings.Find
+
+function TUniqueStrings.GetItem ({n} Str: pchar): {n} pchar;
+var
+  StrLen:    integer;
+  KeyHash:   integer;
+  ItemInd:   integer;
+  Item:      PUniqueStringsItem;
+  NumValues: integer;
+
+begin
+  result := nil;
+
+  if Str <> nil then begin
+    result := Find(Str, StrLen, KeyHash, ItemInd);
+
+    if result = nil then begin
+      GetMem(result, StrLen + 1);
+      Utils.CopyMem(StrLen + 1, Str, result);
+      
+      Item := @Self.fItems[ItemInd];
+
+      if Item.Value.Str = nil then begin
+        Item.Value.Str  := result;
+        Item.Value.Hash := KeyHash;
+      end else begin
+        NumValues := Length(Item.ValueChain);
+
+        SetLength(Item.ValueChain, NumValues + 1);
+        Item.ValueChain[NumValues].Str  := result;
+        Item.ValueChain[NumValues].Hash := KeyHash;
+      end; // .else     
+
+      Inc(Self.fSize);
+
+      if (Self.fSize / Self.fCapacity >= CRITICAL_SIZE_CAPACITY_RATIO) then begin
+        Grow;
+      end;
+    end; // .if
+  end; // .if
+end; // .function TUniqueStrings.GetItem
+
+procedure TUniqueStrings.Grow;
+var
+  NewCapacity: integer;
+  OldItems:    TUniqueStringsItems;
+  Item:        PUniqueStringsItem;
+  NewItem:     PUniqueStringsItem;
+  NumValues:   integer;
+  i:           integer;
+
+begin
+  NewCapacity := Max(Self.fCapacity + MIN_CAPACITY_GROWTH, trunc(Self.fCapacity * GROWTH_FACTOR));
+  OldItems    := Self.fItems;
+  Self.fItems := nil;
+  SetLength(Self.fItems, NewCapacity);
+
+  for i := 0 to Self.fCapacity - 1 do begin
+    Item := @OldItems[i];
+
+    if Item.Value.Str <> nil then begin
+      NewItem := @Self.fItems[Item.Value.Hash mod NewCapacity];
+
+      if NewItem.Value.Str = nil then begin
+        NewItem.Value := Item.Value;
+      end else begin
+        NumValues := Length(NewItem.ValueChain);
+        SetLength(NewItem.ValueChain, NumValues + 1);
+        NewItem.ValueChain[NumValues] := Item.Value;
+      end;
     end;
   end;
 
-  Self.fBufs.Pack;
+  Self.fCapacity := NewCapacity;
+end; // .procedure TUniqueStrings.Grow
 
-  for i := 0 to Self.fBufs.Count - 1 do begin
-    FillChar(TBuffer(Self.fBufs[i]).Addr^, TBuffer(Self.fBufs[i]).Size, 0);
-  end;
+(* For string literal S returns the same static readonly string, thus saving memory and allowing to compare such strings by addresses *)
+function ToStaticStr (const Str: string): string; overload;
+begin
+  
+end;
 
-  Self.fBuf     := nil;
-  Self.fBufSize := 0;
-  Self.fBufPos  := 0;
-  Self.fBufInd  := -1;
-
-  result := Self;
-end; // .function TContiguousMemManager.Release
-
-function TContiguousMemManager.SwitchToNextBuf: boolean;
+function ToStaticStr (Str: pchar): pchar; overload;
 var
-{Un} Buf: TBuffer;
+  Key: string;
 
 begin
-  Buf := nil;
-  // * * * * * //
-  result := Self.fBufInd + 1 < Self.fBufs.Count;
+  // result := nil;
 
-  if result then begin
-    Inc(Self.fBufInd);
-    Buf           := TBuffer(Self.fBufs[Self.fBufInd]);
-    Self.fBuf     := Buf.Addr;
-    Self.fBufPos  := 0;
-    Self.fBufSize := Buf.Size;
-  end;
-end; // .function TContiguousMemManager.SwitchToNextBuf
+  // if Str <> nil then begin
+  //   Key    := Str;
+  //   result := UniqueStrings[Key];
 
+  //   if result = nil then begin
+  //     GetMem(result, Length(Key) + 1);
+  //     Utils.CopyMem(Length(Str) + 1, pchar(Key), result);
+  //     UniqueStrings[Key] := 
+  //   end;
+  // end;
+end;
+
+var
+s: string;
+p1, p2: pchar;
+
+begin
+  // UniqueStrings := TUniqueStrings.Create;
+  // UniqueStrings['do it right now'];
+  // UniqueStrings['hope you are alive'];
+  // p1 := UniqueStrings['take it, Bers'];
+  // p2 := UniqueStrings['take it, Bers'];
+  // {!} Assert(UniqueStrings['take it, Bers'] = p1);
+  // {!} Assert(p1 = p2);
+  // s := 'take it';
+  // s := s + ', Bers';
+  // {!} Assert(UniqueStrings[pchar(s)] = p1);
+  // s := 'alive';
+  // {!} Assert(UniqueStrings['hope you are alive'] = UniqueStrings[pchar('hope you are ' + s)]);
 end.
