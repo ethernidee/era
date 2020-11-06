@@ -29,10 +29,11 @@ function  tr (const Key: string; const Params: array of string): string;
 
 
 var
-  LocalDecimalSeparator: char = '.';
-  NonBreakingSpace:      char = #160;
-  DefMetricSuffixes:     array [0..2] of string = ('K', 'M', 'G');
-  MetricSuffixes:        array [0..2] of string = ('K', 'M', 'G');
+  LocalDecimalSeparator:  char = '.';
+  LocalThousandSeparator: char = ' ';
+  NonBreakingSpace:       char = #160;
+  DefMetricSuffixes:      array [0..2] of string = ('K', 'M', 'G');
+  MetricSuffixes:         array [0..2] of string = ('K', 'M', 'G');
 
 
 (***) implementation (***)
@@ -87,6 +88,16 @@ begin
   end;
 
   LocalDecimalSeparator := Str[1];
+
+  // ---------------------------------
+
+  Str := trDef('era.locale.thousand_separator', [], ' ');
+
+  if Str = '' then begin
+    Str := ' ';    
+  end;
+
+  LocalThousandSeparator := Str[1];
 
   // ---------------------------------
 
