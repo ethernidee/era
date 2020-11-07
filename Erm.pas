@@ -7008,8 +7008,8 @@ begin
   MinValueValType := GetErmParamValType(@SubCmd.Params[0]);
   MaxValueValType := GetErmParamValType(@SubCmd.Params[1]);
 
-  if not ((VarParamValType in [VALTYPE_INT, VALTYPE_FLOAT]) and (MinValueValType = VarParamValType) and (MaxValueValType = VarParamValType)) then begin
-    ShowErmError('"!!VR:F" - only numeric variables of the same type are supported');
+  if not ((VarParamValType in [VALTYPE_INT, VALTYPE_FLOAT]) and (MinValueValType in [VALTYPE_INT, VALTYPE_FLOAT]) and (MaxValueValType in [VALTYPE_INT, VALTYPE_FLOAT])) then begin
+    ShowErmError('"!!VR:F" - only numeric variables and values are supported');
     result := 0; exit;
   end;
 
@@ -7017,6 +7017,14 @@ begin
   MaxValue.v := SubCmd.Nums[1];
 
   if VarParamValType = VALTYPE_INT then begin
+    if MinValueValType = VALTYPE_FLOAT  then begin
+      MinValue.v := Trunc(MinValue.f);
+    end;
+
+    if MaxValueValType = VALTYPE_FLOAT  then begin
+      MaxValue.v := Trunc(MaxValue.f);
+    end;
+
     if FinalValue.v > MaxValue.v then begin
       FinalValue.v := MaxValue.v;
     end;
@@ -7026,7 +7034,15 @@ begin
     end;
 
     result := ord(SetErmParamValue(VarParam, FinalValue.v));
-  end else begin    
+  end else begin
+    if MinValueValType = VALTYPE_INT  then begin
+      MinValue.f := MinValue.v;
+    end;
+
+    if MaxValueValType = VALTYPE_INT  then begin
+      MaxValue.f := MaxValue.v;
+    end;
+
     if FinalValue.f > MaxValue.f then begin
       FinalValue.f := MaxValue.f;
     end;
