@@ -18,10 +18,10 @@ uses
 function DecorateInt (Value: integer; IgnoreSmallNumbers: boolean = false): string;
 
 (* Formats given positive or negative quantity to human-readable string with desired constraints on length
-   and maximal number of digits. Uses game locale settings.
+   and maximal number of digits. Uses game locale settings and metric suffixes like "K", "M" and "G".
    Examples:
     FormatQuantity(1234567890, 10, 10) = '1234567890'
-    FormatQuantity(-1234567890, 6, 4)  = '-1.234G'
+    FormatQuantity(-1234567890, 6, 4)  = '-1.23G'
     FormatQuantity(123, 2, 4)          = '0K'
     FormatQuantity(1234567890, 6, 2)   = '1G'
     FormatQuantity(1234567890, 1, 2)   = '9'
@@ -71,8 +71,10 @@ end; // .function DecorateInt
 function FormatQuantity (Value, MaxLen, MaxDigits: integer): string;
 const
   METRIC_STEP_MULTIPLIER  = 1000;
+  METRIC_STEP_DIGITS      = 3;
   MIN_FRACTIONAL_PART_LEN = 2;
   METRIC_SUFFIX_LEN       = 1;
+  DECIMAL_SEPARATOR_LEN   = 1;
 
 var
   Str:                    string;
@@ -158,12 +160,16 @@ begin
     exit;
   end;
 
+  // Allocate space for decimal separator
+  Dec(MaxLen, DECIMAL_SEPARATOR_LEN);
+  MaxDigits := Min(MaxLen, MaxDigits);
+
   // Calculate fractional part
   FractPart := Value mod MetricSuffixMultiplier;
 
   (* Here we know, that there is definitely space for integer part and probably not full fractional part *)
 
-  NumFractPartDigits    := Alg.CountDigits(FractPart);
+  NumFractPartDigits    := METRIC_STEP_DIGITS * (MetricSuffixInd + 1);
   MaxNumFractPartDigits := MaxDigits - NumIntPartDigits;
 
   // Truncate fractional part
@@ -171,8 +177,21 @@ begin
     FractPart := FractPart div Alg.IntPow10(NumFractPartDigits - MaxNumFractPartDigits);
   end;
 
-  // Produce final result with integer part, fractional part and metric suffix
-  result := StrLib.Concat([result, SysUtils.IntToStr(IntPart), Trans.LocalDecimalSeparator, SysUtils.IntToStr(FractPart), Trans.MetricSuffixes[MetricSuffixInd]]);
+  if FractPart <> 0 then begin
+    // Make fractional part leading zeroes prefix
+    NumFractPartDigits := Min(MaxNumFractPartDigits, NumFractPartDigits);
+    SetLength(Str, NumFractPartDigits - Alg.CountDigits(FractPart));
+
+    if Str <> '' then begin
+      System.FillChar(Str[1], Length(Str), '0');
+    end;
+
+    // Produce final result with integer part, fractional part and metric suffix
+    result := StrLib.Concat([result, SysUtils.IntToStr(IntPart), Trans.LocalDecimalSeparator, Str, SysUtils.IntToStr(FractPart), Trans.MetricSuffixes[MetricSuffixInd]]);
+  end else begin
+    // Got zero length fractional part, skip it
+    result := StrLib.Concat([result, SysUtils.IntToStr(IntPart), Trans.MetricSuffixes[MetricSuffixInd]]);
+  end;
 end; // .function FormatQuantity
 
 end.

@@ -381,6 +381,16 @@ begin
   result := Length(Str);
 end;
 
+function FormatQuantity (Value: integer; Buf: pchar; BufSize: integer; MaxLen, MaxDigits: integer): integer; stdcall;
+var
+  Str: string;
+
+begin
+  Str := EraUtils.FormatQuantity(Value, MaxLen, MaxDigits);
+  Utils.SetPcharValue(Buf, Str, BufSize);
+  result := Length(Str);
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -409,6 +419,7 @@ exports
   FindNextObject,
   FireErmEvent,
   FireEvent,
+  FormatQuantity,
   GameExt.GenerateDebugInfo,
   GameExt.GetRealAddr,
   GameExt.RedirectMemoryBlock,
