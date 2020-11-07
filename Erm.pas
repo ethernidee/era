@@ -7395,6 +7395,11 @@ begin
       ArgXVars[i + 1] := CreateCmdLocalErt(Str, Windows.LStrLen(Str));
     end;
 
+    // Support d- syntax
+    if SubCmd.Modifiers[i] = PARAM_MODIFIER_SUB then begin
+      ArgXVars[i + 1] := -ArgXVars[i + 1];
+    end;
+
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(Param, SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end; // .for
 
@@ -7488,6 +7493,11 @@ begin
     else if (ParamType = PARAM_VARTYPE_Z) and (ArgXVars[i + 1] < 0) then begin
       Str             := GetInterpolatedZVarAddr(ArgXVars[i + 1]);
       ArgXVars[i + 1] := CreateCmdLocalErt(Str, Windows.LStrLen(Str));
+    end;
+
+    // Support d- syntax
+    if SubCmd.Modifiers[i] = PARAM_MODIFIER_SUB then begin
+      ArgXVars[i + 1] := -ArgXVars[i + 1];
     end;
     
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(Param, SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
