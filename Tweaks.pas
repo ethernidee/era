@@ -961,7 +961,7 @@ begin
         Inc(SpellPower);
       end;
     end else if Math.InRange(MonId, MON_COMMANDER_FIRST, MON_COMMANDER_LAST) then begin
-      SpellPower := PatchApi.Call(CDECL_, Ptr(WOG_GET_NPC_MAGIC_POWER), [Ptr($282A36C)]);
+      SpellPower := PatchApi.Call(CDECL_, Ptr(WOG_GET_NPC_MAGIC_POWER), [Stack]);
     end;
     
     Context.EAX := PatchApi.Call(THISCALL_, Ptr($5A0140), [Heroes.CombatManagerPtr^, Spell, TargetPos, CASTER_MON, NO_EXT_TARGET_POS, SkillLevel, SpellPower]);
