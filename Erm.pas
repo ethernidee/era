@@ -1021,6 +1021,9 @@ begin
 
   Temp.f := -Infinity;
   GlobalConsts['FLOAT_NEG_INF'] := Ptr(Temp.v);
+  
+  GlobalConsts['TRUE']  := Ptr(1);
+  GlobalConsts['FALSE'] := Ptr(0);
 end;
 
 function GetTriggerReadableName (EventID: integer): string;
