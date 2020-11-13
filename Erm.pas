@@ -9,7 +9,7 @@ uses
   SysUtils, Math, Windows,
   Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
   Lists, StrLib, Alg, RandMt,
-  Core, Heroes, GameExt, Trans, RscLists, EventMan, DlgMes;
+  Core, Heroes, GameExt, Trans, RscLists, EventMan;
 
 type
   (* Import *)
@@ -7980,7 +7980,6 @@ begin
   ApiJack.HookCode(Ptr($77938A), @Hook_LoadErsFiles);
   ApiJack.HookCode(Ptr($77846B), @Hook_ApplyErsOptions);
 
-
   (* Fix CM3 trigger allowing to handle all clicks *)
   Core.ApiHook(@Hook_CM3, Core.HOOKTYPE_BRIDGE, Ptr($5B0255));
   Core.p.WriteDataPatch(Ptr($5B02DD), ['8B47088D70FF']);
@@ -7993,10 +7992,10 @@ begin
   ApiJack.HookCode(Ptr($733F11), @Hook_UN_J13);
 
   (* Improve UN:U: no error if objects is not found (x < 0 on error). UN:U(type)/(subType)/(direction)/(x)/(y)/(z) *)
-  ApiJack.HookCode(Ptr($733F11), @Hook_UN_J13);
+  ApiJack.HookCode(Ptr($732A55), @Hook_UN_U);
 
   (* Fix UN:P3 command: reset/enable commanders must disable/enable commander chests *)
-  ApiJack.HookCode(Ptr($732A55), @Hook_UN_U);
+  ApiJack.HookCode(Ptr($732EA5), @Hook_UN_P3);
 
   (* Fix MR:N in !?MR1 !?MR2 *)
   Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
