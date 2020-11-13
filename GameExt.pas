@@ -59,9 +59,10 @@ type
 
 
 var
-{O} PluginsList: DataLib.TStrList {OF TDllHandle};
-    hEra:        Windows.THandle;
-    DumpVfsOpt:  boolean;
+{O} PluginsList:      DataLib.TStrList {OF TDllHandle};
+    hEra:             Windows.THandle;
+    DumpVfsOpt:       boolean;
+    ProcessStartTime: Windows.TSystemTime;
 
 (* Means for exe structures relocation (enlarging). It's possible to find relocated address by old
    structure address in a speed of binary search (log2(N)) *)
@@ -501,4 +502,6 @@ begin
   SysUtils.SetCurrentDir(GameDir);
 
   Core.SetDebugMapsDir(GameDir + '\' + DEBUG_MAPS_DIR);
+
+  Windows.GetSystemTime(ProcessStartTime);
 end.

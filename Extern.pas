@@ -9,7 +9,7 @@ unit Extern;
 
 uses
   Windows, SysUtils, Math,
-  Utils, Alg, StrLib, Core, ApiJack,
+  Utils, Alg, StrLib, Core, ApiJack, WinUtils,
   GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
   EraButtons, Lodman, Graph, Trans, Memory, EraUtils,
   EventMan;
@@ -49,7 +49,7 @@ begin
   Utils.CopyMem((Length(Str) + 1) * sizeof(WideChar), PWideChar(Str), result);
 end;
 
-(* Frees buffer, that was transfered to client earlier using other VFS API *)
+(* Frees buffer, that was transfered to client earlier *)
 procedure MemFree ({On} Buf: pointer); stdcall;
 begin
   if Buf <> nil then begin
@@ -391,6 +391,29 @@ begin
   result := Length(Str);
 end;
 
+var
+  (* Global unique process GUID, generated on demand *)
+  ProcessGuid: string;
+
+(* Returns 32-character unique key for current game process. The ID will be unique between multiple game runs. *)
+procedure GetProcessGuid (Buf: pchar); stdcall;
+var
+  ProcessGuidBuf: array [0..sizeof(GameExt.ProcessStartTime) - 1] of byte;
+
+begin
+  if ProcessGuid = '' then begin
+    FillChar(ProcessGuidBuf, sizeof(ProcessGuidBuf), #0);
+
+    if not WinUtils.RtlGenRandom(@ProcessGuidBuf, sizeof(ProcessGuidBuf)) then begin
+      Utils.CopyMem(sizeof(GameExt.ProcessStartTime), @GameExt.ProcessStartTime, @ProcessGuidBuf);
+    end;
+
+    ProcessGuid := StrLib.BinToHex(sizeof(ProcessGuidBuf), @ProcessGuidBuf);
+  end;
+  
+  Utils.CopyMem(Length(ProcessGuid) + 1, pchar(ProcessGuid), Buf);
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -425,6 +448,7 @@ exports
   GameExt.RedirectMemoryBlock,
   GetArgXVars,
   GetButtonID,
+  GetProcessGuid,
   GetRetXVars,
   GetVersion,
   GetVersionNum,
