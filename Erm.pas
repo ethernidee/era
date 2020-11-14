@@ -6168,6 +6168,74 @@ begin
   end;
 end; // .function Hook_HE_Z
 
+function Hook_HE_L (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  ACTION_SET_SMALL_PORTAIT               = 1;
+  ACTION_SET_LARGE_PORTAIT               = 2;
+  ACTION_RESET_HERO_PORTAIT              = 3;
+  ACTION_COPY_PORTRAIT_FROM_ANOTHER_HERO = 4;
+  ACTION_SET_BOTH_PORTAITS               = 5;
+
+var
+  NumParams: integer;
+  Hero:      Heroes.PHero;
+  SubCmd:    PErmSubCmd;
+  Action:    integer;
+
+begin
+  Context.EAX := 1;
+  result      := false;
+  NumParams   := pinteger(Context.EBP - $10)^;
+  Hero        := ppointer(Context.EBP - $380)^;
+  SubCmd      := pointer(Context.EBP - $300);
+  Action      := SubCmd.Nums[0];
+
+  if Action = ACTION_RESET_HERO_PORTAIT then begin
+    // Add dummy parameter to satisfy parameter number check
+    Inc(NumParams);
+  end;
+
+  if (NumParams < 2) then begin
+    ShowErmError('HE:L - invalid number of parameters (<2)');
+    Context.EAX := 0;
+  end;
+
+  if Context.EAX <> 0 then begin
+    case Action of      
+      ACTION_SET_SMALL_PORTAIT: begin
+        Heroes.ZvsChangeHeroPortrait(Hero.Id, nil, GetInterpolatedZVarAddr(SubCmd.Nums[1]));
+      end;
+
+      ACTION_SET_LARGE_PORTAIT: begin
+        Heroes.ZvsChangeHeroPortrait(Hero.Id,  GetInterpolatedZVarAddr(SubCmd.Nums[1]), nil);
+      end;
+
+      ACTION_RESET_HERO_PORTAIT: begin
+        Heroes.ZvsChangeHeroPortrait(Hero.Id, nil, nil);
+      end;
+
+      ACTION_COPY_PORTRAIT_FROM_ANOTHER_HERO: begin
+        Heroes.ZvsChangeHeroPortraitN(Hero.Id, SubCmd.Nums[1]);
+      end;
+
+      ACTION_SET_BOTH_PORTAITS: begin
+        if (NumParams < 3) then begin
+          ShowErmError('HE:L5 - invalid number of parameters (<3)');
+          Context.EAX := 0;
+        end else begin
+          Heroes.ZvsChangeHeroPortrait(Hero.Id, GetInterpolatedZVarAddr(SubCmd.Nums[1]), GetInterpolatedZVarAddr(SubCmd.Nums[2]));
+        end;
+      end;
+    end; // .switch Action
+  end;
+  
+  if Context.EAX = 0 then begin
+    Context.RetAddr := Ptr($749631);
+  end else begin
+    Context.RetAddr := Ptr($74616F);
+  end;
+end; // .function Hook_HE_L
+
 function Hook_HE (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   Cmd:        PErmCmd;
@@ -7950,6 +8018,11 @@ begin
 
   (* New HE:Z command to get hero structure address *)
   ApiJack.HookCode(Ptr($746EE3), @Hook_HE_Z);
+
+  (* Rewritten HE:L command to support all strings *)
+  ApiJack.HookCode(Ptr($745E76), @Hook_HE_L);
+  // Remove HE:L0 command support at all
+  Core.p.WriteDataPatch(Ptr($745E54), ['01']);
 
   (* New BM:Z command to get address of battle stack structure *)
   ApiJack.HookCode(Ptr($75F840), @Hook_BM_Z);
