@@ -851,6 +851,9 @@ const
   ZvsGetTxtValue: function (Row, Col: integer; TxtFile: PTxtFile): pchar cdecl = Ptr($77710B);
   ZvsFindNextObjects: function (ObjType, ObjSubtype: integer; var x, y, z: integer; Direction: integer): longbool cdecl = Ptr($72F67B);
   ZvsFindObjects: function (ObjType, ObjSubtype, ObjectN: integer; var x, y, z: integer): longbool cdecl = Ptr($72F539);
+  ZvsChangeHeroPortraitN: procedure (DstHeroId, SrcHeroId: integer) cdecl = Ptr($753ABF);
+  ZvsChangeHeroPortrait: procedure (HeroId: integer; {n} LargePortrait, {n} SmallPortrait: pchar) cdecl = Ptr($7539A6);
+  ZvsRedrawMap:   procedure = Ptr($7126EA);
   a2i:            function (Str: pchar): int cdecl = Ptr($6184D9);
   a2f:            function (Str: pchar): single cdecl = Ptr($619366);
   
