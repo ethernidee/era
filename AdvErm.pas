@@ -2029,6 +2029,49 @@ begin
   end;
 end;
 
+(* SN:B?(intVar) or (strVar) or ?(strVar) or (intAddress)[/?(addressValue) or (dummy)/$valueAtAddress]
+   The commands allows to:
+   - get address of local or static global ERM variable;
+   - read/write integer/string from/to specific address *)
+function SN_B (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
+var
+  Addr: pointer;
+
+begin
+  result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, TYPE_INT or PARAM_OPTIONAL, TYPE_ANY or PARAM_OPTIONAL]);
+
+  if result then begin
+    result := (Params[0].Value.v <> 0) or (NumParams < 3);
+
+    if not result then begin
+      Error := 'SN:B - cannot read/write to zero address';
+      exit;
+    end;
+
+    Addr := Params[0].Value.p;
+
+    if (NumParams >= 2) and (Params[1].OperGet) then begin
+      Params[1].RetInt(integer(Addr));
+    end;
+
+    if NumParams >= 3 then begin
+      if Params[2].OperGet then begin
+        if Params[2].IsStr then begin
+          Params[2].RetPchar(Addr);
+        end else begin
+          Params[2].RetInt(pinteger(Addr)^);
+        end;
+      end else begin
+        if Params[2].IsStr then begin
+          Utils.SetPcharValue(Addr, Params[2].Value.pc, High(integer));
+        end else begin
+          ApplyIntParam(Params[2], pinteger(Addr)^);
+        end;
+      end; // .else
+    end; // .else
+  end; // .if
+end; // .function SN_B
+
 function SN_C (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
   ExistingConstValue: integer;
@@ -2149,9 +2192,10 @@ var
 
 begin
   with WrapErmCmd('SN', SubCmd, CmdWrapper)^ do begin
-    while FindNextSubcmd(['C', 'P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R', 'V']) do begin
+    while FindNextSubcmd(['B', 'C', 'P', 'S', 'G', 'Q', 'L', 'A', 'E', 'D', 'H', 'T', 'I', 'F', 'X', 'M', 'K', 'W', 'D', 'O', 'R', 'V']) do begin
       case Cmd of
         'A': begin Success := SN_A(NumParams, @Params, Error); end;
+        'B': begin Success := SN_B(NumParams, @Params, Error); end;
         'C': begin Success := SN_C(NumParams, @Params, Error); end;
         'E': begin Success := SN_E(NumParams, @Params, Error); end;
         'F': begin Success := SN_F(NumParams, @Params, Error); end;
