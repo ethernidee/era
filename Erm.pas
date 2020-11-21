@@ -711,11 +711,10 @@ var
 
   (* ERM tracking options *)
   TrackingOpts: record
-    Enabled:              boolean;
-    MaxRecords:           integer;
-    DumpCommands:         boolean;
-    IgnoreEmptyTriggers:  boolean;
-    IgnoreRealTimeTimers: boolean;
+    Enabled:             boolean;
+    MaxRecords:          integer;
+    DumpCommands:        boolean;
+    IgnoreEmptyTriggers: boolean;
   end;
 
 
@@ -8183,7 +8182,7 @@ begin
   (* Enable ERM tracking and pre-command initialization *)
   with TrackingOpts do begin
     if Enabled then begin
-      EventTracker := ErmTracking.TEventTracker.Create(MaxRecords).SetDumpCommands(DumpCommands).SetIgnoreEmptyTriggers(IgnoreEmptyTriggers).SetIgnoreRealTimeTimers(IgnoreRealTimeTimers);
+      EventTracker := ErmTracking.TEventTracker.Create(MaxRecords).SetDumpCommands(DumpCommands).SetIgnoreEmptyTriggers(IgnoreEmptyTriggers);
     end;
   end;
 end; // .procedure OnAfterWoG

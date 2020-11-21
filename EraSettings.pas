@@ -116,10 +116,9 @@ begin
     Enabled := GetDebugOpt('Debug.TrackErm');
 
     if Enabled then begin
-      MaxRecords           := Max(1, GetOptIntValue('Debug.TrackErm.MaxRecords',     10000));
-      DumpCommands         := GetOptBoolValue('Debug.TrackErm.DumpCommands',         true);
-      IgnoreEmptyTriggers  := GetOptBoolValue('Debug.TrackErm.IgnoreEmptyTriggers',  true);
-      IgnoreRealTimeTimers := GetOptBoolValue('Debug.TrackErm.IgnoreRealTimeTimers', true);
+      MaxRecords          := Max(1, GetOptIntValue('Debug.TrackErm.MaxRecords',     10000));
+      DumpCommands        := GetOptBoolValue('Debug.TrackErm.DumpCommands',         true);
+      IgnoreEmptyTriggers := GetOptBoolValue('Debug.TrackErm.IgnoreEmptyTriggers',  true);
     end;
   end;
 end; // .procedure OnEraStart

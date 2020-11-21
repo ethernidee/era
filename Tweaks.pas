@@ -661,19 +661,6 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsEnter2Monster2
 
-function Hook_ZvsEnter2Object (Hook: PatchApi.THiHook; Ecx, Edx, Hero: pointer; MapItem: pointer; MixedPos: integer; IsAI: integer): integer; stdcall;
-const
-  MAP_ITEM_TYPE_OFFSET = $1E;
-  OBJ_MON              = 54;
-
-begin
-  if pword(Utils.PtrOfs(MapItem, MAP_ITEM_TYPE_OFFSET))^ <> OBJ_MON then begin
-    result := PatchApi.Call(PatchApi.FASTCALL_, Hook.GetOriginalFunc(), [Ecx, Edx, Hero, MapItem, MixedPos, IsAi]);
-  end else begin
-    result := PatchApi.Call(PatchApi.FASTCALL_, Ptr($4A8160), [Ecx, Edx, Hero, MapItem, MixedPos, IsAi]);
-  end;
-end; // .function Hook_ZvsEnter2Object
-
 function Hook_OnBeforeBattlefieldVisible (Context: Core.PHookContext): LONGBOOL; stdcall;
 begin
   HadTacticsPhase := false;
@@ -1296,7 +1283,7 @@ begin
   Core.p.WriteDataPatch(Ptr($711F4F), ['8B451425FFFFFF048945149090909090909090']);
   
   (* Fix WoG bug: double !?OB54 event generation when attacking without moving due to Enter2Object + Enter2Monster2 calling *)
-  Core.p.WriteHiHook(Ptr($705979), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.FASTCALL_, @Hook_ZvsEnter2Object);
+  Core.p.WriteDataPatch(Ptr($757AA0), ['EB2C90909090']);
 
   (* Fix battle round counting: no !?BR before battlefield is shown, -1000000000 incrementing for the whole tactics phase, the
      first real round always starts from 0 *)

@@ -41,7 +41,6 @@ type
     fNumTrackedEvents:     integer;
     fDumpCommands:         boolean;
     fIgnoreEmptyTriggers:  boolean;
-    fIgnoreRealTimeTimers: boolean;
 
     function AddRecord: {U} PTrackedEvent;
     function DumpCmd (Addr: pchar): string;
@@ -52,7 +51,6 @@ type
     procedure Reset ();
     function  SetDumpCommands (ShouldDumpCommands: boolean): {SELF} TEventTracker;
     function  SetIgnoreEmptyTriggers (ShouldIgnoreEmptyTriggers: boolean): {SELF} TEventTracker;
-    function  SetIgnoreRealTimeTimers (ShouldIgnoreRealTimeTimers: boolean): {SELF} TEventTracker;
     procedure TrackCmd (Addr: pchar);
     procedure TrackTrigger (EventType: TTriggerTrackEventType; TriggerId: integer);
     procedure GenerateReport (const FilePath: string);
@@ -70,12 +68,11 @@ constructor TEventTracker.Create (TrackingBufSize: integer);
 begin
   {!} Assert(TrackingBufSize > 0);
   SetLength(fEventsBuf, TrackingBufSize);
-  fBufSize              := TrackingBufSize;
-  fBufPos               := 0;
-  fNumTrackedEvents     := 0;
-  fDumpCommands         := false;
-  fIgnoreEmptyTriggers  := false;
-  fIgnoreRealTimeTimers := false;
+  fBufSize             := TrackingBufSize;
+  fBufPos              := 0;
+  fNumTrackedEvents    := 0;
+  fDumpCommands        := false;
+  fIgnoreEmptyTriggers := false;
 end; // .constructor TEventTracker.Create
 
 function TEventTracker.AddRecord: {U} PTrackedEvent;
@@ -111,29 +108,21 @@ begin
   result               := Self;
 end;
 
-function TEventTracker.SetIgnoreRealTimeTimers (ShouldIgnoreRealTimeTimers: boolean): {SELF} TEventTracker;
-begin
-  fIgnoreRealTimeTimers := ShouldIgnoreRealTimeTimers;
-  result                := Self;
-end;
-
 procedure TEventTracker.TrackTrigger (EventType: TTriggerTrackEventType; TriggerId: integer);
 var
 {U} Rec: PTrackedEvent;
    
 begin
-  if not fIgnoreRealTimeTimers or (TriggerId < Erm.TRIGGER_TL0) or (TriggerId > Erm.TRIGGER_TL4) then begin
-    Rec := Self.AddRecord();
-    // * * * * * //
-    Rec.EventType    := EventType;
-    Rec.TriggerId    := TriggerId;
-    Rec.TriggerLevel := Erm.ErmTriggerDepth;
-    Rec.SourceCode   := '';
-    
-    Utils.CopyMem(sizeof(Rec.v), @v[low(Rec.v)], @Rec.v);
-    Utils.CopyMem(sizeof(Rec.f), @f[low(Rec.f)], @Rec.f);
-    Utils.CopyMem(sizeof(Rec.x), @Erm.x[1], @Rec.x);
-  end; // .if
+  Rec := Self.AddRecord();
+  // * * * * * //
+  Rec.EventType    := EventType;
+  Rec.TriggerId    := TriggerId;
+  Rec.TriggerLevel := Erm.ErmTriggerDepth;
+  Rec.SourceCode   := '';
+  
+  Utils.CopyMem(sizeof(Rec.v), @v[low(Rec.v)], @Rec.v);
+  Utils.CopyMem(sizeof(Rec.f), @f[low(Rec.f)], @Rec.f);
+  Utils.CopyMem(sizeof(Rec.x), @Erm.x[1], @Rec.x);
 end; // .procedure TEventTracker.TrackTrigger
 
 procedure TEventTracker.TrackCmd (Addr: pchar);
