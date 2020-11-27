@@ -22,6 +22,49 @@ const
   Font12Height:integer=16;
   FontTinyWidth:integer=11;
   FontTinyHeight:integer=11;
+
+  TEXTMODE_15BITS = $3E0;
+  TEXTMODE_16BITS = $7E0;
+
+var
+  BytesPerPixel: integer = 2;
+  TextColorMode: pword   = Ptr($694DB0);
+  Color16To32:   function (Color16: integer): integer;
+
+procedure UpdateBytesPerPixel;
+begin
+  BytesPerPixel := pbyte($5FA228 + 3)^;
+end;
+
+function Color16To32Func (Color16: integer): integer;
+var
+  Red:   integer;
+  Green: integer;
+  Blue:  integer;
+
+begin
+  Red   := ((Color16 shr 11) and $1F) shl 3;
+  Green := ((Color16 shr 5) and $3F) shl 2;
+  Blue  := (Color16 and $1F) shl 3;
+
+  result := (Red shl 16) or (Green shl 8) or Blue;
+end;
+
+
+function Color15To32Func (Color15: integer): integer;
+var
+  Red:   integer;
+  Green: integer;
+  Blue:  integer;
+
+begin
+  Red   := ((Color15 shr 10) and $1F) shl 3;
+  Green := ((Color15 shr 5) and $1F) shl 3;
+  Blue  := (Color15 and $1F) shl 3;
+
+  result := (Red shl 16) or (Green shl 8) or Blue;
+end;
+
 //返回一个汉字的区位码
 procedure GetQWCode(HZ:pAnsiChar;var Q,W:word);stdcall;
 begin
@@ -58,8 +101,13 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy:=(StartY+x)*ScreenWidth+(y+StartX)*2;
-        pWord(pInteger(Surface+$30)^+xy)^:=Color;
+        xy:=(StartY+x)*ScreenWidth+(y+StartX)*BytesPerPixel;
+        
+        if BytesPerPixel = 2 then begin
+          pWord(pInteger(Surface+$30)^+xy)^:=Color;
+        end else begin
+          pinteger(pInteger(Surface+$30)^+xy)^:=Color16To32(Color);
+        end;
       end;
       Inc(x);
       if x>15 then
@@ -98,8 +146,13 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy:=(StartY+y)*ScreenWidth+(x+StartX)*2;
-        pWord(pInteger(surface+$30)^+xy)^:=Color;
+        xy:=(StartY+y)*ScreenWidth+(x+StartX)*BytesPerPixel;
+        
+        if BytesPerPixel = 2 then begin
+          pWord(pInteger(surface+$30)^+xy)^:=Color;
+        end else begin
+          pinteger(pInteger(surface+$30)^+xy)^:=Color16To32(Color);
+        end;
       end;
       Inc(x);
       if x>15 then
@@ -138,8 +191,13 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy:=(StartY+y)*ScreenWidth+(x+StartX)*2;
-        pWord(pInteger(surface+$30)^+xy)^:=Color;
+        xy:=(StartY+y)*ScreenWidth+(x+StartX)*BytesPerPixel;
+        
+        if BytesPerPixel = 2 then begin
+          pWord(pInteger(surface+$30)^+xy)^:=Color;
+        end else begin
+          pinteger(pInteger(surface+$30)^+xy)^:=Color16To32(Color);
+        end;
       end;
       Inc(x);
       if x>23 then
@@ -266,7 +324,7 @@ begin
         Color := ChineseGetCharColor;
       
         if Color = kDefaultColor then begin
-          Color := pWord(hfont+(colorB+colorSel)*2+$1058)^;
+          Color := pWord(hfont+(ColorB+ColorSel)*2+$1058)^;
         end;
       
         if FontWidth=Font12Width then MakeChar12(cy,cx,Surface,@str[i],Color);
@@ -287,7 +345,17 @@ end;
 procedure DoMyTextOut_New(str:pAnsiChar;Surface,x,y,Width,Height,ColorA,Mode,hfont,unknow:integer);stdcall;
 var
   MaxRow,FontWidth,FontHeight,posStart,posEnd,l,i,row,startX,startY,space,spacerow,j:integer;
-begin
+begin 
+  UpdateBytesPerPixel;
+
+  if TextColorMode^ = TEXTMODE_15BITS then begin
+    Color16To32 := Color15To32Func;
+  end else if TextColorMode^ = TEXTMODE_16BITS then begin
+    Color16To32 := Color16To32Func;
+  end else begin
+    {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
+  end;
+
   //先计算一下总共要用的行数
   MaxRow:=GetStrRowCount(str,hfont,Width);
   SetFont(hfont,FontWidth,FontHeight);
