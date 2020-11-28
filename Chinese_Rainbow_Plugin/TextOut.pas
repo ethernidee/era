@@ -4,6 +4,7 @@ unit TextOut;
  * Chinese character code > 160
  * If next character code <= 160, it becomes 161
  * Example [170][32] => [170][161]
+ * GB2312/GBK
  *)
 
 interface
@@ -50,7 +51,6 @@ begin
   result := (Red shl 16) or (Green shl 8) or Blue;
 end;
 
-
 function Color15To32Func (Color15: integer): integer;
 var
   Red:   integer;
@@ -76,6 +76,7 @@ begin
     W := 1;
   end;
 end;
+
 procedure MakeChar12(StartY,StartX,Surface:integer;HZ:pAnsiChar;Color:word);stdcall;
 var
   OffSet:integer;
@@ -84,15 +85,18 @@ var
   x,y,i,j,xy:integer;
   Q,W:word;
   ScreenWidth:integer;
+
 begin
   ScreenWidth:=pInteger(Surface+$2c)^;
   GetQWCode(HZ,Q,W);
   OffSet:=(94*(Q-1)+(W-1))*24;
   F12.Position:=OffSet;
   F12.Read(GetStr,sizeof(GetStr));
+  
   x:=0;
   y:=0;
   i:=0;
+  
   while(i<=23) do
   begin
     temp:=GetStr[i];

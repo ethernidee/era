@@ -254,6 +254,58 @@ begin
   end;
 end;
 
+(* Returns text copy with Era color tags replaced with native {...text...} tags. Such text may be passed to H3 functions to estimate its width *)
+function EraTagsToNativeTags (Str: pchar): string;
+var
+  Buf: pchar;
+
+begin
+  if (Str = nil) or (Str^ = #0) then begin
+    result := '';
+    exit;
+  end;
+
+  result := Str;
+  Buf    := @result[1];
+  
+  while Str^ <> #0 do begin
+    while not (Str^ in ['{', #0]) do begin
+      Buf^ := Str^;
+      Inc(Str);
+      Inc(Buf);
+    end;
+
+    if Str^ <> #0 then begin
+      Inc(Str);
+
+      if Str^ = '~' then begin
+        if Str[1] = '}' then begin
+          Buf^ := '}';
+          Inc(Str, 2);
+          Inc(Buf);
+        end else begin
+          Buf^ := '{';
+          Inc(Str);
+          Inc(Buf);
+
+          while not (Str^ in ['}', #0]) do begin
+            Inc(Str);
+          end;
+
+          if Str^ <> #0 then begin
+            Inc(Str);
+          end;
+        end; // .else
+      end else begin
+        Buf^ := '{';
+        Inc(Buf);
+      end; // .else
+    end; // .if
+  end; // .while
+
+  Buf^ := #0;
+end; // .function EraTagsToNativeTags
+
 function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
 const
   ERR_COLOR       = $000000;
@@ -272,51 +324,6 @@ var
     
     ColorName: string;
     Color16:   integer;
-    
-  procedure ConvertTextToChinese;
-  var
-    i:  integer;
-  
-  begin
-    i :=  1;
-
-    while i <= TxtLen do begin
-      while (i <= TxtLen) and (Txt[i] <> '{') do begin
-        Buf^ := Txt[i];
-        Inc(Buf);
-        Inc(i);
-      end;
-      
-      if i <= TxtLen then begin
-        Inc(i);
-        
-        if (i <= TxtLen) and (Txt[i] = '~') then begin
-          Inc(i);
-          
-          if (i <= TxtLen) and (Txt[i] = '}') then begin
-            Buf^ := '}';
-            Inc(Buf);
-            Inc(i);
-          end else begin
-            Buf^ := '{';
-            Inc(Buf);
-            
-            while (i <= TxtLen) and (Txt[i] <> '}') do begin
-              Inc(i);
-            end;
-            
-            Inc(i);
-          end; // .else
-        end else begin
-          Buf^ := '{';
-          Inc(Buf);
-        end; // .else
-      end; // .if
-    end; // .while
-    
-    Buf^ := #0;
-    Inc(Buf);
-  end; // .procedure ConvertTextToChinese
     
 begin
   Buf := @TextBuffer[0];
@@ -340,10 +347,10 @@ begin
       
       while not IsBlockEnd and TextScanner.GetCurrChar(c) do begin
         if c = '{' then begin
-          IsBlockEnd  :=  TextScanner.GetCharAtRelPos(+1, c) and (c = '~');
-        end else if ORD(c) <= 32 then begin
+          IsBlockEnd := TextScanner.GetCharAtRelPos(+1, c) and (c = '~');
+        end else if ord(c) <= 32 then begin
           Inc(NumSpaceChars);
-        end else if ChineseLoaderOpt and (ORD(c) > 160) then begin
+        end else if ChineseLoaderOpt and (ord(c) > 160) then begin
           Inc(NumSpaceChars);
           TextScanner.GotoNextChar;
         end;
@@ -406,7 +413,6 @@ begin
   pinteger(Context.EBP + $8)^  := Context.EDX;
   
   if ChineseLoaderOpt then begin
-    //ConvertTextToChinese;
     pinteger(Context.EBP - $14)^ := integer(Buf) - integer(@TextBuffer[0]);
     pinteger(Context.EBP + $8)^  := integer(@TextBuffer[0]);
     Context.ECX                  := Context.EBX;
@@ -441,7 +447,7 @@ begin
   PCharByte(Context.EBP - 4)^ := c;
   Context.RetAddr             := Ptr($4B50BA);
   
-  if ORD(c) > 32 then begin
+  if ord(c) > 32 then begin
     Inc(CurrBlockPos);
   end;
   
@@ -451,7 +457,7 @@ begin
   end;
   
   if (TextBlocks[TextBlockInd].Color16 = DEF_COLOR) and (c in ['{', '}']) then begin
-    PBOOLEAN(Context.EBP + $24)^ := c = '{';
+    pboolean(Context.EBP + $24)^ := c = '{';
     Context.RetAddr              := Ptr($4B5190);
   end;
 
@@ -496,11 +502,6 @@ begin
   NameStdColors;
 end; // .function Hook_SetupColorMode
 
-procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
-begin
-  SetupColorMode;
-end;
-
 function Hook_DrawPic (Context: PHookContext): longbool; stdcall;
 const
   Name: string = 'smalres.def';
@@ -514,6 +515,12 @@ var
   REbp:  integer;
 
 begin
+  if pinteger(Context.EBP + 8)^ < 128 then begin
+    result  :=  Core.EXEC_DEF_CODE;
+    exit;
+  end;
+
+
   REbp := Context.EBP;
 
   asm
@@ -551,15 +558,25 @@ begin
     PUSH 20
     PUSH 0
     PUSH 0
-    PUSH 2
+    PUSH 3
     MOV ECX, Def
     MOV EAX, $47B820
     CALL EAX
   end; // .asm
   
   Context.RetAddr :=  Ptr($4B4FA5);
+  Context.EAX     := pinteger(Context.EBP + 12)^;
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_DrawPic
+
+procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
+begin
+  SetupColorMode;
+
+  // Remove HD mod hook and replace Fnt->DrawCharacter with def frame drawing
+  //Core.p.WriteDataPatch(Ptr($4B4F00), ['558BEC8B4508']);
+  //Core.ApiHook(@Hook_DrawPic, Core.HOOKTYPE_BRIDGE, Ptr($4B4F03));
+end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
@@ -571,7 +588,6 @@ begin
     pinteger($4B5204)^ := $02E7;       // 4B54EF
   end else begin
     Core.Hook(@Hook_HandleTags, Core.HOOKTYPE_BRIDGE, 7, Ptr($4B509B));
-    //Core.ApiHook(@Hook_DrawPic, Core.HOOKTYPE_BRIDGE, Ptr($4B4F03));
   end; 
 
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
