@@ -149,11 +149,11 @@ const
   GameVersion:    pinteger  = Ptr($67F554);
   
   (* Managers *)
-  GAME_MANAGER     = $699538;
-  TOWN_MANAGER     = $69954C;
-  HERO_WND_MANAGER = $6992D0;
-  SOUND_MANAGER    = $699414;
-  COMBAT_MANAGER   = $699420;
+  GAME_MANAGER   = $699538;
+  TOWN_MANAGER   = $69954C;
+  WND_MANAGER    = $6992D0;
+  SOUND_MANAGER  = $699414;
+  COMBAT_MANAGER = $699420;
   
   (* Colors *)
   RED_COLOR         = 'F2223E';
@@ -473,6 +473,22 @@ type
 
   PBinaryTree = ^TBinaryTree;
   TBinaryTree = TBinaryTreeNode;
+
+  {$ALIGN OFF}
+  PDefItem = ^TDefItem;
+  TDefItem = object (TBinaryTreeItem)
+   public
+    Groups:        pointer;
+    Palette16:     pointer;
+    Palette24:     pointer;
+    NumGroups:     integer;
+    ActiveGroups:  pointer;
+    Width:         integer;
+    Height:        integer;
+
+    procedure DrawFrameToBuf (FrameInd: integer; SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DoMirror: boolean = false);
+  end; // .object TDefItem
+  {$ALIGN ON}
 
   {$ALIGN OFF}
   PPcxItem = ^TPcxItem;
@@ -892,6 +908,7 @@ procedure GZipWrite (Count: integer; {n} Addr: pointer);
 function  GzipRead (Count: integer; {n} Addr: pointer): integer;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
 procedure LoadLod (const LodName: string; Res: PLod);
+function  LoadDef (const DefName: string): {n} PDefItem;
 procedure GetGameState (out GameState: TGameState); stdcall;
 function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
@@ -1048,7 +1065,7 @@ begin
     MOV EAX, $4F6C00
     MOV EDX, MesTypeInt
     CALL EAX
-    MOV EAX, [HERO_WND_MANAGER]
+    MOV EAX, [WND_MANAGER]
     MOV EAX, [EAX + $38]
     MOV Res, EAX
   end; // .asm
@@ -1217,6 +1234,11 @@ begin
   PatchApi.Call(PatchApi.THISCALL_, Ptr($55DDF0), [@Self, @ResPtrs, @NewItem]);
 end; // .procedure TBinaryTreeNode.AddItem
 
+procedure TDefItem.DrawFrameToBuf (FrameInd: integer; SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DoMirror: boolean = false);
+begin
+  PatchApi.Call(THISCALL_, Ptr($47B820), [@Self, FrameInd, SrcX, SrcY, aWidth, aHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror)]);
+end;
+
 class function TPcx16ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;
 begin
   result := MemAlloc(Alg.IntRoundToBoundary(sizeof(result^), sizeof(integer)));
@@ -1368,6 +1390,11 @@ begin
     MOV EAX, LOAD_LOD
     CALL EAX
   end; // .asm
+end;
+
+function LoadDef (const DefName: string): {n} PDefItem;
+begin
+  result := PDefItem(PatchApi.Call(THISCALL_, Ptr($55C9C0), [pchar(DefName)]));
 end;
 
 procedure GetGameState (out GameState: TGameState);

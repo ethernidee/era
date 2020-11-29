@@ -6,8 +6,8 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan,
-  Core, GameExt, EventMan;
+  Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi,
+  Core, GameExt, Heroes, EventMan, DlgMes;
 
 const
   TEXTMODE_15BITS = $3E0;
@@ -24,7 +24,9 @@ type
 
   TTextBlock = record
     BlockLen: integer;
-    Color16: integer;
+    Color16:  integer;
+    Def:      Heroes.PDefItem;
+    DefFrame: integer;
   end; // .record TTextBlock
   
   
@@ -63,6 +65,7 @@ var
     // HD mod integration
     HdModCharColor:      integer = HD_MOD_DEF_COLOR;
     HdModSafeBlackColor: integer = 1;
+    HdModDrawCharFunc:   pointer = nil;
 
 
 function Color32To15Func (Color32: integer): integer;
@@ -310,20 +313,36 @@ function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
 const
   ERR_COLOR       = $000000;
   LINE_END_MARKER = #10;
+  NBSP            = #160;
+
+type
+  PFntCharInfo = ^TFntCharInfo;
+  TFntCharInfo = packed record
+    Width: integer;
+    Left:  integer;
+    Right: integer;
+  end;
 
 var
-{U} Buf:          pchar;
-    Txt:          string;
-    TxtLen:       integer;
-    StartPos:     integer;
-    c:            char;
+{U} Buf:      pchar;
+    Txt:      string;
+    TxtLen:   integer;
+    StartPos: integer;
+    c:        char;
     
-    BlockLen:      integer;
-    IsBlockEnd:    boolean;
-    NumSpaceChars: integer;
+    BlockLen:        integer;
+    IsBlockEnd:      boolean;
+    IsEmbeddedImage: boolean;
+    NumSpaceChars:   integer;
     
-    ColorName: string;
-    Color16:   integer;
+    ColorName:    string;
+    DefName:      string;
+    DefFrameStr:  string;
+    NbspWidth:    integer;
+    NumFillChars: integer;
+    CharInfo:     PFntCharInfo;
+    Color16:      integer;
+    i:            integer;
     
 begin
   Buf := @TextBuffer[0];
@@ -335,20 +354,23 @@ begin
   TextBlockInd           := 0;
   TextBlocks[0].BlockLen := TxtLen;
   TextBlocks[0].Color16  := DEF_COLOR;
+  TextBlocks[0].Def      := nil;
   
   if Math.InRange(TxtLen, 1, sizeof(TextBuffer) - 1) then begin
     ColorStack.Clear;
     TextScanner.Connect(Txt, LINE_END_MARKER);
     
     while not TextScanner.EndOfText do begin
-      StartPos      := TextScanner.Pos;
-      NumSpaceChars := 0;
-      IsBlockEnd    := false;
+      StartPos        := TextScanner.Pos;
+      NumSpaceChars   := 0;
+      IsBlockEnd      := false;
+      IsEmbeddedImage := false;
       
       while not IsBlockEnd and TextScanner.GetCurrChar(c) do begin
         if c = '{' then begin
-          IsBlockEnd := TextScanner.GetCharAtRelPos(+1, c) and (c = '~');
-        end else if ord(c) <= 32 then begin
+          IsBlockEnd      := TextScanner.GetCharAtRelPos(+1, c) and (c = '~');
+          IsEmbeddedImage := IsBlockEnd and (TextScanner.CharsRel[2] = '>');
+        end else if ord(c) <= ord(' ') then begin
           Inc(NumSpaceChars);
         end else if ChineseLoaderOpt and (ord(c) > 160) then begin
           Inc(NumSpaceChars);
@@ -364,6 +386,50 @@ begin
       Utils.CopyMem(BlockLen, pointer(@Txt[StartPos]), Buf);
       Buf      := Utils.PtrOfs(Buf, BlockLen);
       TextBlocks[TextBlockInd].BlockLen := BlockLen - NumSpaceChars;
+
+      if IsEmbeddedImage then begin
+        TextScanner.GotoRelPos(+3);
+
+        Inc(TextBlockInd);
+        TextBlocks[TextBlockInd].BlockLen := 0;
+        TextBlocks[TextBlockInd].Color16  := TextBlocks[TextBlockInd - 1].Color16;
+        TextBlocks[TextBlockInd].Def      := nil;
+        TextBlocks[TextBlockInd].DefFrame := 0;
+        
+        if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
+          if TextScanner.c = ':' then begin
+            TextScanner.GotoNextChar();
+
+            if TextScanner.ReadTokenTillDelim(['}'], DefFrameStr) then begin
+              SysUtils.TryStrToInt(DefFrameStr, TextBlocks[TextBlockInd].DefFrame);
+            end;
+          end;
+
+          TextScanner.GotoNextChar();
+
+          TextBlocks[TextBlockInd].Def := Heroes.LoadDef(DefName);
+        end;
+
+        if TextBlocks[TextBlockInd].Def <> nil then begin
+          // _Fnt_->char_sizes[NBSP].width
+          CharInfo                          := pointer(Context.EBX + $3C + ord(NBSP) * 12);
+          NbspWidth                         := Math.Max(1, CharInfo.Left + CharInfo.Width);
+          NumFillChars                      := (TextBlocks[TextBlockInd].Def.Width + NbspWidth - 1) div NbspWidth;
+          TextBlocks[TextBlockInd].BlockLen := NumFillChars;
+
+          Inc(TextBlockInd);
+          TextBlocks[TextBlockInd].BlockLen := 0;
+          TextBlocks[TextBlockInd].Color16  := TextBlocks[TextBlockInd - 1].Color16;
+          TextBlocks[TextBlockInd].Def      := nil;
+
+          for i := 0 to NumFillChars - 1 do begin
+            Buf^ := NBSP;
+            Inc(Buf);
+          end;
+        end;
+
+        continue;
+      end; // .if
       
       if
         not TextScanner.EndOfText   and
@@ -372,6 +438,7 @@ begin
       then begin
         Inc(TextBlockInd);
         TextBlocks[TextBlockInd].BlockLen := 0;
+        TextBlocks[TextBlockInd].Def      := nil;
         
         if ColorName = '' then begin
           case ColorStack.Count of
@@ -482,7 +549,7 @@ begin
   Inc(CurrBlockPos);
   
   while CurrBlockPos = TextBlocks[TextBlockInd].BlockLen do begin
-    CurrBlockPos  :=  0;
+    CurrBlockPos := 0;
     Inc(TextBlockInd);
   end;
 end;
@@ -519,7 +586,6 @@ begin
     result  :=  Core.EXEC_DEF_CODE;
     exit;
   end;
-
 
   REbp := Context.EBP;
 
@@ -569,13 +635,41 @@ begin
   result  :=  not Core.EXEC_DEF_CODE;
 end; // .function Hook_DrawPic
 
+function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: pointer; Ch: integer; DrawBuf: pointer; x, y: integer; Color: integer): integer; stdcall;
+var
+  Def: Heroes.PDefItem;
+  Screen: Heroes.PPcx16Item;
+
+begin
+  if HdModDrawCharFunc <> nil then begin
+    OrigFunc := HdModDrawCharFunc;
+  end;
+
+  if TextBlocks[TextBlockInd].Def <> nil then begin
+    Def := TextBlocks[TextBlockInd].Def;
+
+    if CurrBlockPos = 0 then begin
+      Screen := ppointer(integer(WndManagerPtr^) + $40)^;
+      Def.DrawFrameToBuf(TextBlocks[TextBlockInd].DefFrame, 0, 0, Def.Width, Def.Height, Screen.Buffer, x, y, Screen.Width, Screen.Height, Screen.ScanlineSize);
+    end;
+
+    result := integer(DrawBuf);
+  end else begin
+    result := PatchApi.Call(THISCALL_, OrigFunc, [Font, Ch, DrawBuf, x, y, Color]);
+  end;
+end; // .function Hook_Font_DrawCharacter
+
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 begin
   SetupColorMode;
 
-  // Remove HD mod hook and replace Fnt->DrawCharacter with def frame drawing
-  //Core.p.WriteDataPatch(Ptr($4B4F00), ['558BEC8B4508']);
-  //Core.ApiHook(@Hook_DrawPic, Core.HOOKTYPE_BRIDGE, Ptr($4B4F03));
+  // Remove HD mod hook and replace Fnt->DrawCharacter with custom handler, remembering HD mod function too
+  if pinteger($4B4F00)^ <> integer($8BEC8B55) then begin
+    HdModDrawCharFunc := Ptr($4B4F00 + 5 + pinteger($4B4F00 + 1)^);
+    Core.p.WriteDataPatch(Ptr($4B4F00), ['558BEC8B4508']);
+  end;
+  
+  ApiJack.StdSplice(Ptr($4B4F00), @Hook_Font_DrawCharacter, ApiJack.CONV_THISCALL, 6);
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
