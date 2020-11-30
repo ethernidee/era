@@ -111,8 +111,8 @@ begin
   NamedColors['DarkCyan']             := Ptr(Color32To16($008B8B));
   NamedColors['DarkGoldenRod']        := Ptr(Color32To16($B8860B));
   NamedColors['DarkGray']             := Ptr(Color32To16($A9A9A9));
-  NamedColors['DarkGrey']             := Ptr(Color32To16($A9A9A9));
   NamedColors['DarkGreen']            := Ptr(Color32To16($006400));
+  NamedColors['DarkGrey']             := Ptr(Color32To16($A9A9A9));
   NamedColors['DarkKhaki']            := Ptr(Color32To16($BDB76B));
   NamedColors['DarkMagenta']          := Ptr(Color32To16($8B008B));
   NamedColors['DarkOliveGreen']       := Ptr(Color32To16($556B2F));
@@ -122,14 +122,12 @@ begin
   NamedColors['DarkSalmon']           := Ptr(Color32To16($E9967A));
   NamedColors['DarkSeaGreen']         := Ptr(Color32To16($8FBC8F));
   NamedColors['DarkSlateBlue']        := Ptr(Color32To16($483D8B));
-  NamedColors['DarkSlateGray']        := Ptr(Color32To16($2F4F4F));
   NamedColors['DarkSlateGrey']        := Ptr(Color32To16($2F4F4F));
   NamedColors['DarkTurquoise']        := Ptr(Color32To16($00CED1));
   NamedColors['DarkViolet']           := Ptr(Color32To16($9400D3));
   NamedColors['DeepPink']             := Ptr(Color32To16($FF1493));
   NamedColors['DeepSkyBlue']          := Ptr(Color32To16($00BFFF));
   NamedColors['DimGray']              := Ptr(Color32To16($696969));
-  NamedColors['DimGrey']              := Ptr(Color32To16($696969));
   NamedColors['DodgerBlue']           := Ptr(Color32To16($1E90FF));
   NamedColors['FireBrick']            := Ptr(Color32To16($B22222));
   NamedColors['FloralWhite']          := Ptr(Color32To16($FFFAF0));
@@ -140,9 +138,9 @@ begin
   NamedColors['Gold']                 := Ptr(Color32To16($FFD700));
   NamedColors['GoldenRod']            := Ptr(Color32To16($DAA520));
   NamedColors['Gray']                 := Ptr(Color32To16($808080));
-  NamedColors['Grey']                 := Ptr(Color32To16($808080));
   NamedColors['Green']                := Ptr(Color32To16($008000));
   NamedColors['GreenYellow']          := Ptr(Color32To16($ADFF2F));
+  NamedColors['Grey']                 := Ptr(Color32To16($808080));
   NamedColors['HoneyDew']             := Ptr(Color32To16($F0FFF0));
   NamedColors['HotPink']              := Ptr(Color32To16($FF69B4));
   NamedColors['IndianRed']            := Ptr(Color32To16($CD5C5C));
@@ -158,14 +156,13 @@ begin
   NamedColors['LightCyan']            := Ptr(Color32To16($E0FFFF));
   NamedColors['LightGoldenRodYellow'] := Ptr(Color32To16($FAFAD2));
   NamedColors['LightGray']            := Ptr(Color32To16($D3D3D3));
-  NamedColors['LightGrey']            := Ptr(Color32To16($D3D3D3));
   NamedColors['LightGreen']           := Ptr(Color32To16($90EE90));
+  NamedColors['LightGrey']            := Ptr(Color32To16($D3D3D3));
   NamedColors['LightPink']            := Ptr(Color32To16($FFB6C1));
   NamedColors['LightSalmon']          := Ptr(Color32To16($FFA07A));
   NamedColors['LightSeaGreen']        := Ptr(Color32To16($20B2AA));
   NamedColors['LightSkyBlue']         := Ptr(Color32To16($87CEFA));
   NamedColors['LightSlateGray']       := Ptr(Color32To16($778899));
-  NamedColors['LightSlateGrey']       := Ptr(Color32To16($778899));
   NamedColors['LightSteelBlue']       := Ptr(Color32To16($B0C4DE));
   NamedColors['LightYellow']          := Ptr(Color32To16($FFFFE0));
   NamedColors['Lime']                 := Ptr(Color32To16($00FF00));
@@ -218,7 +215,6 @@ begin
   NamedColors['SkyBlue']              := Ptr(Color32To16($87CEEB));
   NamedColors['SlateBlue']            := Ptr(Color32To16($6A5ACD));
   NamedColors['SlateGray']            := Ptr(Color32To16($708090));
-  NamedColors['SlateGrey']            := Ptr(Color32To16($708090));
   NamedColors['Snow']                 := Ptr(Color32To16($FFFAFA));
   NamedColors['SpringGreen']          := Ptr(Color32To16($00FF7F));
   NamedColors['SteelBlue']            := Ptr(Color32To16($4682B4));
@@ -318,9 +314,9 @@ const
 type
   PFntCharInfo = ^TFntCharInfo;
   TFntCharInfo = packed record
-    Width: integer;
-    Left:  integer;
-    Right: integer;
+    SpaceBefore: integer;
+    Width:       integer;
+    SpaceAfter:  integer;
   end;
 
 var
@@ -413,7 +409,7 @@ begin
         if TextBlocks[TextBlockInd].Def <> nil then begin
           // _Fnt_->char_sizes[NBSP].width
           CharInfo                          := pointer(Context.EBX + $3C + ord(NBSP) * 12);
-          NbspWidth                         := Math.Max(1, CharInfo.Left + CharInfo.Width);
+          NbspWidth                         := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
           NumFillChars                      := (TextBlocks[TextBlockInd].Def.Width + NbspWidth - 1) div NbspWidth;
           TextBlocks[TextBlockInd].BlockLen := NumFillChars;
 
@@ -637,7 +633,7 @@ end; // .function Hook_DrawPic
 
 function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: pointer; Ch: integer; DrawBuf: pointer; x, y: integer; Color: integer): integer; stdcall;
 var
-  Def: Heroes.PDefItem;
+  Def:    Heroes.PDefItem;
   Screen: Heroes.PPcx16Item;
 
 begin
