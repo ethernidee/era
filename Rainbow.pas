@@ -65,7 +65,6 @@ var
     // HD mod integration
     HdModCharColor:      integer = HD_MOD_DEF_COLOR;
     HdModSafeBlackColor: integer = 1;
-    HdModDrawCharFunc:   pointer = nil;
     HdModOrigCharColor:  integer = 0;
 
 
@@ -581,10 +580,6 @@ var
   Screen: Heroes.PPcx16Item;
 
 begin
-  if HdModDrawCharFunc <> nil then begin
-    OrigFunc := HdModDrawCharFunc;
-  end;
-
   if TextBlocks[TextBlockInd].Def <> nil then begin
     Def := TextBlocks[TextBlockInd].Def;
 
@@ -601,14 +596,7 @@ end; // .function Hook_Font_DrawCharacter
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 begin
-  SetupColorMode;
-
-  // Remove HD mod hook and replace Fnt->DrawCharacter with custom handler, remembering HD mod function too
-  if pinteger($4B4F00)^ <> integer($8BEC8B55) then begin
-    HdModDrawCharFunc := Ptr($4B4F00 + 5 + pinteger($4B4F00 + 1)^);
-    Core.p.WriteDataPatch(Ptr($4B4F00), ['558BEC8B4508']);
-  end;
-  
+  SetupColorMode; 
   ApiJack.StdSplice(Ptr($4B4F00), @Hook_Font_DrawCharacter, ApiJack.CONV_THISCALL, 6);
 end;
 
