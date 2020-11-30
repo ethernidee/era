@@ -66,6 +66,7 @@ var
     HdModCharColor:      integer = HD_MOD_DEF_COLOR;
     HdModSafeBlackColor: integer = 1;
     HdModDrawCharFunc:   pointer = nil;
+    HdModOrigCharColor:  integer = 0;
 
 
 function Color32To15Func (Color32: integer): integer;
@@ -343,6 +344,9 @@ var
 begin
   Buf := @TextBuffer[0];
   // * * * * * //
+  // Remember HD mod initial character color, which HD mod set to overwrite H3 text color
+  HdModOrigCharColor := HdModCharColor;
+
   TxtLen := Context.ECX;
   SetLength(Txt, TxtLen);
   Utils.CopyMem(TxtLen, pchar(Context.EDX), pointer(Txt));
@@ -492,6 +496,12 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_BeginParseText
 
+function Hook_Font_DrawTextToPcx16_End (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  HdModCharColor := HdModOrigCharColor;
+  result         := true;
+end;
+
 function Hook_GetCharColor (Context: Core.PHookContext): longbool; stdcall;
 begin
   result := TextBlocks[TextBlockInd].Color16 = DEF_COLOR;
@@ -527,7 +537,7 @@ begin
   HdModCharColor := TextBlocks[TextBlockInd].Color16;
 
   if HdModCharColor = DEF_COLOR then begin
-    HdModCharColor := HD_MOD_DEF_COLOR;
+    HdModCharColor := HdModOrigCharColor;
   end else if HdModCharColor = HD_MOD_DEF_COLOR then begin
     HdModCharColor := HdModSafeBlackColor;
   end;
@@ -564,72 +574,6 @@ begin
   
   NameStdColors;
 end; // .function Hook_SetupColorMode
-
-function Hook_DrawPic (Context: PHookContext): longbool; stdcall;
-const
-  Name: string = 'smalres.def';
-  
-var
-  Def:  pbyte;
-  Pcx8: pbyte;
-  Pcx16:  pbyte;
-  x, y: integer;
-  Width, Height:  integer;
-  REbp:  integer;
-
-begin
-  if pinteger(Context.EBP + 8)^ < 128 then begin
-    result  :=  Core.EXEC_DEF_CODE;
-    exit;
-  end;
-
-  REbp := Context.EBP;
-
-  asm
-    MOV ECX, Name
-    MOV EAX, $55C9C0
-    CALL EAX
-    MOV Def, EAX
-    
-    MOV ECX, REbp
-    MOV EAX, [ECX+12]
-    MOV Pcx16, EAX
-    MOV EAX, [ECX+16]
-    MOV Width, EAX
-    MOV EAX, [ECX+20]
-    MOV Height, EAX
-    MOV EAX, [ECX+24]
-    MOV x, EAX
-    MOV EAX, [ECX+28]
-    MOV y, EAX
-    
-    PUSH 0
-    MOV EDX, [$6992D0]
-    MOV EDX, [EDX+$40]
-    MOV EAX, [EDX+$2C]
-    PUSH EAX // scan_line_size
-    MOV EAX, [EDX+$28]
-    PUSH EAX // height
-    MOV EAX, [EDX+$24]
-    PUSH EAX // width
-    PUSH Height
-    PUSH Width
-    MOV EAX, [EDX+$30]
-    PUSH EAX // buf
-    PUSH 18
-    PUSH 20
-    PUSH 0
-    PUSH 0
-    PUSH 3
-    MOV ECX, Def
-    MOV EAX, $47B820
-    CALL EAX
-  end; // .asm
-  
-  Context.RetAddr :=  Ptr($4B4FA5);
-  Context.EAX     := pinteger(Context.EBP + 12)^;
-  result  :=  not Core.EXEC_DEF_CODE;
-end; // .function Hook_DrawPic
 
 function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: pointer; Ch: integer; DrawBuf: pointer; x, y: integer; Color: integer): integer; stdcall;
 var
@@ -682,6 +626,7 @@ begin
 
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
+  ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
 
   // Support colorful texts with HD mod 32 bit modes
   Core.GlobalPatcher.VarInit('HotA.FontColor', integer(@HdModCharColor));
