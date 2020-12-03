@@ -6,8 +6,12 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi,
+  Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib,
   Core, GameExt, Heroes, EventMan, DlgMes;
+
+type
+  (* Import *)
+  TList = DataLib.TList;
 
 const
   TEXTMODE_15BITS = $3E0;
@@ -51,9 +55,42 @@ exports
   ChineseGotoNextChar;
 
 
+type
+  TTextBlockType = (TEXT_BLOCK_COLOR, TEXT_BLOCK_DEF);
+
+  PTextBlock2 = ^TTextBlock2;
+  TTextBlock2 = record
+    BlockLen:  integer;
+    BlockType: TTextBlockType;
+
+    case TTextBlockType of
+      TEXT_BLOCK_COLOR: (
+        Color16: integer;
+      );
+
+      TEXT_BLOCK_DEF: (
+      {U} Def:      Heroes.PDefItem;
+          FrameInd: integer;
+      );    
+  end; // .record TTextBlock2
+
+  TParsedText = class
+   public
+   {O} Blocks:        {O} TList {of PTextBlock2};
+   {O} ColorStack:    {U} TList {OF Color16: integer};
+       NumBlocks:     integer;
+       OrigText:      string;
+       ProcessedText: string;
+       CurrBlockInd:  integer;
+       CurrBlockPos:  integer;
+
+    constructor Create;
+    destructor Destroy; override;
+  end; // .class TParsedText
+
 var
-{O} NamedColors:  {U} AssocArrays.TAssocArray {OF Color16: INTEGER};
-{O} ColorStack:   {U} Lists.TList {OF Color16: INTEGER};
+{O} NamedColors:  {U} AssocArrays.TAssocArray {OF Color16: integer};
+{O} ColorStack:   {U} Lists.TList {OF Color16: integer};
 {O} TextScanner:  TextScan.TTextScanner;
     Color32To16:  TColor32To16Func;
     
@@ -242,6 +279,18 @@ end; // .procedure NameStdColors
 procedure NameColor (Color32: integer; const Name: string);
 begin
   NamedColors[Name] := Ptr(Color32To16(Color32));
+end;
+
+constructor TParsedText.Create;
+begin
+  Self.Blocks     := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
+  Self.ColorStack := Lists.NewSimpleList;
+end;
+
+destructor TParsedText.Destroy;
+begin
+  SysUtils.FreeAndNil(Self.Blocks);
+  SysUtils.FreeAndNil(Self.ColorStack);
 end;
 
 function IsChineseLoaderPresent (out ChineseHandler: pointer): boolean;
@@ -574,23 +623,21 @@ begin
   NameStdColors;
 end; // .function Hook_SetupColorMode
 
-function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: pointer; Ch: integer; DrawBuf: pointer; x, y: integer; Color: integer): integer; stdcall;
+function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: pointer; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; Color: integer): integer; stdcall;
 var
-  Def:    Heroes.PDefItem;
-  Screen: Heroes.PPcx16Item;
+  Def: Heroes.PDefItem;
 
 begin
   if TextBlocks[TextBlockInd].Def <> nil then begin
     Def := TextBlocks[TextBlockInd].Def;
 
     if CurrBlockPos = 0 then begin
-      Screen := ppointer(integer(WndManagerPtr^) + $40)^;
-      Def.DrawFrameToBuf(TextBlocks[TextBlockInd].DefFrame, 0, 0, Def.Width, Def.Height, Screen.Buffer, x, y, Screen.Width, Screen.Height, Screen.ScanlineSize);
+      Def.DrawFrameToBuf(TextBlocks[TextBlockInd].DefFrame, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize);
     end;
 
-    result := integer(DrawBuf);
+    result := integer(Canvas);
   end else begin
-    result := PatchApi.Call(THISCALL_, OrigFunc, [Font, Ch, DrawBuf, x, y, Color]);
+    result := PatchApi.Call(THISCALL_, OrigFunc, [Font, Ch, Canvas, x, y, Color]);
   end;
 end; // .function Hook_Font_DrawCharacter
 
