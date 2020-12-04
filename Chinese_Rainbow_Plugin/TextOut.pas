@@ -11,7 +11,7 @@ interface
 uses
   Dialogs, Windows, SysUtils, Math;
   
-  procedure DoMyTextOut_New (str:pAnsiChar; Surface, x, y, Width, Height, ColorA, Mode, hfont, unknow:integer); stdcall;
+  procedure DoMyTextOut_New (str:pAnsiChar; Surface, x, y, BoxWidth, BoxHeight, ColorA, Mode, hfont, unknow:integer); stdcall;
   procedure DoMyDialog (hfont, MaxWidth: integer; s: pAnsiChar); stdcall;
 
 implementation
@@ -343,7 +343,7 @@ begin
 end;
 
 //输出一行文字,其中CharLength为字符个数
-procedure MyTextOut (str: pAnsiChar; CharLength, ColorA, hfont, y, x: integer; Surface: integer); stdcall;
+procedure DrawLineToPcx16 (str: pAnsiChar; StrLen, ColorA, hfont, y, x: integer; Surface: integer); stdcall;
 const 
   DEF_COLOR = -1;
 
@@ -361,7 +361,7 @@ begin
   ColorB   := GetColor(ColorA);
   ColorSel := 0;
   
-  while (i < CharLength) and not (Str[i] in [#0, #10]) do begin
+  while (i < StrLen) and not (Str[i] in [#0, #10]) do begin
     if Str[i] > ' ' then begin
       ChineseGotoNextChar;
     end;
@@ -392,9 +392,9 @@ begin
     
     Inc(i);
   end; // .while
-end; // .procedure MyTextOut
+end; // .procedure DrawLineToPcx16
 
-procedure DoMyTextOut_New (str:pAnsiChar; Surface, x, y, Width, Height, ColorA, Mode, hfont, unknow: integer); stdcall;
+procedure DoMyTextOut_New (str:pAnsiChar; Surface, x, y, BoxWidth, BoxHeight, ColorA, Mode, hfont, unknow: integer); stdcall;
 var
   MaxRow, FontWidth, FontHeight, posStart, posEnd, l, i, row, startX, startY, space, spacerow, j:integer;
 
@@ -410,7 +410,7 @@ begin
   end;
 
   //先计算一下总共要用的行数
-  MaxRow := GetStrRowCount(str, hfont, Width);
+  MaxRow := GetStrRowCount(str, hfont, BoxWidth);
   SetFont(hfont, FontWidth, FontHeight);
 
   //PosStart:=0;
@@ -437,7 +437,7 @@ begin
         l        := l + FontWidth;
         i        := i + 2;
         
-        if l>width then begin
+        if l>BoxWidth then begin
           //目前没有对标点符号进行处理
           //if byte(str[i])>160 True then
           i:=i-2;
@@ -454,7 +454,7 @@ begin
         
         Inc(i);
         
-        if l>width then begin
+        if l>BoxWidth then begin
           //英文必须以单词为单位，整个单词换行，以SPACE记录上个空格或汉字位置，以SPACEROW记录上个空格所在行
           if (SpaceRow=Row)and (Space>-1) then
           begin
@@ -478,35 +478,40 @@ begin
     
     case mode of
       0,4,8 :startX:=x;
-      1,5,9 :startX:=x+((Width-l) div 2);
-      2,6,10:startX:=x+Width-l;
+      1,5,9 :startX:=x+((BoxWidth-l) div 2);
+      2,6,10:startX:=x+BoxWidth-l;
     end;
     
     case mode of
       0,1,2,3:startY:=y+(FontHeight)*Row;
       4,5,6,7:begin
-                  if height<MaxRow*(FontHeight) then
+                  if BoxHeight < MaxRow*(FontHeight) then
                   begin
-                    if height<(FontHeight+FontHeight) then
-                      StartY:=y+(FontHeight*Row)+(height-FontHeight)div 2
+                    if BoxHeight < (FontHeight+FontHeight) then
+                      StartY:=y+(FontHeight*Row)+(BoxHeight - FontHeight)div 2
                     else startY:=y+(FontHeight)*Row;
-                  end                else startY:=y+(FontHeight)*Row+(height-MaxRow*(FontHeight))div 2;
+                  end                else startY:=y+(FontHeight)*Row+(BoxHeight - MaxRow*(FontHeight))div 2;
               end;
       8,9,10,11:begin
-                  if height<MaxRow*(FontHeight) then
+                  if BoxHeight < MaxRow*(FontHeight) then
                   begin
-                    if height<(FontHeight+FontHeight) then
-                      StartY:=y+(FontHeight*Row)+(height-FontHeight)
+                    if BoxHeight < (FontHeight+FontHeight) then
+                      StartY:=y+(FontHeight*Row)+(BoxHeight - FontHeight)
                     else startY:=y+(FontHeight)*Row;
                   end
-                  else startY:=y+(FontHeight)*Row+height-MaxRow*(FontHeight);
+                  else startY:=y+(FontHeight)*Row+BoxHeight - MaxRow*(FontHeight);
                 end;
     end;
     //如果超出显示范围，则退出
-    //if StartX+l>x+Width then exit;
-    if (StartY+FontHeight>y+Height)and (Row>0) then exit;
-    if PosEnd-PosStart>0 then
-      MyTextOut(@str[PosStart],PosEnd-PosStart,ColorA,hfont,StartY,StartX,Surface);
+    //if StartX+l>x+BoxWidth then exit;
+
+    if (StartY + FontHeight > y + BoxHeight) and (Row > 0) then begin
+      exit
+    end;
+
+    if PosEnd - PosStart > 0 then begin
+      DrawLineToPcx16(@str[PosStart], PosEnd-PosStart, ColorA, hfont, StartY, StartX, Surface);
+    end;
   end;
 end;
 end.

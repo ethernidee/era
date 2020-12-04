@@ -661,8 +661,6 @@ begin
     ParsedText := ParseText(OrigText, Heroes.PFontItem(Context.EBX));
   end;
 
-  //VarDump([ParsedText.OrigText, ParsedText.ProcessedText]);
-
   CurrColor     := DEF_COLOR;
   CurrTextBlock := ParsedText.Blocks[0];
   CurrBlockPos  := 0;

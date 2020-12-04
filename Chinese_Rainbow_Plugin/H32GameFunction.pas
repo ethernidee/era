@@ -32,12 +32,16 @@ asm
 end;
 procedure MyCutWidth;stdcall;
 asm
-  cmp     al,$0A0
-  ja      @@1
+  cmp     al, 160
+  jbe     @@def
+  cmp     byte [ecx + 1], 160
+  jbe     @@def
+  jmp     @@chinese
+  @@def:
   mov     edx, dword ptr [ebp-$20]
   and     eax, $0FF
-  jmp CutTemp1
-  @@1:
+  jmp     CutTemp1
+  @@chinese:
   mov     edx, dword ptr [ebp-$20]
   mov     eax, $e
   add     esi, eax
