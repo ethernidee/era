@@ -431,7 +431,7 @@ begin
         break;
       end else if (str[i] = '{') or (str[i] = '}') then begin
         Inc(i);
-      end else if str[i] > #160 then begin
+      end else if (str[i] > #160) and (str[i + 1] > #160) then begin
         Space    := i + 2;
         SpaceRow := Row;
         l        := l + FontWidth;
@@ -446,8 +446,8 @@ begin
         end;
       end else begin
         if str[i] = ' ' then begin
-          Space:=i+1;
-          SpaceRow:=Row;
+          Space    := i+1;
+          SpaceRow := Row;
         end;
         
         l := l + GetEngCharWidth(byte(str[i]), hfont);

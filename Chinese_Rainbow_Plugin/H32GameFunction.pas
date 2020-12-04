@@ -49,11 +49,15 @@ end;
 procedure MyWordWarp;stdcall;
 asm
   cmp     dl,$a0
-  ja      @@1
+  jbe     @@def
+  cmp     byte [esi + 1], $a0
+  jbe     @@def
+  jmp     @@chinese
+@@def:
   and     edx,$0FF
   add     edx,5
   jmp     WordWarp1
-@@1:
+@@chinese:
   add     esi,2
   jmp     WordWarp2
 end;
