@@ -6,7 +6,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib,
+  Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib,
   Core, GameExt, Heroes, EventMan, DlgMes;
 
 type
@@ -28,14 +28,6 @@ const
 
 type
   TColor32To16Func  = function (Color32: integer): integer;
-
-  TTextBlock = record
-    BlockLen: integer;
-    Color16:  integer;
-    Def:      Heroes.PDefItem;
-    DefFrame: integer;
-  end; // .record TTextBlock
-  
   
 var
   (* Chinese loader support: {~color}...{~} => {...} *)
@@ -61,8 +53,8 @@ exports
 type
   TTextBlockType = (TEXT_BLOCK_CHARS, TEXT_BLOCK_DEF);
 
-  PTextBlock2 = ^TTextBlock2;
-  TTextBlock2 = record
+  PTextBlock = ^TTextBlock;
+  TTextBlock = record
     BlockLen:  integer;
     BlockType: TTextBlockType;
 
@@ -75,18 +67,15 @@ type
       {U} Def:      Heroes.PDefItem;
           FrameInd: integer;
       );    
-  end; // .record TTextBlock2
+  end; // .record TTextBlock
 
   TParsedText = class
    public
-   {O} Blocks:        {O} TList {of PTextBlock2};
+   {O} Blocks:        {O} TList {of PTextBlock};
    {U} Font:          PFontItem; // Can be dangling pointer
        RefCount:      integer;
-       NumBlocks:     integer;
        OrigText:      string;
        ProcessedText: string;
-       CurrBlockInd:  integer;
-       CurrBlockPos:  integer;
 
     constructor Create;
     destructor  Destroy; override;
@@ -99,11 +88,13 @@ var
 {O} TextScanner:  TextScan.TTextScanner;
     Color32To16:  TColor32To16Func;
 
-    
-    TextBlocks:   array [0..16 * 1024 - 1] of TTextBlock;
-    TextBlockInd: integer;
-    GlobalBuffer: array [0..1024 * 1024 - 1] of char;
+{O} ParsedText:    TParsedText = nil;
+{U} CurrTextBlock: PTextBlock = nil;
+
+    CurrBlockInd: integer;
     CurrBlockPos: integer;
+    CurrColor:    integer;
+    GlobalBuffer: array [0..1024 * 1024 - 1] of char;
 
     // HD mod integration
     HdModCharColor:      integer = HD_MOD_DEF_COLOR;
@@ -383,7 +374,7 @@ var
     StartPos: integer;
     c:        char;
     
-{U} TextBlock:       PTextBlock2;
+{U} TextBlock:       PTextBlock;
     BlockLen:        integer;
     IsBlockEnd:      boolean;
     IsEmbeddedImage: boolean;
@@ -537,187 +528,43 @@ begin
 
   SetLength(result.ProcessedText, ResLen);
 
-  result.NumBlocks := result.Blocks.Count;
+  if ResLen > 0 then begin
+    Utils.CopyMem(ResLen, @GlobalBuffer[0], @result.ProcessedText[1]);
+  end;
 end; // .function ParseText
 
 function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
-const
-  ERR_COLOR       = $000000;
-  LINE_END_MARKER = #10;
-  NBSP            = #160;
-
-type
-  PFntCharInfo = ^TFntCharInfo;
-  TFntCharInfo = packed record
-    SpaceBefore: integer;
-    Width:       integer;
-    SpaceAfter:  integer;
-  end;
-
 var
-{U} Buf:      pchar;
-    Txt:      string;
-    TxtLen:   integer;
-    StartPos: integer;
-    c:        char;
-    
-    BlockLen:        integer;
-    IsBlockEnd:      boolean;
-    IsEmbeddedImage: boolean;
-    NumSpaceChars:   integer;
-    
-    ColorName:    string;
-    DefName:      string;
-    DefFrameStr:  string;
-    NbspWidth:    integer;
-    NumFillChars: integer;
-    CharInfo:     PFntCharInfo;
-    Color16:      integer;
-    i:            integer;
+  OrigText: string;
     
 begin
-  Buf := @GlobalBuffer[0];
-  // * * * * * //
   // Remember HD mod initial character color, which HD mod set to overwrite H3 text color
   HdModOrigCharColor := HdModCharColor;
 
-  TxtLen := Context.ECX;
-  SetLength(Txt, TxtLen);
-  Utils.CopyMem(TxtLen, pchar(Context.EDX), pointer(Txt));
-  
-  TextBlockInd           := 0;
-  TextBlocks[0].BlockLen := TxtLen;
-  TextBlocks[0].Color16  := DEF_COLOR;
-  TextBlocks[0].Def      := nil;
-  
-  if Math.InRange(TxtLen, 1, sizeof(GlobalBuffer) - 1) then begin
-    ColorStack.Clear;
-    TextScanner.Connect(Txt, LINE_END_MARKER);
-    
-    while not TextScanner.EndOfText do begin
-      StartPos        := TextScanner.Pos;
-      NumSpaceChars   := 0;
-      IsBlockEnd      := false;
-      IsEmbeddedImage := false;
-      
-      while not IsBlockEnd and TextScanner.GetCurrChar(c) do begin
-        if c = '{' then begin
-          IsBlockEnd      := TextScanner.GetCharAtRelPos(+1, c) and (c = '~');
-          IsEmbeddedImage := IsBlockEnd and (TextScanner.CharsRel[2] = '>');
-        end else if ord(c) <= ord(' ') then begin
-          Inc(NumSpaceChars);
-        end else if ChineseLoaderOpt and (ord(c) > 160) then begin
-          Inc(NumSpaceChars);
-          TextScanner.GotoNextChar;
-        end;
-        
-        if not IsBlockEnd then begin
-          TextScanner.GotoNextChar;
-        end;
-      end; // .while
-      
-      BlockLen := TextScanner.Pos - StartPos;
-      Utils.CopyMem(BlockLen, pointer(@Txt[StartPos]), Buf);
-      Buf      := Utils.PtrOfs(Buf, BlockLen);
-      TextBlocks[TextBlockInd].BlockLen := BlockLen - NumSpaceChars;
+  if ParsedText <> nil then begin
+    if (Context.ECX <> Length(ParsedText.OrigText)) or (StrLib.ComparePchars(pchar(Context.EDX), pchar(ParsedText.OrigText)) <> 0) then begin
+      SysUtils.FreeAndNil(ParsedText);
+    end;
+  end;
 
-      if IsEmbeddedImage then begin
-        TextScanner.GotoRelPos(+3);
-
-        Inc(TextBlockInd);
-        TextBlocks[TextBlockInd].BlockLen := 0;
-        TextBlocks[TextBlockInd].Color16  := TextBlocks[TextBlockInd - 1].Color16;
-        TextBlocks[TextBlockInd].Def      := nil;
-        TextBlocks[TextBlockInd].DefFrame := 0;
-        
-        if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
-          if TextScanner.c = ':' then begin
-            TextScanner.GotoNextChar();
-
-            if TextScanner.ReadTokenTillDelim(['}'], DefFrameStr) then begin
-              SysUtils.TryStrToInt(DefFrameStr, TextBlocks[TextBlockInd].DefFrame);
-            end;
-          end;
-
-          TextScanner.GotoNextChar();
-
-          TextBlocks[TextBlockInd].Def := Heroes.LoadDef(DefName);
-        end;
-
-        if TextBlocks[TextBlockInd].Def <> nil then begin
-          // _Fnt_->char_sizes[NBSP].width
-          CharInfo                          := pointer(Context.EBX + $3C + ord(NBSP) * 12);
-          NbspWidth                         := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
-          NumFillChars                      := (TextBlocks[TextBlockInd].Def.Width + NbspWidth - 1) div NbspWidth;
-          TextBlocks[TextBlockInd].BlockLen := NumFillChars;
-
-          Inc(TextBlockInd);
-          TextBlocks[TextBlockInd].BlockLen := 0;
-          TextBlocks[TextBlockInd].Color16  := TextBlocks[TextBlockInd - 1].Color16;
-          TextBlocks[TextBlockInd].Def      := nil;
-
-          for i := 0 to NumFillChars - 1 do begin
-            Buf^ := NBSP;
-            Inc(Buf);
-          end;
-        end;
-
-        continue;
-      end; // .if
-      
-      if
-        not TextScanner.EndOfText   and
-        TextScanner.GotoRelPos(+2)  and
-        TextScanner.ReadTokenTillDelim(['}'], ColorName)
-      then begin
-        Inc(TextBlockInd);
-        TextBlocks[TextBlockInd].BlockLen := 0;
-        TextBlocks[TextBlockInd].Def      := nil;
-        
-        if ColorName = '' then begin
-          case ColorStack.Count of
-            0:  TextBlocks[TextBlockInd].Color16 := DEF_COLOR;
-            1:  begin
-                  ColorStack.Pop;
-                  TextBlocks[TextBlockInd].Color16 := DEF_COLOR;
-                end;
-          else
-            ColorStack.Pop;
-            TextBlocks[TextBlockInd].Color16 := integer(ColorStack.Top);
-          end;
-        end else begin
-          Color16 :=  0;
-          
-          if NamedColors.GetExistingValue(ColorName, pointer(Color16)) then begin
-            TextBlocks[TextBlockInd].Color16  :=  Color16;
-          end else if SysUtils.TryStrToInt('$' + ColorName, Color16) then begin
-            Color16                          := Color32To16(Color16);
-            TextBlocks[TextBlockInd].Color16 := Color16;
-          end else begin
-            TextBlocks[TextBlockInd].Color16 := ERR_COLOR;
-          end;
-          
-          ColorStack.Add(Ptr(Color16));
-        end; // .else
-        
-        TextScanner.GotoNextChar;
-      end; // .if
-    end; // .while
-  end; // .if
-  
+  if ParsedText = nil then begin
+    OrigText   := '';
+    SetString(OrigText, pchar(Context.EDX), Context.ECX);
+    ParsedText := ParseText(OrigText, Heroes.PFontItem(Context.EBX));
+  end;
+ 
+  CurrTextBlock                := ParsedText.Blocks[0];
   CurrBlockPos                 := -1;
-  TextBlockInd                 := 0;
-  Context.ECX                  := integer(Buf) - integer(@GlobalBuffer[0]);
-  GlobalBuffer[Context.ECX]    := #0;
-  Context.EDX                  := integer(@GlobalBuffer[0]);
+  CurrBlockInd                 := 0;
+  CurrColor                    := DEF_COLOR;
+  Context.ECX                  := Length(ParsedText.ProcessedText);
+  Context.EDX                  := integer(pchar(ParsedText.ProcessedText));
   pinteger(Context.EBP - $14)^ := Context.ECX;
   pinteger(Context.EBP + $8)^  := Context.EDX;
   
   if ChineseLoaderOpt then begin
-    pinteger(Context.EBP - $14)^ := integer(Buf) - integer(@GlobalBuffer[0]);
-    pinteger(Context.EBP + $8)^  := integer(@GlobalBuffer[0]);
-    Context.ECX                  := Context.EBX;
-    Context.RetAddr              := ChineseHandler;
+    Context.ECX     := Context.EBX;
+    Context.RetAddr := ChineseHandler;
   end else begin
     // Overwritten Code
     if (pinteger(Context.EBP + $24)^ and 4) = 0 then begin
@@ -738,10 +585,10 @@ end;
 
 function Hook_GetCharColor (Context: Core.PHookContext): longbool; stdcall;
 begin
-  result := TextBlocks[TextBlockInd].Color16 = DEF_COLOR;
+  result := CurrColor = DEF_COLOR;
   
   if not result then begin
-    Context.EAX := TextBlocks[TextBlockInd].Color16;
+    Context.EAX := CurrColor;
   end;
 end;
 
@@ -754,21 +601,26 @@ begin
   PCharByte(Context.EBP - 4)^ := c;
   Context.RetAddr             := Ptr($4B50BA);
   
-  if ord(c) > 32 then begin
+  if ord(c) > ord(' ') then begin
     Inc(CurrBlockPos);
   end;
   
-  while CurrBlockPos = TextBlocks[TextBlockInd].BlockLen do begin
+  while CurrBlockPos = CurrTextBlock.BlockLen do begin
     CurrBlockPos := 0;
-    Inc(TextBlockInd);
+    Inc(CurrBlockInd);
+    CurrTextBlock := ParsedText.Blocks[CurrBlockInd];
+
+    if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
+      CurrColor := CurrTextBlock.Color16;
+    end;
   end;
   
-  if (TextBlocks[TextBlockInd].Color16 = DEF_COLOR) and (c in ['{', '}']) then begin
+  if (CurrColor = DEF_COLOR) and (c in ['{', '}']) then begin
     pboolean(Context.EBP + $24)^ := c = '{';
     Context.RetAddr              := Ptr($4B5190);
   end;
 
-  HdModCharColor := TextBlocks[TextBlockInd].Color16;
+  HdModCharColor := CurrColor;
 
   if HdModCharColor = DEF_COLOR then begin
     HdModCharColor := HdModOrigCharColor;
@@ -781,16 +633,21 @@ end; // .function Hook_HandleTags
 
 function ChineseGetCharColor: integer; stdcall;
 begin
-  result := TextBlocks[TextBlockInd].Color16;
+  result := CurrColor;
 end;
 
 procedure ChineseGotoNextChar; stdcall;
 begin
   Inc(CurrBlockPos);
   
-  while CurrBlockPos = TextBlocks[TextBlockInd].BlockLen do begin
+  while CurrBlockPos = CurrTextBlock.BlockLen do begin
     CurrBlockPos := 0;
-    Inc(TextBlockInd);
+    Inc(CurrBlockInd);
+    CurrTextBlock := ParsedText.Blocks[CurrBlockInd];
+
+    if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
+      CurrColor := CurrTextBlock.Color16;
+    end;
   end;
 end;
 
@@ -814,11 +671,11 @@ var
   Def: Heroes.PDefItem;
 
 begin
-  if TextBlocks[TextBlockInd].Def <> nil then begin
-    Def := TextBlocks[TextBlockInd].Def;
+  if (CurrTextBlock.BlockType = TEXT_BLOCK_DEF) and (CurrTextBlock.Def <> nil) then begin
+    Def := CurrTextBlock.Def;
 
     if CurrBlockPos = 0 then begin
-      Def.DrawFrameToBuf(TextBlocks[TextBlockInd].DefFrame, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize);
+      Def.DrawFrameToBuf(CurrTextBlock.FrameInd, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize);
     end;
 
     result := integer(Canvas);
