@@ -486,14 +486,18 @@ type
   PFontItem = ^TFontItem;
   TFontItem = object (TBinaryTreeItem)
    public
-    FirstChar: char; // ???
-    LastChar:  char; // ???
-    Depth:     byte; // ???
-    XSpace:    byte; // ???
-    YSpace:    byte; // ???
-    Height:    byte; // ???
-    Unk1:      array [1..26] of byte;
-    CharInfos: array [#0..#255] of TFontCharInfo;
+    FirstChar:       char;
+    LastChar:        char;
+    BppDepth:        byte; // Bits per pixel, 8 for Heroes fonts
+    XSpace:          byte; // 0?
+    YSpace:          byte; // 0?
+    Height:          byte; // In bits
+    Unk1:            array [1..26] of byte;
+    CharInfos:       array [#0..#255] of TFontCharInfo;
+    CharDataOffsets: array [#0..#255] of integer;
+    Unk2:            array [1..28] of byte;
+    Color16Table:    array [0..255] of word; // 0x1058
+    CharsDataPtr:    Utils.PEndlessShortIntArr;
   end; // .object TFontItem
   {$ALIGN ON}
 
@@ -877,8 +881,9 @@ const
   GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
 
-  CurrentPlayer: pinteger   = Ptr($69CCF4);
-  GameDate:      ^PGameDate = Ptr($840CE0);
+  CurrentPlayer:    pinteger   = Ptr($69CCF4);
+  GameDate:         ^PGameDate = Ptr($840CE0);
+  BytesPerPixelPtr: pbyte      = Ptr($5FA228 + 3);
 
   ZvsGzipWrite:   TGzipWrite = Ptr($704062);
   ZvsGzipRead:    TGzipRead  = Ptr($7040A7);

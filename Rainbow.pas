@@ -20,8 +20,8 @@ const
   TEXTMODE_15BITS = $3E0;
   TEXTMODE_16BITS = $7E0;
 
-  DEF_COLOR        = -1;
-  HD_MOD_DEF_COLOR = 0;
+  DEF_COLOR          = -1;
+  UNSAFE_BLACK_COLOR = 0; // Used as DEF_COLOR because of HD mod compatibility
   
   TextColorMode: pword = Ptr($694DB0);
 
@@ -76,6 +76,7 @@ type
        RefCount:      integer;
        OrigText:      string;
        ProcessedText: string;
+       NumBlocks:     integer;
 
     constructor Create;
     destructor  Destroy; override;
@@ -87,19 +88,18 @@ var
 {O} ColorStack:   {U} Lists.TList {of Color16: integer};
 {O} TextScanner:  TextScan.TTextScanner;
     Color32To16:  TColor32To16Func;
+    Color16To32:  function (Color16: integer): integer;
 
 {O} ParsedText:    TParsedText = nil;
 {U} CurrTextBlock: PTextBlock = nil;
 
-    CurrBlockInd: integer;
-    CurrBlockPos: integer;
-    CurrColor:    integer;
+    CurrBlockInd:   integer;
+    CurrBlockPos:   integer;
+    CurrColor:      integer = DEF_COLOR;
+    OrigColor:      integer;
+    SafeBlackColor: integer = 1;
+    
     GlobalBuffer: array [0..1024 * 1024 - 1] of char;
-
-    // HD mod integration
-    HdModCharColor:      integer = HD_MOD_DEF_COLOR;
-    HdModSafeBlackColor: integer = 1;
-    HdModOrigCharColor:  integer = 0;
 
 
 function Color32To15Func (Color32: integer): integer;
@@ -118,6 +118,34 @@ begin
     ((Color32 and $F80000) shr 8);
 end;
 
+function Color16To32Func (Color16: integer): integer;
+var
+  Red:   integer;
+  Green: integer;
+  Blue:  integer;
+
+begin
+  Red   := ((Color16 shr 11) and $1F) shl 3;
+  Green := ((Color16 shr 5) and $3F) shl 2;
+  Blue  := (Color16 and $1F) shl 3;
+
+  result := (Red shl 16) or (Green shl 8) or Blue;
+end;
+
+function Color15To32Func (Color15: integer): integer;
+var
+  Red:   integer;
+  Green: integer;
+  Blue:  integer;
+
+begin
+  Red   := ((Color15 shr 10) and $1F) shl 3;
+  Green := ((Color15 shr 5) and $1F) shl 3;
+  Blue  := (Color15 and $1F) shl 3;
+
+  result := (Red shl 16) or (Green shl 8) or Blue;
+end;
+
 procedure NameStdColors;
 begin
   NamedColors['AliceBlue']            := Ptr(Color32To16($F0F8FF));
@@ -127,7 +155,7 @@ begin
   NamedColors['Azure']                := Ptr(Color32To16($F0FFFF));
   NamedColors['Beige']                := Ptr(Color32To16($F5F5DC));
   NamedColors['Bisque']               := Ptr(Color32To16($FFE4C4));
-  NamedColors['Black']                := Ptr(Color32To16($000000));
+  NamedColors['Black']                := Ptr(Color32To16(SafeBlackColor));
   NamedColors['BlanchedAlmond']       := Ptr(Color32To16($FFEBCD));
   NamedColors['Blue']                 := Ptr(Color32To16($0000FF));
   NamedColors['BlueViolet']           := Ptr(Color32To16($8A2BE2));
@@ -365,7 +393,6 @@ end;
 
 function ParseText (const OrigText: string; {U} Font: Heroes.PFontItem): {O} TParsedText;
 const
-  ERR_COLOR       = $000000;
   LINE_END_MARKER = #10;
   NBSP            = #160;
 
@@ -388,7 +415,6 @@ var
     NbspWidth:    integer;
     NumFillChars: integer;
     CharInfo:     Heroes.PFontCharInfo;
-    Color16:      integer;
     CurrColor:    integer;
     ResLen:       integer;
     i:            integer;
@@ -425,7 +451,7 @@ begin
   result.Font     := Font;
   New(TextBlock);
   result.Blocks.Add(TextBlock);
-  
+
   TextBlock.BlockLen  := Length(OrigText);
   TextBlock.BlockType := TEXT_BLOCK_CHARS;
   TextBlock.Color16   := DEF_COLOR;
@@ -451,7 +477,7 @@ begin
           IsEmbeddedImage := IsEraTag and (TextScanner.CharsRel[2] = '>');
         end else if ord(c) <= ord(' ') then begin
           Inc(NumSpaceChars);
-        end else if ChineseLoaderOpt and (ord(c) > ord(MAX_CHINESE_LATIN_CHARACTER)) then begin
+        end else if ChineseLoaderOpt and (c > MAX_CHINESE_LATIN_CHARACTER) and (TextScanner.CharsRel[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
           Inc(NumSpaceChars);
           TextScanner.GotoNextChar;
         end;
@@ -459,7 +485,7 @@ begin
         if not IsTag then begin
           TextScanner.GotoNextChar;
         end;
-      end;
+      end; // .while
       
       // Output normal characters to result buffer
       BlockLen           := TextScanner.Pos - StartPos;
@@ -536,18 +562,21 @@ begin
         if ColorName = '' then begin
           PopColor;
         end else begin
-          Color16 := 0;
+          CurrColor := 0;
           
-          if NamedColors.GetExistingValue(ColorName, pointer(Color16)) then begin
-            CurrColor := Color16;
-          end else if SysUtils.TryStrToInt('$' + ColorName, Color16) then begin
-            Color16   := Color32To16(Color16);
-            CurrColor := Color16;
+          if NamedColors.GetExistingValue(ColorName, pointer(CurrColor)) then begin
+            // Ok
+          end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
+            CurrColor := Color32To16(CurrColor);
+
+            if CurrColor = UNSAFE_BLACK_COLOR then begin
+              CurrColor := SafeBlackColor;
+            end;
           end else begin
-            CurrColor := ERR_COLOR;
+            CurrColor := SafeBlackColor;
           end;
           
-          ColorStack.Add(Ptr(Color16));
+          ColorStack.Add(Ptr(CurrColor));
         end; // .else
         
         TextBlock.Color16 := CurrColor;
@@ -564,7 +593,46 @@ begin
   if ResLen > 0 then begin
     Utils.CopyMem(ResLen, @GlobalBuffer[0], @result.ProcessedText[1]);
   end;
+
+  result.NumBlocks := result.Blocks.Count;
 end; // .function ParseText
+
+(* Determines current block, based on position in block, number of blocks left and block length.
+   Automatically skips/applies empty blocks. Updates current color if necessary.
+   Synchronizes current color with HD mod variables *)
+procedure UpdateCurrBlock; stdcall;
+begin
+  if (ParsedText <> nil) and (CurrTextBlock <> nil) then begin
+    if CurrBlockPos < CurrTextBlock.BlockLen then begin
+      if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
+        CurrColor := CurrTextBlock.Color16;
+      end;
+    end else begin
+      while CurrBlockPos >= CurrTextBlock.BlockLen do begin
+        CurrBlockPos := 0;
+        Inc(CurrBlockInd);
+
+        // Normal, valid case
+        if CurrBlockInd < ParsedText.NumBlocks then begin
+          CurrTextBlock := ParsedText.Blocks[CurrBlockInd];
+
+          if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
+            CurrColor := CurrTextBlock.Color16;
+          end;
+        // Something is broken, like invalid GBK character (missing second part of code point), mixed language, etc
+        // Recover to use the last color
+        end else begin
+          CurrBlockInd := ParsedText.NumBlocks - 1;
+          CurrBlockPos := CurrTextBlock.BlockLen;
+        end;
+      end; // .while
+    end; // .else
+  end; // .if
+
+  if CurrColor = DEF_COLOR then begin
+    CurrColor := OrigColor;
+  end;
+end; // .procedure UpdateCurrBlock
 
 function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
 var
@@ -572,7 +640,7 @@ var
     
 begin
   // Remember HD mod initial character color, which HD mod set to overwrite H3 text color
-  HdModOrigCharColor := HdModCharColor;
+  OrigColor := CurrColor;
 
   if ParsedText <> nil then begin
     if (Context.ECX <> Length(ParsedText.OrigText)) or (StrLib.ComparePchars(pchar(Context.EDX), pchar(ParsedText.OrigText)) <> 0) then begin
@@ -585,15 +653,14 @@ begin
     SetString(OrigText, pchar(Context.EDX), Context.ECX);
     ParsedText := ParseText(OrigText, Heroes.PFontItem(Context.EBX));
   end;
- 
-  CurrColor     := DEF_COLOR;
+
+  // Use CurrColor, set by HD mod or plugins. It's set to DEF_COLOR automatically on DrawText routine exit
   CurrTextBlock := ParsedText.Blocks[0];
-  CurrBlockPos  := -1;
+  CurrBlockPos  := 0;
   CurrBlockInd  := 0;
 
-  if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-    CurrColor := CurrTextBlock.Color16;
-  end;
+  UpdateCurrBlock;
+  CurrBlockPos := -1;
 
   Context.ECX                  := Length(ParsedText.ProcessedText);
   Context.EDX                  := integer(pchar(ParsedText.ProcessedText));
@@ -617,8 +684,9 @@ end; // .function Hook_BeginParseText
 
 function Hook_Font_DrawTextToPcx16_End (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
-  HdModCharColor := HdModOrigCharColor;
-  result         := true;
+  CurrColor     := OrigColor;
+  CurrTextBlock := nil;
+  result        := true;
 end;
 
 function Hook_GetCharColor (Context: Core.PHookContext): longbool; stdcall;
@@ -638,32 +706,10 @@ begin
   c                           := PCharByte(Context.EDX)^;
   PCharByte(Context.EBP - 4)^ := c;
   Context.RetAddr             := Ptr($4B50BA);
-  
+
   if ord(c) > ord(' ') then begin
     Inc(CurrBlockPos);
-  end;
-  
-  while CurrBlockPos = CurrTextBlock.BlockLen do begin
-    CurrBlockPos := 0;
-    Inc(CurrBlockInd);
-    CurrTextBlock := ParsedText.Blocks[CurrBlockInd];
-
-    if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-      CurrColor := CurrTextBlock.Color16;
-    end;
-  end;
-  
-  if (CurrColor = DEF_COLOR) and (c in ['{', '}']) then begin
-    pboolean(Context.EBP + $24)^ := c = '{';
-    Context.RetAddr              := Ptr($4B5190);
-  end;
-
-  HdModCharColor := CurrColor;
-
-  if HdModCharColor = DEF_COLOR then begin
-    HdModCharColor := HdModOrigCharColor;
-  end else if HdModCharColor = HD_MOD_DEF_COLOR then begin
-    HdModCharColor := HdModSafeBlackColor;
+    UpdateCurrBlock;
   end;
 
   result := not Core.EXEC_DEF_CODE;
@@ -677,26 +723,19 @@ end;
 procedure ChineseGotoNextChar; stdcall;
 begin
   Inc(CurrBlockPos);
-  
-  while CurrBlockPos = CurrTextBlock.BlockLen do begin
-    CurrBlockPos := 0;
-    Inc(CurrBlockInd);
-    CurrTextBlock := ParsedText.Blocks[CurrBlockInd];
-
-    if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-      CurrColor := CurrTextBlock.Color16;
-    end;
-  end;
+  UpdateCurrBlock;
 end;
 
 procedure SetupColorMode;
 begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
-    Color32To16         := Color32To15Func;
-    HdModSafeBlackColor := Color32To16((8 shl 16) or (8 shl 8) or 8);
+    Color32To16    := Color32To15Func;
+    Color16To32    := Color15To32Func;
+    SafeBlackColor := Color32To16((8 shl 16) or (8 shl 8) or 8);
   end else if TextColorMode^ = TEXTMODE_16BITS then begin
-    Color32To16         := Color32To16Func;
-    HdModSafeBlackColor := Color32To16((8 shl 16) or (4 shl 8) or 8);
+    Color32To16    := Color32To16Func;
+    Color16To32    := Color16To32Func;
+    SafeBlackColor := Color32To16((8 shl 16) or (4 shl 8) or 8);
   end else begin
     {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
   end;
@@ -704,21 +743,83 @@ begin
   NameStdColors;
 end; // .function Hook_SetupColorMode
 
-function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: pointer; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; Color: integer): integer; stdcall;
+function DrawCharacterToPcx (Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; ColorInd: integer): Heroes.PPcx16Item;
+var
+  CharWidth:      integer;
+  FontHeight:     integer;
+  CharPixelPtr:   pbyte;
+  OutRowStartPtr: pword;
+  OutPixelPtr:    pword;
+  BytesPerPixel:  integer;
+  CharPixel:      integer;
+  Color16:        integer;
+  i, j:           integer;
+  c:              char;
+
+begin
+  result := Heroes.PPcx16Item(Ch); // Vanilla code. Like error marker?
+
+  if (Ch >= 0) and (Ch <= 255) then begin
+    BytesPerPixel := BytesPerPixelPtr^;
+    c             := chr(Ch);
+    CharWidth     := Font.CharInfos[c].Width;
+    FontHeight    := Font.Height;
+
+    if (CharWidth > 0) and (FontHeight > 0) then begin
+      CharPixelPtr   := @Font.CharsDataPtr[Font.CharDataOffsets[c]];
+      OutRowStartPtr := Utils.PtrOfs(Canvas.Buffer, y * Canvas.ScanlineSize + (x + Font.CharInfos[c].SpaceBefore) * BytesPerPixel);
+
+      for j := 0 to FontHeight - 1 do begin
+        OutPixelPtr := OutRowStartPtr;
+
+        for i := 0 to CharWidth - 1 do begin
+          CharPixel := CharPixelPtr^;
+
+          if CharPixel <> 0 then begin
+            if CharPixel = -1 then begin
+              if CurrColor = DEF_COLOR then begin
+                Color16 := Font.Color16Table[ColorInd];
+              end else begin
+                Color16 := CurrColor;
+              end;
+            end else begin
+              Color16 := Font.Color16Table[32];
+            end;
+
+            if BytesPerPixel = sizeof(integer) then begin
+              pinteger(OutPixelPtr)^ := Color16To32(Color16);
+            end else begin
+              pword(OutPixelPtr)^ := Color16;
+            end; 
+          end; // .if   
+          
+          Inc(pbyte(OutPixelPtr), BytesPerPixel);
+          Inc(CharPixelPtr);
+        end; // .for
+
+        Inc(pbyte(OutRowStartPtr), Canvas.ScanlineSize);
+      end; // .for
+    end; // .if
+
+    result := Canvas;
+  end; // .if
+end; // .function DrawCharacterToPcx
+
+function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; Color: integer): Heroes.PPcx16Item; stdcall;
 var
   Def: Heroes.PDefItem;
 
 begin
-  if (CurrTextBlock.BlockType = TEXT_BLOCK_DEF) and (CurrTextBlock.Def <> nil) then begin
+  if (ParsedText <> nil) and (CurrTextBlock <> nil) and (CurrTextBlock.BlockType = TEXT_BLOCK_DEF) and (CurrTextBlock.Def <> nil) then begin
     Def := CurrTextBlock.Def;
 
     if CurrBlockPos = 0 then begin
       Def.DrawFrameToBuf(CurrTextBlock.FrameInd, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize);
     end;
 
-    result := integer(Canvas);
+    result := Canvas;
   end else begin
-    result := PatchApi.Call(THISCALL_, OrigFunc, [Font, Ch, Canvas, x, y, Color]);
+    result := DrawCharacterToPcx(Font, Ch, Canvas, x, y, Color);
   end;
 end; // .function Hook_Font_DrawCharacter
 
@@ -745,7 +846,7 @@ begin
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
 
   // Support colorful texts with HD mod 32 bit modes
-  Core.GlobalPatcher.VarInit('HotA.FontColor', integer(@HdModCharColor));
+  Core.GlobalPatcher.VarInit('HotA.FontColor', integer(@CurrColor));
 end; // .procedure OnAfterWoG
 
 begin

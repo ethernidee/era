@@ -9,23 +9,66 @@ unit TextOut;
 
 interface
 uses
-  Dialogs,Windows,SysUtils,math;
-  procedure DoMyTextOut_New(str:pAnsiChar;Surface,x,y,Width,Height,ColorA,Mode,hfont,unknow:integer);stdcall;
-  procedure DoMyDialog(hfont,MaxWidth:integer;s:pAnsiChar);stdcall;
+  Dialogs, Windows, SysUtils, Math;
+  
+  procedure DoMyTextOut_New (str:pAnsiChar; Surface, x, y, Width, Height, ColorA, Mode, hfont, unknow:integer); stdcall;
+  procedure DoMyDialog (hfont, MaxWidth: integer; s: pAnsiChar); stdcall;
+
 implementation
+
 uses
   H32GameFunction,Main;
+
 const
-  Font24Width:integer=28;
-  Font24Height:integer=25;
-  //你可以通过微调高度来调整游戏效果
-  Font12Width:integer=14;
-  Font12Height:integer=16;
-  FontTinyWidth:integer=11;
-  FontTinyHeight:integer=11;
+  Font24Width:  integer = 28;
+  Font24Height: integer = 25;
+
+  Font12Width:  integer = 14;
+  Font12Height: integer = 16;
+
+  FontTinyWidth:  integer = 11;
+  FontTinyHeight: integer = 11;
 
   TEXTMODE_15BITS = $3E0;
   TEXTMODE_16BITS = $7E0;
+
+type
+  PChars12 = ^TChars12;
+  TChars12 = packed array [0..11] of char;
+
+  {$ALIGN OFF}
+  PBinaryTreeItem = ^TBinaryTreeItem;
+  TBinaryTreeItem = object
+   public
+    VTable:   ppointer;
+    Name:     TChars12;
+    NameEnd:  integer;
+    ItemType: integer;
+    RefCount: integer;
+  end; // .object TBinaryTreeItem
+  {$ALIGN ON}
+
+  PFontCharInfo = ^TFontCharInfo;
+  TFontCharInfo = packed record
+    SpaceBefore: integer;
+    Width:       integer;
+    SpaceAfter:  integer;
+  end;
+
+  {$ALIGN OFF}
+  PFontItem = ^TFontItem;
+  TFontItem = object (TBinaryTreeItem)
+   public
+    FirstChar: char; // ???
+    LastChar:  char; // ???
+    Depth:     byte; // ???
+    XSpace:    byte; // ???
+    YSpace:    byte; // ???
+    Height:    byte; // ???
+    Unk1:      array [1..26] of byte;
+    CharInfos: array [#0..#255] of TFontCharInfo;
+  end; // .object TFontItem
+  {$ALIGN ON}
 
 var
   BytesPerPixel: integer = 2;
@@ -124,6 +167,7 @@ begin
     Inc(i);
   end;
 end;
+
 procedure MakeChar10(StartY,StartX,Surface:integer;HZ:pAnsiChar;Color:word);stdcall;
 var
   OffSet:integer;
@@ -169,6 +213,7 @@ begin
     Inc(i);
   end;
 end;
+
 procedure MakeChar24(StartY,StartX,Surface:integer;HZ:pAnsiChar;Color:word);stdcall;
 var
   OffSet:integer;
@@ -215,35 +260,34 @@ begin
   end;
 end;
 
-function GetEngCharWidth(Assic:byte;hfont:dword):integer;stdcall;
+function GetEngCharWidth (Assic:byte;hfont:dword):integer;stdcall;
 var
   temp:integer;
 begin
   temp:=assic*$c+$3c+hfont;
   result:=pInteger(temp)^+pInteger(temp+4)^+pInteger(temp+8)^;
 end;
-function GetColor(ColorA:integer):word;stdcall;
+
+function GetColor(ColorA: integer): word; stdcall;
 begin
-  if ColorA<256 then result:=ColorA+9
-  else result:=ColorA-256;
+  if ColorA < 256 then result := ColorA + 9
+  else result := ColorA - 256;
 end;
-procedure SetFont(hfont:integer;var Width,Height:integer);stdcall;
+
+procedure SetFont (hfont: integer; var Width, Height: integer); stdcall;
 begin
-  if pInteger(hfont+4)^=1718053218 then
-  begin
-    Width:=Font24Width;
-    Height:=Font24Height;
-  end else
-  if pInteger(hfont+4)^=2037279092 then
-  begin
-    Width:=FontTinyWidth;
-    Height:=FontTinyHeight;
-  end else
-  begin
-    Width:=Font12Width;
-    Height:=Font12Height;
+  if pInteger(hfont + 4)^ = 1718053218 then begin
+    Width  := Font24Width;
+    Height := Font24Height;
+  end else if pInteger(hfont + 4)^ = 2037279092 then begin
+    Width  := FontTinyWidth;
+    Height := FontTinyHeight;
+  end else begin
+    Width  := Font12Width;
+    Height := Font12Height;
   end;
 end;
+
 //得到文字一共要占几行
 function GetStrRowCount(str:pAnsiChar;hfont,RowWidth:integer):integer;stdcall;
 var
@@ -260,17 +304,17 @@ begin
   Row:=1;
   while (str[i]<>#0) do
   begin
-    if (str[i]='{') or (str[i]='}') then
+    if (str[i] = '{') or (str[i] = '}') then
     begin
       i:=i+1;
     end else
-    if (byte(str[i])=$0a) then
+    if (str[i] = #10) then
     begin
       i:=i+1;
       Length:=0;
       if str[i]<>#0 then row:=row+1;
     end else
-    if (byte(str[i]) > 160){and (Byte(str[i+1])>160)} then
+    if (str[i] > #160) and (str[i+1] > #160) then
     begin
       Length:=Length+FontWidth;
       i:=i+2;
@@ -292,14 +336,16 @@ begin
   end;
   result:=Row;
 end;
+
 procedure DoMyDialog(hfont,MaxWidth:integer;s:pAnsiChar);stdcall;
 begin
   DialogResult:=GetStrRowCount(s,hfont,MaxWidth);
 end;
+
 //输出一行文字,其中CharLength为字符个数
-procedure MyTextOut(str:pAnsiChar;CharLength,ColorA,hfont,y,x:integer;Surface:integer); stdcall;
+procedure MyTextOut (str: pAnsiChar; CharLength, ColorA, hfont, y, x: integer; Surface: integer); stdcall;
 const 
-  kDefaultColor = -1;
+  DEF_COLOR = -1;
 
 var
   FontWidth, FontHeight, i, cy, cx: integer;
@@ -308,10 +354,11 @@ var
 
 begin
   SetFont(hfont, FontWidth, FontHeight);
-  i := 0;
-  cy := y;
-  cx := x;
-  ColorB := GetColor(ColorA);
+
+  i        := 0;
+  cy       := y;
+  cx       := x;
+  ColorB   := GetColor(ColorA);
   ColorSel := 0;
   
   while (i < CharLength) and not (Str[i] in [#0, #10]) do begin
@@ -324,31 +371,36 @@ begin
     end else if Str[i] = '}' then begin
       ColorSel := 0;
     end else begin
-      if (byte(str[i]) > 160) then begin
-        Color := ChineseGetCharColor;
-      
-        if Color = kDefaultColor then begin
-          Color := pWord(hfont+(ColorB+ColorSel)*2+$1058)^;
-        end;
-      
-        if FontWidth=Font12Width then MakeChar12(cy,cx,Surface,@str[i],Color);
-        if FontWidth=FontTinyWidth then MakeChar10(cy,cx,Surface,@str[i],Color);
-        if FontWidth=Font24Width then MakeChar24(cy,cx,Surface,@str[i],Color);
-        cx:=cx+FontWidth;
+      Color := ChineseGetCharColor;
+      MessageBoxA(0, pchar(inttostr(Color)), '', 0);
+
+      if Color = DEF_COLOR then begin
+        Color := pWord(hfont+(ColorB + ColorSel) * 2 + $1058)^;
+      end;
+
+      MessageBoxA(0, pchar(inttostr(Color)), 'Final color', 0);
+
+      if (str[i] > #160) and (str[i + 1] > #160) then begin
+        if FontWidth = Font12Width   then MakeChar12(cy, cx, Surface, @str[i], Color);
+        if FontWidth = FontTinyWidth then MakeChar10(cy, cx, Surface, @str[i], Color);
+        if FontWidth = Font24Width   then MakeChar24(cy, cx, Surface, @str[i], Color);
+        
+        cx := cx + FontWidth;
         Inc(i);
-      end
-      else begin
-        EngTextOut(hfont,byte(str[i]),Surface,cx,cy, ColorB + ColorSel);
-        cx:=cx+GetEngCharWidth(byte(str[i]),hfont);
+      end else begin
+        EngTextOut(hfont, byte(str[i]), Surface, cx, cy, Color);
+        cx := cx + GetEngCharWidth(byte(str[i]), hfont);
       end;
     end; // .else
     
     Inc(i);
   end; // .while
-end;
-procedure DoMyTextOut_New(str:pAnsiChar;Surface,x,y,Width,Height,ColorA,Mode,hfont,unknow:integer);stdcall;
+end; // .procedure MyTextOut
+
+procedure DoMyTextOut_New (str:pAnsiChar; Surface, x, y, Width, Height, ColorA, Mode, hfont, unknow: integer); stdcall;
 var
-  MaxRow,FontWidth,FontHeight,posStart,posEnd,l,i,row,startX,startY,space,spacerow,j:integer;
+  MaxRow, FontWidth, FontHeight, posStart, posEnd, l, i, row, startX, startY, space, spacerow, j:integer;
+
 begin 
   UpdateBytesPerPixel;
 
@@ -361,13 +413,15 @@ begin
   end;
 
   //先计算一下总共要用的行数
-  MaxRow:=GetStrRowCount(str,hfont,Width);
-  SetFont(hfont,FontWidth,FontHeight);
+  MaxRow := GetStrRowCount(str, hfont, Width);
+  SetFont(hfont, FontWidth, FontHeight);
+
   //PosStart:=0;
-  PosEnd:=0;
-  Row:=-1;
-  SpaceRow:=-1;
-  Space:=-1;
+  PosEnd   := 0;
+  Row      := -1;
+  SpaceRow := -1;
+  Space    := -1;
+  
   while Str[PosEnd]<>#0 do
   begin
     Row:=Row+1;
