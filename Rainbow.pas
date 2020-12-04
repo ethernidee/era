@@ -576,7 +576,7 @@ begin
               CurrColor := SafeBlackColor;
             end;
           end else begin
-            CurrColor := SafeBlackColor;
+            CurrColor := DEF_COLOR;
           end;
           
           ColorStack.Add(Ptr(CurrColor));

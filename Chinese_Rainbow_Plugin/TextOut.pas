@@ -26,8 +26,8 @@ const
   Font12Width:  integer = 14;
   Font12Height: integer = 16;
 
-  FontTinyWidth:  integer = 11;
-  FontTinyHeight: integer = 11;
+  Font11Width:  integer = 11;
+  Font11Height: integer = 11;
 
   TEXTMODE_15BITS = $3E0;
   TEXTMODE_16BITS = $7E0;
@@ -59,14 +59,18 @@ type
   PFontItem = ^TFontItem;
   TFontItem = object (TBinaryTreeItem)
    public
-    FirstChar: char; // ???
-    LastChar:  char; // ???
-    Depth:     byte; // ???
-    XSpace:    byte; // ???
-    YSpace:    byte; // ???
-    Height:    byte; // ???
-    Unk1:      array [1..26] of byte;
-    CharInfos: array [#0..#255] of TFontCharInfo;
+    FirstChar:       char;
+    LastChar:        char;
+    BppDepth:        byte; // Bits per pixel, 8 for Heroes fonts
+    XSpace:          byte; // 0?
+    YSpace:          byte; // 0?
+    Height:          byte; // In bits
+    Unk1:            array [1..26] of byte;
+    CharInfos:       array [#0..#255] of TFontCharInfo;
+    CharDataOffsets: array [#0..#255] of integer;
+    Unk2:            array [1..28] of byte;
+    Color16Table:    array [0..255] of word; // 0x1058
+    CharsDataPtr:    pshortint;
   end; // .object TFontItem
   {$ALIGN ON}
 
@@ -274,17 +278,26 @@ begin
   else result := ColorA - 256;
 end;
 
-procedure SetFont (hfont: integer; var Width, Height: integer); stdcall;
+procedure SetFont (Font: PFontItem; var Width, Height: integer); stdcall;
+var
+  Font24Diff: integer;
+  Font12Diff: integer;
+  Font11Diff: integer;
+
 begin
-  if pInteger(hfont + 4)^ = 1718053218 then begin
+  Font24Diff := Abs(Font.Height - Font24Height) * 1000 div Font.Height;
+  Font12Diff := Abs(Font.Height - Font12Height) * 1000 div Font.Height;
+  Font11Diff := Abs(Font.Height - Font11Height) * 1000 div Font.Height;
+
+  if (Font24Diff <= Font12Diff) and (Font24Diff <= Font11Diff) then begin
     Width  := Font24Width;
     Height := Font24Height;
-  end else if pInteger(hfont + 4)^ = 2037279092 then begin
-    Width  := FontTinyWidth;
-    Height := FontTinyHeight;
-  end else begin
+  end else if (Font12Diff <= Font11Diff) and (Font12Diff <= Font11Diff) then begin
     Width  := Font12Width;
     Height := Font12Height;
+  end else begin
+    Width  := Font11Width;
+    Height := Font11Height;
   end;
 end;
 
@@ -298,7 +311,7 @@ begin
     result:=0;
     exit;
   end;
-  SetFont(hfont,FontWidth,FontHeight);
+  SetFont(PFontItem(hfont),FontWidth,FontHeight);
   i:=0;
   Length:=0;
   Row:=1;
@@ -353,7 +366,7 @@ var
   Color: integer;
 
 begin
-  SetFont(hfont, FontWidth, FontHeight);
+  SetFont(PFontItem(hfont), FontWidth, FontHeight);
 
   i        := 0;
   cy       := y;
@@ -379,7 +392,7 @@ begin
 
       if (str[i] > #160) and (str[i + 1] > #160) then begin
         if FontWidth = Font12Width   then MakeChar12(cy, cx, Surface, @str[i], Color);
-        if FontWidth = FontTinyWidth then MakeChar10(cy, cx, Surface, @str[i], Color);
+        if FontWidth = Font11Width then MakeChar10(cy, cx, Surface, @str[i], Color);
         if FontWidth = Font24Width   then MakeChar24(cy, cx, Surface, @str[i], Color);
         
         cx := cx + FontWidth;
@@ -411,7 +424,7 @@ begin
 
   //先计算一下总共要用的行数
   MaxRow := GetStrRowCount(str, hfont, BoxWidth);
-  SetFont(hfont, FontWidth, FontHeight);
+  SetFont(PFontItem(hfont), FontWidth, FontHeight);
 
   //PosStart:=0;
   PosEnd   := 0;
