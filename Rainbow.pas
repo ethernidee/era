@@ -21,6 +21,7 @@ const
   TEXTMODE_16BITS = $7E0;
 
   DEF_COLOR          = -1;
+  HD_MOD_DEF_COLOR   = 0;
   UNSAFE_BLACK_COLOR = 0; // Used as DEF_COLOR because of HD mod compatibility
   
   TextColorMode: pword = Ptr($694DB0);
@@ -100,6 +101,8 @@ var
     SafeBlackColor: integer = 1;
     
     GlobalBuffer: array [0..1024 * 1024 - 1] of char;
+
+    HdModCharColor: word;
 
 
 function Color32To15Func (Color32: integer): integer;
@@ -639,8 +642,12 @@ var
   OrigText: string;
     
 begin
+  OrigColor := DEF_COLOR;
+
   // Remember HD mod initial character color, which HD mod set to overwrite H3 text color
-  OrigColor := CurrColor;
+  if HdModCharColor <> HD_MOD_DEF_COLOR then begin
+    OrigColor := HdModCharColor;
+  end;
 
   if ParsedText <> nil then begin
     if (Context.ECX <> Length(ParsedText.OrigText)) or (StrLib.ComparePchars(pchar(Context.EDX), pchar(ParsedText.OrigText)) <> 0) then begin
@@ -654,7 +661,7 @@ begin
     ParsedText := ParseText(OrigText, Heroes.PFontItem(Context.EBX));
   end;
 
-  // Use CurrColor, set by HD mod or plugins. It's set to DEF_COLOR automatically on DrawText routine exit
+  CurrColor     := DEF_COLOR;
   CurrTextBlock := ParsedText.Blocks[0];
   CurrBlockPos  := 0;
   CurrBlockInd  := 0;
@@ -682,9 +689,10 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_BeginParseText
 
+
 function Hook_Font_DrawTextToPcx16_End (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
-  CurrColor     := OrigColor;
+  CurrColor     := DEF_COLOR;
   CurrTextBlock := nil;
   result        := true;
 end;
@@ -747,7 +755,7 @@ function DrawCharacterToPcx (Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes
 var
   CharWidth:      integer;
   FontHeight:     integer;
-  CharPixelPtr:   pbyte;
+  CharPixelPtr:   pshortint;
   OutRowStartPtr: pword;
   OutPixelPtr:    pword;
   BytesPerPixel:  integer;
@@ -805,7 +813,7 @@ begin
   end; // .if
 end; // .function DrawCharacterToPcx
 
-function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; Color: integer): Heroes.PPcx16Item; stdcall;
+function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; ColorInd: integer): Heroes.PPcx16Item; stdcall;
 var
   Def: Heroes.PDefItem;
 
@@ -819,7 +827,7 @@ begin
 
     result := Canvas;
   end else begin
-    result := DrawCharacterToPcx(Font, Ch, Canvas, x, y, Color);
+    result := DrawCharacterToPcx(Font, Ch, Canvas, x, y, ColorInd);
   end;
 end; // .function Hook_Font_DrawCharacter
 
@@ -846,7 +854,7 @@ begin
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
 
   // Support colorful texts with HD mod 32 bit modes
-  Core.GlobalPatcher.VarInit('HotA.FontColor', integer(@CurrColor));
+  Core.GlobalPatcher.VarInit('HotA.FontColor', integer(@HdModCharColor));
 end; // .procedure OnAfterWoG
 
 begin
