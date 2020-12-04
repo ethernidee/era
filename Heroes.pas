@@ -156,8 +156,9 @@ const
   COMBAT_MANAGER = $699420;
   
   (* Colors *)
-  RED_COLOR         = 'F2223E';
-  HEROES_GOLD_COLOR = 'FFE794';
+  RED_COLOR              = 'F2223E';
+  HEROES_GOLD_COLOR      = 'FFE794';
+  HEROES_GOLD_COLOR_CODE = integer($FFE794);
 
   (* Resources *)
   RES_FIRST   = 0;

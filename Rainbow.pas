@@ -264,7 +264,7 @@ begin
   NamedColors['Yellow']               := Ptr(Color32To16($FFFF00));
   NamedColors['YellowGreen']          := Ptr(Color32To16($9ACD32));
   NamedColors['r']                    := Ptr(Color32To16($F2223E));
-  NamedColors['g']                    := Ptr(Color32To16($FFE794));
+  NamedColors['g']                    := Ptr(Color32To16(Heroes.HEROES_GOLD_COLOR_CODE));
   NamedColors['b']                    := NamedColors['Blue'];
   NamedColors['y']                    := NamedColors['Yellow'];
   NamedColors['w']                    := NamedColors['White'];
@@ -376,10 +376,12 @@ var
     
 {U} TextBlock:       PTextBlock;
     BlockLen:        integer;
-    IsBlockEnd:      boolean;
+    IsTag:           boolean;
+    IsEraTag:        boolean;
     IsEmbeddedImage: boolean;
     NumSpaceChars:   integer;
     
+    NativeTag:    char;
     ColorName:    string;
     DefName:      string;
     FrameIndStr:  string;
@@ -390,7 +392,31 @@ var
     CurrColor:    integer;
     ResLen:       integer;
     i:            integer;
-    
+
+  procedure BeginNewColorBlock;
+  begin
+    if (TextBlock.BlockType <> TEXT_BLOCK_CHARS) or (TextBlock.BlockLen > 0) then begin
+      New(TextBlock);
+      result.Blocks.Add(TextBlock);
+      TextBlock.BlockLen  := 0;
+      TextBlock.BlockType := TEXT_BLOCK_CHARS;
+    end;
+  end;
+
+  procedure PopColor;
+  begin
+    case ColorStack.Count of
+      0: CurrColor := DEF_COLOR;
+      1: begin
+           ColorStack.Pop;
+           CurrColor := DEF_COLOR;
+         end;
+    else
+      ColorStack.Pop;
+      CurrColor := integer(ColorStack.Top);
+    end;
+  end;
+
 begin
   Buf := @GlobalBuffer[0];
   // * * * * * //
@@ -404,6 +430,7 @@ begin
   TextBlock.BlockType := TEXT_BLOCK_CHARS;
   TextBlock.Color16   := DEF_COLOR;
   CurrColor           := DEF_COLOR;
+  NativeTag           := #0;
   
   if Length(OrigText) <= sizeof(GlobalBuffer) - 1 then begin
     ColorStack.Clear;
@@ -412,29 +439,38 @@ begin
     while not TextScanner.EndOfText do begin
       StartPos        := TextScanner.Pos;
       NumSpaceChars   := 0;
-      IsBlockEnd      := false;
+      IsTag           := false;
+      IsEraTag        := false;
       IsEmbeddedImage := false;
       
-      while not IsBlockEnd and TextScanner.GetCurrChar(c) do begin
-        if c = '{' then begin
-          IsBlockEnd      := TextScanner.GetCharAtRelPos(+1, c) and (c = '~');
-          IsEmbeddedImage := IsBlockEnd and (TextScanner.CharsRel[2] = '>');
+      while not IsTag and TextScanner.GetCurrChar(c) do begin
+        if c in ['{', '}'] then begin
+          IsTag           := true;
+          NativeTag       := c;
+          IsEraTag        := TextScanner.CharsRel[1] = '~';
+          IsEmbeddedImage := IsEraTag and (TextScanner.CharsRel[2] = '>');
         end else if ord(c) <= ord(' ') then begin
           Inc(NumSpaceChars);
         end else if ChineseLoaderOpt and (ord(c) > ord(MAX_CHINESE_LATIN_CHARACTER)) then begin
           Inc(NumSpaceChars);
           TextScanner.GotoNextChar;
         end;
-        
-        if not IsBlockEnd then begin
+
+        if not IsTag then begin
           TextScanner.GotoNextChar;
         end;
-      end; // .while
+      end;
       
+      // Output normal characters to result buffer
       BlockLen           := TextScanner.Pos - StartPos;
       Utils.CopyMem(BlockLen, pointer(@OrigText[StartPos]), Buf);
       Buf                := Utils.PtrOfs(Buf, BlockLen);
       TextBlock.BlockLen := BlockLen - NumSpaceChars;
+
+      // Text ended
+      if not IsTag then begin
+        break;
+      end;
 
       if IsEmbeddedImage then begin
         TextScanner.GotoRelPos(+3);
@@ -467,11 +503,8 @@ begin
           NumFillChars       := (TextBlock.Def.Width + NbspWidth - 1) div NbspWidth;
           TextBlock.BlockLen := NumFillChars;
 
-          New(TextBlock);
-          result.Blocks.Add(TextBlock);
-          TextBlock.BlockLen  := 0;
-          TextBlock.BlockType := TEXT_BLOCK_CHARS;
-          TextBlock.Color16   := CurrColor;
+          BeginNewColorBlock;
+          TextBlock.Color16 := CurrColor;
 
           // Output serie of non-breaking spaces to compensate image width
           for i := 0 to NumFillChars - 1 do begin
@@ -482,26 +515,26 @@ begin
 
         continue;
       end; // .if
-      
-      if not TextScanner.EndOfText and TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
-        if (TextBlock.BlockType <> TEXT_BLOCK_CHARS) or (TextBlock.BlockLen > 0) then begin
-          New(TextBlock);
-          result.Blocks.Add(TextBlock);
-          TextBlock.BlockLen  := 0;
-          TextBlock.BlockType := TEXT_BLOCK_CHARS;
+
+      // Handle native '{', '}' tags
+      if not IsEraTag then begin
+        BeginNewColorBlock;
+
+        if NativeTag = '}' then begin
+          PopColor;
+        end else begin
+          CurrColor := Color32To16(HEROES_GOLD_COLOR_CODE);
+          ColorStack.Add(Ptr(CurrColor));
         end;
+
+        TextBlock.Color16 := CurrColor;
+        TextScanner.GotoNextChar;
+      // Handle Era custom color open/close tags
+      end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
+        BeginNewColorBlock;
         
         if ColorName = '' then begin
-          case ColorStack.Count of
-            0:  CurrColor := DEF_COLOR;
-            1:  begin
-                  ColorStack.Pop;
-                  CurrColor := DEF_COLOR;
-                end;
-          else
-            ColorStack.Pop;
-            CurrColor := integer(ColorStack.Top);
-          end;
+          PopColor;
         end else begin
           Color16 := 0;
           
@@ -519,7 +552,7 @@ begin
         
         TextBlock.Color16 := CurrColor;
         TextScanner.GotoNextChar;
-      end; // .if
+      end; // .elseif
     end; // .while
   end; // .if
   
@@ -553,10 +586,15 @@ begin
     ParsedText := ParseText(OrigText, Heroes.PFontItem(Context.EBX));
   end;
  
-  CurrTextBlock                := ParsedText.Blocks[0];
-  CurrBlockPos                 := -1;
-  CurrBlockInd                 := 0;
-  CurrColor                    := DEF_COLOR;
+  CurrColor     := DEF_COLOR;
+  CurrTextBlock := ParsedText.Blocks[0];
+  CurrBlockPos  := -1;
+  CurrBlockInd  := 0;
+
+  if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
+    CurrColor := CurrTextBlock.Color16;
+  end;
+
   Context.ECX                  := Length(ParsedText.ProcessedText);
   Context.EDX                  := integer(pchar(ParsedText.ProcessedText));
   pinteger(Context.EBP - $14)^ := Context.ECX;

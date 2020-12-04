@@ -486,8 +486,10 @@ begin
   
   Log.Write('Core', 'AssertHandler', CrashMes);
   DlgMes.MsgError(CrashMes);
-
-  raise EAssertFailure.Create(CrashMes) at Address;
+  
+  // Better callstack
+  pinteger(0)^ := 0;
+  //raise EAssertFailure.Create(CrashMes) at Address;
 end; // .procedure AssertHandler
 
 begin
