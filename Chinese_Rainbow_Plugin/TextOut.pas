@@ -306,11 +306,11 @@ begin
   begin
     if (str[i] = '{') or (str[i] = '}') then
     begin
-      i:=i+1;
+      Inc(i);
     end else
     if (str[i] = #10) then
     begin
-      i:=i+1;
+      Inc(i);
       Length:=0;
       if str[i]<>#0 then row:=row+1;
     end else
@@ -326,7 +326,7 @@ begin
     end else
     begin
       Length:=Length+GetEngCharWidth(byte(str[i]),hfont);
-      i:=i+1;
+      Inc(i);
       if Length>RowWidth then
       begin
         Length:=0;
@@ -372,13 +372,10 @@ begin
       ColorSel := 0;
     end else begin
       Color := ChineseGetCharColor;
-      MessageBoxA(0, pchar(inttostr(Color)), '', 0);
 
       if Color = DEF_COLOR then begin
         Color := pWord(hfont+(ColorB + ColorSel) * 2 + $1058)^;
       end;
-
-      MessageBoxA(0, pchar(inttostr(Color)), 'Final color', 0);
 
       if (str[i] > #160) and (str[i + 1] > #160) then begin
         if FontWidth = Font12Width   then MakeChar12(cy, cx, Surface, @str[i], Color);
@@ -388,7 +385,7 @@ begin
         cx := cx + FontWidth;
         Inc(i);
       end else begin
-        EngTextOut(hfont, byte(str[i]), Surface, cx, cy, Color);
+        EngTextOut(hfont, byte(str[i]), Surface, cx, cy, ColorB);
         cx := cx + GetEngCharWidth(byte(str[i]), hfont);
       end;
     end; // .else
@@ -422,51 +419,42 @@ begin
   SpaceRow := -1;
   Space    := -1;
   
-  while Str[PosEnd]<>#0 do
-  begin
-    Row:=Row+1;
-    PosStart:=PosEnd;
-    i:=posEnd;
-    l:=0;
-    while str[i]<>#0 do
-    begin
-      if byte(str[i])=$0a then
-      begin
-        i:=i+1;
+  while Str[PosEnd] <> #0 do begin
+    Row      := Row + 1;
+    PosStart := PosEnd;
+    i        := posEnd;
+    l        := 0;
+    
+    while str[i] <> #0 do begin
+      if str[i] = #10 then begin
+        i := i + 1;
         break;
-      end else
-      if (str[i]='{') or (str[i]='}') then
-      begin
-        i:=i+1;
-      end else
-      if byte(str[i]) > 160 then
-      begin
-        Space:=i+2;
-        SpaceRow:=Row;
-        l:=l+FontWidth;
-        i:=i+2;
-        //这里应该是大于
-        if l>width then
-        begin
+      end else if (str[i] = '{') or (str[i] = '}') then begin
+        Inc(i);
+      end else if str[i] > #160 then begin
+        Space    := i + 2;
+        SpaceRow := Row;
+        l        := l + FontWidth;
+        i        := i + 2;
+        
+        if l>width then begin
           //目前没有对标点符号进行处理
           //if byte(str[i])>160 True then
-          begin
-            i:=i-2;
-            l:=l-FontWidth;
-            break;
-          end;
+          i:=i-2;
+          l:=l-FontWidth;
+          break;
         end;
-      end else
-      begin
-        if byte(str[i])=$20 then
-        begin
+      end else begin
+        if str[i] = ' ' then begin
           Space:=i+1;
           SpaceRow:=Row;
         end;
-        l:=l+GetEngCharWidth(byte(str[i]),hfont);
-        i:=i+1;
-        if l>width then
-        begin
+        
+        l := l + GetEngCharWidth(byte(str[i]), hfont);
+        
+        Inc(i);
+        
+        if l>width then begin
           //英文必须以单词为单位，整个单词换行，以SPACE记录上个空格或汉字位置，以SPACEROW记录上个空格所在行
           if (SpaceRow=Row)and (Space>-1) then
           begin
@@ -483,14 +471,17 @@ begin
         end;
       end;
     end;
+    
     posEnd:=i;
     startX:=x;
     startY:=y+FontHeight*Row;
+    
     case mode of
       0,4,8 :startX:=x;
       1,5,9 :startX:=x+((Width-l) div 2);
       2,6,10:startX:=x+Width-l;
     end;
+    
     case mode of
       0,1,2,3:startY:=y+(FontHeight)*Row;
       4,5,6,7:begin
