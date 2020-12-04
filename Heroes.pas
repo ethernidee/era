@@ -224,6 +224,13 @@ type
     Dummy: array [0..399] of byte;
   end;
 
+  PFontCharInfo = ^TFontCharInfo;
+  TFontCharInfo = packed record
+    SpaceBefore: integer;
+    Width:       integer;
+    SpaceAfter:  integer;
+  end;
+
   PBasicString = ^TBasicString;
   TBasicString = packed record
     Value: pchar;
@@ -473,6 +480,21 @@ type
 
   PBinaryTree = ^TBinaryTree;
   TBinaryTree = TBinaryTreeNode;
+
+  {$ALIGN OFF}
+  PFontItem = ^TFontItem;
+  TFontItem = object (TBinaryTreeItem)
+   public
+    FirstChar: char; // ???
+    LastChar:  char; // ???
+    Depth:     byte; // ???
+    XSpace:    byte; // ???
+    YSpace:    byte; // ???
+    Height:    byte; // ???
+    Unk1:      array [1..26] of byte;
+    CharInfos: array [#0..#255] of TFontCharInfo;
+  end; // .object TFontItem
+  {$ALIGN ON}
 
   {$ALIGN OFF}
   PDefItem = ^TDefItem;

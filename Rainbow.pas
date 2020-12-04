@@ -12,8 +12,11 @@ uses
 type
   (* Import *)
   TList = DataLib.TList;
+  TDict = DataLib.TDict;
 
 const
+  MAX_CHINESE_LATIN_CHARACTER = #160;
+
   TEXTMODE_15BITS = $3E0;
   TEXTMODE_16BITS = $7E0;
 
@@ -56,7 +59,7 @@ exports
 
 
 type
-  TTextBlockType = (TEXT_BLOCK_COLOR, TEXT_BLOCK_DEF);
+  TTextBlockType = (TEXT_BLOCK_CHARS, TEXT_BLOCK_DEF);
 
   PTextBlock2 = ^TTextBlock2;
   TTextBlock2 = record
@@ -64,7 +67,7 @@ type
     BlockType: TTextBlockType;
 
     case TTextBlockType of
-      TEXT_BLOCK_COLOR: (
+      TEXT_BLOCK_CHARS: (
         Color16: integer;
       );
 
@@ -77,7 +80,8 @@ type
   TParsedText = class
    public
    {O} Blocks:        {O} TList {of PTextBlock2};
-   {O} ColorStack:    {U} TList {OF Color16: integer};
+   {U} Font:          PFontItem; // Can be dangling pointer
+       RefCount:      integer;
        NumBlocks:     integer;
        OrigText:      string;
        ProcessedText: string;
@@ -85,18 +89,20 @@ type
        CurrBlockPos:  integer;
 
     constructor Create;
-    destructor Destroy; override;
+    destructor  Destroy; override;
   end; // .class TParsedText
 
 var
-{O} NamedColors:  {U} AssocArrays.TAssocArray {OF Color16: integer};
-{O} ColorStack:   {U} Lists.TList {OF Color16: integer};
+{O} NamedColors:  {U} AssocArrays.TAssocArray {of Color16: integer};
+{O} LoadedImages: {U} TDict {of loaded H3 def, pcx or other image};
+{O} ColorStack:   {U} Lists.TList {of Color16: integer};
 {O} TextScanner:  TextScan.TTextScanner;
     Color32To16:  TColor32To16Func;
+
     
     TextBlocks:   array [0..16 * 1024 - 1] of TTextBlock;
     TextBlockInd: integer;
-    TextBuffer:   array [0..1024 * 1024 - 1] of char;
+    GlobalBuffer: array [0..1024 * 1024 - 1] of char;
     CurrBlockPos: integer;
 
     // HD mod integration
@@ -283,14 +289,12 @@ end;
 
 constructor TParsedText.Create;
 begin
-  Self.Blocks     := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
-  Self.ColorStack := Lists.NewSimpleList;
+  Self.Blocks := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
 end;
 
 destructor TParsedText.Destroy;
 begin
   SysUtils.FreeAndNil(Self.Blocks);
-  SysUtils.FreeAndNil(Self.ColorStack);
 end;
 
 function IsChineseLoaderPresent (out ChineseHandler: pointer): boolean;
@@ -354,6 +358,188 @@ begin
   Buf^ := #0;
 end; // .function EraTagsToNativeTags
 
+(* Loads def image and caches it forever for fast drawing *)
+function LoadDefImage (const FileName: string): {n} Heroes.PDefItem;
+begin
+  result := LoadedImages[FileName];
+
+  if result = nil then begin
+    result := Heroes.LoadDef(FileName);
+
+    if result <> nil then begin
+      LoadedImages[FileName] := result;
+    end;
+  end;
+end;
+
+function ParseText (const OrigText: string; {U} Font: Heroes.PFontItem): {O} TParsedText;
+const
+  ERR_COLOR       = $000000;
+  LINE_END_MARKER = #10;
+  NBSP            = #160;
+
+var
+{U} Buf:      pchar;
+    StartPos: integer;
+    c:        char;
+    
+{U} TextBlock:       PTextBlock2;
+    BlockLen:        integer;
+    IsBlockEnd:      boolean;
+    IsEmbeddedImage: boolean;
+    NumSpaceChars:   integer;
+    
+    ColorName:    string;
+    DefName:      string;
+    FrameIndStr:  string;
+    NbspWidth:    integer;
+    NumFillChars: integer;
+    CharInfo:     Heroes.PFontCharInfo;
+    Color16:      integer;
+    CurrColor:    integer;
+    ResLen:       integer;
+    i:            integer;
+    
+begin
+  Buf := @GlobalBuffer[0];
+  // * * * * * //
+  result          := TParsedText.Create;
+  result.OrigText := OrigText;
+  result.Font     := Font;
+  New(TextBlock);
+  result.Blocks.Add(TextBlock);
+  
+  TextBlock.BlockLen  := Length(OrigText);
+  TextBlock.BlockType := TEXT_BLOCK_CHARS;
+  TextBlock.Color16   := DEF_COLOR;
+  CurrColor           := DEF_COLOR;
+  
+  if Length(OrigText) <= sizeof(GlobalBuffer) - 1 then begin
+    ColorStack.Clear;
+    TextScanner.Connect(OrigText, LINE_END_MARKER);
+    
+    while not TextScanner.EndOfText do begin
+      StartPos        := TextScanner.Pos;
+      NumSpaceChars   := 0;
+      IsBlockEnd      := false;
+      IsEmbeddedImage := false;
+      
+      while not IsBlockEnd and TextScanner.GetCurrChar(c) do begin
+        if c = '{' then begin
+          IsBlockEnd      := TextScanner.GetCharAtRelPos(+1, c) and (c = '~');
+          IsEmbeddedImage := IsBlockEnd and (TextScanner.CharsRel[2] = '>');
+        end else if ord(c) <= ord(' ') then begin
+          Inc(NumSpaceChars);
+        end else if ChineseLoaderOpt and (ord(c) > ord(MAX_CHINESE_LATIN_CHARACTER)) then begin
+          Inc(NumSpaceChars);
+          TextScanner.GotoNextChar;
+        end;
+        
+        if not IsBlockEnd then begin
+          TextScanner.GotoNextChar;
+        end;
+      end; // .while
+      
+      BlockLen           := TextScanner.Pos - StartPos;
+      Utils.CopyMem(BlockLen, pointer(@OrigText[StartPos]), Buf);
+      Buf                := Utils.PtrOfs(Buf, BlockLen);
+      TextBlock.BlockLen := BlockLen - NumSpaceChars;
+
+      if IsEmbeddedImage then begin
+        TextScanner.GotoRelPos(+3);
+
+        New(TextBlock);
+        result.Blocks.Add(TextBlock);
+        TextBlock.BlockLen  := 0;
+        TextBlock.BlockType := TEXT_BLOCK_DEF;
+        TextBlock.Def       := nil;
+        TextBlock.FrameInd  := 0;
+        
+        if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
+          if TextScanner.c = ':' then begin
+            TextScanner.GotoNextChar();
+
+            if TextScanner.ReadTokenTillDelim(['}'], FrameIndStr) then begin
+              SysUtils.TryStrToInt(FrameIndStr, TextBlock.FrameInd);
+            end;
+          end;
+
+          TextScanner.GotoNextChar();
+
+          TextBlock.Def := LoadDefImage(DefName);
+        end;
+
+        if TextBlock.Def <> nil then begin
+          // _Fnt_->char_sizes[NBSP].width
+          CharInfo           := @Font.CharInfos[NBSP];
+          NbspWidth          := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
+          NumFillChars       := (TextBlock.Def.Width + NbspWidth - 1) div NbspWidth;
+          TextBlock.BlockLen := NumFillChars;
+
+          New(TextBlock);
+          result.Blocks.Add(TextBlock);
+          TextBlock.BlockLen  := 0;
+          TextBlock.BlockType := TEXT_BLOCK_CHARS;
+          TextBlock.Color16   := CurrColor;
+
+          // Output serie of non-breaking spaces to compensate image width
+          for i := 0 to NumFillChars - 1 do begin
+            Buf^ := NBSP;
+            Inc(Buf);
+          end;
+        end;
+
+        continue;
+      end; // .if
+      
+      if not TextScanner.EndOfText and TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
+        if (TextBlock.BlockType <> TEXT_BLOCK_CHARS) or (TextBlock.BlockLen > 0) then begin
+          New(TextBlock);
+          result.Blocks.Add(TextBlock);
+          TextBlock.BlockLen  := 0;
+          TextBlock.BlockType := TEXT_BLOCK_CHARS;
+        end;
+        
+        if ColorName = '' then begin
+          case ColorStack.Count of
+            0:  CurrColor := DEF_COLOR;
+            1:  begin
+                  ColorStack.Pop;
+                  CurrColor := DEF_COLOR;
+                end;
+          else
+            ColorStack.Pop;
+            CurrColor := integer(ColorStack.Top);
+          end;
+        end else begin
+          Color16 := 0;
+          
+          if NamedColors.GetExistingValue(ColorName, pointer(Color16)) then begin
+            CurrColor := Color16;
+          end else if SysUtils.TryStrToInt('$' + ColorName, Color16) then begin
+            Color16   := Color32To16(Color16);
+            CurrColor := Color16;
+          end else begin
+            CurrColor := ERR_COLOR;
+          end;
+          
+          ColorStack.Add(Ptr(Color16));
+        end; // .else
+        
+        TextBlock.Color16 := CurrColor;
+        TextScanner.GotoNextChar;
+      end; // .if
+    end; // .while
+  end; // .if
+  
+  ResLen := integer(Buf) - integer(@GlobalBuffer[0]);
+  {!} Assert(ResLen < sizeof(GlobalBuffer), 'Huge text exceeded ERA ParseText buffer capacity');
+
+  SetLength(result.ProcessedText, ResLen);
+
+  result.NumBlocks := result.Blocks.Count;
+end; // .function ParseText
+
 function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
 const
   ERR_COLOR       = $000000;
@@ -390,7 +576,7 @@ var
     i:            integer;
     
 begin
-  Buf := @TextBuffer[0];
+  Buf := @GlobalBuffer[0];
   // * * * * * //
   // Remember HD mod initial character color, which HD mod set to overwrite H3 text color
   HdModOrigCharColor := HdModCharColor;
@@ -404,7 +590,7 @@ begin
   TextBlocks[0].Color16  := DEF_COLOR;
   TextBlocks[0].Def      := nil;
   
-  if Math.InRange(TxtLen, 1, sizeof(TextBuffer) - 1) then begin
+  if Math.InRange(TxtLen, 1, sizeof(GlobalBuffer) - 1) then begin
     ColorStack.Clear;
     TextScanner.Connect(Txt, LINE_END_MARKER);
     
@@ -521,15 +707,15 @@ begin
   
   CurrBlockPos                 := -1;
   TextBlockInd                 := 0;
-  Context.ECX                  := integer(Buf) - integer(@TextBuffer[0]);
-  TextBuffer[Context.ECX]      := #0;
-  Context.EDX                  := integer(@TextBuffer[0]);
+  Context.ECX                  := integer(Buf) - integer(@GlobalBuffer[0]);
+  GlobalBuffer[Context.ECX]    := #0;
+  Context.EDX                  := integer(@GlobalBuffer[0]);
   pinteger(Context.EBP - $14)^ := Context.ECX;
   pinteger(Context.EBP + $8)^  := Context.EDX;
   
   if ChineseLoaderOpt then begin
-    pinteger(Context.EBP - $14)^ := integer(Buf) - integer(@TextBuffer[0]);
-    pinteger(Context.EBP + $8)^  := integer(@TextBuffer[0]);
+    pinteger(Context.EBP - $14)^ := integer(Buf) - integer(@GlobalBuffer[0]);
+    pinteger(Context.EBP + $8)^  := integer(@GlobalBuffer[0]);
     Context.ECX                  := Context.EBX;
     Context.RetAddr              := ChineseHandler;
   end else begin
@@ -668,9 +854,10 @@ begin
 end; // .procedure OnAfterWoG
 
 begin
-  NamedColors := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
-  ColorStack  := Lists.NewSimpleList;
-  TextScanner := TextScan.TTextScanner.Create;
+  NamedColors  := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
+  LoadedImages := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  ColorStack   := Lists.NewSimpleList;
+  TextScanner  := TextScan.TTextScanner.Create;
   
   EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
   EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
