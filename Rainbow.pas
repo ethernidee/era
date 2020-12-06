@@ -478,7 +478,7 @@ begin
           NativeTag       := c;
           IsEraTag        := TextScanner.CharsRel[1] = '~';
           IsEmbeddedImage := IsEraTag and (TextScanner.CharsRel[2] = '>');
-        end else if ord(c) <= ord(' ') then begin
+        end else if c in [#10, ' '] then begin
           Inc(NumSpaceChars);
         end else if ChineseLoaderOpt and (c > MAX_CHINESE_LATIN_CHARACTER) and (TextScanner.CharsRel[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
           Inc(NumSpaceChars);
@@ -717,7 +717,7 @@ begin
   PCharByte(Context.EBP - 4)^ := c;
   Context.RetAddr             := Ptr($4B50BA);
 
-  if ord(c) > ord(' ') then begin
+  if not (c in [#10, ' ']) then begin
     Inc(CurrBlockPos);
     UpdateCurrBlock;
   end;

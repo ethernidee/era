@@ -315,38 +315,39 @@ begin
   i:=0;
   Length:=0;
   Row:=1;
-  while (str[i]<>#0) do
-  begin
-    if (str[i] = '{') or (str[i] = '}') then
-    begin
+  
+  while str[i] <> #0 do begin
+    if (str[i] = '{') or (str[i] = '}') then begin
       Inc(i);
-    end else
-    if (str[i] = #10) then
-    begin
+    end else if (str[i] = #10) then begin
       Inc(i);
       Length:=0;
       if str[i]<>#0 then row:=row+1;
-    end else
-    if (str[i] > #160) and (str[i+1] > #160) then
-    begin
-      Length:=Length+FontWidth;
-      i:=i+2;
-      if Length>RowWidth then
-      begin
+    end else if (str[i] > #160) and (str[i+1] > #160) then begin
+      Length := Length+FontWidth;
+      i      := i+2;
+      
+      if Length>RowWidth then begin
         Length:=0;
-        if str[i]<>#0 then row:=row+1;
+        
+        if str[i]<>#0 then begin
+          row:=row+1;
+        end
       end;
-    end else
-    begin
+    end else begin
       Length:=Length+GetEngCharWidth(byte(str[i]),hfont);
       Inc(i);
-      if Length>RowWidth then
-      begin
+      
+      if Length>RowWidth then begin
         Length:=0;
-        if str[i]<>#0 then row:=row+1;
+        
+        if str[i]<>#0 then begin
+          row:=row+1;
+        end;
       end;
     end;
   end;
+  
   result:=Row;
 end;
 
@@ -375,7 +376,7 @@ begin
   ColorSel := 0;
   
   while (i < StrLen) and not (Str[i] in [#0, #10]) do begin
-    if Str[i] > ' ' then begin
+    if not (Str[i] in [#10, ' ']) then begin
       ChineseGotoNextChar;
     end;
   
