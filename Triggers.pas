@@ -596,6 +596,12 @@ begin
   result := Erm.RetXVars[ARG_INCOME];
 end;
 
+procedure OnExternalGameLeave (Event: GameExt.PEvent); stdcall;
+begin
+  Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+  GameExt.SetMapDir('');
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -671,4 +677,5 @@ end; // .procedure OnAfterWoG
 
 begin
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  EventMan.GetInstance.On('$OnGameLeave', OnExternalGameLeave);
 end.
