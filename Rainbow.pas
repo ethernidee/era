@@ -622,11 +622,13 @@ begin
           if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
             CurrColor := CurrTextBlock.Color16;
           end;
-        // Something is broken, like invalid GBK character (missing second part of code point), mixed language, etc
-        // Recover to use the last color
+        // Something is broken, like invalid GBK character (missing second part of code point), mixed language, etc.
+        // Empty string, probably. Recover to use the last color.
         end else begin
           CurrBlockInd := ParsedText.NumBlocks - 1;
           CurrBlockPos := CurrTextBlock.BlockLen;
+
+          break;
         end;
       end; // .while
     end; // .else
@@ -855,6 +857,9 @@ begin
 
   // Support colorful texts with HD mod 32 bit modes
   Core.GlobalPatcher.VarInit('HotA.FontColor', integer(@HdModCharColor));
+
+  // Fix TransformInputKey routine to allow entering "{" and "}"
+  Core.p.WriteDataPatch(Ptr($5BAFB5), ['EB08']);
 end; // .procedure OnAfterWoG
 
 begin
