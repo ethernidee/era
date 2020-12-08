@@ -4982,7 +4982,7 @@ begin
       exit;
     end else begin
       // Allow FU/DO receivers to handle zero number of parameters
-      if (SubCmd.Pos <> PrevSubCmdPos) or ((CmdId <> CMD_FU) and (CmdId <> CMD_DO)) then begin
+      if (SubCmd.Pos <> PrevSubCmdPos) or ((CmdId <> CMD_FU) and (CmdId <> CMD_DO)) or (SubCmd.Code.Value[SubCmd.Pos] = '/') then begin
         Inc(result);
       end;
 
