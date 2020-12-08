@@ -8070,6 +8070,18 @@ begin
   (* Extended UN:C implementation with 4 parameters support *)
   ApiJack.HookCode(Ptr($731FF0), @Hook_UN_C);
 
+  (* Fix missing final "break" keyword in CO:A case, leading to automatical CO:N execution in many branches *)
+  Core.p.WriteDataPatch(Ptr($76F929), ['0F872A0E']);
+  Core.p.WriteDataPatch(Ptr($76F9E9), ['E9660D']);
+  Core.p.WriteDataPatch(Ptr($76FA08), ['E9470D']);
+  Core.p.WriteDataPatch(Ptr($76FA27), ['E9280D']);
+  Core.p.WriteDataPatch(Ptr($76FA4B), ['E9040D']);
+  Core.p.WriteDataPatch(Ptr($76FA74), ['E9DB0C']);
+  Core.p.WriteDataPatch(Ptr($76FAF6), ['E9590C']);
+  Core.p.WriteDataPatch(Ptr($76FB2B), ['E9240C']);
+  Core.p.WriteDataPatch(Ptr($76FC30), ['E91F0B']);
+  Core.p.WriteDataPatch(Ptr($76FC71), ['0F8DDD0A']);
+
   (* Fix DL:C close all dialogs bug *)
   Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
 
