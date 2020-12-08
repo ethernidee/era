@@ -6663,6 +6663,47 @@ begin
   end;
 end; // .function Hook_DL_A
 
+function Hook_EA_E (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  LOCAL_SUBCMD   = +$14;
+  LOCAL_EXP      = -$64;
+  LOCAL_MODIFIER = -$78;
+  LOCAL_MON_TYPE = -$7C;
+  LOCAL_MON_NUM  = -$74;
+
+var
+  SubCmd:    PErmSubCmd;
+  IsGetOper: boolean;
+
+begin
+  SubCmd    := ppointer(Context.EBP + LOCAL_SUBCMD)^;
+  IsGetOper := false;
+
+  if ZvsApply(pinteger(Context.EBP + LOCAL_EXP), sizeof(integer), SubCmd, 0) <> 0 then begin
+    IsGetOper := true;
+  end;
+
+  if ZvsApply(pinteger(Context.EBP + LOCAL_MODIFIER), sizeof(integer), SubCmd, 1) <> 0 then begin
+    IsGetOper := true;
+  end;
+
+  if ZvsApply(pinteger(Context.EBP + LOCAL_MON_TYPE), sizeof(integer), SubCmd, 2) <> 0 then begin
+    IsGetOper := true;
+  end;
+
+  if ZvsApply(pinteger(Context.EBP + LOCAL_MON_NUM), sizeof(integer), SubCmd, 3) <> 0 then begin
+    IsGetOper := true;
+  end;
+
+  result := false;
+
+  if IsGetOper then begin
+    Context.RetAddr := Ptr($7270B5);
+  end else begin
+    Context.RetAddr := Ptr($726D6E);
+  end;
+end; // .function Hook_EA_E
+
 (* Rounds given value to one of the following directions: -1 for floor, 1 for ceil, 0 for away from zero *)
 function RoundFloat32 (Value: single; Direction: integer): integer;
 begin
@@ -8111,6 +8152,9 @@ begin
 
   (* Fix HE(xxx) GetVarVal call to allow new variable types *)
   ApiJack.HookCode(Ptr($743A17), @Hook_HE);
+
+  (* Fix EA:E to not return on first GET-parameter, but evaluate all 4 parameters first. And still No assignment is performed with any GET parameter. *)
+  ApiJack.HookCode(Ptr($726CFA), @Hook_EA_E);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
