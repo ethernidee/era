@@ -98,12 +98,9 @@ var
     CurrBlockInd:   integer;
     CurrBlockPos:   integer;
     CurrColor:      integer = DEF_COLOR;
-    OrigColor:      integer;
     SafeBlackColor: integer = 1;
     
     GlobalBuffer: array [0..1024 * 1024 - 1] of char;
-
-    HdModCharColor: word;
 
 
 function Color32To15Func (Color32: integer): integer;
@@ -658,21 +655,10 @@ begin
       end; // .while
     end; // .else
   end; // .if
-
-  if CurrColor = DEF_COLOR then begin
-    CurrColor := OrigColor;
-  end;
 end; // .procedure UpdateCurrBlock
 
 function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;  
 begin
-  OrigColor := DEF_COLOR;
-
-  // Remember HD mod initial character color, which HD mod set to overwrite H3 text color
-  if HdModCharColor <> HD_MOD_DEF_COLOR then begin
-    OrigColor := HdModCharColor;
-  end;
-
   UpdateCurrParsedText(Heroes.PFontItem(Context.EBX), pchar(Context.EDX), Context.ECX);
 
   CurrColor     := DEF_COLOR;
@@ -874,9 +860,6 @@ begin
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
   ApiJack.StdSplice(Ptr($4B5680), @New_Font_GetLineSize, ApiJack.CONV_THISCALL, 2);
-
-  // Support colorful texts with HD mod 32 bit modes
-  Core.GlobalPatcher.VarInit('HotA.FontColor', integer(@HdModCharColor));
 
   // Fix TransformInputKey routine to allow entering "{" and "}"
   Core.p.WriteDataPatch(Ptr($5BAFB5), ['EB08']);
