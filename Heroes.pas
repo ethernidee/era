@@ -483,6 +483,14 @@ type
   TBinaryTree = TBinaryTreeNode;
 
   {$ALIGN OFF}
+  PPalette16 = ^TPalette16;
+  TPalette16 = object (TBinaryTreeItem)
+   public
+    Colors: array [0..255] of word;
+  end;
+  {$ALIGN ON}
+
+  {$ALIGN OFF}
   PFontItem = ^TFontItem;
   TFontItem = object (TBinaryTreeItem)
    public
@@ -495,8 +503,7 @@ type
     Unk1:            array [1..26] of byte;
     CharInfos:       array [#0..#255] of TFontCharInfo;
     CharDataOffsets: array [#0..#255] of integer;
-    Unk2:            array [1..28] of byte;
-    Color16Table:    array [0..255] of word; // 0x1058
+    Palette16:       TPalette16;
     CharsDataPtr:    Utils.PEndlessShortIntArr;
   end; // .object TFontItem
   {$ALIGN ON}

@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib,
-  Core, GameExt, Heroes, EventMan, DlgMes;
+  Core, GameExt, Heroes, EventMan, DlgMes, Windows;
 
 type
   (* Import *)
@@ -788,12 +788,12 @@ begin
           if CharPixel <> 0 then begin
             if CharPixel = -1 then begin
               if CurrColor = DEF_COLOR then begin
-                Color16 := Font.Color16Table[ColorInd];
+                Color16 := Font.Palette16.Colors[ColorInd];
               end else begin
                 Color16 := CurrColor;
               end;
             end else begin
-              Color16 := Font.Color16Table[32];
+              Color16 := Font.Palette16.Colors[32];
             end;
 
             if BytesPerPixel = sizeof(integer) then begin
