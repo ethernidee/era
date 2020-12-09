@@ -6,8 +6,9 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Math, SysUtils, Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib,
-  Core, GameExt, Heroes, EventMan, DlgMes, Windows;
+  Math, SysUtils, Windows,
+  Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib,
+  Core, GameExt, Heroes, EventMan, DlgMes;
 
 type
   (* Import *)
@@ -91,8 +92,8 @@ var
     Color32To16:  TColor32To16Func;
     Color16To32:  function (Color16: integer): integer;
 
-{O} ParsedText:    TParsedText = nil;
-{U} CurrTextBlock: PTextBlock = nil;
+{U} CurrParsedText: TParsedText = nil;
+{U} CurrTextBlock:  PTextBlock = nil;
 
     CurrBlockInd:   integer;
     CurrBlockPos:   integer;
@@ -600,12 +601,36 @@ begin
   result.NumBlocks := result.Blocks.Count;
 end; // .function ParseText
 
+function UpdateCurrParsedText (Font: Heroes.PFontItem; OrigStr: pchar; OrigTextLen: integer = -1): {U} TParsedText;
+var
+  OrigText: string;
+
+begin
+  if CurrParsedText <> nil then begin
+    if OrigTextLen < 0 then begin
+      OrigTextLen := Windows.LStrLen(OrigStr);
+    end;
+
+    if (OrigTextLen <> Length(CurrParsedText.OrigText)) or (StrLib.ComparePchars(OrigStr, pchar(CurrParsedText.OrigText)) <> 0) then begin
+      SysUtils.FreeAndNil(CurrParsedText);
+    end;
+  end;
+
+  if CurrParsedText = nil then begin
+    OrigText   := '';
+    SetString(OrigText, OrigStr, OrigTextLen);
+    CurrParsedText := ParseText(OrigText, Font);
+  end;
+
+  result := CurrParsedText;
+end; // .function UpdateCurrParsedText
+
 (* Determines current block, based on position in block, number of blocks left and block length.
    Automatically skips/applies empty blocks. Updates current color if necessary.
    Synchronizes current color with HD mod variables *)
 procedure UpdateCurrBlock; stdcall;
 begin
-  if (ParsedText <> nil) and (CurrTextBlock <> nil) then begin
+  if (CurrParsedText <> nil) and (CurrTextBlock <> nil) then begin
     if CurrBlockPos < CurrTextBlock.BlockLen then begin
       if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
         CurrColor := CurrTextBlock.Color16;
@@ -616,8 +641,8 @@ begin
         Inc(CurrBlockInd);
 
         // Normal, valid case
-        if CurrBlockInd < ParsedText.NumBlocks then begin
-          CurrTextBlock := ParsedText.Blocks[CurrBlockInd];
+        if CurrBlockInd < CurrParsedText.NumBlocks then begin
+          CurrTextBlock := CurrParsedText.Blocks[CurrBlockInd];
 
           if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
             CurrColor := CurrTextBlock.Color16;
@@ -625,7 +650,7 @@ begin
         // Something is broken, like invalid GBK character (missing second part of code point), mixed language, etc.
         // Empty string, probably. Recover to use the last color.
         end else begin
-          CurrBlockInd := ParsedText.NumBlocks - 1;
+          CurrBlockInd := CurrParsedText.NumBlocks - 1;
           CurrBlockPos := CurrTextBlock.BlockLen;
 
           break;
@@ -639,10 +664,7 @@ begin
   end;
 end; // .procedure UpdateCurrBlock
 
-function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
-var
-  OrigText: string;
-    
+function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;  
 begin
   OrigColor := DEF_COLOR;
 
@@ -651,28 +673,18 @@ begin
     OrigColor := HdModCharColor;
   end;
 
-  if ParsedText <> nil then begin
-    if (Context.ECX <> Length(ParsedText.OrigText)) or (StrLib.ComparePchars(pchar(Context.EDX), pchar(ParsedText.OrigText)) <> 0) then begin
-      SysUtils.FreeAndNil(ParsedText);
-    end;
-  end;
-
-  if ParsedText = nil then begin
-    OrigText   := '';
-    SetString(OrigText, pchar(Context.EDX), Context.ECX);
-    ParsedText := ParseText(OrigText, Heroes.PFontItem(Context.EBX));
-  end;
+  UpdateCurrParsedText(Heroes.PFontItem(Context.EBX), pchar(Context.EDX), Context.ECX);
 
   CurrColor     := DEF_COLOR;
-  CurrTextBlock := ParsedText.Blocks[0];
+  CurrTextBlock := CurrParsedText.Blocks[0];
   CurrBlockPos  := 0;
   CurrBlockInd  := 0;
 
   UpdateCurrBlock;
   CurrBlockPos := -1;
 
-  Context.ECX                  := Length(ParsedText.ProcessedText);
-  Context.EDX                  := integer(pchar(ParsedText.ProcessedText));
+  Context.ECX                  := Length(CurrParsedText.ProcessedText);
+  Context.EDX                  := integer(pchar(CurrParsedText.ProcessedText));
   pinteger(Context.EBP - $14)^ := Context.ECX;
   pinteger(Context.EBP + $8)^  := Context.EDX;
   
@@ -724,6 +736,13 @@ begin
 
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_HandleTags
+
+function New_Font_GetLineSize (OrigFunc: pointer; Font: Heroes.PFontItem; Line: pchar): integer; stdcall;
+begin
+  UpdateCurrParsedText(Font, Line);
+
+  result := PatchApi.Call(THISCALL_, OrigFunc, [Font, pchar(CurrParsedText.ProcessedText)]);
+end;
 
 function ChineseGetCharColor: integer; stdcall;
 begin
@@ -815,12 +834,12 @@ begin
   end; // .if
 end; // .function DrawCharacterToPcx
 
-function Hook_Font_DrawCharacter (OrigFunc: pointer; Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; ColorInd: integer): Heroes.PPcx16Item; stdcall;
+function New_Font_DrawCharacter (OrigFunc: pointer; Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; ColorInd: integer): Heroes.PPcx16Item; stdcall;
 var
   Def: Heroes.PDefItem;
 
 begin
-  if (ParsedText <> nil) and (CurrTextBlock <> nil) and (CurrTextBlock.BlockType = TEXT_BLOCK_DEF) and (CurrTextBlock.Def <> nil) then begin
+  if (CurrParsedText <> nil) and (CurrTextBlock <> nil) and (CurrTextBlock.BlockType = TEXT_BLOCK_DEF) and (CurrTextBlock.Def <> nil) then begin
     Def := CurrTextBlock.Def;
 
     if CurrBlockPos = 0 then begin
@@ -831,12 +850,12 @@ begin
   end else begin
     result := DrawCharacterToPcx(Font, Ch, Canvas, x, y, ColorInd);
   end;
-end; // .function Hook_Font_DrawCharacter
+end; // .function New_Font_DrawCharacter
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 begin
   SetupColorMode; 
-  ApiJack.StdSplice(Ptr($4B4F00), @Hook_Font_DrawCharacter, ApiJack.CONV_THISCALL, 6);
+  ApiJack.StdSplice(Ptr($4B4F00), @New_Font_DrawCharacter, ApiJack.CONV_THISCALL, 6);
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -854,6 +873,7 @@ begin
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
+  ApiJack.StdSplice(Ptr($4B5680), @New_Font_GetLineSize, ApiJack.CONV_THISCALL, 2);
 
   // Support colorful texts with HD mod 32 bit modes
   Core.GlobalPatcher.VarInit('HotA.FontColor', integer(@HdModCharColor));
