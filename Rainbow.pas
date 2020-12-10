@@ -723,6 +723,13 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_HandleTags
 
+function New_Font_CountNumTextLines (OrigFunc: pointer; Font: Heroes.PFontItem; Line: pchar; BoxWidth: integer): integer; stdcall;
+begin
+  UpdateCurrParsedText(Font, Line);
+
+  result := PatchApi.Call(THISCALL_, OrigFunc, [Font, pchar(CurrParsedText.ProcessedText), BoxWidth]);
+end;
+
 function New_Font_GetLineWidth (OrigFunc: pointer; Font: Heroes.PFontItem; Line: pchar): integer; stdcall;
 begin
   UpdateCurrParsedText(Font, Line);
@@ -749,6 +756,15 @@ begin
   UpdateCurrParsedText(Font, Line);
 
   result := PatchApi.Call(THISCALL_, OrigFunc, [Font, pchar(CurrParsedText.ProcessedText), BoxWidth]);
+end;
+
+function New_Font_TextToLines (OrigFunc: pointer; Font: Heroes.PFontItem; Text: pchar; BoxWidth: integer; var DlgTextLines: Heroes.TDlgTextLines): integer; stdcall;
+begin
+  UpdateCurrParsedText(Font, Text);
+  DlgTextLines.Reset;
+  
+
+  result := 0;
 end;
 
 function ChineseGetCharColor: integer; stdcall;
@@ -880,10 +896,12 @@ begin
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
+  ApiJack.StdSplice(Ptr($4B5580), @New_Font_CountNumTextLines, ApiJack.CONV_THISCALL, 3);
   ApiJack.StdSplice(Ptr($4B5680), @New_Font_GetLineWidth, ApiJack.CONV_THISCALL, 2);
   ApiJack.StdSplice(Ptr($4B56F0), @New_Font_GetMaxLineWidth, ApiJack.CONV_THISCALL, 2);
   ApiJack.StdSplice(Ptr($4B5770), @New_Font_GetMaxWordWidth, ApiJack.CONV_THISCALL, 2);
   ApiJack.StdSplice(Ptr($4B57E0), @New_Font_GetTextWidthForBox, ApiJack.CONV_THISCALL, 3);
+  ApiJack.StdSplice(Ptr($4B58F0), @New_Font_TextToLines, ApiJack.CONV_THISCALL, 4);
 
   // Fix TransformInputKey routine to allow entering "{" and "}"
   Core.p.WriteDataPatch(Ptr($5BAFB5), ['EB08']);

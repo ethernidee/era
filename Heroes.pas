@@ -5,7 +5,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
-uses Windows, SysUtils, Utils, PatchApi, DataLib, TypeWrappers, Alg, Core, StrLib;
+uses Windows, SysUtils, Utils, PatchApi, DataLib, TypeWrappers, Alg, Core, StrLib, DlgMes;
 
 type
   (* Import *)
@@ -185,6 +185,9 @@ const
   (*  Dialog Pictures Types and Subtypes  *)
   NO_PIC_TYPE = -1;
 
+  (* Internal structures *)
+  H3STR_CONST_REF_COUNT = -1;
+
 type
   TMesType =
   (
@@ -240,11 +243,39 @@ type
 
   PExtString = ^TExtString;
   TExtString = packed record
-    Value: pchar;
-    Len:   integer;
-    Dummy: integer;
+    Value:    pchar;
+    Len:      integer;
+    Capacity: integer;
 
     function ToString: string;
+  end;
+
+  PH3Str = ^TH3Str;
+  TH3Str = packed record
+    Special:  integer;
+    Value:    pchar;   // Zero-terminated string or null. If not null, pbyte(Value - 1) is reference counter (zero for single owner) or -1 for constants
+    Len:      integer;
+    Capacity: integer;
+
+    (* Resets the structure without freeing memory *)
+    procedure Reset;
+
+    (* Resets the structure and frees memory if necessary *)
+    procedure Clear;
+
+    procedure SetLen (NewLen: integer);
+    procedure AssignPchar ({n} Str: pchar; StrLen: integer = -1);
+  end;
+
+  PDlgTextLines = ^TDlgTextLines;
+  TDlgTextLines = packed record
+    NumLines:     integer;
+    FirstStr:     PH3Str;
+    FirstFreeStr: PH3Str;
+    ListEnd:      PH3Str;
+
+    procedure Reset;
+    procedure AppendLine ({n} Line: pchar; LineLen: integer = -1);
   end;
   
   PGameState  = ^TGameState;
@@ -1135,6 +1166,65 @@ function TExtString.ToString: string;
 begin
   SetLength(result, Self.Len);
   Utils.CopyMem(Self.Len, Self.Value, pointer(result));
+end;
+
+procedure TH3Str.Reset;
+begin
+  Self.Value    := nil;
+  Self.Len      := 0;
+  Self.Capacity := 0;
+end;
+
+procedure TH3Str.Clear;
+var
+  RefCounterPtr: pshortint;
+
+begin
+  if (Self.Value <> nil) then begin
+    RefCounterPtr := pointer(integer(Self.Value) - sizeof(byte));
+
+    if (RefCounterPtr^ <> 0) and (RefCounterPtr^ <> H3STR_CONST_REF_COUNT) then begin
+      Dec(RefCounterPtr^);
+    end else begin
+      MFree(RefCounterPtr);
+    end;
+  end;
+
+  Self.Reset;
+end;
+
+procedure TH3Str.SetLen (NewLen: integer);
+begin
+  PatchApi.Call(THISCALL_, Ptr($404B80), [@Self, NewLen]);
+end;
+
+procedure TH3Str.AssignPchar ({n} Str: pchar; StrLen: integer = -1);
+begin
+  if StrLen = -1 then begin
+    if Str = nil then begin
+      StrLen := 0;
+    end else begin
+      StrLen := Windows.LStrLen(Str);
+    end;
+  end;
+
+  PatchApi.Call(THISCALL_, Ptr($404180), [@Self, Str, StrLen]);
+end;
+
+procedure TDlgTextLines.Reset;
+begin
+  PatchApi.Call(THISCALL_, Ptr($4B5D70), [@Self, Self.FirstStr, Self.FirstFreeStr]);
+end;
+
+procedure TDlgTextLines.AppendLine ({n} Line: pchar; LineLen: integer = -1);
+var
+  NewLine: TH3Str;
+
+begin
+  NewLine.Reset;
+  NewLine.AssignPchar(Line, LineLen);
+  PatchApi.Call(THISCALL_, Ptr($4AF250), [@Self, Self.FirstFreeStr, 1, @NewLine]);
+  NewLine.Clear;
 end;
 
 constructor TResourceNamer.Create;
