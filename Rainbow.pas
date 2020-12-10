@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   Math, SysUtils, Windows,
   Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib,
-  Core, GameExt, Heroes, EventMan, DlgMes;
+  Core, GameExt, Heroes, Memory, EventMan, DlgMes;
 
 type
   (* Import *)
@@ -67,6 +67,7 @@ type
 
       TEXT_BLOCK_DEF: (
       {U} Def:      Heroes.PDefItem;
+          DefName:  pchar; // Pointer to persisted string
           FrameInd: integer;
       );    
   end; // .record TTextBlock
@@ -84,13 +85,24 @@ type
     destructor  Destroy; override;
   end; // .class TParsedText
 
+  TParsedTextLine = class
+   public
+    Offset:   integer;
+    Len:      integer;
+    BlockInd: integer;
+    BlockPos: integer;
+
+    procedure ToTaggedText (ParsedText: TParsedText; Res: StrLib.TStrBuilder);
+  end;
+
 var
-{O} NamedColors:  {U} AssocArrays.TAssocArray {of Color16: integer};
-{O} LoadedImages: {U} TDict {of loaded H3 def, pcx or other image};
-{O} ColorStack:   {U} Lists.TList {of Color16: integer};
-{O} TextScanner:  TextScan.TTextScanner;
-    Color32To16:  TColor32To16Func;
-    Color16To32:  function (Color16: integer): integer;
+{O} NamedColors:       {U} AssocArrays.TAssocArray {of Color16: integer};
+{O} LoadedImages:      {U} TDict {of loaded H3 def, pcx or other image};
+{O} ColorStack:        {U} Lists.TList {of Color16: integer};
+{O} TextScanner:       TextScan.TTextScanner;
+{O} TaggedLineBuilder: StrLib.TStrBuilder;
+    Color32To16:       TColor32To16Func;
+    Color16To32:       function (Color16: integer): integer;
 
 {U} CurrParsedText: TParsedText = nil;
 {U} CurrTextBlock:  PTextBlock = nil;
@@ -307,6 +319,115 @@ begin
   NamedColors[Name] := Ptr(Color32To16(Color32));
 end;
 
+procedure TParsedTextLine.ToTaggedText (ParsedText: TParsedText; Res: StrLib.TStrBuilder);
+var
+  Text:                   pchar;
+  SliceStart:             pchar;
+  SliceLen:               integer;
+  BlockInd:               integer;
+  BlockPos:               integer;
+  CurrBlock:              PTextBlock;
+  NumBlocks:              integer;
+  NumBlockCharsToProcess: integer;
+  i, j:                   integer;
+
+begin
+  Res.Clear;
+
+  if Self.Len <= 0 then begin
+    exit;
+  end;
+
+  // Init
+  Text      := Utils.PtrOfs(pchar(ParsedText.ProcessedText), Self.Offset);
+  BlockInd  := Self.BlockInd;
+  BlockPos  := Self.BlockPos;
+  NumBlocks := ParsedText.NumBlocks;
+  CurrBlock := ParsedText.Blocks[BlockInd];
+
+  // Skip leading empty blocks
+  while (BlockPos >= CurrBlock.BlockLen) and (BlockInd + 1 < NumBlocks) do begin
+    Inc(BlockInd);
+    BlockPos  := 0;
+    CurrBlock := ParsedText.Blocks[BlockInd];
+  end;
+
+  i := 0;
+
+  // Process each physical line character
+  while i < Self.Len do begin
+    {!} Assert(BlockPos < CurrBlock.BlockLen);
+    SliceStart := Text;
+
+    // Output block opening tag, if necessary
+    case CurrBlock.BlockType of
+      TEXT_BLOCK_CHARS: begin
+        if CurrBlock.Color16 <> DEF_COLOR then begin
+          Res.Append('{~');
+          Res.Append(SysUtils.Format('%x', [Color16To32(CurrBlock.Color16)]));
+          Res.Append('}');
+        end;
+      end;
+
+      TEXT_BLOCK_DEF: begin
+        Res.Append('{~>');
+        Res.AppendBuf(Windows.LStrLen(CurrBlock.DefName), CurrBlock.DefName);
+
+        if CurrBlock.FrameInd <> 0 then begin
+          Res.Append(':' + SysUtils.IntToStr(CurrBlock.FrameInd));
+        end;
+
+        Res.Append('}');
+      end;
+    else
+      {!} Assert(false, 'ToTaggedText: unsupported BlockType = ' + SysUtils.IntToStr(ord(CurrBlock.BlockType)));
+    end; // .switch CurrBlock.BlockType
+
+    // Estimate number of block meaningful characters to process
+    NumBlockCharsToProcess := Math.Min(CurrBlock.BlockLen - BlockPos, Self.Len - i);
+    j                      := 0;
+
+    // Skip block meaningful characters
+    while j < NumBlockCharsToProcess do begin
+      if not (Text^ in [#10, ' ']) then begin
+        Inc(j);
+      end;
+
+      Inc(Text);
+    end;
+
+    Inc(BlockPos, NumBlockCharsToProcess);
+    Inc(i,        integer(Text) - integer(SliceStart));
+
+    // Skip out-of-block spacy characters
+    while (i < Self.Len) and (Text^ in [#10, ' ']) do begin
+      Inc(Text);
+      Inc(i);
+    end;
+
+    SliceLen := integer(Text) - integer(SliceStart);
+    Res.AppendBuf(SliceLen, SliceStart);
+
+    // Output closing block tag if necessary
+    case CurrBlock.BlockType of
+      TEXT_BLOCK_CHARS: begin
+        if CurrBlock.Color16 <> DEF_COLOR then begin
+          Res.Append('{~}');
+        end;
+      end;
+    end;
+
+    // Proceed to the next non-empty block
+    if i < Len then begin
+      while (BlockPos >= CurrBlock.BlockLen) and (BlockInd + 1 < NumBlocks) do begin
+        Inc(BlockInd);
+        BlockPos  := 0;
+        CurrBlock := ParsedText.Blocks[BlockInd];
+      end;
+    end;
+  end; // .while
+end; // .procedure TParsedTextLine.ToTaggedText
+
 constructor TParsedText.Create;
 begin
   Self.Blocks := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
@@ -510,6 +631,8 @@ begin
         TextBlock.FrameInd  := 0;
         
         if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
+          DefName := SysUtils.AnsiLowerCase(DefName);
+
           if TextScanner.c = ':' then begin
             TextScanner.GotoNextChar();
 
@@ -520,8 +643,9 @@ begin
 
           TextScanner.GotoNextChar();
 
-          TextBlock.Def := LoadDefImage(DefName);
-        end;
+          TextBlock.Def     := LoadDefImage(DefName);
+          TextBlock.DefName := Memory.UniqueStrings[pchar(DefName)];
+        end; // .if
 
         if TextBlock.Def <> nil then begin
           // _Fnt_->char_sizes[NBSP].width
@@ -689,7 +813,6 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_BeginParseText
 
-
 function Hook_Font_DrawTextToPcx16_End (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   CurrColor     := DEF_COLOR;
@@ -762,7 +885,6 @@ function New_Font_TextToLines (OrigFunc: pointer; Font: Heroes.PFontItem; Text: 
 begin
   UpdateCurrParsedText(Font, Text);
   DlgTextLines.Reset;
-  
 
   result := 0;
 end;
@@ -901,17 +1023,18 @@ begin
   ApiJack.StdSplice(Ptr($4B56F0), @New_Font_GetMaxLineWidth, ApiJack.CONV_THISCALL, 2);
   ApiJack.StdSplice(Ptr($4B5770), @New_Font_GetMaxWordWidth, ApiJack.CONV_THISCALL, 2);
   ApiJack.StdSplice(Ptr($4B57E0), @New_Font_GetTextWidthForBox, ApiJack.CONV_THISCALL, 3);
-  ApiJack.StdSplice(Ptr($4B58F0), @New_Font_TextToLines, ApiJack.CONV_THISCALL, 4);
+  //ApiJack.StdSplice(Ptr($4B58F0), @New_Font_TextToLines, ApiJack.CONV_THISCALL, 4);
 
   // Fix TransformInputKey routine to allow entering "{" and "}"
   Core.p.WriteDataPatch(Ptr($5BAFB5), ['EB08']);
 end; // .procedure OnAfterWoG
 
 begin
-  NamedColors  := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
-  LoadedImages := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
-  ColorStack   := Lists.NewSimpleList;
-  TextScanner  := TextScan.TTextScanner.Create;
+  NamedColors       := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
+  LoadedImages      := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  ColorStack        := Lists.NewSimpleList;
+  TextScanner       := TextScan.TTextScanner.Create;
+  TaggedLineBuilder := StrLib.TStrBuilder.Create;
   
   EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
   EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
