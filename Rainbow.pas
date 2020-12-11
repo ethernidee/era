@@ -507,10 +507,10 @@ begin
   end;
 end;
 
-function ParsedTextToLines (ParsedText: TParsedText; BoxWidth: integer): {O} TList {of TParsedTextLine}; forward;
+// function ParsedTextToLines (ParsedText: TParsedText; BoxWidth: integer): {O} TList {of TParsedTextLine}; forward;
 
-var
-  List: TList;
+// var
+//   List: TList;
 
 function ParseText (const OrigText: string; {U} Font: Heroes.PFontItem): {O} TParsedText;
 const
@@ -720,14 +720,14 @@ begin
 
   result.NumBlocks := result.Blocks.Count;
 
-  if result.NumBlocks > 1 then begin
-    List := ParsedTextToLines(result, 100);
+  // if result.NumBlocks > 1 then begin
+  //   List := ParsedTextToLines(result, 100);
 
-    for i := 0 to List.Count - 1 do begin
-      TParsedTextLine(List[i]).ToTaggedText(result, TaggedLineBuilder);
-      VarDump(['LineN:', i + 1, TaggedLineBuilder.BuildStr()]);
-    end;
-  end;
+  //   for i := 0 to List.Count - 1 do begin
+  //     TParsedTextLine(List[i]).ToTaggedText(result, TaggedLineBuilder);
+  //     VarDump(['LineN:', i + 1, TaggedLineBuilder.BuildStr()]);
+  //   end;
+  // end;
 end; // .function ParseText
 
 function GetGraphemWidth (Font: Heroes.PFontItem; Graphem: pchar; out GraphemSize: integer): integer;
@@ -857,7 +857,7 @@ begin
     if c = #10 then begin
       Inc(Cursor.TextPtr);
     // Skip trailing spaces
-    end else if c = ' ' then begin
+    end else begin
       while Cursor.TextPtr^ = ' ' do begin
         Inc(Cursor.TextPtr);
       end;
@@ -996,11 +996,18 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_HandleTags
 
-function New_Font_CountNumTextLines (OrigFunc: pointer; Font: Heroes.PFontItem; Line: pchar; BoxWidth: integer): integer; stdcall;
-begin
-  UpdateCurrParsedText(Font, Line);
+function New_Font_CountNumTextLines (OrigFunc: pointer; Font: Heroes.PFontItem; Text: pchar; BoxWidth: integer): integer; stdcall;
+var
+{O} Lines: {O} TList {of TParsedTextLine};
 
-  result := PatchApi.Call(THISCALL_, OrigFunc, [Font, pchar(CurrParsedText.ProcessedText), BoxWidth]);
+begin
+  Lines := nil;
+  // * * * * * //
+  UpdateCurrParsedText(Font, Text);
+  Lines  := ParsedTextToLines(CurrParsedText, BoxWidth);
+  result := Lines.Count;
+  // * * * * * //
+  SysUtils.FreeAndNil(Lines);
 end;
 
 function New_Font_GetLineWidth (OrigFunc: pointer; Font: Heroes.PFontItem; Line: pchar): integer; stdcall;
@@ -1032,12 +1039,28 @@ begin
 end;
 
 function New_Font_TextToLines (OrigFunc: pointer; Font: Heroes.PFontItem; Text: pchar; BoxWidth: integer; var DlgTextLines: Heroes.TDlgTextLines): integer; stdcall;
+var
+{O} Lines:   {O} TList {of TParsedTextLine};
+    LineStr: string;
+    i:       integer;
+
 begin
+  Lines := nil;
+  // * * * * * //
   UpdateCurrParsedText(Font, Text);
+  Lines := ParsedTextToLines(CurrParsedText, BoxWidth);
   DlgTextLines.Reset;
 
+  for i := 0 to Lines.Count - 1 do begin
+    TParsedTextLine(Lines[i]).ToTaggedText(CurrParsedText, TaggedLineBuilder);
+    LineStr := TaggedLineBuilder.BuildStr();
+    DlgTextLines.AppendLine(pchar(LineStr), Length(LineStr));
+  end;
+
   result := 0;
-end;
+  // * * * * * //
+  SysUtils.FreeAndNil(Lines);
+end; // .function New_Font_TextToLines
 
 function ChineseGetCharColor: integer; stdcall;
 begin
@@ -1173,7 +1196,7 @@ begin
   ApiJack.StdSplice(Ptr($4B56F0), @New_Font_GetMaxLineWidth, ApiJack.CONV_THISCALL, 2);
   ApiJack.StdSplice(Ptr($4B5770), @New_Font_GetMaxWordWidth, ApiJack.CONV_THISCALL, 2);
   ApiJack.StdSplice(Ptr($4B57E0), @New_Font_GetTextWidthForBox, ApiJack.CONV_THISCALL, 3);
-  //ApiJack.StdSplice(Ptr($4B58F0), @New_Font_TextToLines, ApiJack.CONV_THISCALL, 4);
+  ApiJack.StdSplice(Ptr($4B58F0), @New_Font_TextToLines, ApiJack.CONV_THISCALL, 4);
 
   // Fix TransformInputKey routine to allow entering "{" and "}"
   Core.p.WriteDataPatch(Ptr($5BAFB5), ['EB08']);
