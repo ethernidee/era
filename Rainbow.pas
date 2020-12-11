@@ -321,15 +321,14 @@ end;
 
 procedure TParsedTextLine.ToTaggedText (ParsedText: TParsedText; Res: StrLib.TStrBuilder);
 var
-  Text:                   pchar;
-  SliceStart:             pchar;
-  SliceLen:               integer;
-  BlockInd:               integer;
-  BlockPos:               integer;
-  CurrBlock:              PTextBlock;
-  NumBlocks:              integer;
-  NumBlockCharsToProcess: integer;
-  i, j:                   integer;
+  Text:       pchar;
+  TextEnd:    pchar;
+  SliceStart: pchar;
+  SliceLen:   integer;
+  BlockInd:   integer;
+  BlockPos:   integer;
+  CurrBlock:  PTextBlock;
+  NumBlocks:  integer;
 
 begin
   Res.Clear;
@@ -340,6 +339,7 @@ begin
 
   // Init
   Text      := Utils.PtrOfs(pchar(ParsedText.ProcessedText), Self.Offset);
+  TextEnd   := Utils.PtrOfs(Text, Self.Len);
   BlockInd  := Self.BlockInd;
   BlockPos  := Self.BlockPos;
   NumBlocks := ParsedText.NumBlocks;
@@ -352,10 +352,8 @@ begin
     CurrBlock := ParsedText.Blocks[BlockInd];
   end;
 
-  i := 0;
-
   // Process each physical line character
-  while i < Self.Len do begin
+  while Text < TextEnd do begin
     {!} Assert(BlockPos < CurrBlock.BlockLen);
     SliceStart := Text;
 
@@ -383,26 +381,22 @@ begin
       {!} Assert(false, 'ToTaggedText: unsupported BlockType = ' + SysUtils.IntToStr(ord(CurrBlock.BlockType)));
     end; // .switch CurrBlock.BlockType
 
-    // Estimate number of block meaningful characters to process
-    NumBlockCharsToProcess := Math.Min(CurrBlock.BlockLen - BlockPos, Self.Len - i);
-    j                      := 0;
-
     // Skip block meaningful characters
-    while j < NumBlockCharsToProcess do begin
+    while (Text < TextEnd) and (BlockPos < CurrBlock.BlockLen) do begin
       if not (Text^ in [#10, ' ']) then begin
-        Inc(j);
+        Inc(BlockPos);
+
+        if ChineseLoaderOpt and (Text^ > MAX_CHINESE_LATIN_CHARACTER) and (Text[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
+          Inc(Text);
+        end;
       end;
 
       Inc(Text);
     end;
 
-    Inc(BlockPos, NumBlockCharsToProcess);
-    Inc(i,        integer(Text) - integer(SliceStart));
-
     // Skip out-of-block spacy characters
-    while (i < Self.Len) and (Text^ in [#10, ' ']) do begin
+    while (Text < TextEnd) and (Text^ in [#10, ' ']) do begin
       Inc(Text);
-      Inc(i);
     end;
 
     SliceLen := integer(Text) - integer(SliceStart);
@@ -418,7 +412,7 @@ begin
     end;
 
     // Proceed to the next non-empty block
-    if i < Len then begin
+    if Text < TextEnd then begin
       while (BlockPos >= CurrBlock.BlockLen) and (BlockInd + 1 < NumBlocks) do begin
         Inc(BlockInd);
         BlockPos  := 0;
@@ -512,6 +506,11 @@ begin
     end;
   end;
 end;
+
+function ParsedTextToLines (ParsedText: TParsedText; BoxWidth: integer): {O} TList {of TParsedTextLine}; forward;
+
+var
+  List: TList;
 
 function ParseText (const OrigText: string; {U} Font: Heroes.PFontItem): {O} TParsedText;
 const
@@ -720,7 +719,158 @@ begin
   end;
 
   result.NumBlocks := result.Blocks.Count;
+
+  if result.NumBlocks > 1 then begin
+    List := ParsedTextToLines(result, 100);
+
+    for i := 0 to List.Count - 1 do begin
+      TParsedTextLine(List[i]).ToTaggedText(result, TaggedLineBuilder);
+      VarDump(['LineN:', i + 1, TaggedLineBuilder.BuildStr()]);
+    end;
+  end;
 end; // .function ParseText
+
+function GetGraphemWidth (Font: Heroes.PFontItem; Graphem: pchar; out GraphemSize: integer): integer;
+var
+  CharInfo: Heroes.PFontCharInfo;
+
+begin
+  if ChineseLoaderOpt and (Graphem^ > MAX_CHINESE_LATIN_CHARACTER) and (Graphem[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
+    result      := 999;
+    GraphemSize := 2;
+  end else begin
+    CharInfo    := @Font.CharInfos[Graphem^];
+    result      := CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter;
+    GraphemSize := 1;
+  end;
+end;
+
+(* Given parsed text. Returns list of TParsedTextLine, suitable to be displayed in the box of given size *)
+function ParsedTextToLines (ParsedText: TParsedText; BoxWidth: integer): {O} TList {of TParsedTextLine};
+type
+  TSavepoint = record
+    TextPtr:  pchar;
+    BlockInd: integer;
+    BlockPos: integer;
+    Len:      integer;
+  end;
+
+var
+{O} Line:            TParsedTextLine;
+    LineStart:       TSavepoint;
+    LastWordEnd:     TSavepoint;
+    Cursor:          TSavepoint;
+    CurrBlock:       PTextBlock;
+    LineWidth:       integer;
+    GraphemWidth:    integer;
+    GraphemSize:     integer;
+    PrevGraphemSize: integer;
+    TextStart:       pchar;
+    NumBlocks:       integer;
+    c:               char;
+
+begin
+  Line := nil;
+  // * * * * * //
+  result := DataLib.NewList(Utils.OWNS_ITEMS);
+
+  if ParsedText.ProcessedText = '' then begin
+    exit;
+  end;
+
+  NumBlocks := ParsedText.NumBlocks;
+  CurrBlock := ParsedText.Blocks[0];
+
+  TextStart := pchar(ParsedText.ProcessedText);
+  c         := #0;
+
+  LineStart.TextPtr  := TextStart;
+  LineStart.BlockInd := 0;
+  LineStart.BlockPos := 0;
+  LineStart.Len      := 0;
+
+  LastWordEnd := LineStart;
+  Cursor      := LineStart;
+
+  // Handle all lines
+  repeat
+    LineWidth       := 0;
+    PrevGraphemSize := 0;
+
+    // Handle single line
+    while true do begin
+      c := Cursor.TextPtr^;
+
+      // End of text/line
+      if c in [#0, #10] then begin
+        break;
+      end;
+
+      GraphemWidth := GetGraphemWidth(ParsedText.Font, Cursor.TextPtr, GraphemSize);
+      Inc(LineWidth, GraphemWidth);
+
+      if LineWidth > BoxWidth then begin
+        if c = ' ' then begin
+          break;
+        // This word should be wrapped, fallback to the previous word
+        end else if LastWordEnd.TextPtr <> LineStart.TextPtr then begin
+          Cursor    := LastWordEnd;
+          CurrBlock := ParsedText.Blocks[Cursor.BlockInd];
+          break;
+        end;
+      end;
+
+      // Track word end
+      if (GraphemSize > 1) or (PrevGraphemSize > 1) or ((c = ' ') and (Cursor.TextPtr <> LineStart.TextPtr) and (Cursor.TextPtr[-1] <> ' ')) then begin
+        LastWordEnd := Cursor;
+      end;
+
+      // Move position in text
+      Inc(Cursor.TextPtr, GraphemSize);
+      Inc(Cursor.Len,     GraphemSize);
+
+      PrevGraphemSize := GraphemSize;
+
+      // Move position in block
+      if c <> ' ' then begin
+        Inc(Cursor.BlockPos);
+
+        while (Cursor.BlockPos >= CurrBlock.BlockLen) and (Cursor.BlockInd + 1 < NumBlocks) do begin
+          Inc(Cursor.BlockInd);
+          Cursor.BlockPos := 0;
+          CurrBlock       := ParsedText.Blocks[Cursor.BlockInd];
+        end;
+      end;
+    end; // .while
+
+    // Create new line
+    Line          := TParsedTextLine.Create;
+    Line.Offset   := integer(LineStart.TextPtr) - integer(TextStart);
+    Line.BlockInd := LineStart.BlockInd;
+    Line.BlockPos := LineStart.BlockPos;
+    Line.Len      := Cursor.Len;
+
+    // Add the line to the result
+    result.Add(Line); Line := nil;
+
+    // Skip line end character
+    if c = #10 then begin
+      Inc(Cursor.TextPtr);
+    // Skip trailing spaces
+    end else if c = ' ' then begin
+      while Cursor.TextPtr^ = ' ' do begin
+        Inc(Cursor.TextPtr);
+      end;
+    end;
+
+    // Init next line
+    Cursor.Len  := 0;
+    LineStart   := Cursor;
+    LastWordEnd := Cursor;
+  until Cursor.TextPtr^ = #0;
+  // * * * * * //
+  {!} Assert(Line = nil);
+end; // .function ParsedTextToLines
 
 function UpdateCurrParsedText (Font: Heroes.PFontItem; OrigStr: pchar; OrigTextLen: integer = -1): {U} TParsedText;
 var
