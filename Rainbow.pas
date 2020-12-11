@@ -75,7 +75,7 @@ type
   TParsedText = class
    public
    {O} Blocks:        {O} TList {of PTextBlock};
-   {U} Font:          PFontItem; // Can be dangling pointer
+   {U} Font:          PFontItem;
        RefCount:      integer;
        OrigText:      string;
        ProcessedText: string;
@@ -97,7 +97,7 @@ type
 
 var
 {O} NamedColors:       {U} AssocArrays.TAssocArray {of Color16: integer};
-{O} LoadedImages:      {U} TDict {of loaded H3 def, pcx or other image};
+{O} LoadedResources:   {U} TDict {of loaded H3 resource};
 {O} ColorStack:        {U} Lists.TList {of Color16: integer};
 {O} TextScanner:       TextScan.TTextScanner;
 {O} TaggedLineBuilder: StrLib.TStrBuilder;
@@ -496,13 +496,13 @@ end; // .function EraTagsToNativeTags
 (* Loads def image and caches it forever for fast drawing *)
 function LoadDefImage (const FileName: string): {n} Heroes.PDefItem;
 begin
-  result := LoadedImages[FileName];
+  result := LoadedResources[FileName];
 
   if result = nil then begin
     result := Heroes.LoadDef(FileName);
 
     if result <> nil then begin
-      LoadedImages[FileName] := result;
+      LoadedResources[FileName] := result;
     end;
   end;
 end;
@@ -530,6 +530,7 @@ var
     NumSpaceChars:   integer;
     
     NativeTag:    char;
+    FontName:     string;
     ColorName:    string;
     DefName:      string;
     FrameIndStr:  string;
@@ -578,6 +579,13 @@ begin
   TextBlock.Color16   := DEF_COLOR;
   CurrColor           := DEF_COLOR;
   NativeTag           := #0;
+
+  FontName := pchar(@Font.Name);
+  
+  if LoadedResources[FontName] = nil then begin
+    LoadedResources[FontName] := Font;
+    Inc(Font.RefCount);
+  end;
   
   if Length(OrigText) <= sizeof(GlobalBuffer) - 1 then begin
     ColorStack.Clear;
@@ -1204,7 +1212,7 @@ end; // .procedure OnAfterWoG
 
 begin
   NamedColors       := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
-  LoadedImages      := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  LoadedResources   := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   ColorStack        := Lists.NewSimpleList;
   TextScanner       := TextScan.TTextScanner.Create;
   TaggedLineBuilder := StrLib.TStrBuilder.Create;
