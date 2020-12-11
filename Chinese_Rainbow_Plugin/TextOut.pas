@@ -74,10 +74,19 @@ type
   end; // .object TFontItem
   {$ALIGN ON}
 
+  TGraphemWidthEstimator = function (Font: PFontItem): integer; stdcall;
+
 var
-  BytesPerPixel: integer = 2;
-  TextColorMode: pword   = Ptr($694DB0);
-  Color16To32:   function (Color16: integer): integer;
+  BytesPerPixel:  integer = 2;
+  TextColorMode:  pword   = Ptr($694DB0);
+  Color16To32:    function (Color16: integer): integer;
+  PrevFont:       PFontItem;
+  PrevFontWidth:  integer;
+  PrevFontHeight: integer;
+
+function  ChineseGetCharColor: integer; stdcall; external 'era.dll';
+procedure ChineseGotoNextChar; stdcall; external 'era.dll';
+procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); stdcall; external 'era.dll';
 
 procedure UpdateBytesPerPixel;
 begin
@@ -285,6 +294,12 @@ var
   Font11Diff: integer;
 
 begin
+  if Font = PrevFont then begin
+    Width  := PrevFontWidth;
+    Height := PrevFontHeight;
+    exit;
+  end;
+
   Font24Diff := Abs(Font.Height - Font24Height) * 1000 div Font.Height;
   Font12Diff := Abs(Font.Height - Font12Height) * 1000 div Font.Height;
   Font11Diff := Abs(Font.Height - Font11Height) * 1000 div Font.Height;
@@ -299,7 +314,11 @@ begin
     Width  := Font11Width;
     Height := Font11Height;
   end;
-end;
+
+  PrevFont       := Font;
+  PrevFontWidth  := Width;
+  PrevFontHeight := Height;
+end; // .procedure SetFont
 
 //得到文字一共要占几行
 function GetStrRowCount(str:pAnsiChar;hfont,RowWidth:integer):integer;stdcall;
@@ -392,9 +411,9 @@ begin
       end;
 
       if (str[i] > #160) and (str[i + 1] > #160) then begin
-        if FontWidth = Font12Width   then MakeChar12(cy, cx, Surface, @str[i], Color);
+        if FontWidth = Font12Width then MakeChar12(cy, cx, Surface, @str[i], Color);
         if FontWidth = Font11Width then MakeChar10(cy, cx, Surface, @str[i], Color);
-        if FontWidth = Font24Width   then MakeChar24(cy, cx, Surface, @str[i], Color);
+        if FontWidth = Font24Width then MakeChar24(cy, cx, Surface, @str[i], Color);
         
         cx := cx + FontWidth;
         Inc(i);
@@ -528,4 +547,19 @@ begin
     end;
   end;
 end;
+
+function GraphemWidthEstimator (Font: PFontItem): integer; stdcall;
+var
+  Height: integer;
+
+begin
+  if Font = PrevFont then begin
+    result := PrevFontWidth;
+  end else begin
+    SetFont(Font, result, Height);
+  end;
+end;
+
+begin
+  SetChineseGraphemWidthEstimator(GraphemWidthEstimator);
 end.

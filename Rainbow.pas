@@ -29,12 +29,14 @@ const
 
 
 type
-  TColor32To16Func  = function (Color32: integer): integer;
+  TColor32To16Func       = function (Color32: integer): integer;
+  TGraphemWidthEstimator = function (Font: Heroes.PFontItem): integer; stdcall;
   
 var
   (* Chinese loader support: {~color}...{~} => {...} *)
-  ChineseLoaderOpt: boolean;
-  ChineseHandler:   pointer;
+  ChineseLoaderOpt:             boolean;
+  ChineseHandler:               pointer;
+  ChineseGraphemWidthEstimator: TGraphemWidthEstimator;
 
 
 procedure NameColor (Color32: integer; const Name: string); stdcall;
@@ -42,6 +44,7 @@ procedure NameColor (Color32: integer; const Name: string); stdcall;
 (* Chinese only: temporal *)
 function  ChineseGetCharColor: integer; stdcall;
 procedure ChineseGotoNextChar; stdcall;
+procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); stdcall;
 
 
 (***) implementation (***)
@@ -49,7 +52,8 @@ procedure ChineseGotoNextChar; stdcall;
 
 exports
   ChineseGetCharColor,
-  ChineseGotoNextChar;
+  ChineseGotoNextChar,
+  SetChineseGraphemWidthEstimator;
 
 
 type
@@ -744,7 +748,7 @@ var
 
 begin
   if ChineseLoaderOpt and (Graphem^ > MAX_CHINESE_LATIN_CHARACTER) and (Graphem[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
-    result      := 999;
+    result      := ChineseGraphemWidthEstimator(Font);
     GraphemSize := 2;
   end else begin
     CharInfo    := @Font.CharInfos[Graphem^];
@@ -1079,6 +1083,11 @@ procedure ChineseGotoNextChar; stdcall;
 begin
   Inc(CurrBlockPos);
   UpdateCurrBlock;
+end;
+
+procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); stdcall;
+begin
+  ChineseGraphemWidthEstimator := Estimator;
 end;
 
 procedure SetupColorMode;
