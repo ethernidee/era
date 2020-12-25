@@ -866,9 +866,9 @@ type
 
   PGameDate = ^TGameDate;
   TGameDate = packed record
-    Month: word;
-    Week:  word;
     Day:   word;
+    Week:  word;
+    Month: word;
   end;
 
   PArtInfo = ^TArtInfo;
