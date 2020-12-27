@@ -473,6 +473,9 @@ type
   PChars12 = ^TChars12;
   TChars12 = packed array [0..11] of char;
 
+  TDrawImageFlag  = (DFL_CROP, DFL_MIRROR, DFL_NO_SPECIAL_PALETTE_COLORS);
+  TDrawImageFlags = set of TDrawImageFlag;
+
   {$ALIGN OFF}
   PBinaryTreeItem = ^TBinaryTreeItem;
   TBinaryTreeItem = object
@@ -566,7 +569,7 @@ type
     Unk1:            integer;
     Buffer:          integer;
 
-    procedure DrawFrameToBuf (SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; Palette16: PPalette16; DoMirror: boolean = false; DisableSpecialPaletteColors: boolean = true);
+    procedure DrawFrameToBufEx (SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; Palette16: PPalette16; DrawFlags: TDrawImageFlags = []);
   end; // .object TDefFrame
   {$ALIGN ON}
 
@@ -595,7 +598,9 @@ type
     Width:         integer;
     Height:        integer;
 
-    procedure DrawFrameToBuf (GroupInd, FrameInd, SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DoMirror: boolean = false; DisableSpecialPaletteColors: boolean = true);
+    function  GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
+    procedure DrawFrameToBufEx (GroupInd, FrameInd, SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DrawFlags: TDrawImageFlags = []);
+    procedure DrawFrameToBuf (GroupInd, FrameInd: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DrawFlags: TDrawImageFlags = []);
   end; // .object TDefItem
   {$ALIGN ON}
 
@@ -1403,24 +1408,66 @@ begin
   PatchApi.Call(PatchApi.THISCALL_, Ptr($55DDF0), [@Self, @ResPtrs, @NewItem]);
 end; // .procedure TBinaryTreeNode.AddItem
 
-procedure TDefFrame.DrawFrameToBuf (SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; Palette16: PPalette16; DoMirror: boolean = false; DisableSpecialPaletteColors: boolean = true);
+procedure TDefFrame.DrawFrameToBufEx (SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; Palette16: PPalette16; DrawFlags: TDrawImageFlags = []);
 begin
-  PatchApi.Call(THISCALL_, Ptr($47BE90), [@Self, SrcX, SrcY, aWidth, aHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Palette16, ord(DoMirror), ord(DisableSpecialPaletteColors)]);
+  PatchApi.Call(THISCALL_, Ptr($47BE90), [@Self, SrcX, SrcY, aWidth, aHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Palette16, ord(DFL_MIRROR in DrawFlags), ord(not (DFL_NO_SPECIAL_PALETTE_COLORS in DrawFlags))]);
 end;
 
-procedure TDefItem.DrawFrameToBuf (GroupInd, FrameInd, SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DoMirror: boolean = false; DisableSpecialPaletteColors: boolean = true);
+function TDefItem.GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
 var
 {U} DefGroup: PDefGroup;
 
 begin
+  result := nil;
+
   if Math.InRange(GroupInd, 0, Self.NumGroups - 1) then begin
     DefGroup := Self.Groups[GroupInd];
 
     if Math.InRange(FrameInd, 0, DefGroup.NumFrames - 1) then begin
-      DefGroup.Frames[FrameInd].DrawFrameToBuf(SrcX, SrcY, aWidth, aHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Self.Palette16, DoMirror, DisableSpecialPaletteColors);
+      result := DefGroup.Frames[FrameInd];
     end;
   end;
 end;
+
+procedure TDefItem.DrawFrameToBufEx (GroupInd, FrameInd, SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DrawFlags: TDrawImageFlags = []);
+var
+{U} DefFrame: PDefFrame;
+
+begin
+  DefFrame := Self.GetFrame(GroupInd, FrameInd);
+
+  if DefFrame <> nil then begin
+    DefFrame.DrawFrameToBufEx(SrcX, SrcY, aWidth, aHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Self.Palette16, DrawFlags);
+  end;
+end;
+
+procedure TDefItem.DrawFrameToBuf (GroupInd, FrameInd: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DrawFlags: TDrawImageFlags = []);
+var
+{U} DefFrame:  PDefFrame;
+    SrcX:      integer;
+    SrcY:      integer;
+    SrcHeight: integer;
+    SrcWidth:  integer;
+
+begin
+  DefFrame := Self.GetFrame(GroupInd, FrameInd);
+
+  if DefFrame <> nil then begin
+    if DFL_CROP in DrawFlags then begin
+      SrcX      := DefFrame.FrameLeft;
+      SrcY      := DefFrame.FrameTop;
+      SrcWidth  := DefFrame.FrameWidth;
+      SrcHeight := DefFrame.FrameHeight;
+    end else begin
+      SrcX      := 0;
+      SrcY      := 0;
+      SrcWidth  := Self.Width;
+      SrcHeight := Self.Height;
+    end;
+
+    DefFrame.DrawFrameToBufEx(SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Self.Palette16, DrawFlags);
+  end;
+end; // .procedure TDefItem.DrawFrameToBuf
 
 class function TPcx16ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;
 begin

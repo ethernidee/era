@@ -72,6 +72,7 @@ type
       TEXT_BLOCK_DEF: (
       {U} Def:      Heroes.PDefItem;
           DefName:  pchar; // Pointer to persisted string
+          GroupInd: integer;
           FrameInd: integer;
       );    
   end; // .record TTextBlock
@@ -387,11 +388,13 @@ var
     IsEmbeddedImage: boolean;
     NumSpaceChars:   integer;
     
+    TempStr:     string;
+    FontName:    string absolute TempStr;
+    ColorName:   string absolute TempStr;
+    DefName:     string absolute TempStr;
+    FrameIndStr: string absolute TempStr;
+    
     NativeTag:    char;
-    FontName:     string;
-    ColorName:    string;
-    DefName:      string;
-    FrameIndStr:  string;
     NbspWidth:    integer;
     NumFillChars: integer;
     CharInfo:     Heroes.PFontCharInfo;
@@ -495,23 +498,36 @@ begin
         TextBlock.BlockLen  := 0;
         TextBlock.BlockType := TEXT_BLOCK_DEF;
         TextBlock.Def       := nil;
+        TextBlock.GroupInd  := 0;
         TextBlock.FrameInd  := 0;
         
         if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
-          DefName := SysUtils.AnsiLowerCase(DefName);
+          DefName           := SysUtils.AnsiLowerCase(DefName);
+          TextBlock.DefName := Memory.UniqueStrings[pchar(DefName)];
+
+          if Length(DefName) <= 4096 then begin
+            TextBlock.Def := LoadDefImage(DefName);
+          end;
 
           if TextScanner.c = ':' then begin
             TextScanner.GotoNextChar();
 
-            if TextScanner.ReadTokenTillDelim(['}'], FrameIndStr) then begin
+            if TextScanner.ReadTokenTillDelim(['}', ':'], FrameIndStr) then begin
               SysUtils.TryStrToInt(FrameIndStr, TextBlock.FrameInd);
+
+              if TextScanner.c = ':' then begin
+                TextScanner.GotoNextChar();
+                TextBlock.GroupInd := TextBlock.FrameInd;
+                TextBlock.FrameInd := 0;
+
+                if TextScanner.ReadTokenTillDelim(['}'], FrameIndStr) then begin
+                  SysUtils.TryStrToInt(FrameIndStr, TextBlock.FrameInd);
+                end;
+              end;
             end;
-          end;
+          end; // .if
 
           TextScanner.GotoNextChar();
-
-          TextBlock.Def     := LoadDefImage(DefName);
-          TextBlock.DefName := Memory.UniqueStrings[pchar(DefName)];
         end; // .if
 
         if TextBlock.Def <> nil then begin
@@ -791,7 +807,8 @@ begin
         Res.Append('{~>');
         Res.AppendBuf(Windows.LStrLen(CurrBlock.DefName), CurrBlock.DefName);
 
-        if CurrBlock.FrameInd <> 0 then begin
+        if (CurrBlock.GroupInd <> 0) or (CurrBlock.FrameInd <> 0) then begin
+          Res.Append(':' + SysUtils.IntToStr(CurrBlock.GroupInd));
           Res.Append(':' + SysUtils.IntToStr(CurrBlock.FrameInd));
         end;
 
@@ -1132,7 +1149,7 @@ begin
     Def := CurrTextBlock.Def;
 
     if CurrBlockPos = 0 then begin
-      Def.DrawFrameToBuf(0, CurrTextBlock.FrameInd, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize);
+      Def.DrawFrameToBuf(CurrTextBlock.GroupInd, CurrTextBlock.FrameInd, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize, [Heroes.DFL_CROP]);
     end;
 
     result := Canvas;
