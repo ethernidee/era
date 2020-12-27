@@ -1,8 +1,8 @@
 unit Rainbow;
-{
-DESCRIPTION:  Adds multi-color support to all Heroes texts
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  DESCRIPTION: Adds markup language support to all Heroes texts (EML - Era Markup Language).
+  AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+*)
 
 (***)  interface  (***)
 uses
@@ -59,21 +59,43 @@ exports
 type
   TTextBlockType = (TEXT_BLOCK_CHARS, TEXT_BLOCK_DEF);
 
+  PEmlChars = ^TEmlChars;
+  TEmlChars = record
+    Color16: integer;
+  end;
+
+  PEmlImg = ^TEmlImg;
+  TEmlImg = record
+    IsBlock: boolean;
+
+    (* The following fields are used for block images only *)
+    CharsPerLine: integer;
+    OffsetY:      integer;
+    Height:       integer;
+  end;
+
+  PEmlDef = ^TEmlDef;
+  TEmlDef = record
+  {U} Def:      Heroes.PDefItem;
+      DefName:  pchar; // Pointer to persisted string
+      GroupInd: integer;
+      FrameInd: integer;
+  end;
+
   PTextBlock = ^TTextBlock;
   TTextBlock = record
-    BlockLen:  integer;
-    BlockType: TTextBlockType;
+    BlockType:      TTextBlockType;
+    BlockLen:       integer;
+    HorizAlignment: integer;
 
     case TTextBlockType of
       TEXT_BLOCK_CHARS: (
-        Color16: integer;
+        CharsBlock: TEmlChars;
       );
 
       TEXT_BLOCK_DEF: (
-      {U} Def:      Heroes.PDefItem;
-          DefName:  pchar; // Pointer to persisted string
-          GroupInd: integer;
-          FrameInd: integer;
+        ImgBlock: TEmlImg;
+        DefBlock: TEmlDef;
       );    
   end; // .record TTextBlock
 
@@ -439,7 +461,7 @@ begin
 
   TextBlock.BlockLen  := Length(OrigText);
   TextBlock.BlockType := TEXT_BLOCK_CHARS;
-  TextBlock.Color16   := DEF_COLOR;
+  TextBlock.CharsBlock.Color16   := DEF_COLOR;
   CurrColor           := DEF_COLOR;
   NativeTag           := #0;
 
@@ -497,31 +519,31 @@ begin
         Self.Blocks.Add(TextBlock);
         TextBlock.BlockLen  := 0;
         TextBlock.BlockType := TEXT_BLOCK_DEF;
-        TextBlock.Def       := nil;
-        TextBlock.GroupInd  := 0;
-        TextBlock.FrameInd  := 0;
+        TextBlock.DefBlock.Def       := nil;
+        TextBlock.DefBlock.GroupInd  := 0;
+        TextBlock.DefBlock.FrameInd  := 0;
         
         if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
           DefName           := SysUtils.AnsiLowerCase(DefName);
-          TextBlock.DefName := Memory.UniqueStrings[pchar(DefName)];
+          TextBlock.DefBlock.DefName := Memory.UniqueStrings[pchar(DefName)];
 
           if Length(DefName) <= 4096 then begin
-            TextBlock.Def := LoadDefImage(DefName);
+            TextBlock.DefBlock.Def := LoadDefImage(DefName);
           end;
 
           if TextScanner.c = ':' then begin
             TextScanner.GotoNextChar();
 
             if TextScanner.ReadTokenTillDelim(['}', ':'], FrameIndStr) then begin
-              SysUtils.TryStrToInt(FrameIndStr, TextBlock.FrameInd);
+              SysUtils.TryStrToInt(FrameIndStr, TextBlock.DefBlock.FrameInd);
 
               if TextScanner.c = ':' then begin
                 TextScanner.GotoNextChar();
-                TextBlock.GroupInd := TextBlock.FrameInd;
-                TextBlock.FrameInd := 0;
+                TextBlock.DefBlock.GroupInd := TextBlock.DefBlock.FrameInd;
+                TextBlock.DefBlock.FrameInd := 0;
 
                 if TextScanner.ReadTokenTillDelim(['}'], FrameIndStr) then begin
-                  SysUtils.TryStrToInt(FrameIndStr, TextBlock.FrameInd);
+                  SysUtils.TryStrToInt(FrameIndStr, TextBlock.DefBlock.FrameInd);
                 end;
               end;
             end;
@@ -530,15 +552,15 @@ begin
           TextScanner.GotoNextChar();
         end; // .if
 
-        if TextBlock.Def <> nil then begin
+        if TextBlock.DefBlock.Def <> nil then begin
           // _Fnt_->char_sizes[NBSP].width
           CharInfo           := @Font.CharInfos[NBSP];
           NbspWidth          := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
-          NumFillChars       := (TextBlock.Def.GetFrameWidth(TextBlock.GroupInd, TextBlock.FrameInd) + NbspWidth - 1) div NbspWidth;
+          NumFillChars       := (TextBlock.DefBlock.Def.GetFrameWidth(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd) + NbspWidth - 1) div NbspWidth;
           TextBlock.BlockLen := NumFillChars;
 
           BeginNewColorBlock;
-          TextBlock.Color16 := CurrColor;
+          TextBlock.CharsBlock.Color16 := CurrColor;
 
           // Output serie of non-breaking spaces to compensate image width
           for i := 0 to NumFillChars - 1 do begin
@@ -561,7 +583,7 @@ begin
           ColorStack.Add(Ptr(CurrColor));
         end;
 
-        TextBlock.Color16 := CurrColor;
+        TextBlock.CharsBlock.Color16 := CurrColor;
         TextScanner.GotoNextChar;
       // Handle Era custom color open/close tags
       end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
@@ -587,7 +609,7 @@ begin
           ColorStack.Add(Ptr(CurrColor));
         end; // .else
         
-        TextBlock.Color16 := CurrColor;
+        TextBlock.CharsBlock.Color16 := CurrColor;
         TextScanner.GotoNextChar;
       end; // .elseif
     end; // .while
@@ -796,20 +818,20 @@ begin
     // Output block opening tag, if necessary
     case CurrBlock.BlockType of
       TEXT_BLOCK_CHARS: begin
-        if CurrBlock.Color16 <> DEF_COLOR then begin
+        if CurrBlock.CharsBlock.Color16 <> DEF_COLOR then begin
           Res.Append('{~');
-          Res.Append(SysUtils.Format('%x', [Color16To32(CurrBlock.Color16)]));
+          Res.Append(SysUtils.Format('%x', [Color16To32(CurrBlock.CharsBlock.Color16)]));
           Res.Append('}');
         end;
       end;
 
       TEXT_BLOCK_DEF: begin
         Res.Append('{~>');
-        Res.AppendBuf(Windows.LStrLen(CurrBlock.DefName), CurrBlock.DefName);
+        Res.AppendBuf(Windows.LStrLen(CurrBlock.DefBlock.DefName), CurrBlock.DefBlock.DefName);
 
-        if (CurrBlock.GroupInd <> 0) or (CurrBlock.FrameInd <> 0) then begin
-          Res.Append(':' + SysUtils.IntToStr(CurrBlock.GroupInd));
-          Res.Append(':' + SysUtils.IntToStr(CurrBlock.FrameInd));
+        if (CurrBlock.DefBlock.GroupInd <> 0) or (CurrBlock.DefBlock.FrameInd <> 0) then begin
+          Res.Append(':' + SysUtils.IntToStr(CurrBlock.DefBlock.GroupInd));
+          Res.Append(':' + SysUtils.IntToStr(CurrBlock.DefBlock.FrameInd));
         end;
 
         Res.Append('}');
@@ -842,7 +864,7 @@ begin
     // Output closing block tag if necessary
     case CurrBlock.BlockType of
       TEXT_BLOCK_CHARS: begin
-        if CurrBlock.Color16 <> DEF_COLOR then begin
+        if CurrBlock.CharsBlock.Color16 <> DEF_COLOR then begin
           Res.Append('{~}');
         end;
       end;
@@ -889,7 +911,7 @@ begin
   if (CurrParsedText <> nil) and (CurrTextBlock <> nil) then begin
     if CurrBlockPos < CurrTextBlock.BlockLen then begin
       if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-        CurrColor := CurrTextBlock.Color16;
+        CurrColor := CurrTextBlock.CharsBlock.Color16;
       end;
     end else begin
       while CurrBlockPos >= CurrTextBlock.BlockLen do begin
@@ -901,7 +923,7 @@ begin
           CurrTextBlock := CurrParsedText.Blocks[CurrBlockInd];
 
           if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-            CurrColor := CurrTextBlock.Color16;
+            CurrColor := CurrTextBlock.CharsBlock.Color16;
           end;
         // Something is broken, like invalid GBK character (missing second part of code point), mixed language, etc.
         // Empty string, probably. Recover to use the last color.
@@ -1145,11 +1167,11 @@ var
   Def: Heroes.PDefItem;
 
 begin
-  if (CurrParsedText <> nil) and (CurrTextBlock <> nil) and (CurrTextBlock.BlockType = TEXT_BLOCK_DEF) and (CurrTextBlock.Def <> nil) then begin
-    Def := CurrTextBlock.Def;
+  if (CurrParsedText <> nil) and (CurrTextBlock <> nil) and (CurrTextBlock.BlockType = TEXT_BLOCK_DEF) and (CurrTextBlock.DefBlock.Def <> nil) then begin
+    Def := CurrTextBlock.DefBlock.Def;
 
     if CurrBlockPos = 0 then begin
-      Def.DrawFrameToBuf(CurrTextBlock.GroupInd, CurrTextBlock.FrameInd, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize, [Heroes.DFL_CROP]);
+      Def.DrawFrameToBuf(CurrTextBlock.DefBlock.GroupInd, CurrTextBlock.DefBlock.FrameInd, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize, [Heroes.DFL_CROP]);
     end;
 
     result := Canvas;
