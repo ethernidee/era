@@ -85,8 +85,13 @@ type
        ProcessedText: string;
        NumBlocks:     integer;
 
-    constructor Create;
+    constructor Create (const OrigText: string; {U} Font: Heroes.PFontItem);
     destructor  Destroy; override;
+
+    (* Returns list of TParsedTextLine, suitable to be displayed in the box of given size *)
+    function ToLines (BoxWidth: integer): {O} TList {of TParsedTextLine};
+
+    function CountLines (BoxWidth: integer): integer;
   end; // .class TParsedText
 
   TParsedTextLine = class
@@ -323,6 +328,416 @@ begin
   NamedColors[Name] := Ptr(Color32To16(Color32));
 end;
 
+function IsChineseLoaderPresent (out ChineseHandler: pointer): boolean;
+begin
+  result := pbyte($4B5202)^ = $E9;
+  
+  if result then begin
+    ChineseHandler  := Ptr(pinteger($4B5203)^ + integer($4B5207));
+  end;
+end;
+
+(* Loads def image and caches it forever for fast drawing *)
+function LoadDefImage (const FileName: string): {n} Heroes.PDefItem;
+begin
+  result := LoadedResources[FileName];
+
+  if result = nil then begin
+    result := Heroes.LoadDef(FileName);
+
+    if result <> nil then begin
+      LoadedResources[FileName] := result;
+    end;
+  end;
+end;
+
+function GetGraphemWidth (Font: Heroes.PFontItem; Graphem: pchar; out GraphemSize: integer): integer;
+var
+  CharInfo: Heroes.PFontCharInfo;
+
+begin
+  if ChineseLoaderOpt and (Graphem^ > MAX_CHINESE_LATIN_CHARACTER) and (Graphem[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
+    result      := ChineseGraphemWidthEstimator(Font);
+    GraphemSize := 2;
+  end else begin
+    CharInfo    := @Font.CharInfos[Graphem^];
+    result      := CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter;
+    GraphemSize := 1;
+  end;
+end;
+
+// var
+//   List: TList;
+
+constructor TParsedText.Create (const OrigText: string; {U} Font: Heroes.PFontItem);
+const
+  LINE_END_MARKER = #10;
+  NBSP            = #160;
+
+var
+{U} Buf:      pchar;
+    StartPos: integer;
+    c:        char;
+    
+{U} TextBlock:       PTextBlock;
+    BlockLen:        integer;
+    IsTag:           boolean;
+    IsEraTag:        boolean;
+    IsEmbeddedImage: boolean;
+    NumSpaceChars:   integer;
+    
+    NativeTag:    char;
+    FontName:     string;
+    ColorName:    string;
+    DefName:      string;
+    FrameIndStr:  string;
+    NbspWidth:    integer;
+    NumFillChars: integer;
+    CharInfo:     Heroes.PFontCharInfo;
+    CurrColor:    integer;
+    ResLen:       integer;
+    i:            integer;
+
+  procedure BeginNewColorBlock;
+  begin
+    if (TextBlock.BlockType <> TEXT_BLOCK_CHARS) or (TextBlock.BlockLen > 0) then begin
+      New(TextBlock);
+      Self.Blocks.Add(TextBlock);
+      TextBlock.BlockLen  := 0;
+      TextBlock.BlockType := TEXT_BLOCK_CHARS;
+    end;
+  end;
+
+  procedure PopColor;
+  begin
+    case ColorStack.Count of
+      0: CurrColor := DEF_COLOR;
+      1: begin
+           ColorStack.Pop;
+           CurrColor := DEF_COLOR;
+         end;
+    else
+      ColorStack.Pop;
+      CurrColor := integer(ColorStack.Top);
+    end;
+  end;
+
+begin
+  inherited Create;
+
+  Buf := @GlobalBuffer[0];
+  // * * * * * //
+  Self.Blocks   := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
+  Self.OrigText := OrigText;
+  Self.Font     := Font;
+  New(TextBlock);
+  Self.Blocks.Add(TextBlock);
+
+  TextBlock.BlockLen  := Length(OrigText);
+  TextBlock.BlockType := TEXT_BLOCK_CHARS;
+  TextBlock.Color16   := DEF_COLOR;
+  CurrColor           := DEF_COLOR;
+  NativeTag           := #0;
+
+  FontName := pchar(@Font.Name);
+  
+  if LoadedResources[FontName] = nil then begin
+    LoadedResources[FontName] := Font;
+    Inc(Font.RefCount);
+  end;
+  
+  if Length(OrigText) <= sizeof(GlobalBuffer) - 1 then begin
+    ColorStack.Clear;
+    TextScanner.Connect(OrigText, LINE_END_MARKER);
+    
+    while not TextScanner.EndOfText do begin
+      StartPos        := TextScanner.Pos;
+      NumSpaceChars   := 0;
+      IsTag           := false;
+      IsEraTag        := false;
+      IsEmbeddedImage := false;
+      
+      while not IsTag and TextScanner.GetCurrChar(c) do begin
+        if c in ['{', '}'] then begin
+          IsTag           := true;
+          NativeTag       := c;
+          IsEraTag        := TextScanner.CharsRel[1] = '~';
+          IsEmbeddedImage := IsEraTag and (TextScanner.CharsRel[2] = '>');
+        end else if c in [#10, ' '] then begin
+          Inc(NumSpaceChars);
+        end else if ChineseLoaderOpt and (c > MAX_CHINESE_LATIN_CHARACTER) and (TextScanner.CharsRel[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
+          Inc(NumSpaceChars);
+          TextScanner.GotoNextChar;
+        end;
+
+        if not IsTag then begin
+          TextScanner.GotoNextChar;
+        end;
+      end; // .while
+      
+      // Output normal characters to result buffer
+      BlockLen           := TextScanner.Pos - StartPos;
+      Utils.CopyMem(BlockLen, pointer(@OrigText[StartPos]), Buf);
+      Buf                := Utils.PtrOfs(Buf, BlockLen);
+      TextBlock.BlockLen := BlockLen - NumSpaceChars;
+
+      // Text ended
+      if not IsTag then begin
+        break;
+      end;
+
+      if IsEmbeddedImage then begin
+        TextScanner.GotoRelPos(+3);
+
+        New(TextBlock);
+        Self.Blocks.Add(TextBlock);
+        TextBlock.BlockLen  := 0;
+        TextBlock.BlockType := TEXT_BLOCK_DEF;
+        TextBlock.Def       := nil;
+        TextBlock.FrameInd  := 0;
+        
+        if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
+          DefName := SysUtils.AnsiLowerCase(DefName);
+
+          if TextScanner.c = ':' then begin
+            TextScanner.GotoNextChar();
+
+            if TextScanner.ReadTokenTillDelim(['}'], FrameIndStr) then begin
+              SysUtils.TryStrToInt(FrameIndStr, TextBlock.FrameInd);
+            end;
+          end;
+
+          TextScanner.GotoNextChar();
+
+          TextBlock.Def     := LoadDefImage(DefName);
+          TextBlock.DefName := Memory.UniqueStrings[pchar(DefName)];
+        end; // .if
+
+        if TextBlock.Def <> nil then begin
+          // _Fnt_->char_sizes[NBSP].width
+          CharInfo           := @Font.CharInfos[NBSP];
+          NbspWidth          := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
+          NumFillChars       := (TextBlock.Def.Width + NbspWidth - 1) div NbspWidth;
+          TextBlock.BlockLen := NumFillChars;
+
+          BeginNewColorBlock;
+          TextBlock.Color16 := CurrColor;
+
+          // Output serie of non-breaking spaces to compensate image width
+          for i := 0 to NumFillChars - 1 do begin
+            Buf^ := NBSP;
+            Inc(Buf);
+          end;
+        end;
+
+        continue;
+      end; // .if
+
+      // Handle native '{', '}' tags
+      if not IsEraTag then begin
+        BeginNewColorBlock;
+
+        if NativeTag = '}' then begin
+          PopColor;
+        end else begin
+          CurrColor := Color32To16(HEROES_GOLD_COLOR_CODE);
+          ColorStack.Add(Ptr(CurrColor));
+        end;
+
+        TextBlock.Color16 := CurrColor;
+        TextScanner.GotoNextChar;
+      // Handle Era custom color open/close tags
+      end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
+        BeginNewColorBlock;
+        
+        if ColorName = '' then begin
+          PopColor;
+        end else begin
+          CurrColor := 0;
+          
+          if NamedColors.GetExistingValue(ColorName, pointer(CurrColor)) then begin
+            // Ok
+          end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
+            CurrColor := Color32To16(CurrColor);
+
+            if CurrColor = UNSAFE_BLACK_COLOR then begin
+              CurrColor := SafeBlackColor;
+            end;
+          end else begin
+            CurrColor := DEF_COLOR;
+          end;
+          
+          ColorStack.Add(Ptr(CurrColor));
+        end; // .else
+        
+        TextBlock.Color16 := CurrColor;
+        TextScanner.GotoNextChar;
+      end; // .elseif
+    end; // .while
+  end; // .if
+  
+  ResLen := integer(Buf) - integer(@GlobalBuffer[0]);
+  {!} Assert(ResLen < sizeof(GlobalBuffer), 'Huge text exceeded ERA ParseText buffer capacity');
+
+  SetLength(Self.ProcessedText, ResLen);
+
+  if ResLen > 0 then begin
+    Utils.CopyMem(ResLen, @GlobalBuffer[0], @Self.ProcessedText[1]);
+  end;
+
+  Self.NumBlocks := Self.Blocks.Count;
+
+  // if Self.NumBlocks > 1 then begin
+  //   List := ParsedTextToLines(Self, 100);
+
+  //   for i := 0 to List.Count - 1 do begin
+  //     TParsedTextLine(List[i]).ToTaggedText(Self, TaggedLineBuilder);
+  //     VarDump(['LineN:', i + 1, TaggedLineBuilder.BuildStr()]);
+  //   end;
+  // end;
+end; // .function TParsedText.Create
+
+destructor TParsedText.Destroy;
+begin
+  SysUtils.FreeAndNil(Self.Blocks);
+end;
+
+function TParsedText.ToLines (BoxWidth: integer): {O} TList {of TParsedTextLine};
+type
+  TSavepoint = record
+    TextPtr:  pchar;
+    BlockInd: integer;
+    BlockPos: integer;
+    Len:      integer;
+  end;
+
+var
+{O} Line:            TParsedTextLine;
+    LineStart:       TSavepoint;
+    LastWordEnd:     TSavepoint;
+    Cursor:          TSavepoint;
+    CurrBlock:       PTextBlock;
+    LineWidth:       integer;
+    GraphemWidth:    integer;
+    GraphemSize:     integer;
+    PrevGraphemSize: integer;
+    TextStart:       pchar;
+    NumBlocks:       integer;
+    c:               char;
+
+begin
+  Line := nil;
+  // * * * * * //
+  result := DataLib.NewList(Utils.OWNS_ITEMS);
+
+  if Self.ProcessedText = '' then begin
+    exit;
+  end;
+
+  NumBlocks := Self.NumBlocks;
+  CurrBlock := Self.Blocks[0];
+
+  TextStart := pchar(Self.ProcessedText);
+  c         := #0;
+
+  LineStart.TextPtr  := TextStart;
+  LineStart.BlockInd := 0;
+  LineStart.BlockPos := 0;
+  LineStart.Len      := 0;
+
+  LastWordEnd := LineStart;
+  Cursor      := LineStart;
+
+  // Handle all lines
+  repeat
+    LineWidth       := 0;
+    PrevGraphemSize := 0;
+
+    // Handle single line
+    while true do begin
+      c := Cursor.TextPtr^;
+
+      // End of text/line
+      if c in [#0, #10] then begin
+        break;
+      end;
+
+      GraphemWidth := GetGraphemWidth(Self.Font, Cursor.TextPtr, GraphemSize);
+      Inc(LineWidth, GraphemWidth);
+
+      if LineWidth > BoxWidth then begin
+        if c = ' ' then begin
+          break;
+        // This word should be wrapped, fallback to the previous word
+        end else if LastWordEnd.TextPtr <> LineStart.TextPtr then begin
+          Cursor    := LastWordEnd;
+          CurrBlock := Self.Blocks[Cursor.BlockInd];
+          break;
+        end;
+      end;
+
+      // Track word end
+      if (GraphemSize > 1) or (PrevGraphemSize > 1) or ((c = ' ') and (Cursor.TextPtr <> LineStart.TextPtr) and (Cursor.TextPtr[-1] <> ' ')) then begin
+        LastWordEnd := Cursor;
+      end;
+
+      // Move position in text
+      Inc(Cursor.TextPtr, GraphemSize);
+      Inc(Cursor.Len,     GraphemSize);
+
+      PrevGraphemSize := GraphemSize;
+
+      // Move position in block
+      if c <> ' ' then begin
+        Inc(Cursor.BlockPos);
+
+        while (Cursor.BlockPos >= CurrBlock.BlockLen) and (Cursor.BlockInd + 1 < NumBlocks) do begin
+          Inc(Cursor.BlockInd);
+          Cursor.BlockPos := 0;
+          CurrBlock       := Self.Blocks[Cursor.BlockInd];
+        end;
+      end;
+    end; // .while
+
+    // Create new line
+    Line          := TParsedTextLine.Create;
+    Line.Offset   := integer(LineStart.TextPtr) - integer(TextStart);
+    Line.BlockInd := LineStart.BlockInd;
+    Line.BlockPos := LineStart.BlockPos;
+    Line.Len      := Cursor.Len;
+
+    // Add the line to the result
+    result.Add(Line); Line := nil;
+
+    // Skip line end character
+    if c = #10 then begin
+      Inc(Cursor.TextPtr);
+    // Skip trailing spaces
+    end else begin
+      while Cursor.TextPtr^ = ' ' do begin
+        Inc(Cursor.TextPtr);
+      end;
+    end;
+
+    // Init next line
+    Cursor.Len  := 0;
+    LineStart   := Cursor;
+    LastWordEnd := Cursor;
+  until Cursor.TextPtr^ = #0;
+  // * * * * * //
+  {!} Assert(Line = nil);
+end; // .function TParsedText.ToLines
+
+function TParsedText.CountLines (BoxWidth: integer): integer;
+var
+  {O} Lines: {O} TList {of TParsedTextLine};
+
+begin
+  Lines  := Self.ToLines(BoxWidth);
+  result := Lines.Count;
+  SysUtils.FreeAndNil(Lines);
+end;
+
 procedure TParsedTextLine.ToTaggedText (ParsedText: TParsedText; Res: StrLib.TStrBuilder);
 var
   Text:       pchar;
@@ -426,483 +841,23 @@ begin
   end; // .while
 end; // .procedure TParsedTextLine.ToTaggedText
 
-constructor TParsedText.Create;
-begin
-  Self.Blocks := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
-end;
-
-destructor TParsedText.Destroy;
-begin
-  SysUtils.FreeAndNil(Self.Blocks);
-end;
-
-function IsChineseLoaderPresent (out ChineseHandler: pointer): boolean;
-begin
-  result := pbyte($4B5202)^ = $E9;
-  
-  if result then begin
-    ChineseHandler  := Ptr(pinteger($4B5203)^ + integer($4B5207));
-  end;
-end;
-
-(* Returns text copy with Era color tags replaced with native {...text...} tags. Such text may be passed to H3 functions to estimate its width *)
-function EraTagsToNativeTags (Str: pchar): string;
-var
-  Buf: pchar;
-
-begin
-  if (Str = nil) or (Str^ = #0) then begin
-    result := '';
-    exit;
-  end;
-
-  result := Str;
-  Buf    := @result[1];
-  
-  while Str^ <> #0 do begin
-    while not (Str^ in ['{', #0]) do begin
-      Buf^ := Str^;
-      Inc(Str);
-      Inc(Buf);
-    end;
-
-    if Str^ <> #0 then begin
-      Inc(Str);
-
-      if Str^ = '~' then begin
-        if Str[1] = '}' then begin
-          Buf^ := '}';
-          Inc(Str, 2);
-          Inc(Buf);
-        end else begin
-          Buf^ := '{';
-          Inc(Str);
-          Inc(Buf);
-
-          while not (Str^ in ['}', #0]) do begin
-            Inc(Str);
-          end;
-
-          if Str^ <> #0 then begin
-            Inc(Str);
-          end;
-        end; // .else
-      end else begin
-        Buf^ := '{';
-        Inc(Buf);
-      end; // .else
-    end; // .if
-  end; // .while
-
-  Buf^ := #0;
-end; // .function EraTagsToNativeTags
-
-(* Loads def image and caches it forever for fast drawing *)
-function LoadDefImage (const FileName: string): {n} Heroes.PDefItem;
-begin
-  result := LoadedResources[FileName];
-
-  if result = nil then begin
-    result := Heroes.LoadDef(FileName);
-
-    if result <> nil then begin
-      LoadedResources[FileName] := result;
-    end;
-  end;
-end;
-
-// function ParsedTextToLines (ParsedText: TParsedText; BoxWidth: integer): {O} TList {of TParsedTextLine}; forward;
-
-// var
-//   List: TList;
-
-function ParseText (const OrigText: string; {U} Font: Heroes.PFontItem): {O} TParsedText;
-const
-  LINE_END_MARKER = #10;
-  NBSP            = #160;
-
-var
-{U} Buf:      pchar;
-    StartPos: integer;
-    c:        char;
-    
-{U} TextBlock:       PTextBlock;
-    BlockLen:        integer;
-    IsTag:           boolean;
-    IsEraTag:        boolean;
-    IsEmbeddedImage: boolean;
-    NumSpaceChars:   integer;
-    
-    NativeTag:    char;
-    FontName:     string;
-    ColorName:    string;
-    DefName:      string;
-    FrameIndStr:  string;
-    NbspWidth:    integer;
-    NumFillChars: integer;
-    CharInfo:     Heroes.PFontCharInfo;
-    CurrColor:    integer;
-    ResLen:       integer;
-    i:            integer;
-
-  procedure BeginNewColorBlock;
-  begin
-    if (TextBlock.BlockType <> TEXT_BLOCK_CHARS) or (TextBlock.BlockLen > 0) then begin
-      New(TextBlock);
-      result.Blocks.Add(TextBlock);
-      TextBlock.BlockLen  := 0;
-      TextBlock.BlockType := TEXT_BLOCK_CHARS;
-    end;
-  end;
-
-  procedure PopColor;
-  begin
-    case ColorStack.Count of
-      0: CurrColor := DEF_COLOR;
-      1: begin
-           ColorStack.Pop;
-           CurrColor := DEF_COLOR;
-         end;
-    else
-      ColorStack.Pop;
-      CurrColor := integer(ColorStack.Top);
-    end;
-  end;
-
-begin
-  Buf := @GlobalBuffer[0];
-  // * * * * * //
-  result          := TParsedText.Create;
-  result.OrigText := OrigText;
-  result.Font     := Font;
-  New(TextBlock);
-  result.Blocks.Add(TextBlock);
-
-  TextBlock.BlockLen  := Length(OrigText);
-  TextBlock.BlockType := TEXT_BLOCK_CHARS;
-  TextBlock.Color16   := DEF_COLOR;
-  CurrColor           := DEF_COLOR;
-  NativeTag           := #0;
-
-  FontName := pchar(@Font.Name);
-  
-  if LoadedResources[FontName] = nil then begin
-    LoadedResources[FontName] := Font;
-    Inc(Font.RefCount);
-  end;
-  
-  if Length(OrigText) <= sizeof(GlobalBuffer) - 1 then begin
-    ColorStack.Clear;
-    TextScanner.Connect(OrigText, LINE_END_MARKER);
-    
-    while not TextScanner.EndOfText do begin
-      StartPos        := TextScanner.Pos;
-      NumSpaceChars   := 0;
-      IsTag           := false;
-      IsEraTag        := false;
-      IsEmbeddedImage := false;
-      
-      while not IsTag and TextScanner.GetCurrChar(c) do begin
-        if c in ['{', '}'] then begin
-          IsTag           := true;
-          NativeTag       := c;
-          IsEraTag        := TextScanner.CharsRel[1] = '~';
-          IsEmbeddedImage := IsEraTag and (TextScanner.CharsRel[2] = '>');
-        end else if c in [#10, ' '] then begin
-          Inc(NumSpaceChars);
-        end else if ChineseLoaderOpt and (c > MAX_CHINESE_LATIN_CHARACTER) and (TextScanner.CharsRel[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
-          Inc(NumSpaceChars);
-          TextScanner.GotoNextChar;
-        end;
-
-        if not IsTag then begin
-          TextScanner.GotoNextChar;
-        end;
-      end; // .while
-      
-      // Output normal characters to result buffer
-      BlockLen           := TextScanner.Pos - StartPos;
-      Utils.CopyMem(BlockLen, pointer(@OrigText[StartPos]), Buf);
-      Buf                := Utils.PtrOfs(Buf, BlockLen);
-      TextBlock.BlockLen := BlockLen - NumSpaceChars;
-
-      // Text ended
-      if not IsTag then begin
-        break;
-      end;
-
-      if IsEmbeddedImage then begin
-        TextScanner.GotoRelPos(+3);
-
-        New(TextBlock);
-        result.Blocks.Add(TextBlock);
-        TextBlock.BlockLen  := 0;
-        TextBlock.BlockType := TEXT_BLOCK_DEF;
-        TextBlock.Def       := nil;
-        TextBlock.FrameInd  := 0;
-        
-        if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
-          DefName := SysUtils.AnsiLowerCase(DefName);
-
-          if TextScanner.c = ':' then begin
-            TextScanner.GotoNextChar();
-
-            if TextScanner.ReadTokenTillDelim(['}'], FrameIndStr) then begin
-              SysUtils.TryStrToInt(FrameIndStr, TextBlock.FrameInd);
-            end;
-          end;
-
-          TextScanner.GotoNextChar();
-
-          TextBlock.Def     := LoadDefImage(DefName);
-          TextBlock.DefName := Memory.UniqueStrings[pchar(DefName)];
-        end; // .if
-
-        if TextBlock.Def <> nil then begin
-          // _Fnt_->char_sizes[NBSP].width
-          CharInfo           := @Font.CharInfos[NBSP];
-          NbspWidth          := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
-          NumFillChars       := (TextBlock.Def.Width + NbspWidth - 1) div NbspWidth;
-          TextBlock.BlockLen := NumFillChars;
-
-          BeginNewColorBlock;
-          TextBlock.Color16 := CurrColor;
-
-          // Output serie of non-breaking spaces to compensate image width
-          for i := 0 to NumFillChars - 1 do begin
-            Buf^ := NBSP;
-            Inc(Buf);
-          end;
-        end;
-
-        continue;
-      end; // .if
-
-      // Handle native '{', '}' tags
-      if not IsEraTag then begin
-        BeginNewColorBlock;
-
-        if NativeTag = '}' then begin
-          PopColor;
-        end else begin
-          CurrColor := Color32To16(HEROES_GOLD_COLOR_CODE);
-          ColorStack.Add(Ptr(CurrColor));
-        end;
-
-        TextBlock.Color16 := CurrColor;
-        TextScanner.GotoNextChar;
-      // Handle Era custom color open/close tags
-      end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
-        BeginNewColorBlock;
-        
-        if ColorName = '' then begin
-          PopColor;
-        end else begin
-          CurrColor := 0;
-          
-          if NamedColors.GetExistingValue(ColorName, pointer(CurrColor)) then begin
-            // Ok
-          end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
-            CurrColor := Color32To16(CurrColor);
-
-            if CurrColor = UNSAFE_BLACK_COLOR then begin
-              CurrColor := SafeBlackColor;
-            end;
-          end else begin
-            CurrColor := DEF_COLOR;
-          end;
-          
-          ColorStack.Add(Ptr(CurrColor));
-        end; // .else
-        
-        TextBlock.Color16 := CurrColor;
-        TextScanner.GotoNextChar;
-      end; // .elseif
-    end; // .while
-  end; // .if
-  
-  ResLen := integer(Buf) - integer(@GlobalBuffer[0]);
-  {!} Assert(ResLen < sizeof(GlobalBuffer), 'Huge text exceeded ERA ParseText buffer capacity');
-
-  SetLength(result.ProcessedText, ResLen);
-
-  if ResLen > 0 then begin
-    Utils.CopyMem(ResLen, @GlobalBuffer[0], @result.ProcessedText[1]);
-  end;
-
-  result.NumBlocks := result.Blocks.Count;
-
-  // if result.NumBlocks > 1 then begin
-  //   List := ParsedTextToLines(result, 100);
-
-  //   for i := 0 to List.Count - 1 do begin
-  //     TParsedTextLine(List[i]).ToTaggedText(result, TaggedLineBuilder);
-  //     VarDump(['LineN:', i + 1, TaggedLineBuilder.BuildStr()]);
-  //   end;
-  // end;
-end; // .function ParseText
-
-function GetGraphemWidth (Font: Heroes.PFontItem; Graphem: pchar; out GraphemSize: integer): integer;
-var
-  CharInfo: Heroes.PFontCharInfo;
-
-begin
-  if ChineseLoaderOpt and (Graphem^ > MAX_CHINESE_LATIN_CHARACTER) and (Graphem[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
-    result      := ChineseGraphemWidthEstimator(Font);
-    GraphemSize := 2;
-  end else begin
-    CharInfo    := @Font.CharInfos[Graphem^];
-    result      := CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter;
-    GraphemSize := 1;
-  end;
-end;
-
-(* Given parsed text. Returns list of TParsedTextLine, suitable to be displayed in the box of given size *)
-function ParsedTextToLines (ParsedText: TParsedText; BoxWidth: integer): {O} TList {of TParsedTextLine};
-type
-  TSavepoint = record
-    TextPtr:  pchar;
-    BlockInd: integer;
-    BlockPos: integer;
-    Len:      integer;
-  end;
-
-var
-{O} Line:            TParsedTextLine;
-    LineStart:       TSavepoint;
-    LastWordEnd:     TSavepoint;
-    Cursor:          TSavepoint;
-    CurrBlock:       PTextBlock;
-    LineWidth:       integer;
-    GraphemWidth:    integer;
-    GraphemSize:     integer;
-    PrevGraphemSize: integer;
-    TextStart:       pchar;
-    NumBlocks:       integer;
-    c:               char;
-
-begin
-  Line := nil;
-  // * * * * * //
-  result := DataLib.NewList(Utils.OWNS_ITEMS);
-
-  if ParsedText.ProcessedText = '' then begin
-    exit;
-  end;
-
-  NumBlocks := ParsedText.NumBlocks;
-  CurrBlock := ParsedText.Blocks[0];
-
-  TextStart := pchar(ParsedText.ProcessedText);
-  c         := #0;
-
-  LineStart.TextPtr  := TextStart;
-  LineStart.BlockInd := 0;
-  LineStart.BlockPos := 0;
-  LineStart.Len      := 0;
-
-  LastWordEnd := LineStart;
-  Cursor      := LineStart;
-
-  // Handle all lines
-  repeat
-    LineWidth       := 0;
-    PrevGraphemSize := 0;
-
-    // Handle single line
-    while true do begin
-      c := Cursor.TextPtr^;
-
-      // End of text/line
-      if c in [#0, #10] then begin
-        break;
-      end;
-
-      GraphemWidth := GetGraphemWidth(ParsedText.Font, Cursor.TextPtr, GraphemSize);
-      Inc(LineWidth, GraphemWidth);
-
-      if LineWidth > BoxWidth then begin
-        if c = ' ' then begin
-          break;
-        // This word should be wrapped, fallback to the previous word
-        end else if LastWordEnd.TextPtr <> LineStart.TextPtr then begin
-          Cursor    := LastWordEnd;
-          CurrBlock := ParsedText.Blocks[Cursor.BlockInd];
-          break;
-        end;
-      end;
-
-      // Track word end
-      if (GraphemSize > 1) or (PrevGraphemSize > 1) or ((c = ' ') and (Cursor.TextPtr <> LineStart.TextPtr) and (Cursor.TextPtr[-1] <> ' ')) then begin
-        LastWordEnd := Cursor;
-      end;
-
-      // Move position in text
-      Inc(Cursor.TextPtr, GraphemSize);
-      Inc(Cursor.Len,     GraphemSize);
-
-      PrevGraphemSize := GraphemSize;
-
-      // Move position in block
-      if c <> ' ' then begin
-        Inc(Cursor.BlockPos);
-
-        while (Cursor.BlockPos >= CurrBlock.BlockLen) and (Cursor.BlockInd + 1 < NumBlocks) do begin
-          Inc(Cursor.BlockInd);
-          Cursor.BlockPos := 0;
-          CurrBlock       := ParsedText.Blocks[Cursor.BlockInd];
-        end;
-      end;
-    end; // .while
-
-    // Create new line
-    Line          := TParsedTextLine.Create;
-    Line.Offset   := integer(LineStart.TextPtr) - integer(TextStart);
-    Line.BlockInd := LineStart.BlockInd;
-    Line.BlockPos := LineStart.BlockPos;
-    Line.Len      := Cursor.Len;
-
-    // Add the line to the result
-    result.Add(Line); Line := nil;
-
-    // Skip line end character
-    if c = #10 then begin
-      Inc(Cursor.TextPtr);
-    // Skip trailing spaces
-    end else begin
-      while Cursor.TextPtr^ = ' ' do begin
-        Inc(Cursor.TextPtr);
-      end;
-    end;
-
-    // Init next line
-    Cursor.Len  := 0;
-    LineStart   := Cursor;
-    LastWordEnd := Cursor;
-  until Cursor.TextPtr^ = #0;
-  // * * * * * //
-  {!} Assert(Line = nil);
-end; // .function ParsedTextToLines
-
 function UpdateCurrParsedText (Font: Heroes.PFontItem; OrigStr: pchar; OrigTextLen: integer = -1): {U} TParsedText;
 var
   OrigText: string;
 
 begin
-  if CurrParsedText <> nil then begin
-    if OrigTextLen < 0 then begin
-      OrigTextLen := Windows.LStrLen(OrigStr);
-    end;
+  if OrigTextLen < 0 then begin
+    OrigTextLen := Windows.LStrLen(OrigStr);
+  end;
 
-    if (OrigTextLen <> Length(CurrParsedText.OrigText)) or (StrLib.ComparePchars(OrigStr, pchar(CurrParsedText.OrigText)) <> 0) then begin
-      SysUtils.FreeAndNil(CurrParsedText);
-    end;
+  if (CurrParsedText <> nil) and ((OrigTextLen <> Length(CurrParsedText.OrigText)) or (StrLib.ComparePchars(OrigStr, pchar(CurrParsedText.OrigText)) <> 0)) then begin
+    SysUtils.FreeAndNil(CurrParsedText);
   end;
 
   if CurrParsedText = nil then begin
-    OrigText   := '';
+    OrigText       := '';
     SetString(OrigText, OrigStr, OrigTextLen);
-    CurrParsedText := ParseText(OrigText, Font);
+    CurrParsedText := TParsedText.Create(OrigText, Font);
   end;
 
   result := CurrParsedText;
@@ -1009,17 +964,9 @@ begin
 end; // .function Hook_HandleTags
 
 function New_Font_CountNumTextLines (OrigFunc: pointer; Font: Heroes.PFontItem; Text: pchar; BoxWidth: integer): integer; stdcall;
-var
-{O} Lines: {O} TList {of TParsedTextLine};
-
 begin
-  Lines := nil;
-  // * * * * * //
   UpdateCurrParsedText(Font, Text);
-  Lines  := ParsedTextToLines(CurrParsedText, BoxWidth);
-  result := Lines.Count;
-  // * * * * * //
-  SysUtils.FreeAndNil(Lines);
+  result := CurrParsedText.CountLines(BoxWidth);
 end;
 
 function New_Font_GetLineWidth (OrigFunc: pointer; Font: Heroes.PFontItem; Line: pchar): integer; stdcall;
@@ -1060,7 +1007,7 @@ begin
   Lines := nil;
   // * * * * * //
   UpdateCurrParsedText(Font, Text);
-  Lines := ParsedTextToLines(CurrParsedText, BoxWidth);
+  Lines := CurrParsedText.ToLines(BoxWidth);
   DlgTextLines.Reset;
 
   for i := 0 to Lines.Count - 1 do begin
