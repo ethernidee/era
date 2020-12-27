@@ -860,7 +860,8 @@ asm
   JMP @@Ret
 @@FloatRes:
   // Set e1
-  FST DWORD [$A48F18]
+  FSTP DWORD [$A48F18]
+  FWAIT
 
 @@Ret:
   MOV ESP, SavedEsp
