@@ -5,7 +5,10 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
-uses Windows, SysUtils, Utils, PatchApi, DataLib, TypeWrappers, Alg, Core, StrLib, DlgMes;
+uses
+  Windows, SysUtils, Math,
+  Utils, PatchApi, DataLib, TypeWrappers, Alg, StrLib, DlgMes,
+  Core;
 
 type
   (* Import *)
@@ -522,6 +525,14 @@ type
   {$ALIGN ON}
 
   {$ALIGN OFF}
+  PPalette24 = ^TPalette24;
+  TPalette24 = object (TBinaryTreeItem)
+   public
+    Colors: array [0..255] of integer;
+  end;
+  {$ALIGN ON}
+
+  {$ALIGN OFF}
   PFontItem = ^TFontItem;
   TFontItem = object (TBinaryTreeItem)
    public
@@ -540,18 +551,51 @@ type
   {$ALIGN ON}
 
   {$ALIGN OFF}
+  PDefFrame = ^TDefFrame;
+  TDefFrame = object (TBinaryTreeItem)
+   public
+    FrameSize:       integer;
+    BufSize:         integer;
+    CompressionType: pointer;
+    DefWidth:        integer;
+    DefHeight:       pointer;
+    FrameWidth:      integer;
+    FrameHeight:     integer;
+    FrameLeft:       integer;
+    FrameTop:        integer;
+    Unk1:            integer;
+    Buffer:          integer;
+
+    procedure DrawFrameToBuf (SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; Palette16: PPalette16; DoMirror: boolean = false; DisableSpecialPaletteColors: boolean = true);
+  end; // .object TDefFrame
+  {$ALIGN ON}
+
+  PDefFrames = ^TDefFrames;
+  TDefFrames = array [0..High(integer) div sizeof(integer) - 1] of PDefFrame;
+
+  PDefGroup = ^TDefGroup;
+  TDefGroup = packed record
+    NumFrames: integer;
+    FrameSize: integer;
+    Frames:    PDefFrames;
+  end;
+
+  PDefGroups = ^TDefGroups;
+  TDefGroups = array [0..High(integer) div sizeof(integer) - 1] of PDefGroup;
+
+  {$ALIGN OFF}
   PDefItem = ^TDefItem;
   TDefItem = object (TBinaryTreeItem)
    public
-    Groups:        pointer;
-    Palette16:     pointer;
-    Palette24:     pointer;
+    Groups:        PDefGroups;
+    Palette16:     PPalette16;
+    Palette24:     PPalette24;
     NumGroups:     integer;
     ActiveGroups:  pointer;
     Width:         integer;
     Height:        integer;
 
-    procedure DrawFrameToBuf (FrameInd: integer; SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DoMirror: boolean = false);
+    procedure DrawFrameToBuf (GroupInd, FrameInd, SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DoMirror: boolean = false; DisableSpecialPaletteColors: boolean = true);
   end; // .object TDefItem
   {$ALIGN ON}
 
@@ -1359,9 +1403,23 @@ begin
   PatchApi.Call(PatchApi.THISCALL_, Ptr($55DDF0), [@Self, @ResPtrs, @NewItem]);
 end; // .procedure TBinaryTreeNode.AddItem
 
-procedure TDefItem.DrawFrameToBuf (FrameInd: integer; SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DoMirror: boolean = false);
+procedure TDefFrame.DrawFrameToBuf (SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; Palette16: PPalette16; DoMirror: boolean = false; DisableSpecialPaletteColors: boolean = true);
 begin
-  PatchApi.Call(THISCALL_, Ptr($47B820), [@Self, FrameInd, SrcX, SrcY, aWidth, aHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror)]);
+  PatchApi.Call(THISCALL_, Ptr($47BE90), [@Self, SrcX, SrcY, aWidth, aHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Palette16, ord(DoMirror), ord(DisableSpecialPaletteColors)]);
+end;
+
+procedure TDefItem.DrawFrameToBuf (GroupInd, FrameInd, SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DoMirror: boolean = false; DisableSpecialPaletteColors: boolean = true);
+var
+{U} DefGroup: PDefGroup;
+
+begin
+  if Math.InRange(GroupInd, 0, Self.NumGroups - 1) then begin
+    DefGroup := Self.Groups[GroupInd];
+
+    if Math.InRange(FrameInd, 0, DefGroup.NumFrames - 1) then begin
+      DefGroup.Frames[FrameInd].DrawFrameToBuf(SrcX, SrcY, aWidth, aHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Self.Palette16, DoMirror, DisableSpecialPaletteColors);
+    end;
+  end;
 end;
 
 class function TPcx16ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;

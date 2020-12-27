@@ -1132,7 +1132,7 @@ begin
     Def := CurrTextBlock.Def;
 
     if CurrBlockPos = 0 then begin
-      Def.DrawFrameToBuf(CurrTextBlock.FrameInd, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize);
+      Def.DrawFrameToBuf(0, CurrTextBlock.FrameInd, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize);
     end;
 
     result := Canvas;
