@@ -599,6 +599,8 @@ type
     Height:        integer;
 
     function  GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
+    function  GetFrameWidth (GroupInd, FrameInd: integer): integer;
+    function  GetFrameHeight (GroupInd, FrameInd: integer): integer;
     procedure DrawFrameToBufEx (GroupInd, FrameInd, SrcX, SrcY, aWidth, aHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DrawFlags: TDrawImageFlags = []);
     procedure DrawFrameToBuf (GroupInd, FrameInd: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DrawFlags: TDrawImageFlags = []);
   end; // .object TDefItem
@@ -1426,6 +1428,34 @@ begin
     if Math.InRange(FrameInd, 0, DefGroup.NumFrames - 1) then begin
       result := DefGroup.Frames[FrameInd];
     end;
+  end;
+end;
+
+function TDefItem.GetFrameWidth (GroupInd, FrameInd: integer): integer;
+var
+{U} DefFrame: PDefFrame;
+
+begin
+  DefFrame := Self.GetFrame(GroupInd, FrameInd);
+
+  if DefFrame <> nil then begin
+    result := DefFrame.FrameWidth;
+  end else begin
+    result := 0;
+  end;
+end;
+
+function TDefItem.GetFrameHeight (GroupInd, FrameInd: integer): integer;
+var
+{U} DefFrame: PDefFrame;
+
+begin
+  DefFrame := Self.GetFrame(GroupInd, FrameInd);
+
+  if DefFrame <> nil then begin
+    result := DefFrame.FrameHeight;
+  end else begin
+    result := 0;
   end;
 end;
 

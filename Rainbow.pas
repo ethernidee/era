@@ -534,7 +534,7 @@ begin
           // _Fnt_->char_sizes[NBSP].width
           CharInfo           := @Font.CharInfos[NBSP];
           NbspWidth          := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
-          NumFillChars       := (TextBlock.Def.Width + NbspWidth - 1) div NbspWidth;
+          NumFillChars       := (TextBlock.Def.GetFrameWidth(TextBlock.GroupInd, TextBlock.FrameInd) + NbspWidth - 1) div NbspWidth;
           TextBlock.BlockLen := NumFillChars;
 
           BeginNewColorBlock;
