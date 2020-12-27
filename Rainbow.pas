@@ -113,8 +113,9 @@ var
     Color32To16:       TColor32To16Func;
     Color16To32:       function (Color16: integer): integer;
 
-{U} CurrParsedText: TParsedText = nil;
-{U} CurrTextBlock:  PTextBlock = nil;
+{O} CurrParsedText:   TParsedText = nil;
+{U} CurrTextBlock:    PTextBlock  = nil;
+    CurrTextNumLines: integer     = 1;
 
     CurrBlockInd:   integer;
     CurrBlockPos:   integer;
@@ -901,6 +902,7 @@ end; // .procedure UpdateCurrBlock
 function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;  
 begin
   UpdateCurrParsedText(Heroes.PFontItem(Context.EBX), pchar(Context.EDX), Context.ECX);
+  CurrTextNumLines := CurrParsedText.CountLines(pinteger(Context.EBP + $18)^);
 
   CurrColor     := DEF_COLOR;
   CurrTextBlock := CurrParsedText.Blocks[0];
@@ -929,6 +931,11 @@ begin
   
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_BeginParseText
+
+function Hook_CountNumTextLines (Text: pchar; BoxWidth: integer): integer; stdcall;
+begin
+  result := CurrTextNumLines;
+end;
 
 function Hook_Font_DrawTextToPcx16_End (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
@@ -1154,6 +1161,8 @@ begin
 
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
+  Core.Hook(@Hook_CountNumTextLines, Core.HOOKTYPE_CALL, 5, Ptr($4B5275));
+  Core.Hook(@Hook_CountNumTextLines, Core.HOOKTYPE_CALL, 5, Ptr($4B52CA));
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
   ApiJack.StdSplice(Ptr($4B5580), @New_Font_CountNumTextLines, ApiJack.CONV_THISCALL, 3);
   ApiJack.StdSplice(Ptr($4B5680), @New_Font_GetLineWidth, ApiJack.CONV_THISCALL, 2);
