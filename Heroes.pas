@@ -1445,7 +1445,12 @@ begin
   SrcHeight := Math.Min(SrcMaxHeight, SrcHeight - SrcY);
 
   if DFL_CROP in DrawFlags then begin
-    Inc(SrcX, Self.FrameLeft);
+    if DFL_MIRROR in DrawFlags then begin
+      Inc(SrcX, Self.DefWidth - Self.FrameLeft - Self.FrameWidth)
+    end else begin
+      Inc(SrcX, Self.FrameLeft);
+    end;
+
     Inc(SrcY, Self.FrameTop);
   end;
 

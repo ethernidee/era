@@ -75,6 +75,7 @@ type
   PEmlImg = ^TEmlImg;
   TEmlImg = record
     IsBlock:      boolean;
+    DrawFlags:    Heroes.TDrawImageFlags;
     OffsetY:      integer;
     CharsPerLine: integer;
     Height:       integer;
@@ -528,11 +529,11 @@ begin
   New(TextBlock);
   Self.Blocks.Add(TextBlock);
 
-  TextBlock.BlockLen  := Length(OrigText);
-  TextBlock.BlockType := TEXT_BLOCK_CHARS;
-  TextBlock.CharsBlock.Color16   := DEF_COLOR;
-  CurrColor           := DEF_COLOR;
-  NativeTag           := #0;
+  TextBlock.BlockLen           := Length(OrigText);
+  TextBlock.BlockType          := TEXT_BLOCK_CHARS;
+  TextBlock.CharsBlock.Color16 := DEF_COLOR;
+  CurrColor                    := DEF_COLOR;
+  NativeTag                    := #0;
 
   FontName := pchar(@Font.Name);
   
@@ -569,7 +570,7 @@ begin
           TextScanner.GotoNextChar;
         end;
       end; // .while
-      
+
       // Output normal characters to result buffer
       BlockLen           := TextScanner.Pos - StartPos;
       Utils.CopyMem(BlockLen, pointer(@OrigText[StartPos]), Buf);
@@ -589,6 +590,7 @@ begin
         TextBlock.BlockLen              := 0;
         TextBlock.BlockType             := TEXT_BLOCK_DEF;
         TextBlock.ImgBlock.IsBlock      := false;
+        TextBlock.ImgBlock.DrawFlags    := [Heroes.DFL_CROP];
         TextBlock.ImgBlock.CharsPerLine := 0;
         TextBlock.ImgBlock.OffsetY      := 0;
         TextBlock.ImgBlock.Height       := 0;
@@ -621,6 +623,10 @@ begin
 
         EmlAttrs                   := ParseEmlAttrs(EmlAttrs);
         TextBlock.ImgBlock.IsBlock := EmlAttrs['block'] <> nil;
+        
+        if EmlAttrs['mirror'] <> nil then begin
+          Include(TextBlock.ImgBlock.DrawFlags, Heroes.DFL_MIRROR);
+        end;
 
         if TextBlock.DefBlock.Def <> nil then begin
           CharInfo                        := @Font.CharInfos[NBSP];
@@ -1268,7 +1274,17 @@ begin
     Def := CurrTextBlock.DefBlock.Def;
 
     if CurrBlockPos = 0 then begin
-      Def.DrawFrameToBuf(CurrTextBlock.DefBlock.GroupInd, CurrTextBlock.DefBlock.FrameInd, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y + CurrTextBlock.ImgBlock.OffsetY, Canvas.Width, Canvas.Height, Canvas.ScanlineSize, [Heroes.DFL_CROP]);
+      Def.DrawFrameToBuf(
+        CurrTextBlock.DefBlock.GroupInd,
+        CurrTextBlock.DefBlock.FrameInd,
+        0, 0,
+        Def.Width, Def.Height,
+        Canvas.Buffer,
+        x, y + CurrTextBlock.ImgBlock.OffsetY,
+        Canvas.Width, Canvas.Height,
+        Canvas.ScanlineSize,
+        CurrTextBlock.ImgBlock.DrawFlags
+      );
     end;
 
     result := Canvas;
