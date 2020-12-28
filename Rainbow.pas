@@ -7,13 +7,14 @@ unit Rainbow;
 (***)  interface  (***)
 uses
   Math, SysUtils, Windows,
-  Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib,
+  Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib, TypeWrappers,
   Core, GameExt, Heroes, Memory, EventMan, DlgMes;
 
 type
   (* Import *)
-  TList = DataLib.TList;
-  TDict = DataLib.TDict;
+  TList   = DataLib.TList;
+  TDict   = DataLib.TDict;
+  TString = TypeWrappers.TString;
 
 const
   MAX_CHINESE_LATIN_CHARACTER = #160;
@@ -56,6 +57,13 @@ exports
   SetChineseGraphemWidthEstimator;
 
 
+const
+  BLANKS = [#0..#32];
+
+  TOKEN_HASH_TOP    = 517545930;
+  TOKEN_HASH_MIDDLE = -1635771697;
+  TOKEN_HASH_BOTTOM = -1990233436;
+
 type
   TTextBlockType = (TEXT_BLOCK_CHARS, TEXT_BLOCK_DEF);
 
@@ -66,12 +74,11 @@ type
 
   PEmlImg = ^TEmlImg;
   TEmlImg = record
-    IsBlock: boolean;
-
-    (* The following fields are used for block images only *)
-    CharsPerLine: integer;
+    IsBlock:      boolean;
     OffsetY:      integer;
+    CharsPerLine: integer;
     Height:       integer;
+    NumLines:     integer;
   end;
 
   PEmlDef = ^TEmlDef;
@@ -393,6 +400,61 @@ end;
 // var
 //   List: TList;
 
+function ReadEmlValue: string;
+begin
+  result := '';
+
+  if TextScanner.c = '"' then begin
+    TextScanner.GotoNextChar();
+    TextScanner.ReadTokenTillDelim(['"'], result);
+    TextScanner.GotoNextChar();
+  end else begin
+    TextScanner.ReadTokenTillDelim([' ', ':', '}'], result);
+  end;
+end;
+
+function ReadEmlIntValue (DefValue: integer): integer;
+begin
+  if not SysUtils.TryStrToInt(ReadEmlValue, result) then begin
+    result := DefValue;
+  end;
+end;
+
+(* Either reuses existing array or creates new one if nil is passed *)
+function ParseEmlAttrs ({On} Attrs: {O} TDict {of TString}): {UO} TDict {of TString};
+var
+  Key:   string;
+  Value: string;
+  c:     char;
+
+begin
+  result := Attrs;
+
+  if result <> nil then begin
+    result.Clear;
+  end else begin
+    result := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  end;
+
+  TextScanner.SkipCharset(BLANKS);
+  c      := TextScanner.c;
+
+  while not (c in [#0, '}']) do begin
+    TextScanner.ReadTokenTillDelim(['}', ' ', '='], Key);
+    Value := '';
+
+    if TextScanner.c = '=' then begin
+      TextScanner.GotoNextChar;
+      Value := ReadEmlValue;
+    end;
+
+    result[Key] := TString.Create(Value);
+
+    TextScanner.SkipCharset(BLANKS);
+    c := TextScanner.c;
+  end; // .while
+end; // .function ParseEmlAttrs
+
 constructor TParsedText.Create (const OrigText: string; {U} Font: Heroes.PFontItem);
 const
   LINE_END_MARKER = #10;
@@ -402,27 +464,32 @@ var
 {U} Buf:      pchar;
     StartPos: integer;
     c:        char;
-    
-{U} TextBlock:       PTextBlock;
-    BlockLen:        integer;
-    IsTag:           boolean;
-    IsEraTag:        boolean;
-    IsEmbeddedImage: boolean;
-    NumSpaceChars:   integer;
-    
-    TempStr:     string;
-    FontName:    string absolute TempStr;
-    ColorName:   string absolute TempStr;
-    DefName:     string absolute TempStr;
-    FrameIndStr: string absolute TempStr;
-    
-    NativeTag:    char;
-    NbspWidth:    integer;
-    NumFillChars: integer;
-    CharInfo:     Heroes.PFontCharInfo;
-    CurrColor:    integer;
-    ResLen:       integer;
-    i:            integer;
+
+{U}  TextBlock:       PTextBlock;
+{On} EmlAttrs:        {O} TDict {of TString};
+{Un} AttrValue:       TString;
+     BlockLen:        integer;
+     IsTag:           boolean;
+     IsEraTag:        boolean;
+     IsEmbeddedImage: boolean;
+     NumSpaceChars:   integer;
+     VertAlignHash:   integer;
+     ValueHash:       integer;
+     LinesHeight:     integer;
+     
+     TempStr:     string;
+     FontName:    string absolute TempStr;
+     ColorName:   string absolute TempStr;
+     DefName:     string absolute TempStr;
+     FrameIndStr: string absolute TempStr;
+     
+     NativeTag:    char;
+     NbspWidth:    integer;
+     NumFillChars: integer;
+     CharInfo:     Heroes.PFontCharInfo;
+     CurrColor:    integer;
+     ResLen:       integer;
+     i:            integer;
 
   procedure BeginNewColorBlock;
   begin
@@ -451,7 +518,9 @@ var
 begin
   inherited Create;
 
-  Buf := @GlobalBuffer[0];
+  Buf       := @GlobalBuffer[0];
+  EmlAttrs  := nil;
+  AttrValue := nil;
   // * * * * * //
   Self.Blocks   := Lists.NewList(Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
   Self.OrigText := OrigText;
@@ -517,14 +586,21 @@ begin
 
         New(TextBlock);
         Self.Blocks.Add(TextBlock);
-        TextBlock.BlockLen  := 0;
-        TextBlock.BlockType := TEXT_BLOCK_DEF;
-        TextBlock.DefBlock.Def       := nil;
-        TextBlock.DefBlock.GroupInd  := 0;
-        TextBlock.DefBlock.FrameInd  := 0;
+        TextBlock.BlockLen              := 0;
+        TextBlock.BlockType             := TEXT_BLOCK_DEF;
+        TextBlock.ImgBlock.IsBlock      := false;
+        TextBlock.ImgBlock.CharsPerLine := 0;
+        TextBlock.ImgBlock.OffsetY      := 0;
+        TextBlock.ImgBlock.Height       := 0;
+        TextBlock.ImgBlock.NumLines     := 1;
+        TextBlock.DefBlock.Def          := nil;
+        TextBlock.DefBlock.GroupInd     := 0;
+        TextBlock.DefBlock.FrameInd     := 0;
         
-        if TextScanner.ReadTokenTillDelim(['}', ':'], DefName) then begin
-          DefName           := SysUtils.AnsiLowerCase(DefName);
+        DefName := ReadEmlValue;
+
+        if DefName <> '' then begin
+          DefName                    := SysUtils.AnsiLowerCase(DefName);
           TextBlock.DefBlock.DefName := Memory.UniqueStrings[pchar(DefName)];
 
           if Length(DefName) <= 4096 then begin
@@ -533,31 +609,47 @@ begin
 
           if TextScanner.c = ':' then begin
             TextScanner.GotoNextChar();
+            TextBlock.DefBlock.FrameInd := ReadEmlIntValue(0);
 
-            if TextScanner.ReadTokenTillDelim(['}', ':'], FrameIndStr) then begin
-              SysUtils.TryStrToInt(FrameIndStr, TextBlock.DefBlock.FrameInd);
-
-              if TextScanner.c = ':' then begin
-                TextScanner.GotoNextChar();
-                TextBlock.DefBlock.GroupInd := TextBlock.DefBlock.FrameInd;
-                TextBlock.DefBlock.FrameInd := 0;
-
-                if TextScanner.ReadTokenTillDelim(['}'], FrameIndStr) then begin
-                  SysUtils.TryStrToInt(FrameIndStr, TextBlock.DefBlock.FrameInd);
-                end;
-              end;
+            if TextScanner.c = ':' then begin
+              TextScanner.GotoNextChar();
+              TextBlock.DefBlock.GroupInd := TextBlock.DefBlock.FrameInd;
+              TextBlock.DefBlock.FrameInd := ReadEmlIntValue(0);
             end;
           end; // .if
-
-          TextScanner.GotoNextChar();
         end; // .if
 
+        EmlAttrs                   := ParseEmlAttrs(EmlAttrs);
+        TextBlock.ImgBlock.IsBlock := EmlAttrs['block'] <> nil;
+
         if TextBlock.DefBlock.Def <> nil then begin
-          // _Fnt_->char_sizes[NBSP].width
-          CharInfo           := @Font.CharInfos[NBSP];
-          NbspWidth          := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
-          NumFillChars       := (TextBlock.DefBlock.Def.GetFrameWidth(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd) + NbspWidth - 1) div NbspWidth;
-          TextBlock.BlockLen := NumFillChars;
+          CharInfo                        := @Font.CharInfos[NBSP];
+          NbspWidth                       := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
+          NumFillChars                    := (TextBlock.DefBlock.Def.GetFrameWidth(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd) + NbspWidth - 1) div NbspWidth;
+          TextBlock.ImgBlock.CharsPerLine := Math.Max(1, NumFillChars);
+          TextBlock.ImgBlock.Height       := TextBlock.DefBlock.Def.GetFrameHeight(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
+          TextBlock.BlockLen              := NumFillChars;
+
+          if TextBlock.ImgBlock.IsBlock then begin
+            TextBlock.ImgBlock.NumLines := (TextBlock.ImgBlock.Height + Font.Height - 1) div Font.Height;
+          end;
+
+          LinesHeight   := TextBlock.ImgBlock.NumLines * Font.Height;
+          VertAlignHash := TOKEN_HASH_MIDDLE;
+          AttrValue     := EmlAttrs['valign'];
+
+          if AttrValue <> nil then begin
+            ValueHash := Crypto.AnsiCrc32(AttrValue.Value);
+
+            if (ValueHash = TOKEN_HASH_TOP) or (ValueHash = TOKEN_HASH_BOTTOM) then begin
+              VertAlignHash := ValueHash;
+            end;
+          end;
+
+          case VertAlignHash of
+            TOKEN_HASH_MIDDLE: TextBlock.ImgBlock.OffsetY := (LinesHeight - TextBlock.ImgBlock.Height) div 2;
+            TOKEN_HASH_BOTTOM: TextBlock.ImgBlock.OffsetY := LinesHeight - TextBlock.ImgBlock.Height;
+          end;
 
           BeginNewColorBlock;
           TextBlock.CharsBlock.Color16 := CurrColor;
@@ -568,6 +660,8 @@ begin
             Inc(Buf);
           end;
         end;
+
+        TextScanner.GotoNextChar();
 
         continue;
       end; // .if
@@ -634,6 +728,9 @@ begin
   //     VarDump(['LineN:', i + 1, TaggedLineBuilder.BuildStr()]);
   //   end;
   // end;
+
+  // * * * * * //
+  SysUtils.FreeAndNil(EmlAttrs);
 end; // .function TParsedText.Create
 
 destructor TParsedText.Destroy;
@@ -1171,7 +1268,7 @@ begin
     Def := CurrTextBlock.DefBlock.Def;
 
     if CurrBlockPos = 0 then begin
-      Def.DrawFrameToBuf(CurrTextBlock.DefBlock.GroupInd, CurrTextBlock.DefBlock.FrameInd, Canvas.Buffer, x, y, Canvas.Width, Canvas.Height, Canvas.ScanlineSize, [Heroes.DFL_CROP]);
+      Def.DrawFrameToBuf(CurrTextBlock.DefBlock.GroupInd, CurrTextBlock.DefBlock.FrameInd, 0, 0, Def.Width, Def.Height, Canvas.Buffer, x, y + CurrTextBlock.ImgBlock.OffsetY, Canvas.Width, Canvas.Height, Canvas.ScanlineSize, [Heroes.DFL_CROP]);
     end;
 
     result := Canvas;
@@ -1215,7 +1312,7 @@ begin
 end; // .procedure OnAfterWoG
 
 begin
-  NamedColors       := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCRC32, SysUtils.AnsiLowerCase);
+  NamedColors       := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCrc32, SysUtils.AnsiLowerCase);
   LoadedResources   := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   ColorStack        := Lists.NewSimpleList;
   TextScanner       := TextScan.TTextScanner.Create;
