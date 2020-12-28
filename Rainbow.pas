@@ -74,12 +74,13 @@ type
 
   PEmlImg = ^TEmlImg;
   TEmlImg = record
-    IsBlock:      boolean;
-    DrawFlags:    Heroes.TDrawImageFlags;
-    OffsetY:      integer;
-    CharsPerLine: integer;
-    Height:       integer;
-    NumLines:     integer;
+    IsBlock:       boolean;
+    DrawFlags:     Heroes.TDrawImageFlags;
+    OffsetY:       integer;
+    CharsPerLine:  integer;
+    Height:        integer;
+    NumLines:      integer;
+    AttrVertAlign: integer;
   end;
 
   PEmlDef = ^TEmlDef;
@@ -587,17 +588,18 @@ begin
 
         New(TextBlock);
         Self.Blocks.Add(TextBlock);
-        TextBlock.BlockLen              := 0;
-        TextBlock.BlockType             := TEXT_BLOCK_DEF;
-        TextBlock.ImgBlock.IsBlock      := false;
-        TextBlock.ImgBlock.DrawFlags    := [Heroes.DFL_CROP];
-        TextBlock.ImgBlock.CharsPerLine := 0;
-        TextBlock.ImgBlock.OffsetY      := 0;
-        TextBlock.ImgBlock.Height       := 0;
-        TextBlock.ImgBlock.NumLines     := 1;
-        TextBlock.DefBlock.Def          := nil;
-        TextBlock.DefBlock.GroupInd     := 0;
-        TextBlock.DefBlock.FrameInd     := 0;
+        TextBlock.BlockLen               := 0;
+        TextBlock.BlockType              := TEXT_BLOCK_DEF;
+        TextBlock.ImgBlock.IsBlock       := false;
+        TextBlock.ImgBlock.DrawFlags     := [Heroes.DFL_CROP];
+        TextBlock.ImgBlock.CharsPerLine  := 0;
+        TextBlock.ImgBlock.OffsetY       := 0;
+        TextBlock.ImgBlock.Height        := 0;
+        TextBlock.ImgBlock.NumLines      := 1;
+        TextBlock.DefBlock.Def           := nil;
+        TextBlock.DefBlock.GroupInd      := 0;
+        TextBlock.DefBlock.FrameInd      := 0;
+        TextBlock.ImgBlock.AttrVertAlign := TOKEN_HASH_MIDDLE;
         
         DefName := ReadEmlValue;
 
@@ -656,6 +658,8 @@ begin
             TOKEN_HASH_MIDDLE: TextBlock.ImgBlock.OffsetY := (LinesHeight - TextBlock.ImgBlock.Height) div 2;
             TOKEN_HASH_BOTTOM: TextBlock.ImgBlock.OffsetY := LinesHeight - TextBlock.ImgBlock.Height;
           end;
+
+          TextBlock.ImgBlock.AttrVertAlign := VertAlignHash;
 
           BeginNewColorBlock;
           TextBlock.CharsBlock.Color16 := CurrColor;
@@ -935,6 +939,21 @@ begin
         if (CurrBlock.DefBlock.GroupInd <> 0) or (CurrBlock.DefBlock.FrameInd <> 0) then begin
           Res.Append(':' + SysUtils.IntToStr(CurrBlock.DefBlock.GroupInd));
           Res.Append(':' + SysUtils.IntToStr(CurrBlock.DefBlock.FrameInd));
+        end;
+
+        if CurrBlock.ImgBlock.AttrVertAlign <> TOKEN_HASH_MIDDLE then begin
+          case CurrBlock.ImgBlock.AttrVertAlign of
+            TOKEN_HASH_TOP:    Res.Append(' valign=top');
+            TOKEN_HASH_BOTTOM: Res.Append(' valign=bottom');
+          end;
+        end;
+
+        if Heroes.DFL_MIRROR in CurrBlock.ImgBlock.DrawFlags then begin
+          Res.Append(' mirror');
+        end;
+
+        if  CurrBlock.ImgBlock.IsBlock then begin
+          Res.Append(' block');
         end;
 
         Res.Append('}');
