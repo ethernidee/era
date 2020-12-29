@@ -76,6 +76,7 @@ type
   TEmlImg = record
     IsBlock:       boolean;
     DrawFlags:     Heroes.TDrawImageFlags;
+    OffsetX:       integer;
     OffsetY:       integer;
     CharsPerLine:  integer;
     Height:        integer;
@@ -478,6 +479,7 @@ var
      VertAlignHash:   integer;
      ValueHash:       integer;
      LinesHeight:     integer;
+     ImageWidth:      integer;
      
      TempStr:     string;
      FontName:    string absolute TempStr;
@@ -593,6 +595,7 @@ begin
         TextBlock.ImgBlock.IsBlock       := false;
         TextBlock.ImgBlock.DrawFlags     := [Heroes.DFL_CROP];
         TextBlock.ImgBlock.CharsPerLine  := 0;
+        TextBlock.ImgBlock.OffsetX       := 0;
         TextBlock.ImgBlock.OffsetY       := 0;
         TextBlock.ImgBlock.Height        := 0;
         TextBlock.ImgBlock.NumLines      := 1;
@@ -633,9 +636,12 @@ begin
         if TextBlock.DefBlock.Def <> nil then begin
           CharInfo                        := @Font.CharInfos[NBSP];
           NbspWidth                       := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
-          NumFillChars                    := (TextBlock.DefBlock.Def.GetFrameWidth(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd) + NbspWidth - 1) div NbspWidth;
+          ImageWidth                      := TextBlock.DefBlock.Def.GetFrameWidth(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
+          NumFillChars                    := (ImageWidth + NbspWidth - 1) div NbspWidth;
           TextBlock.ImgBlock.CharsPerLine := Math.Max(1, NumFillChars);
           TextBlock.ImgBlock.Height       := TextBlock.DefBlock.Def.GetFrameHeight(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
+          TextBlock.ImgBlock.OffsetX      := (NumFillChars * NbspWidth - ImageWidth) div 2;
+          VarDump([TextBlock.ImgBlock.OffsetX]);
           TextBlock.BlockLen              := NumFillChars;
 
           if TextBlock.ImgBlock.IsBlock then begin
@@ -1299,7 +1305,7 @@ begin
         0, 0,
         Def.Width, Def.Height,
         Canvas.Buffer,
-        x, y + CurrTextBlock.ImgBlock.OffsetY,
+        x + CurrTextBlock.ImgBlock.OffsetX, y + CurrTextBlock.ImgBlock.OffsetY,
         Canvas.Width, Canvas.Height,
         Canvas.ScanlineSize,
         CurrTextBlock.ImgBlock.DrawFlags
