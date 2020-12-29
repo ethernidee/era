@@ -22,9 +22,7 @@ const
   TEXTMODE_15BITS = $3E0;
   TEXTMODE_16BITS = $7E0;
 
-  DEF_COLOR          = -1;
-  HD_MOD_DEF_COLOR   = 0;
-  UNSAFE_BLACK_COLOR = 0; // Used as DEF_COLOR because of HD mod compatibility
+  DEF_COLOR = -1;
   
   TextColorMode: pword = Ptr($694DB0);
 
@@ -153,7 +151,6 @@ var
     CurrBlockInd:   integer;
     CurrBlockPos:   integer;
     CurrColor:      integer = DEF_COLOR;
-    SafeBlackColor: integer = 1;
     
     GlobalBuffer: array [0..1024 * 1024 - 1] of char;
 
@@ -211,7 +208,7 @@ begin
   NamedColors['Azure']                := Ptr(Color32To16($F0FFFF));
   NamedColors['Beige']                := Ptr(Color32To16($F5F5DC));
   NamedColors['Bisque']               := Ptr(Color32To16($FFE4C4));
-  NamedColors['Black']                := Ptr(Color32To16(SafeBlackColor));
+  NamedColors['Black']                := Ptr(Color32To16($000000));
   NamedColors['BlanchedAlmond']       := Ptr(Color32To16($FFEBCD));
   NamedColors['Blue']                 := Ptr(Color32To16($0000FF));
   NamedColors['BlueViolet']           := Ptr(Color32To16($8A2BE2));
@@ -695,7 +692,7 @@ begin
 
         TextBlock.CharsBlock.Color16 := CurrColor;
         TextScanner.GotoNextChar;
-      // Handle Era custom color open/close tags
+      // Handle other ERL open/close tags
       end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
         BeginNewColorBlock;
         
@@ -708,10 +705,6 @@ begin
             // Ok
           end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
             CurrColor := Color32To16(CurrColor);
-
-            if CurrColor = UNSAFE_BLACK_COLOR then begin
-              CurrColor := SafeBlackColor;
-            end;
           end else begin
             CurrColor := DEF_COLOR;
           end;
@@ -1216,11 +1209,9 @@ begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
     Color32To16    := Color32To15Func;
     Color16To32    := Color15To32Func;
-    SafeBlackColor := Color32To16((8 shl 16) or (8 shl 8) or 8);
   end else if TextColorMode^ = TEXTMODE_16BITS then begin
     Color32To16    := Color32To16Func;
     Color16To32    := Color16To32Func;
-    SafeBlackColor := Color32To16((8 shl 16) or (4 shl 8) or 8);
   end else begin
     {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
   end;
