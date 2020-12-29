@@ -67,7 +67,7 @@ type
 
   PEmlChars = ^TEmlChars;
   TEmlChars = record
-    Color16: integer;
+    Color32: integer;
   end;
 
   PEmlImg = ^TEmlImg;
@@ -136,9 +136,9 @@ type
   end;
 
 var
-{O} NamedColors:       {U} AssocArrays.TAssocArray {of Color16: integer};
+{O} NamedColors:       {U} AssocArrays.TAssocArray {of Color32: integer};
 {O} LoadedResources:   {U} TDict {of loaded H3 resource};
-{O} ColorStack:        {U} Lists.TList {of Color16: integer};
+{O} ColorStack:        {U} Lists.TList {of Color32: integer};
 {O} TextScanner:       TextScan.TTextScanner;
 {O} TaggedLineBuilder: StrLib.TStrBuilder;
     Color32To16:       TColor32To16Func;
@@ -201,151 +201,151 @@ end;
 
 procedure NameStdColors;
 begin
-  NamedColors['AliceBlue']            := Ptr(Color32To16($F0F8FF));
-  NamedColors['AntiqueWhite']         := Ptr(Color32To16($FAEBD7));
-  NamedColors['Aqua']                 := Ptr(Color32To16($00FFFF));
-  NamedColors['Aquamarine']           := Ptr(Color32To16($7FFFD4));
-  NamedColors['Azure']                := Ptr(Color32To16($F0FFFF));
-  NamedColors['Beige']                := Ptr(Color32To16($F5F5DC));
-  NamedColors['Bisque']               := Ptr(Color32To16($FFE4C4));
-  NamedColors['Black']                := Ptr(Color32To16($000000));
-  NamedColors['BlanchedAlmond']       := Ptr(Color32To16($FFEBCD));
-  NamedColors['Blue']                 := Ptr(Color32To16($0000FF));
-  NamedColors['BlueViolet']           := Ptr(Color32To16($8A2BE2));
-  NamedColors['Brown']                := Ptr(Color32To16($A52A2A));
-  NamedColors['BurlyWood']            := Ptr(Color32To16($DEB887));
-  NamedColors['CadetBlue']            := Ptr(Color32To16($5F9EA0));
-  NamedColors['Chartreuse']           := Ptr(Color32To16($7FFF00));
-  NamedColors['Chocolate']            := Ptr(Color32To16($D2691E));
-  NamedColors['Coral']                := Ptr(Color32To16($FF7F50));
-  NamedColors['CornflowerBlue']       := Ptr(Color32To16($6495ED));
-  NamedColors['Cornsilk']             := Ptr(Color32To16($FFF8DC));
-  NamedColors['Crimson']              := Ptr(Color32To16($DC143C));
-  NamedColors['Cyan']                 := Ptr(Color32To16($00FFFF));
-  NamedColors['DarkBlue']             := Ptr(Color32To16($00008B));
-  NamedColors['DarkCyan']             := Ptr(Color32To16($008B8B));
-  NamedColors['DarkGoldenRod']        := Ptr(Color32To16($B8860B));
-  NamedColors['DarkGray']             := Ptr(Color32To16($A9A9A9));
-  NamedColors['DarkGreen']            := Ptr(Color32To16($006400));
-  NamedColors['DarkGrey']             := Ptr(Color32To16($A9A9A9));
-  NamedColors['DarkKhaki']            := Ptr(Color32To16($BDB76B));
-  NamedColors['DarkMagenta']          := Ptr(Color32To16($8B008B));
-  NamedColors['DarkOliveGreen']       := Ptr(Color32To16($556B2F));
-  NamedColors['Darkorange']           := Ptr(Color32To16($FF8C00));
-  NamedColors['DarkOrchid']           := Ptr(Color32To16($9932CC));
-  NamedColors['DarkRed']              := Ptr(Color32To16($8B0000));
-  NamedColors['DarkSalmon']           := Ptr(Color32To16($E9967A));
-  NamedColors['DarkSeaGreen']         := Ptr(Color32To16($8FBC8F));
-  NamedColors['DarkSlateBlue']        := Ptr(Color32To16($483D8B));
-  NamedColors['DarkSlateGrey']        := Ptr(Color32To16($2F4F4F));
-  NamedColors['DarkTurquoise']        := Ptr(Color32To16($00CED1));
-  NamedColors['DarkViolet']           := Ptr(Color32To16($9400D3));
-  NamedColors['DeepPink']             := Ptr(Color32To16($FF1493));
-  NamedColors['DeepSkyBlue']          := Ptr(Color32To16($00BFFF));
-  NamedColors['DimGray']              := Ptr(Color32To16($696969));
-  NamedColors['DodgerBlue']           := Ptr(Color32To16($1E90FF));
-  NamedColors['FireBrick']            := Ptr(Color32To16($B22222));
-  NamedColors['FloralWhite']          := Ptr(Color32To16($FFFAF0));
-  NamedColors['ForestGreen']          := Ptr(Color32To16($228B22));
-  NamedColors['Fuchsia']              := Ptr(Color32To16($FF00FF));
-  NamedColors['Gainsboro']            := Ptr(Color32To16($DCDCDC));
-  NamedColors['GhostWhite']           := Ptr(Color32To16($F8F8FF));
-  NamedColors['Gold']                 := Ptr(Color32To16($FFD700));
-  NamedColors['GoldenRod']            := Ptr(Color32To16($DAA520));
-  NamedColors['Gray']                 := Ptr(Color32To16($808080));
-  NamedColors['Green']                := Ptr(Color32To16($008000));
-  NamedColors['GreenYellow']          := Ptr(Color32To16($ADFF2F));
-  NamedColors['Grey']                 := Ptr(Color32To16($808080));
-  NamedColors['HoneyDew']             := Ptr(Color32To16($F0FFF0));
-  NamedColors['HotPink']              := Ptr(Color32To16($FF69B4));
-  NamedColors['IndianRed']            := Ptr(Color32To16($CD5C5C));
-  NamedColors['Indigo']               := Ptr(Color32To16($4B0082));
-  NamedColors['Ivory']                := Ptr(Color32To16($FFFFF0));
-  NamedColors['Khaki']                := Ptr(Color32To16($F0E68C));
-  NamedColors['Lavender']             := Ptr(Color32To16($E6E6FA));
-  NamedColors['LavenderBlush']        := Ptr(Color32To16($FFF0F5));
-  NamedColors['LawnGreen']            := Ptr(Color32To16($7CFC00));
-  NamedColors['LemonChiffon']         := Ptr(Color32To16($FFFACD));
-  NamedColors['LightBlue']            := Ptr(Color32To16($ADD8E6));
-  NamedColors['LightCoral']           := Ptr(Color32To16($F08080));
-  NamedColors['LightCyan']            := Ptr(Color32To16($E0FFFF));
-  NamedColors['LightGoldenRodYellow'] := Ptr(Color32To16($FAFAD2));
-  NamedColors['LightGray']            := Ptr(Color32To16($D3D3D3));
-  NamedColors['LightGreen']           := Ptr(Color32To16($90EE90));
-  NamedColors['LightGrey']            := Ptr(Color32To16($D3D3D3));
-  NamedColors['LightPink']            := Ptr(Color32To16($FFB6C1));
-  NamedColors['LightSalmon']          := Ptr(Color32To16($FFA07A));
-  NamedColors['LightSeaGreen']        := Ptr(Color32To16($20B2AA));
-  NamedColors['LightSkyBlue']         := Ptr(Color32To16($87CEFA));
-  NamedColors['LightSlateGray']       := Ptr(Color32To16($778899));
-  NamedColors['LightSteelBlue']       := Ptr(Color32To16($B0C4DE));
-  NamedColors['LightYellow']          := Ptr(Color32To16($FFFFE0));
-  NamedColors['Lime']                 := Ptr(Color32To16($00FF00));
-  NamedColors['LimeGreen']            := Ptr(Color32To16($32CD32));
-  NamedColors['Linen']                := Ptr(Color32To16($FAF0E6));
-  NamedColors['Magenta']              := Ptr(Color32To16($FF00FF));
-  NamedColors['Maroon']               := Ptr(Color32To16($800000));
-  NamedColors['MediumAquaMarine']     := Ptr(Color32To16($66CDAA));
-  NamedColors['MediumBlue']           := Ptr(Color32To16($0000CD));
-  NamedColors['MediumOrchid']         := Ptr(Color32To16($BA55D3));
-  NamedColors['MediumPurple']         := Ptr(Color32To16($9370D8));
-  NamedColors['MediumSeaGreen']       := Ptr(Color32To16($3CB371));
-  NamedColors['MediumSlateBlue']      := Ptr(Color32To16($7B68EE));
-  NamedColors['MediumSpringGreen']    := Ptr(Color32To16($00FA9A));
-  NamedColors['MediumTurquoise']      := Ptr(Color32To16($48D1CC));
-  NamedColors['MediumVioletRed']      := Ptr(Color32To16($C71585));
-  NamedColors['MidnightBlue']         := Ptr(Color32To16($191970));
-  NamedColors['MintCream']            := Ptr(Color32To16($F5FFFA));
-  NamedColors['MistyRose']            := Ptr(Color32To16($FFE4E1));
-  NamedColors['Moccasin']             := Ptr(Color32To16($FFE4B5));
-  NamedColors['NavajoWhite']          := Ptr(Color32To16($FFDEAD));
-  NamedColors['Navy']                 := Ptr(Color32To16($000080));
-  NamedColors['OldLace']              := Ptr(Color32To16($FDF5E6));
-  NamedColors['Olive']                := Ptr(Color32To16($808000));
-  NamedColors['OliveDrab']            := Ptr(Color32To16($6B8E23));
-  NamedColors['Orange']               := Ptr(Color32To16($FFA500));
-  NamedColors['OrangeRed']            := Ptr(Color32To16($FF4500));
-  NamedColors['Orchid']               := Ptr(Color32To16($DA70D6));
-  NamedColors['PaleGoldenRod']        := Ptr(Color32To16($EEE8AA));
-  NamedColors['PaleGreen']            := Ptr(Color32To16($98FB98));
-  NamedColors['PaleTurquoise']        := Ptr(Color32To16($AFEEEE));
-  NamedColors['PaleVioletRed']        := Ptr(Color32To16($D87093));
-  NamedColors['PapayaWhip']           := Ptr(Color32To16($FFEFD5));
-  NamedColors['PeachPuff']            := Ptr(Color32To16($FFDAB9));
-  NamedColors['Peru']                 := Ptr(Color32To16($CD853F));
-  NamedColors['Pink']                 := Ptr(Color32To16($FFC0CB));
-  NamedColors['Plum']                 := Ptr(Color32To16($DDA0DD));
-  NamedColors['PowderBlue']           := Ptr(Color32To16($B0E0E6));
-  NamedColors['Purple']               := Ptr(Color32To16($800080));
-  NamedColors['Red']                  := Ptr(Color32To16($FF0000));
-  NamedColors['RosyBrown']            := Ptr(Color32To16($BC8F8F));
-  NamedColors['RoyalBlue']            := Ptr(Color32To16($4169E1));
-  NamedColors['SaddleBrown']          := Ptr(Color32To16($8B4513));
-  NamedColors['Salmon']               := Ptr(Color32To16($FA8072));
-  NamedColors['SandyBrown']           := Ptr(Color32To16($F4A460));
-  NamedColors['SeaGreen']             := Ptr(Color32To16($2E8B57));
-  NamedColors['SeaShell']             := Ptr(Color32To16($FFF5EE));
-  NamedColors['Sienna']               := Ptr(Color32To16($A0522D));
-  NamedColors['Silver']               := Ptr(Color32To16($C0C0C0));
-  NamedColors['SkyBlue']              := Ptr(Color32To16($87CEEB));
-  NamedColors['SlateBlue']            := Ptr(Color32To16($6A5ACD));
-  NamedColors['SlateGray']            := Ptr(Color32To16($708090));
-  NamedColors['Snow']                 := Ptr(Color32To16($FFFAFA));
-  NamedColors['SpringGreen']          := Ptr(Color32To16($00FF7F));
-  NamedColors['SteelBlue']            := Ptr(Color32To16($4682B4));
-  NamedColors['Tan']                  := Ptr(Color32To16($D2B48C));
-  NamedColors['Teal']                 := Ptr(Color32To16($008080));
-  NamedColors['Thistle']              := Ptr(Color32To16($D8BFD8));
-  NamedColors['Tomato']               := Ptr(Color32To16($FF6347));
-  NamedColors['Turquoise']            := Ptr(Color32To16($40E0D0));
-  NamedColors['Violet']               := Ptr(Color32To16($EE82EE));
-  NamedColors['Wheat']                := Ptr(Color32To16($F5DEB3));
-  NamedColors['White']                := Ptr(Color32To16($FFFFFF));
-  NamedColors['WhiteSmoke']           := Ptr(Color32To16($F5F5F5));
-  NamedColors['Yellow']               := Ptr(Color32To16($FFFF00));
-  NamedColors['YellowGreen']          := Ptr(Color32To16($9ACD32));
-  NamedColors['r']                    := Ptr(Color32To16($F2223E));
-  NamedColors['g']                    := Ptr(Color32To16(Heroes.HEROES_GOLD_COLOR_CODE));
+  NamedColors['AliceBlue']            := Ptr($F0F8FF);
+  NamedColors['AntiqueWhite']         := Ptr($FAEBD7);
+  NamedColors['Aqua']                 := Ptr($00FFFF);
+  NamedColors['Aquamarine']           := Ptr($7FFFD4);
+  NamedColors['Azure']                := Ptr($F0FFFF);
+  NamedColors['Beige']                := Ptr($F5F5DC);
+  NamedColors['Bisque']               := Ptr($FFE4C4);
+  NamedColors['Black']                := Ptr($000000);
+  NamedColors['BlanchedAlmond']       := Ptr($FFEBCD);
+  NamedColors['Blue']                 := Ptr($0000FF);
+  NamedColors['BlueViolet']           := Ptr($8A2BE2);
+  NamedColors['Brown']                := Ptr($A52A2A);
+  NamedColors['BurlyWood']            := Ptr($DEB887);
+  NamedColors['CadetBlue']            := Ptr($5F9EA0);
+  NamedColors['Chartreuse']           := Ptr($7FFF00);
+  NamedColors['Chocolate']            := Ptr($D2691E);
+  NamedColors['Coral']                := Ptr($FF7F50);
+  NamedColors['CornflowerBlue']       := Ptr($6495ED);
+  NamedColors['Cornsilk']             := Ptr($FFF8DC);
+  NamedColors['Crimson']              := Ptr($DC143C);
+  NamedColors['Cyan']                 := Ptr($00FFFF);
+  NamedColors['DarkBlue']             := Ptr($00008B);
+  NamedColors['DarkCyan']             := Ptr($008B8B);
+  NamedColors['DarkGoldenRod']        := Ptr($B8860B);
+  NamedColors['DarkGray']             := Ptr($A9A9A9);
+  NamedColors['DarkGreen']            := Ptr($006400);
+  NamedColors['DarkGrey']             := Ptr($A9A9A9);
+  NamedColors['DarkKhaki']            := Ptr($BDB76B);
+  NamedColors['DarkMagenta']          := Ptr($8B008B);
+  NamedColors['DarkOliveGreen']       := Ptr($556B2F);
+  NamedColors['Darkorange']           := Ptr($FF8C00);
+  NamedColors['DarkOrchid']           := Ptr($9932CC);
+  NamedColors['DarkRed']              := Ptr($8B0000);
+  NamedColors['DarkSalmon']           := Ptr($E9967A);
+  NamedColors['DarkSeaGreen']         := Ptr($8FBC8F);
+  NamedColors['DarkSlateBlue']        := Ptr($483D8B);
+  NamedColors['DarkSlateGrey']        := Ptr($2F4F4F);
+  NamedColors['DarkTurquoise']        := Ptr($00CED1);
+  NamedColors['DarkViolet']           := Ptr($9400D3);
+  NamedColors['DeepPink']             := Ptr($FF1493);
+  NamedColors['DeepSkyBlue']          := Ptr($00BFFF);
+  NamedColors['DimGray']              := Ptr($696969);
+  NamedColors['DodgerBlue']           := Ptr($1E90FF);
+  NamedColors['FireBrick']            := Ptr($B22222);
+  NamedColors['FloralWhite']          := Ptr($FFFAF0);
+  NamedColors['ForestGreen']          := Ptr($228B22);
+  NamedColors['Fuchsia']              := Ptr($FF00FF);
+  NamedColors['Gainsboro']            := Ptr($DCDCDC);
+  NamedColors['GhostWhite']           := Ptr($F8F8FF);
+  NamedColors['Gold']                 := Ptr($FFD700);
+  NamedColors['GoldenRod']            := Ptr($DAA520);
+  NamedColors['Gray']                 := Ptr($808080);
+  NamedColors['Green']                := Ptr($008000);
+  NamedColors['GreenYellow']          := Ptr($ADFF2F);
+  NamedColors['Grey']                 := Ptr($808080);
+  NamedColors['HoneyDew']             := Ptr($F0FFF0);
+  NamedColors['HotPink']              := Ptr($FF69B4);
+  NamedColors['IndianRed']            := Ptr($CD5C5C);
+  NamedColors['Indigo']               := Ptr($4B0082);
+  NamedColors['Ivory']                := Ptr($FFFFF0);
+  NamedColors['Khaki']                := Ptr($F0E68C);
+  NamedColors['Lavender']             := Ptr($E6E6FA);
+  NamedColors['LavenderBlush']        := Ptr($FFF0F5);
+  NamedColors['LawnGreen']            := Ptr($7CFC00);
+  NamedColors['LemonChiffon']         := Ptr($FFFACD);
+  NamedColors['LightBlue']            := Ptr($ADD8E6);
+  NamedColors['LightCoral']           := Ptr($F08080);
+  NamedColors['LightCyan']            := Ptr($E0FFFF);
+  NamedColors['LightGoldenRodYellow'] := Ptr($FAFAD2);
+  NamedColors['LightGray']            := Ptr($D3D3D3);
+  NamedColors['LightGreen']           := Ptr($90EE90);
+  NamedColors['LightGrey']            := Ptr($D3D3D3);
+  NamedColors['LightPink']            := Ptr($FFB6C1);
+  NamedColors['LightSalmon']          := Ptr($FFA07A);
+  NamedColors['LightSeaGreen']        := Ptr($20B2AA);
+  NamedColors['LightSkyBlue']         := Ptr($87CEFA);
+  NamedColors['LightSlateGray']       := Ptr($778899);
+  NamedColors['LightSteelBlue']       := Ptr($B0C4DE);
+  NamedColors['LightYellow']          := Ptr($FFFFE0);
+  NamedColors['Lime']                 := Ptr($00FF00);
+  NamedColors['LimeGreen']            := Ptr($32CD32);
+  NamedColors['Linen']                := Ptr($FAF0E6);
+  NamedColors['Magenta']              := Ptr($FF00FF);
+  NamedColors['Maroon']               := Ptr($800000);
+  NamedColors['MediumAquaMarine']     := Ptr($66CDAA);
+  NamedColors['MediumBlue']           := Ptr($0000CD);
+  NamedColors['MediumOrchid']         := Ptr($BA55D3);
+  NamedColors['MediumPurple']         := Ptr($9370D8);
+  NamedColors['MediumSeaGreen']       := Ptr($3CB371);
+  NamedColors['MediumSlateBlue']      := Ptr($7B68EE);
+  NamedColors['MediumSpringGreen']    := Ptr($00FA9A);
+  NamedColors['MediumTurquoise']      := Ptr($48D1CC);
+  NamedColors['MediumVioletRed']      := Ptr($C71585);
+  NamedColors['MidnightBlue']         := Ptr($191970);
+  NamedColors['MintCream']            := Ptr($F5FFFA);
+  NamedColors['MistyRose']            := Ptr($FFE4E1);
+  NamedColors['Moccasin']             := Ptr($FFE4B5);
+  NamedColors['NavajoWhite']          := Ptr($FFDEAD);
+  NamedColors['Navy']                 := Ptr($000080);
+  NamedColors['OldLace']              := Ptr($FDF5E6);
+  NamedColors['Olive']                := Ptr($808000);
+  NamedColors['OliveDrab']            := Ptr($6B8E23);
+  NamedColors['Orange']               := Ptr($FFA500);
+  NamedColors['OrangeRed']            := Ptr($FF4500);
+  NamedColors['Orchid']               := Ptr($DA70D6);
+  NamedColors['PaleGoldenRod']        := Ptr($EEE8AA);
+  NamedColors['PaleGreen']            := Ptr($98FB98);
+  NamedColors['PaleTurquoise']        := Ptr($AFEEEE);
+  NamedColors['PaleVioletRed']        := Ptr($D87093);
+  NamedColors['PapayaWhip']           := Ptr($FFEFD5);
+  NamedColors['PeachPuff']            := Ptr($FFDAB9);
+  NamedColors['Peru']                 := Ptr($CD853F);
+  NamedColors['Pink']                 := Ptr($FFC0CB);
+  NamedColors['Plum']                 := Ptr($DDA0DD);
+  NamedColors['PowderBlue']           := Ptr($B0E0E6);
+  NamedColors['Purple']               := Ptr($800080);
+  NamedColors['Red']                  := Ptr($FF0000);
+  NamedColors['RosyBrown']            := Ptr($BC8F8F);
+  NamedColors['RoyalBlue']            := Ptr($4169E1);
+  NamedColors['SaddleBrown']          := Ptr($8B4513);
+  NamedColors['Salmon']               := Ptr($FA8072);
+  NamedColors['SandyBrown']           := Ptr($F4A460);
+  NamedColors['SeaGreen']             := Ptr($2E8B57);
+  NamedColors['SeaShell']             := Ptr($FFF5EE);
+  NamedColors['Sienna']               := Ptr($A0522D);
+  NamedColors['Silver']               := Ptr($C0C0C0);
+  NamedColors['SkyBlue']              := Ptr($87CEEB);
+  NamedColors['SlateBlue']            := Ptr($6A5ACD);
+  NamedColors['SlateGray']            := Ptr($708090);
+  NamedColors['Snow']                 := Ptr($FFFAFA);
+  NamedColors['SpringGreen']          := Ptr($00FF7F);
+  NamedColors['SteelBlue']            := Ptr($4682B4);
+  NamedColors['Tan']                  := Ptr($D2B48C);
+  NamedColors['Teal']                 := Ptr($008080);
+  NamedColors['Thistle']              := Ptr($D8BFD8);
+  NamedColors['Tomato']               := Ptr($FF6347);
+  NamedColors['Turquoise']            := Ptr($40E0D0);
+  NamedColors['Violet']               := Ptr($EE82EE);
+  NamedColors['Wheat']                := Ptr($F5DEB3);
+  NamedColors['White']                := Ptr($FFFFFF);
+  NamedColors['WhiteSmoke']           := Ptr($F5F5F5);
+  NamedColors['Yellow']               := Ptr($FFFF00);
+  NamedColors['YellowGreen']          := Ptr($9ACD32);
+  NamedColors['r']                    := Ptr($F2223E);
+  NamedColors['g']                    := Ptr(Heroes.HEROES_GOLD_COLOR_CODE);
   NamedColors['b']                    := NamedColors['Blue'];
   NamedColors['y']                    := NamedColors['Yellow'];
   NamedColors['w']                    := NamedColors['White'];
@@ -356,7 +356,7 @@ end; // .procedure NameStdColors
 
 procedure NameColor (Color32: integer; const Name: string);
 begin
-  NamedColors[Name] := Ptr(Color32To16(Color32));
+  NamedColors[Name] := Ptr(Color32);
 end;
 
 function IsChineseLoaderPresent (out ChineseHandler: pointer): boolean;
@@ -455,6 +455,9 @@ begin
   end; // .while
 end; // .function ParseEmlAttrs
 
+// var
+//   List: TList;
+
 constructor TParsedText.Create (const OrigText: string; {U} Font: Heroes.PFontItem);
 const
   LINE_END_MARKER = #10;
@@ -531,7 +534,7 @@ begin
 
   TextBlock.BlockLen           := Length(OrigText);
   TextBlock.BlockType          := TEXT_BLOCK_CHARS;
-  TextBlock.CharsBlock.Color16 := DEF_COLOR;
+  TextBlock.CharsBlock.Color32 := DEF_COLOR;
   CurrColor                    := DEF_COLOR;
   NativeTag                    := #0;
 
@@ -638,7 +641,6 @@ begin
           TextBlock.ImgBlock.CharsPerLine := Math.Max(1, NumFillChars);
           TextBlock.ImgBlock.Height       := TextBlock.DefBlock.Def.GetFrameHeight(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
           TextBlock.ImgBlock.OffsetX      := (NumFillChars * NbspWidth - ImageWidth) div 2;
-          VarDump([TextBlock.ImgBlock.OffsetX]);
           TextBlock.BlockLen              := NumFillChars;
 
           if TextBlock.ImgBlock.IsBlock then begin
@@ -665,7 +667,7 @@ begin
           TextBlock.ImgBlock.AttrVertAlign := VertAlignHash;
 
           BeginNewColorBlock;
-          TextBlock.CharsBlock.Color16 := CurrColor;
+          TextBlock.CharsBlock.Color32 := CurrColor;
 
           // Output serie of non-breaking spaces to compensate image width
           for i := 0 to NumFillChars - 1 do begin
@@ -686,11 +688,11 @@ begin
         if NativeTag = '}' then begin
           PopColor;
         end else begin
-          CurrColor := Color32To16(HEROES_GOLD_COLOR_CODE);
+          CurrColor := HEROES_GOLD_COLOR_CODE;
           ColorStack.Add(Ptr(CurrColor));
         end;
 
-        TextBlock.CharsBlock.Color16 := CurrColor;
+        TextBlock.CharsBlock.Color32 := CurrColor;
         TextScanner.GotoNextChar;
       // Handle other ERL open/close tags
       end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
@@ -704,7 +706,7 @@ begin
           if NamedColors.GetExistingValue(ColorName, pointer(CurrColor)) then begin
             // Ok
           end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
-            CurrColor := Color32To16(CurrColor);
+            // Ok
           end else begin
             CurrColor := DEF_COLOR;
           end;
@@ -712,7 +714,7 @@ begin
           ColorStack.Add(Ptr(CurrColor));
         end; // .else
         
-        TextBlock.CharsBlock.Color16 := CurrColor;
+        TextBlock.CharsBlock.Color32 := CurrColor;
         TextScanner.GotoNextChar;
       end; // .elseif
     end; // .while
@@ -730,7 +732,7 @@ begin
   Self.NumBlocks := Self.Blocks.Count;
 
   // if Self.NumBlocks > 1 then begin
-  //   List := ParsedTextToLines(Self, 100);
+  //   List := Self.ToLines(400);
 
   //   for i := 0 to List.Count - 1 do begin
   //     TParsedTextLine(List[i]).ToTaggedText(Self, TaggedLineBuilder);
@@ -924,9 +926,9 @@ begin
     // Output block opening tag, if necessary
     case CurrBlock.BlockType of
       TEXT_BLOCK_CHARS: begin
-        if CurrBlock.CharsBlock.Color16 <> DEF_COLOR then begin
+        if CurrBlock.CharsBlock.Color32 <> DEF_COLOR then begin
           Res.Append('{~');
-          Res.Append(SysUtils.Format('%x', [Color16To32(CurrBlock.CharsBlock.Color16)]));
+          Res.Append(SysUtils.Format('%.8x', [CurrBlock.CharsBlock.Color32]));
           Res.Append('}');
         end;
       end;
@@ -985,7 +987,7 @@ begin
     // Output closing block tag if necessary
     case CurrBlock.BlockType of
       TEXT_BLOCK_CHARS: begin
-        if CurrBlock.CharsBlock.Color16 <> DEF_COLOR then begin
+        if CurrBlock.CharsBlock.Color32 <> DEF_COLOR then begin
           Res.Append('{~}');
         end;
       end;
@@ -1032,7 +1034,7 @@ begin
   if (CurrParsedText <> nil) and (CurrTextBlock <> nil) then begin
     if CurrBlockPos < CurrTextBlock.BlockLen then begin
       if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-        CurrColor := CurrTextBlock.CharsBlock.Color16;
+        CurrColor := CurrTextBlock.CharsBlock.Color32;
       end;
     end else begin
       while CurrBlockPos >= CurrTextBlock.BlockLen do begin
@@ -1044,7 +1046,7 @@ begin
           CurrTextBlock := CurrParsedText.Blocks[CurrBlockInd];
 
           if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-            CurrColor := CurrTextBlock.CharsBlock.Color16;
+            CurrColor := CurrTextBlock.CharsBlock.Color32;
           end;
         // Something is broken, like invalid GBK character (missing second part of code point), mixed language, etc.
         // Empty string, probably. Recover to use the last color.
@@ -1228,7 +1230,7 @@ var
   OutPixelPtr:    pword;
   BytesPerPixel:  integer;
   CharPixel:      integer;
-  Color16:        integer;
+  Color32:        integer;
   i, j:           integer;
   c:              char;
 
@@ -1254,18 +1256,18 @@ begin
           if CharPixel <> 0 then begin
             if CharPixel = -1 then begin
               if CurrColor = DEF_COLOR then begin
-                Color16 := Font.Palette16.Colors[ColorInd];
+                Color32 := Color16To32(Font.Palette16.Colors[ColorInd]);
               end else begin
-                Color16 := CurrColor;
+                Color32 := CurrColor;
               end;
             end else begin
-              Color16 := Font.Palette16.Colors[32];
+              Color32 := Color16To32(Font.Palette16.Colors[32]);
             end;
 
             if BytesPerPixel = sizeof(integer) then begin
-              pinteger(OutPixelPtr)^ := Color16To32(Color16);
+              pinteger(OutPixelPtr)^ := Color32;
             end else begin
-              pword(OutPixelPtr)^ := Color16;
+              pword(OutPixelPtr)^ := Color32To16(Color32);
             end; 
           end; // .if   
           
