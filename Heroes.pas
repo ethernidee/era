@@ -549,7 +549,7 @@ type
     CharInfos:       array [#0..#255] of TFontCharInfo;
     CharDataOffsets: array [#0..#255] of integer;
     Palette16:       TPalette16;
-    CharsDataPtr:    Utils.PEndlessShortIntArr;
+    CharsDataPtr:    Utils.PEndlessByteArr;
   end; // .object TFontItem
   {$ALIGN ON}
 

@@ -172,31 +172,13 @@ begin
 end;
 
 function Color16To32Func (Color16: integer): integer;
-var
-  Red:   integer;
-  Green: integer;
-  Blue:  integer;
-
 begin
-  Red   := ((Color16 shr 11) and $1F) shl 3;
-  Green := ((Color16 shr 5) and $3F) shl 2;
-  Blue  := (Color16 and $1F) shl 3;
-
-  result := (Red shl 16) or (Green shl 8) or Blue;
+  result := (({BLUE} (Color16 and $1F) shl 3) or ({GREEN} (Color16 and $7E0) shl 5) or ({RED} (Color16 and $F800) shl 8)) and $FFF8FCF8;
 end;
 
 function Color15To32Func (Color15: integer): integer;
-var
-  Red:   integer;
-  Green: integer;
-  Blue:  integer;
-
 begin
-  Red   := ((Color15 shr 10) and $1F) shl 3;
-  Green := ((Color15 shr 5) and $1F) shl 3;
-  Blue  := (Color15 and $1F) shl 3;
-
-  result := (Red shl 16) or (Green shl 8) or Blue;
+  result := (({BLUE} (Color15 and $1F) shl 3) or ({GREEN} (Color15 and $3E0) shl 6) or ({RED} (Color15 and $F800) shl 9)) and $FFF8F8F8;
 end;
 
 procedure NameStdColors;
@@ -1225,12 +1207,14 @@ function DrawCharacterToPcx (Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes
 var
   CharWidth:      integer;
   FontHeight:     integer;
-  CharPixelPtr:   pshortint;
+  CharPixelPtr:   pbyte;
   OutRowStartPtr: pword;
   OutPixelPtr:    pword;
   BytesPerPixel:  integer;
   CharPixel:      integer;
   Color32:        integer;
+  CurrColor32:    integer;
+  ShadowColor32:  integer;
   i, j:           integer;
   c:              char;
 
@@ -1242,6 +1226,12 @@ begin
     c             := chr(Ch);
     CharWidth     := Font.CharInfos[c].Width;
     FontHeight    := Font.Height;
+    ShadowColor32 := Color16To32(Font.Palette16.Colors[32]);
+    CurrColor32   := CurrColor;
+
+    if CurrColor32 = DEF_COLOR then begin
+      CurrColor32 := Color16To32(Font.Palette16.Colors[ColorInd]);
+    end;
 
     if (CharWidth > 0) and (FontHeight > 0) then begin
       CharPixelPtr   := @Font.CharsDataPtr[Font.CharDataOffsets[c]];
@@ -1254,14 +1244,10 @@ begin
           CharPixel := CharPixelPtr^;
 
           if CharPixel <> 0 then begin
-            if CharPixel = -1 then begin
-              if CurrColor = DEF_COLOR then begin
-                Color32 := Color16To32(Font.Palette16.Colors[ColorInd]);
-              end else begin
-                Color32 := CurrColor;
-              end;
+            if CharPixel = 255 then begin
+              Color32 := CurrColor32;
             end else begin
-              Color32 := Color16To32(Font.Palette16.Colors[32]);
+              Color32 := ShadowColor32;
             end;
 
             if BytesPerPixel = sizeof(integer) then begin
