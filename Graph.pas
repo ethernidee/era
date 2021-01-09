@@ -1,4 +1,4 @@
-﻿unit Graph;
+unit Graph;
 
 (***)  interface  (***)
 
@@ -16,6 +16,13 @@ const
   (* Width and height values *)
   AUTO_WIDTH  = 0;
   AUTO_HEIGHT = 0;
+
+  ALPHA_CHANNEL_MASK_32        = integer($FF000000);
+  RED_BLUE_CHANNELS_MASK_32    = $00FF00FF;
+  GREEN_CHANNEL_MASK_32        = $0000FF00;
+  ALPHA_GREEN_CHANNELS_MASK_32 = integer(ALPHA_CHANNEL_MASK_32 or GREEN_CHANNEL_MASK_32);
+  FULLY_OPAQUE_MASK32          = integer($FF000000);
+  RGB_MASK_32                  = $FFFFFF;
 
 type
   (* Import *)
@@ -50,13 +57,16 @@ type
   end;
 
 
-function  LoadImage (const FilePath: string): {n} TGraphic;
+(* Performans ARBG pixels alpha blending *)
+function AlphaBlend32 (FirstColor32, SecondColor32: integer): integer;
+
+function LoadImage (const FilePath: string): {n} TGraphic;
 
 (* Fast bitmap scaling. Input bitmap is forced to be 24 bit. *)
 function ResizeBmp24 ({OU} Image: TBitmap; NewWidth, NewHeight, MaxWidth, MaxHeight: integer; ResizeAlg: TResizeAlg; FreeOriginal: boolean): {O} TBitmap;
 
 (* ©Charles Hacker, adapted by ethernidee. Input bitmap is forced to be 24 bit. *)
-function  SmoothResizeBmp24 ({OU} abmp: TBitmap; NewWidth, NewHeight: integer; FreeOriginal: boolean): {O} TBitmap;
+function SmoothResizeBmp24 ({OU} abmp: TBitmap; NewWidth, NewHeight: integer; FreeOriginal: boolean): {O} TBitmap;
 
 function LoadImageAsPcx16 (FilePath:  string;      PcxName:   string  = '';
                            Width:     integer = 0; Height:    integer = 0;
@@ -82,6 +92,27 @@ procedure ValidateImageSize (Width: integer; Height: integer);
 begin
   {!} Assert((Width > 0) and (Height > 0), Format('Invalid image dimensions specified: %dx%d', [Width, Height]));
 end;
+
+function AlphaBlend32 (FirstColor32, SecondColor32: integer): integer;
+const
+  ONE_ALPHA_CHANNEL_MASK_32 = $01000000;
+
+var
+  SecondColorOpacity:    integer;
+  SecondColorOpaqueness: integer;
+  RedBlueChannels:       integer;
+  AlphaGreenChannels:    integer;
+
+begin
+  SecondColorOpaqueness := (SecondColor32 and ALPHA_CHANNEL_MASK_32) shr 24;
+  SecondColorOpacity    := 255 - SecondColorOpaqueness;
+  RedBlueChannels       := (SecondColorOpacity    * (FirstColor32  and RED_BLUE_CHANNELS_MASK_32) +
+                            SecondColorOpaqueness * (SecondColor32 and RED_BLUE_CHANNELS_MASK_32)) shr 8;
+  AlphaGreenChannels    := SecondColorOpacity     * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8) +
+                           SecondColorOpaqueness  * (ONE_ALPHA_CHANNEL_MASK_32 or ((SecondColor32 and GREEN_CHANNEL_MASK_32) shr 8));
+  result                := (RedBlueChannels and RED_BLUE_CHANNELS_MASK_32) or (AlphaGreenChannels and ALPHA_GREEN_CHANNELS_MASK_32);
+end;
+
 
 (* Returns number of bits per pixels, 0 for unknown or unsupported. *)
 function GetBmpColorDepth (Image: TBitmap): integer;

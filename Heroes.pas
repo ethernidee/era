@@ -161,7 +161,7 @@ const
   (* Colors *)
   RED_COLOR              = 'F2223E';
   HEROES_GOLD_COLOR      = 'FFE794';
-  HEROES_GOLD_COLOR_CODE = integer($FFE794);
+  HEROES_GOLD_COLOR_CODE = integer($FFFFE794);
 
   (* Resources *)
   RES_FIRST   = 0;

@@ -8,7 +8,7 @@ unit Rainbow;
 uses
   Math, SysUtils, Windows,
   Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib, TypeWrappers,
-  Core, GameExt, Heroes, Memory, EventMan, DlgMes;
+  Core, GameExt, Heroes, Graph, Memory, EventMan, DlgMes;
 
 type
   (* Import *)
@@ -22,7 +22,7 @@ const
   TEXTMODE_15BITS = $3E0;
   TEXTMODE_16BITS = $7E0;
 
-  DEF_COLOR = -1;
+  DEF_COLOR = 0;
   
   TextColorMode: pword = Ptr($694DB0);
 
@@ -173,160 +173,165 @@ end;
 
 function Color16To32Func (Color16: integer): integer;
 begin
-  result := (({BLUE} (Color16 and $1F) shl 3) or ({GREEN} (Color16 and $7E0) shl 5) or ({RED} (Color16 and $F800) shl 8)) and $FFF8FCF8;
+  result := (({BLUE} (Color16 and $1F) shl 3) or ({GREEN} (Color16 and $7E0) shl 5) or ({RED} (Color16 and $F800) shl 8) or Graph.FULLY_OPAQUE_MASK32) and $FFF8FCF8;
 end;
 
 function Color15To32Func (Color15: integer): integer;
 begin
-  result := (({BLUE} (Color15 and $1F) shl 3) or ({GREEN} (Color15 and $3E0) shl 6) or ({RED} (Color15 and $F800) shl 9)) and $FFF8F8F8;
+  result := (({BLUE} (Color15 and $1F) shl 3) or ({GREEN} (Color15 and $3E0) shl 6) or ({RED} (Color15 and $F800) shl 9) or Graph.FULLY_OPAQUE_MASK32) and $FFF8F8F8;
+end;
+
+function Color32ToCode (Color32: integer): string;
+begin
+  result := SysUtils.Format('%.8x', [((Color32 and Graph.RGB_MASK_32) shl 8) or ((Color32 shr 24) and $FF)]);
 end;
 
 procedure NameStdColors;
 begin
   NamedColors['AliceBlue']            := Ptr($F0F8FF);
-  NamedColors['AntiqueWhite']         := Ptr($FAEBD7);
-  NamedColors['Aqua']                 := Ptr($00FFFF);
-  NamedColors['Aquamarine']           := Ptr($7FFFD4);
-  NamedColors['Azure']                := Ptr($F0FFFF);
-  NamedColors['Beige']                := Ptr($F5F5DC);
-  NamedColors['Bisque']               := Ptr($FFE4C4);
-  NamedColors['Black']                := Ptr($000000);
-  NamedColors['BlanchedAlmond']       := Ptr($FFEBCD);
-  NamedColors['Blue']                 := Ptr($0000FF);
-  NamedColors['BlueViolet']           := Ptr($8A2BE2);
-  NamedColors['Brown']                := Ptr($A52A2A);
-  NamedColors['BurlyWood']            := Ptr($DEB887);
-  NamedColors['CadetBlue']            := Ptr($5F9EA0);
-  NamedColors['Chartreuse']           := Ptr($7FFF00);
-  NamedColors['Chocolate']            := Ptr($D2691E);
-  NamedColors['Coral']                := Ptr($FF7F50);
-  NamedColors['CornflowerBlue']       := Ptr($6495ED);
-  NamedColors['Cornsilk']             := Ptr($FFF8DC);
-  NamedColors['Crimson']              := Ptr($DC143C);
-  NamedColors['Cyan']                 := Ptr($00FFFF);
-  NamedColors['DarkBlue']             := Ptr($00008B);
-  NamedColors['DarkCyan']             := Ptr($008B8B);
-  NamedColors['DarkGoldenRod']        := Ptr($B8860B);
-  NamedColors['DarkGray']             := Ptr($A9A9A9);
-  NamedColors['DarkGreen']            := Ptr($006400);
-  NamedColors['DarkGrey']             := Ptr($A9A9A9);
-  NamedColors['DarkKhaki']            := Ptr($BDB76B);
-  NamedColors['DarkMagenta']          := Ptr($8B008B);
-  NamedColors['DarkOliveGreen']       := Ptr($556B2F);
-  NamedColors['Darkorange']           := Ptr($FF8C00);
-  NamedColors['DarkOrchid']           := Ptr($9932CC);
-  NamedColors['DarkRed']              := Ptr($8B0000);
-  NamedColors['DarkSalmon']           := Ptr($E9967A);
-  NamedColors['DarkSeaGreen']         := Ptr($8FBC8F);
-  NamedColors['DarkSlateBlue']        := Ptr($483D8B);
-  NamedColors['DarkSlateGrey']        := Ptr($2F4F4F);
-  NamedColors['DarkTurquoise']        := Ptr($00CED1);
-  NamedColors['DarkViolet']           := Ptr($9400D3);
-  NamedColors['DeepPink']             := Ptr($FF1493);
-  NamedColors['DeepSkyBlue']          := Ptr($00BFFF);
-  NamedColors['DimGray']              := Ptr($696969);
-  NamedColors['DodgerBlue']           := Ptr($1E90FF);
-  NamedColors['FireBrick']            := Ptr($B22222);
-  NamedColors['FloralWhite']          := Ptr($FFFAF0);
-  NamedColors['ForestGreen']          := Ptr($228B22);
-  NamedColors['Fuchsia']              := Ptr($FF00FF);
-  NamedColors['Gainsboro']            := Ptr($DCDCDC);
-  NamedColors['GhostWhite']           := Ptr($F8F8FF);
-  NamedColors['Gold']                 := Ptr($FFD700);
-  NamedColors['GoldenRod']            := Ptr($DAA520);
-  NamedColors['Gray']                 := Ptr($808080);
-  NamedColors['Green']                := Ptr($008000);
-  NamedColors['GreenYellow']          := Ptr($ADFF2F);
-  NamedColors['Grey']                 := Ptr($808080);
-  NamedColors['HoneyDew']             := Ptr($F0FFF0);
-  NamedColors['HotPink']              := Ptr($FF69B4);
-  NamedColors['IndianRed']            := Ptr($CD5C5C);
-  NamedColors['Indigo']               := Ptr($4B0082);
-  NamedColors['Ivory']                := Ptr($FFFFF0);
-  NamedColors['Khaki']                := Ptr($F0E68C);
-  NamedColors['Lavender']             := Ptr($E6E6FA);
-  NamedColors['LavenderBlush']        := Ptr($FFF0F5);
-  NamedColors['LawnGreen']            := Ptr($7CFC00);
-  NamedColors['LemonChiffon']         := Ptr($FFFACD);
-  NamedColors['LightBlue']            := Ptr($ADD8E6);
-  NamedColors['LightCoral']           := Ptr($F08080);
-  NamedColors['LightCyan']            := Ptr($E0FFFF);
-  NamedColors['LightGoldenRodYellow'] := Ptr($FAFAD2);
-  NamedColors['LightGray']            := Ptr($D3D3D3);
-  NamedColors['LightGreen']           := Ptr($90EE90);
-  NamedColors['LightGrey']            := Ptr($D3D3D3);
-  NamedColors['LightPink']            := Ptr($FFB6C1);
-  NamedColors['LightSalmon']          := Ptr($FFA07A);
-  NamedColors['LightSeaGreen']        := Ptr($20B2AA);
-  NamedColors['LightSkyBlue']         := Ptr($87CEFA);
-  NamedColors['LightSlateGray']       := Ptr($778899);
-  NamedColors['LightSteelBlue']       := Ptr($B0C4DE);
-  NamedColors['LightYellow']          := Ptr($FFFFE0);
-  NamedColors['Lime']                 := Ptr($00FF00);
-  NamedColors['LimeGreen']            := Ptr($32CD32);
-  NamedColors['Linen']                := Ptr($FAF0E6);
-  NamedColors['Magenta']              := Ptr($FF00FF);
-  NamedColors['Maroon']               := Ptr($800000);
-  NamedColors['MediumAquaMarine']     := Ptr($66CDAA);
-  NamedColors['MediumBlue']           := Ptr($0000CD);
-  NamedColors['MediumOrchid']         := Ptr($BA55D3);
-  NamedColors['MediumPurple']         := Ptr($9370D8);
-  NamedColors['MediumSeaGreen']       := Ptr($3CB371);
-  NamedColors['MediumSlateBlue']      := Ptr($7B68EE);
-  NamedColors['MediumSpringGreen']    := Ptr($00FA9A);
-  NamedColors['MediumTurquoise']      := Ptr($48D1CC);
-  NamedColors['MediumVioletRed']      := Ptr($C71585);
-  NamedColors['MidnightBlue']         := Ptr($191970);
-  NamedColors['MintCream']            := Ptr($F5FFFA);
-  NamedColors['MistyRose']            := Ptr($FFE4E1);
-  NamedColors['Moccasin']             := Ptr($FFE4B5);
-  NamedColors['NavajoWhite']          := Ptr($FFDEAD);
-  NamedColors['Navy']                 := Ptr($000080);
-  NamedColors['OldLace']              := Ptr($FDF5E6);
-  NamedColors['Olive']                := Ptr($808000);
-  NamedColors['OliveDrab']            := Ptr($6B8E23);
-  NamedColors['Orange']               := Ptr($FFA500);
-  NamedColors['OrangeRed']            := Ptr($FF4500);
-  NamedColors['Orchid']               := Ptr($DA70D6);
-  NamedColors['PaleGoldenRod']        := Ptr($EEE8AA);
-  NamedColors['PaleGreen']            := Ptr($98FB98);
-  NamedColors['PaleTurquoise']        := Ptr($AFEEEE);
-  NamedColors['PaleVioletRed']        := Ptr($D87093);
-  NamedColors['PapayaWhip']           := Ptr($FFEFD5);
-  NamedColors['PeachPuff']            := Ptr($FFDAB9);
-  NamedColors['Peru']                 := Ptr($CD853F);
-  NamedColors['Pink']                 := Ptr($FFC0CB);
-  NamedColors['Plum']                 := Ptr($DDA0DD);
-  NamedColors['PowderBlue']           := Ptr($B0E0E6);
-  NamedColors['Purple']               := Ptr($800080);
-  NamedColors['Red']                  := Ptr($FF0000);
-  NamedColors['RosyBrown']            := Ptr($BC8F8F);
-  NamedColors['RoyalBlue']            := Ptr($4169E1);
-  NamedColors['SaddleBrown']          := Ptr($8B4513);
-  NamedColors['Salmon']               := Ptr($FA8072);
-  NamedColors['SandyBrown']           := Ptr($F4A460);
-  NamedColors['SeaGreen']             := Ptr($2E8B57);
-  NamedColors['SeaShell']             := Ptr($FFF5EE);
-  NamedColors['Sienna']               := Ptr($A0522D);
-  NamedColors['Silver']               := Ptr($C0C0C0);
-  NamedColors['SkyBlue']              := Ptr($87CEEB);
-  NamedColors['SlateBlue']            := Ptr($6A5ACD);
-  NamedColors['SlateGray']            := Ptr($708090);
-  NamedColors['Snow']                 := Ptr($FFFAFA);
-  NamedColors['SpringGreen']          := Ptr($00FF7F);
-  NamedColors['SteelBlue']            := Ptr($4682B4);
-  NamedColors['Tan']                  := Ptr($D2B48C);
-  NamedColors['Teal']                 := Ptr($008080);
-  NamedColors['Thistle']              := Ptr($D8BFD8);
-  NamedColors['Tomato']               := Ptr($FF6347);
-  NamedColors['Turquoise']            := Ptr($40E0D0);
-  NamedColors['Violet']               := Ptr($EE82EE);
-  NamedColors['Wheat']                := Ptr($F5DEB3);
-  NamedColors['White']                := Ptr($FFFFFF);
-  NamedColors['WhiteSmoke']           := Ptr($F5F5F5);
-  NamedColors['Yellow']               := Ptr($FFFF00);
-  NamedColors['YellowGreen']          := Ptr($9ACD32);
-  NamedColors['r']                    := Ptr($F2223E);
+  NamedColors['AntiqueWhite']         := Ptr($FFFAEBD7);
+  NamedColors['Aqua']                 := Ptr($FF00FFFF);
+  NamedColors['Aquamarine']           := Ptr($FF7FFFD4);
+  NamedColors['Azure']                := Ptr($FFF0FFFF);
+  NamedColors['Beige']                := Ptr($FFF5F5DC);
+  NamedColors['Bisque']               := Ptr($FFFFE4C4);
+  NamedColors['Black']                := Ptr($FF000000);
+  NamedColors['BlanchedAlmond']       := Ptr($FFFFEBCD);
+  NamedColors['Blue']                 := Ptr($FF0000FF);
+  NamedColors['BlueViolet']           := Ptr($FF8A2BE2);
+  NamedColors['Brown']                := Ptr($FFA52A2A);
+  NamedColors['BurlyWood']            := Ptr($FFDEB887);
+  NamedColors['CadetBlue']            := Ptr($FF5F9EA0);
+  NamedColors['Chartreuse']           := Ptr($FF7FFF00);
+  NamedColors['Chocolate']            := Ptr($FFD2691E);
+  NamedColors['Coral']                := Ptr($FFFF7F50);
+  NamedColors['CornflowerBlue']       := Ptr($FF6495ED);
+  NamedColors['Cornsilk']             := Ptr($FFFFF8DC);
+  NamedColors['Crimson']              := Ptr($FFDC143C);
+  NamedColors['Cyan']                 := Ptr($FF00FFFF);
+  NamedColors['DarkBlue']             := Ptr($FF00008B);
+  NamedColors['DarkCyan']             := Ptr($FF008B8B);
+  NamedColors['DarkGoldenRod']        := Ptr($FFB8860B);
+  NamedColors['DarkGray']             := Ptr($FFA9A9A9);
+  NamedColors['DarkGreen']            := Ptr($FF006400);
+  NamedColors['DarkGrey']             := Ptr($FFA9A9A9);
+  NamedColors['DarkKhaki']            := Ptr($FFBDB76B);
+  NamedColors['DarkMagenta']          := Ptr($FF8B008B);
+  NamedColors['DarkOliveGreen']       := Ptr($FF556B2F);
+  NamedColors['Darkorange']           := Ptr($FFFF8C00);
+  NamedColors['DarkOrchid']           := Ptr($FF9932CC);
+  NamedColors['DarkRed']              := Ptr($FF8B0000);
+  NamedColors['DarkSalmon']           := Ptr($FFE9967A);
+  NamedColors['DarkSeaGreen']         := Ptr($FF8FBC8F);
+  NamedColors['DarkSlateBlue']        := Ptr($FF483D8B);
+  NamedColors['DarkSlateGrey']        := Ptr($FF2F4F4F);
+  NamedColors['DarkTurquoise']        := Ptr($FF00CED1);
+  NamedColors['DarkViolet']           := Ptr($FF9400D3);
+  NamedColors['DeepPink']             := Ptr($FFFF1493);
+  NamedColors['DeepSkyBlue']          := Ptr($FF00BFFF);
+  NamedColors['DimGray']              := Ptr($FF696969);
+  NamedColors['DodgerBlue']           := Ptr($FF1E90FF);
+  NamedColors['FireBrick']            := Ptr($FFB22222);
+  NamedColors['FloralWhite']          := Ptr($FFFFFAF0);
+  NamedColors['ForestGreen']          := Ptr($FF228B22);
+  NamedColors['Fuchsia']              := Ptr($FFFF00FF);
+  NamedColors['Gainsboro']            := Ptr($FFDCDCDC);
+  NamedColors['GhostWhite']           := Ptr($FFF8F8FF);
+  NamedColors['Gold']                 := Ptr($FFFFD700);
+  NamedColors['GoldenRod']            := Ptr($FFDAA520);
+  NamedColors['Gray']                 := Ptr($FF808080);
+  NamedColors['Green']                := Ptr($FF008000);
+  NamedColors['GreenYellow']          := Ptr($FFADFF2F);
+  NamedColors['Grey']                 := Ptr($FF808080);
+  NamedColors['HoneyDew']             := Ptr($FFF0FFF0);
+  NamedColors['HotPink']              := Ptr($FFFF69B4);
+  NamedColors['IndianRed']            := Ptr($FFCD5C5C);
+  NamedColors['Indigo']               := Ptr($FF4B0082);
+  NamedColors['Ivory']                := Ptr($FFFFFFF0);
+  NamedColors['Khaki']                := Ptr($FFF0E68C);
+  NamedColors['Lavender']             := Ptr($FFE6E6FA);
+  NamedColors['LavenderBlush']        := Ptr($FFFFF0F5);
+  NamedColors['LawnGreen']            := Ptr($FF7CFC00);
+  NamedColors['LemonChiffon']         := Ptr($FFFFFACD);
+  NamedColors['LightBlue']            := Ptr($FFADD8E6);
+  NamedColors['LightCoral']           := Ptr($FFF08080);
+  NamedColors['LightCyan']            := Ptr($FFE0FFFF);
+  NamedColors['LightGoldenRodYellow'] := Ptr($FFFAFAD2);
+  NamedColors['LightGray']            := Ptr($FFD3D3D3);
+  NamedColors['LightGreen']           := Ptr($FF90EE90);
+  NamedColors['LightGrey']            := Ptr($FFD3D3D3);
+  NamedColors['LightPink']            := Ptr($FFFFB6C1);
+  NamedColors['LightSalmon']          := Ptr($FFFFA07A);
+  NamedColors['LightSeaGreen']        := Ptr($FF20B2AA);
+  NamedColors['LightSkyBlue']         := Ptr($FF87CEFA);
+  NamedColors['LightSlateGray']       := Ptr($FF778899);
+  NamedColors['LightSteelBlue']       := Ptr($FFB0C4DE);
+  NamedColors['LightYellow']          := Ptr($FFFFFFE0);
+  NamedColors['Lime']                 := Ptr($FF00FF00);
+  NamedColors['LimeGreen']            := Ptr($FF32CD32);
+  NamedColors['Linen']                := Ptr($FFFAF0E6);
+  NamedColors['Magenta']              := Ptr($FFFF00FF);
+  NamedColors['Maroon']               := Ptr($FF800000);
+  NamedColors['MediumAquaMarine']     := Ptr($FF66CDAA);
+  NamedColors['MediumBlue']           := Ptr($FF0000CD);
+  NamedColors['MediumOrchid']         := Ptr($FFBA55D3);
+  NamedColors['MediumPurple']         := Ptr($FF9370D8);
+  NamedColors['MediumSeaGreen']       := Ptr($FF3CB371);
+  NamedColors['MediumSlateBlue']      := Ptr($FF7B68EE);
+  NamedColors['MediumSpringGreen']    := Ptr($FF00FA9A);
+  NamedColors['MediumTurquoise']      := Ptr($FF48D1CC);
+  NamedColors['MediumVioletRed']      := Ptr($FFC71585);
+  NamedColors['MidnightBlue']         := Ptr($FF191970);
+  NamedColors['MintCream']            := Ptr($FFF5FFFA);
+  NamedColors['MistyRose']            := Ptr($FFFFE4E1);
+  NamedColors['Moccasin']             := Ptr($FFFFE4B5);
+  NamedColors['NavajoWhite']          := Ptr($FFFFDEAD);
+  NamedColors['Navy']                 := Ptr($FF000080);
+  NamedColors['OldLace']              := Ptr($FFFDF5E6);
+  NamedColors['Olive']                := Ptr($FF808000);
+  NamedColors['OliveDrab']            := Ptr($FF6B8E23);
+  NamedColors['Orange']               := Ptr($FFFFA500);
+  NamedColors['OrangeRed']            := Ptr($FFFF4500);
+  NamedColors['Orchid']               := Ptr($FFDA70D6);
+  NamedColors['PaleGoldenRod']        := Ptr($FFEEE8AA);
+  NamedColors['PaleGreen']            := Ptr($FF98FB98);
+  NamedColors['PaleTurquoise']        := Ptr($FFAFEEEE);
+  NamedColors['PaleVioletRed']        := Ptr($FFD87093);
+  NamedColors['PapayaWhip']           := Ptr($FFFFEFD5);
+  NamedColors['PeachPuff']            := Ptr($FFFFDAB9);
+  NamedColors['Peru']                 := Ptr($FFCD853F);
+  NamedColors['Pink']                 := Ptr($FFFFC0CB);
+  NamedColors['Plum']                 := Ptr($FFDDA0DD);
+  NamedColors['PowderBlue']           := Ptr($FFB0E0E6);
+  NamedColors['Purple']               := Ptr($FF800080);
+  NamedColors['Red']                  := Ptr($FFFF0000);
+  NamedColors['RosyBrown']            := Ptr($FFBC8F8F);
+  NamedColors['RoyalBlue']            := Ptr($FF4169E1);
+  NamedColors['SaddleBrown']          := Ptr($FF8B4513);
+  NamedColors['Salmon']               := Ptr($FFFA8072);
+  NamedColors['SandyBrown']           := Ptr($FFF4A460);
+  NamedColors['SeaGreen']             := Ptr($FF2E8B57);
+  NamedColors['SeaShell']             := Ptr($FFFFF5EE);
+  NamedColors['Sienna']               := Ptr($FFA0522D);
+  NamedColors['Silver']               := Ptr($FFC0C0C0);
+  NamedColors['SkyBlue']              := Ptr($FF87CEEB);
+  NamedColors['SlateBlue']            := Ptr($FF6A5ACD);
+  NamedColors['SlateGray']            := Ptr($FF708090);
+  NamedColors['Snow']                 := Ptr($FFFFFAFA);
+  NamedColors['SpringGreen']          := Ptr($FF00FF7F);
+  NamedColors['SteelBlue']            := Ptr($FF4682B4);
+  NamedColors['Tan']                  := Ptr($FFD2B48C);
+  NamedColors['Teal']                 := Ptr($FF008080);
+  NamedColors['Thistle']              := Ptr($FFD8BFD8);
+  NamedColors['Tomato']               := Ptr($FFFF6347);
+  NamedColors['Turquoise']            := Ptr($FF40E0D0);
+  NamedColors['Violet']               := Ptr($FFEE82EE);
+  NamedColors['Wheat']                := Ptr($FFF5DEB3);
+  NamedColors['White']                := Ptr($FFFFFFFF);
+  NamedColors['WhiteSmoke']           := Ptr($FFF5F5F5);
+  NamedColors['Yellow']               := Ptr($FFFFFF00);
+  NamedColors['YellowGreen']          := Ptr($FF9ACD32);
+  NamedColors['r']                    := Ptr($FFF2223E);
   NamedColors['g']                    := Ptr(Heroes.HEROES_GOLD_COLOR_CODE);
   NamedColors['b']                    := NamedColors['Blue'];
   NamedColors['y']                    := NamedColors['Yellow'];
@@ -442,8 +447,9 @@ end; // .function ParseEmlAttrs
 
 constructor TParsedText.Create (const OrigText: string; {U} Font: Heroes.PFontItem);
 const
-  LINE_END_MARKER = #10;
-  NBSP            = #160;
+  LINE_END_MARKER         = #10;
+  NBSP                    = #160;
+  RGBA_COLOR_CODE_MIN_LEN = 7;
 
 var
 {U} Buf:      pchar;
@@ -688,7 +694,11 @@ begin
           if NamedColors.GetExistingValue(ColorName, pointer(CurrColor)) then begin
             // Ok
           end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
-            // Ok
+            if Length(ColorName) < RGBA_COLOR_CODE_MIN_LEN then begin
+              CurrColor := CurrColor or Graph.FULLY_OPAQUE_MASK32;
+            end else begin
+              CurrColor := ((CurrColor and $FF) shl 24) or ((CurrColor shr 8) and Graph.RGB_MASK_32);
+            end;
           end else begin
             CurrColor := DEF_COLOR;
           end;
@@ -910,7 +920,7 @@ begin
       TEXT_BLOCK_CHARS: begin
         if CurrBlock.CharsBlock.Color32 <> DEF_COLOR then begin
           Res.Append('{~');
-          Res.Append(SysUtils.Format('%.8x', [CurrBlock.CharsBlock.Color32]));
+          Res.Append(Color32ToCode(CurrBlock.CharsBlock.Color32));
           Res.Append('}');
         end;
       end;
@@ -1247,13 +1257,13 @@ begin
             if CharPixel = 255 then begin
               Color32 := CurrColor32;
             end else begin
-              Color32 := ShadowColor32;
+              Color32 := (ShadowColor32 and Graph.RGB_MASK_32) or ((256 - CharPixel) shl 24);
             end;
 
             if BytesPerPixel = sizeof(integer) then begin
-              pinteger(OutPixelPtr)^ := Color32;
+              pinteger(OutPixelPtr)^ := Graph.AlphaBlend32(pinteger(OutPixelPtr)^, Color32);
             end else begin
-              pword(OutPixelPtr)^ := Color32To16(Color32);
+              pword(OutPixelPtr)^ := Color32To16(Graph.AlphaBlend32(Color16To32(pword(OutPixelPtr)^), Color32));
             end; 
           end; // .if   
           
