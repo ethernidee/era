@@ -6734,9 +6734,14 @@ begin
   ValueParam     := @SubCmd.Params[0];
   ValueParamType := ValueParam.GetType();
   UseRounding    := NumParams >= 2;
+  SecondValue.v  := SubCmd.Nums[0];
 
-  if ValueParam.GetCheckType() <> PARAM_CHECK_NONE then begin
-    ShowErmError('"!!VR:S" - only SET syntax is supported');
+  if ValueParam.GetCheckType() = PARAM_CHECK_GET then begin
+    SecondValue.v := GetErmParamValue(VarParam, ValType);
+    Utils.Exchange(VarParam,     ValueParam);
+    Utils.Exchange(VarParamType, ValueParamType);
+  end else if ValueParam.GetCheckType() <> PARAM_CHECK_NONE then begin
+    ShowErmError('"!!VR:S" - only GET/SET syntax is supported');
     result := 0; exit;
   end;
 
@@ -6744,18 +6749,17 @@ begin
     // VR(i32):S(i32)
     if ValueParamType in PARAM_VARTYPES_INTS then begin
       if SubCmd.Modifiers[0] = PARAM_MODIFIER_NONE then begin
-        result := ord(SetErmParamValue(VarParam, SubCmd.Nums[0]));
+        result := ord(SetErmParamValue(VarParam, SecondValue.v));
       end else begin
         Value.v := GetErmParamValue(VarParam, ValType);
-        PutVal(@Value, sizeof(Value), SubCmd.Nums[0], SubCmd.Modifiers[0]);
+        PutVal(@Value, sizeof(Value), SecondValue.v, SubCmd.Modifiers[0]);
         result := ord(SetErmParamValue(VarParam, Value.v));
       end;
     end
     // VR(i32):S(f32) or VR(i32):S(f32)/(rounding direction)
     else if ValueParamType in PARAM_VARTYPES_FLOATS then begin
-      Value.f       := GetErmParamValue(VarParam, ValType);
-      SecondValue.v := SubCmd.Nums[0];
-      Value.f       := ApplyFloatModifier(Value.f, SecondValue.f, SubCmd.Modifiers[0]);
+      Value.f := GetErmParamValue(VarParam, ValType);
+      Value.f := ApplyFloatModifier(Value.f, SecondValue.f, SubCmd.Modifiers[0]);
 
       if UseRounding then begin
         Math.SetRoundMode(rmUp);
@@ -6775,8 +6779,7 @@ begin
   else if VarParamType in PARAM_VARTYPES_FLOATS then begin
     // VR(n32):S(n32)
     if ValueParamType in PARAM_VARTYPES_NUMERIC then begin
-      Value.v       := GetErmParamValue(VarParam, ValType);
-      SecondValue.v := SubCmd.Nums[0];
+      Value.v := GetErmParamValue(VarParam, ValType);
 
       if ValueParamType <> PARAM_VARTYPE_E then begin
         SecondValue.f := SecondValue.v;
@@ -6795,7 +6798,7 @@ begin
   end else begin
     // VR(str):S(str)
     if ValueParamType in PARAM_VARTYPES_STRINGS then begin
-      result := ord(SetErmParamValue(VarParam, integer(GetInterpolatedZVarAddr(SubCmd.Nums[0])), FLAG_ASSIGNABLE_STRINGS));
+      result := ord(SetErmParamValue(VarParam, integer(GetInterpolatedZVarAddr(SecondValue.v)), FLAG_ASSIGNABLE_STRINGS));
     end else begin
       ShowErmError('"!!VR:S" - cannot set string variable to non-string value');
       result := 0; exit;
