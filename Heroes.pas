@@ -299,12 +299,46 @@ type
 
   TMapCoords = array [0..2] of integer;
 
+  {$ALIGN OFF}
+  // Field names should be rechecked
+  PDlg = ^TDlg;
+  TDlg = object
+    VTable:           Utils.PEndlessPtrArr;
+    ZOrder:           integer;
+    NextDlg:          PDlg;
+    LastDlg:          PDlg;
+    Flags:            integer;
+    State:            integer;
+    PoxX:             integer;
+    PoxY:             integer;
+    Width:            integer;
+    Height:           integer;
+    LastDlgItem:      pointer;
+    FirstDlgItem:     pointer;
+    DlgItemsStruct:   pointer;
+    SomeDlgItems:     array [0..2] of pointer;
+    FocusedItemId:    integer;
+    SomePcx:          integer;
+    DeactivatesCount: integer;
+    field_4C:         pointer;
+    field_50:         pointer;
+    field_54:         pointer;
+    DlgScrollBar:     pointer;
+    field_5C:         pointer;
+    Vector:           pointer;
+    field_64:         integer;
+  end;
+  {$ALIGN ON}
+
   PPAdvManager = ^PAdvManager;
   PAdvManager  = ^TAdvManager;
   TAdvManager  = packed record
-    _0:              array [1..80] of byte;
-    RootDlgIdPtr:    ppinteger;
-    CurrentDlgIdPtr: ppinteger;
+    _0:         array [1..80] of byte;
+    RootDlg:    PDlg;
+    CurrentDlg: PDlg;
+
+    function GetRootDlgId:    integer;
+    function GetCurrentDlgId: integer;
   end;
 
   (* Events are stored in random order, except events for the same day *)
@@ -1261,6 +1295,24 @@ begin
   PatchApi.Call(THISCALL_, Ptr($404180), [@Self, Str, StrLen]);
 end;
 
+function TAdvManager.GetRootDlgId: integer;
+begin
+  result := 0;
+
+  if AdvManagerPtr^.RootDlg <> nil then begin
+    result := integer(AdvManagerPtr^.RootDlg.VTable[0]);
+  end;
+end;
+
+function TAdvManager.GetCurrentDlgId: integer;
+begin
+  result := 0;
+
+  if AdvManagerPtr^.CurrentDlg <> nil then begin
+    result := integer(AdvManagerPtr^.CurrentDlg.VTable[0]);
+  end;
+end;
+
 procedure TDlgTextLines.Reset;
 begin
   PatchApi.Call(THISCALL_, Ptr($4B5D70), [@Self, Self.FirstStr, Self.FirstFreeStr]);
@@ -1673,18 +1725,9 @@ end;
 
 procedure GetGameState (out GameState: TGameState);
 begin
-  if (AdvManagerPtr^ <> nil) and (AdvManagerPtr^.RootDlgIdPtr <> nil) then begin
-    GameState.RootDlgId :=  AdvManagerPtr^.RootDlgIdPtr^^;
-  end else begin
-    GameState.RootDlgId :=  0;
-  end;
-  
-  if (AdvManagerPtr^ <> nil) and (AdvManagerPtr^.CurrentDlgIdPtr <> nil) then begin
-    GameState.CurrentDlgId := AdvManagerPtr^.CurrentDlgIdPtr^^;
-  end else begin
-    GameState.CurrentDlgId := 0;
-  end;
-end; // .procedure GetDialogsIds
+  GameState.RootDlgId    := AdvManagerPtr^.GetRootDlgId;
+  GameState.CurrentDlgId := AdvManagerPtr^.GetCurrentDlgId;
+end;
 
 function GetMapSize: integer; ASSEMBLER; {$W+}
 asm

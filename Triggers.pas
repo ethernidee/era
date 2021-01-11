@@ -10,7 +10,7 @@ uses
   Core, PatchApi, GameExt, Heroes, ApiJack, Erm, EventMan;
 
 const
-  NO_STACK  = -1;
+  NO_STACK = -1;
   
   STACK_POS_OFS = $38;
 
@@ -86,7 +86,7 @@ const
   ENABLE_DEF_REACTION = 0;
 
 var
-  GameState: Heroes.TGameState;
+  RootDlgId: integer;
   SavedV:    array [1..10] of integer;
   SavedZ:    Erm.TErmZVar;
   
@@ -94,21 +94,21 @@ begin
   result := false;
   
   if Msg = WM_KEYDOWN then begin
-    Heroes.GetGameState(GameState);
+    RootDlgId := Heroes.AdvManagerPtr^.GetRootDlgId;
     
     if wParam = KEY_F11 then begin
       GameExt.GenerateDebugInfo;
 
-      if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
+      if RootDlgId = Heroes.ADVMAP_DLGID then begin
         Heroes.PrintChatMsg('{~white}Debug information was dumped to ' + GameExt.DEBUG_DIR +'{~}');
       end;
-    end else if (wParam = KEY_F12) and (GameState.RootDlgId = Heroes.ADVMAP_DLGID) then begin
+    end else if (wParam = KEY_F12) and (RootDlgId = Heroes.ADVMAP_DLGID) then begin
       Erm.ReloadErm;
     end else begin
       Erm.ArgXVars[1] := wParam;
       Erm.ArgXVars[2] := ENABLE_DEF_REACTION;
       
-      if GameState.RootDlgId = Heroes.ADVMAP_DLGID then begin
+      if (RootDlgId = Heroes.ADVMAP_DLGID) and (Heroes.AdvManagerPtr^.CurrentDlg.FocusedItemId = -1) then begin
         Utils.CopyMem(sizeof(SavedV), @Erm.v[1], @SavedV);
         Utils.CopyMem(sizeof(SavedZ), @Erm.z[1], @SavedZ);
         
