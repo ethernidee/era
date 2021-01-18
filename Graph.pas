@@ -57,8 +57,14 @@ type
   end;
 
 
+(* Premultiplies RGB color channels by color opaqueness *)
+function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
+
 (* Performans ARBG pixels alpha blending *)
 function AlphaBlend32 (FirstColor32, SecondColor32: integer): integer;
+
+(* Performans ARBG pixels alpha blending. RGB channels of the second color must be premultiplied by opaqueness *)
+function AlphaBlendWithPremultiplied32 (FirstColor32, SecondColor32Premultiplied: integer): integer;
 
 function LoadImage (const FilePath: string): {n} TGraphic;
 
@@ -91,6 +97,31 @@ end;
 procedure ValidateImageSize (Width: integer; Height: integer);
 begin
   {!} Assert((Width > 0) and (Height > 0), Format('Invalid image dimensions specified: %dx%d', [Width, Height]));
+end;
+
+function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
+var
+  AlphaChannel:    integer;
+  ColorOpaqueness: integer;
+
+begin
+  AlphaChannel    := Color32 and ALPHA_CHANNEL_MASK_32;
+  ColorOpaqueness := AlphaChannel shr 24;
+  result          := (((ColorOpaqueness * (Color32 and RED_BLUE_CHANNELS_MASK_32)) shr 8) and RED_BLUE_CHANNELS_MASK_32) or
+                     (((ColorOpaqueness * (Color32 and GREEN_CHANNEL_MASK_32)) shr 8) and GREEN_CHANNEL_MASK_32) or
+                     AlphaChannel;
+end;
+
+function AlphaBlendWithPremultiplied32 (FirstColor32, SecondColor32Premultiplied: integer): integer;
+var
+  SecondColorOpacity: integer;
+
+begin
+  SecondColorOpacity := 255 - ((SecondColor32Premultiplied and ALPHA_CHANNEL_MASK_32) shr 24);
+
+  result := ((((SecondColorOpacity * (FirstColor32 and RED_BLUE_CHANNELS_MASK_32))  shr 8)  and RED_BLUE_CHANNELS_MASK_32) or
+            ((SecondColorOpacity * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8)) and ALPHA_GREEN_CHANNELS_MASK_32))
+            + SecondColor32Premultiplied;
 end;
 
 function AlphaBlend32 (FirstColor32, SecondColor32: integer): integer;
