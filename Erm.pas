@@ -5398,9 +5398,9 @@ begin
                 goto AfterTriggers;
               end;
 
-              Cmd               := Utils.PtrOfs(@Trigger.FirstCmd, i * sizeof(TErmCmd));
+              Cmd           := Utils.PtrOfs(@Trigger.FirstCmd, i * sizeof(TErmCmd));
               ErmErrCmdPtr^ := Cmd.CmdHeader.Value;
-              CmdId             := Cmd.CmdId;
+              CmdId         := Cmd.CmdId;
 
               if CmdId.Id = CMD_IF then begin
                 Inc(FlowOpersLevel);

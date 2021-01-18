@@ -29,6 +29,9 @@ const
   PATCHES_PATH              = 'EraPlugins';
   DEBUG_DIR                 = 'Debug\Era';
   DEBUG_MAPS_DIR            = 'DebugMaps';
+  RUNTIME_DIR               = 'Runtime';
+  RANDOM_MAPS_DIR           = 'Random_Maps';
+  SAVED_GAMES_DIR           = 'Games';
   DEBUG_EVENT_LIST_PATH     = DEBUG_DIR + '\event list.txt';
   DEBUG_PATCH_LIST_PATH     = DEBUG_DIR + '\patch list.txt';
   DEBUG_MOD_LIST_PATH       = DEBUG_DIR + '\mod list.txt';
@@ -426,6 +429,9 @@ begin
 
   ModsDir := GameDir + '\' + MODS_DIR;
   Files.ForcePath(GameDir + '\' + DEBUG_DIR);
+  Files.ForcePath(GameDir + '\' + RUNTIME_DIR);
+  Files.ForcePath(GameDir + '\' + RANDOM_MAPS_DIR);
+  Files.ForcePath(GameDir + '\' + SAVED_GAMES_DIR);
 
   // Era started, load settings, initialize logging subsystem
   EventMan.GetInstance.Fire('OnEraStart', NO_EVENT_DATA, 0);
