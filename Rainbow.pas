@@ -1201,11 +1201,11 @@ end;
 procedure SetupColorMode;
 begin
   if TextColorMode^ = TEXTMODE_15BITS then begin
-    Color32To16    := Color32To15Func;
-    Color16To32    := Color15To32Func;
+    Color32To16 := Color32To15Func;
+    Color16To32 := Color15To32Func;
   end else if TextColorMode^ = TEXTMODE_16BITS then begin
-    Color32To16    := Color32To16Func;
-    Color16To32    := Color16To32Func;
+    Color32To16 := Color32To16Func;
+    Color16To32 := Color16To32Func;
   end else begin
     {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
   end;
@@ -1215,18 +1215,19 @@ end; // .function Hook_SetupColorMode
 
 function DrawCharacterToPcx (Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; ColorInd: integer): Heroes.PPcx16Item;
 var
-  CharWidth:      integer;
-  FontHeight:     integer;
-  CharPixelPtr:   pbyte;
-  OutRowStartPtr: pword;
-  OutPixelPtr:    pword;
-  BytesPerPixel:  integer;
-  CharPixel:      integer;
-  Color32:        integer;
-  CurrColor32:    integer;
-  ShadowColor32:  integer;
-  i, j:           integer;
-  c:              char;
+  CharWidth:       integer;
+  FontHeight:      integer;
+  CharPixelPtr:    pbyte;
+  OutRowStartPtr:  pword;
+  OutPixelPtr:     pword;
+  BytesPerPixel:   integer;
+  CharPixel:       integer;
+  Color32:         integer;
+  CurrColor32:     integer;
+  ShadowColor32:   integer;
+  ColorOpaqueness: integer;
+  i, j:            integer;
+  c:               char;
 
 begin
   result := Heroes.PPcx16Item(Ch); // Vanilla code. Like error marker?
@@ -1244,6 +1245,10 @@ begin
     end;
 
     if (CharWidth > 0) and (FontHeight > 0) then begin
+      CurrColor32     := Graph.PremultiplyColorChannelsByAlpha(CurrColor32);
+      ShadowColor32   := Graph.PremultiplyColorChannelsByAlpha(ShadowColor32);
+      ColorOpaqueness := (CurrColor32 and Graph.ALPHA_CHANNEL_MASK_32) shr 24;
+
       CharPixelPtr   := @Font.CharsDataPtr[Font.CharDataOffsets[c]];
       OutRowStartPtr := Utils.PtrOfs(Canvas.Buffer, y * Canvas.ScanlineSize + (x + Font.CharInfos[c].SpaceBefore) * BytesPerPixel);
 
@@ -1257,13 +1262,13 @@ begin
             if CharPixel = 255 then begin
               Color32 := CurrColor32;
             end else begin
-              Color32 := (ShadowColor32 and Graph.RGB_MASK_32) or ((256 - CharPixel) shl 24);
+              Color32 := (ShadowColor32 and Graph.RGB_MASK_32) or ((((256 - CharPixel) * ColorOpaqueness) and $FF00) shl 16);
             end;
 
             if BytesPerPixel = sizeof(integer) then begin
-              pinteger(OutPixelPtr)^ := Graph.AlphaBlend32(pinteger(OutPixelPtr)^, Color32);
+              pinteger(OutPixelPtr)^ := Graph.AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color32);
             end else begin
-              pword(OutPixelPtr)^ := Color32To16(Graph.AlphaBlend32(Color16To32(pword(OutPixelPtr)^), Color32));
+              pword(OutPixelPtr)^ := Color32To16(Graph.AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color32));
             end; 
           end; // .if   
           
