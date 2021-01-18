@@ -20,6 +20,13 @@ uses
   H32GameFunction,Main;
 
 const
+  ALPHA_CHANNEL_MASK_32        = integer($FF000000);
+  RED_BLUE_CHANNELS_MASK_32    = $00FF00FF;
+  GREEN_CHANNEL_MASK_32        = $0000FF00;
+  ALPHA_GREEN_CHANNELS_MASK_32 = integer(ALPHA_CHANNEL_MASK_32 or GREEN_CHANNEL_MASK_32);
+  FULLY_OPAQUE_MASK32          = integer($FF000000);
+  RGB_MASK_32                  = $FFFFFF;
+
   Font24Width:  integer = 28;
   Font24Height: integer = 25;
 
@@ -80,6 +87,7 @@ var
   BytesPerPixel:  integer = 2;
   TextColorMode:  pword   = Ptr($694DB0);
   Color16To32:    function (Color16: integer): integer;
+  Color32To16:    function (Color32: integer): integer;
   PrevFont:       PFontItem;
   PrevFontWidth:  integer;
   PrevFontHeight: integer;
@@ -93,32 +101,55 @@ begin
   BytesPerPixel := pbyte($5FA228 + 3)^;
 end;
 
-function Color16To32Func (Color16: integer): integer;
-var
-  Red:   integer;
-  Green: integer;
-  Blue:  integer;
-
+function Color32To15Func (Color32: integer): integer;
 begin
-  Red   := ((Color16 shr 11) and $1F) shl 3;
-  Green := ((Color16 shr 5) and $3F) shl 2;
-  Blue  := (Color16 and $1F) shl 3;
+  result  :=
+    ((Color32 and $0000F8) shr 3) or
+    ((Color32 and $00F800) shr 6) or
+    ((Color32 and $F80000) shr 9);
+end;
 
-  result := (Red shl 16) or (Green shl 8) or Blue;
+function Color32To16Func (Color32: integer): integer;
+begin
+  result  :=
+    ((Color32 and $0000F8) shr 3) or
+    ((Color32 and $00FC00) shr 5) or
+    ((Color32 and $F80000) shr 8);
+end;
+
+function Color16To32Func (Color16: integer): integer;
+begin
+  result := (({BLUE} (Color16 and $1F) shl 3) or ({GREEN} (Color16 and $7E0) shl 5) or ({RED} (Color16 and $F800) shl 8) or FULLY_OPAQUE_MASK32) and $FFF8FCF8;
 end;
 
 function Color15To32Func (Color15: integer): integer;
+begin
+  result := (({BLUE} (Color15 and $1F) shl 3) or ({GREEN} (Color15 and $3E0) shl 6) or ({RED} (Color15 and $F800) shl 9) or FULLY_OPAQUE_MASK32) and $FFF8F8F8;
+end;
+
+function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
 var
-  Red:   integer;
-  Green: integer;
-  Blue:  integer;
+  AlphaChannel:    integer;
+  ColorOpaqueness: integer;
 
 begin
-  Red   := ((Color15 shr 10) and $1F) shl 3;
-  Green := ((Color15 shr 5) and $1F) shl 3;
-  Blue  := (Color15 and $1F) shl 3;
+  AlphaChannel    := Color32 and ALPHA_CHANNEL_MASK_32;
+  ColorOpaqueness := AlphaChannel shr 24;
+  result          := (((ColorOpaqueness * (Color32 and RED_BLUE_CHANNELS_MASK_32)) shr 8) and RED_BLUE_CHANNELS_MASK_32) or
+                     (((ColorOpaqueness * (Color32 and GREEN_CHANNEL_MASK_32)) shr 8) and GREEN_CHANNEL_MASK_32) or
+                     AlphaChannel;
+end;
 
-  result := (Red shl 16) or (Green shl 8) or Blue;
+function AlphaBlendWithPremultiplied32 (FirstColor32, SecondColor32Premultiplied: integer): integer;
+var
+  SecondColorOpacity: integer;
+
+begin
+  SecondColorOpacity := 255 - ((SecondColor32Premultiplied and ALPHA_CHANNEL_MASK_32) shr 24);
+
+  result := ((((SecondColorOpacity * (FirstColor32 and RED_BLUE_CHANNELS_MASK_32))  shr 8)  and RED_BLUE_CHANNELS_MASK_32) or
+            ((SecondColorOpacity * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8)) and ALPHA_GREEN_CHANNELS_MASK_32))
+            + SecondColor32Premultiplied;
 end;
 
 //返回一个汉字的区位码
@@ -133,17 +164,18 @@ begin
   end;
 end;
 
-procedure MakeChar12(StartY,StartX,Surface:integer;HZ:pAnsiChar;Color:word);stdcall;
+procedure MakeChar12 (StartY, StartX, Surface: integer; HZ: pAnsiChar; Color: integer); stdcall;
 var
   OffSet:integer;
   GetStr:array [0..23] of byte;
   temp,dis:byte;
   x,y,i,j,xy:integer;
   Q,W:word;
-  ScreenWidth:integer;
+  ScanlineSize:integer;
+  OutPixelPtr: pword;
 
 begin
-  ScreenWidth:=pInteger(Surface+$2c)^;
+  ScanlineSize:=pInteger(Surface+$2c)^;
   GetQWCode(HZ,Q,W);
   OffSet:=(94*(Q-1)+(W-1))*24;
   F12.Position:=OffSet;
@@ -161,13 +193,14 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy:=(StartY+x)*ScreenWidth+(y+StartX)*BytesPerPixel;
+        xy          := (StartY + y) * ScanlineSize + (x + StartX) * BytesPerPixel;
+        OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
         
-        if BytesPerPixel = 2 then begin
-          pWord(pInteger(Surface+$30)^+xy)^:=Color;
+        if BytesPerPixel = sizeof(integer) then begin
+          pinteger(OutPixelPtr)^ := AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color);
         end else begin
-          pinteger(pInteger(Surface+$30)^+xy)^:=Color16To32(Color);
-        end;
+          pword(OutPixelPtr)^ := Color32To16(AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color));
+        end; 
       end;
       Inc(x);
       if x>15 then
@@ -181,16 +214,18 @@ begin
   end;
 end;
 
-procedure MakeChar10(StartY,StartX,Surface:integer;HZ:pAnsiChar;Color:word);stdcall;
+procedure MakeChar10 (StartY, StartX, Surface: integer; HZ: pAnsiChar; Color: integer); stdcall;
 var
   OffSet:integer;
   GetStr:array[0..19] of byte;
   temp,dis:byte;
   x,y,i,j,xy:integer;
   Q,W:word;
-  ScreenWidth:integer;
+  ScanlineSize:integer;
+  OutPixelPtr: pword;
+
 begin
-  ScreenWidth:=pInteger(Surface+$2c)^;
+  ScanlineSize:=pInteger(Surface+$2c)^;
   GetQWCode(HZ,Q,W);
   OffSet:=(94*(Q-1)+(W-1))*20;
   F10.Position:=OffSet;
@@ -207,13 +242,14 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy:=(StartY+y)*ScreenWidth+(x+StartX)*BytesPerPixel;
+        xy          := (StartY + y) * ScanlineSize + (x + StartX) * BytesPerPixel;
+        OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
         
-        if BytesPerPixel = 2 then begin
-          pWord(pInteger(surface+$30)^+xy)^:=Color;
+        if BytesPerPixel = sizeof(integer) then begin
+          pinteger(OutPixelPtr)^ := AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color);
         end else begin
-          pinteger(pInteger(surface+$30)^+xy)^:=Color16To32(Color);
-        end;
+          pword(OutPixelPtr)^ := Color32To16(AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color));
+        end; 
       end;
       Inc(x);
       if x>15 then
@@ -227,16 +263,18 @@ begin
   end;
 end;
 
-procedure MakeChar24(StartY,StartX,Surface:integer;HZ:pAnsiChar;Color:word);stdcall;
+procedure MakeChar24(StartY, StartX, Surface: integer; HZ: pAnsiChar; Color: integer); stdcall;
 var
   OffSet:integer;
   GetStr:array[0..71] of byte;
   temp,dis:byte;
   x,y,i,j,xy:integer;
   Q,W:word;
-  ScreenWidth:integer;
+  ScanlineSize:integer;
+  OutPixelPtr: pword;
+
 begin
-  ScreenWidth:=pInteger(Surface+$2c)^;
+  ScanlineSize:=pInteger(Surface+$2c)^;
   GetQWCode(HZ,Q,W);
   OffSet:=(94*(Q-1)+(W-1))*72;
   F24.Position:=OffSet;
@@ -253,13 +291,14 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy:=(StartY+y)*ScreenWidth+(x+StartX)*BytesPerPixel;
+        xy          := (StartY + y) * ScanlineSize + (x + StartX) * BytesPerPixel;
+        OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
         
-        if BytesPerPixel = 2 then begin
-          pWord(pInteger(surface+$30)^+xy)^:=Color;
+        if BytesPerPixel = sizeof(integer) then begin
+          pinteger(OutPixelPtr)^ := AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color);
         end else begin
-          pinteger(pInteger(surface+$30)^+xy)^:=Color16To32(Color);
-        end;
+          pword(OutPixelPtr)^ := Color32To16(AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color));
+        end; 
       end;
       Inc(x);
       if x>23 then
@@ -378,7 +417,7 @@ end;
 //输出一行文字,其中CharLength为字符个数
 procedure DrawLineToPcx16 (str: pAnsiChar; StrLen, ColorA, hfont, y, x: integer; Surface: integer); stdcall;
 const 
-  DEF_COLOR = -1;
+  DEF_COLOR = 0;
 
 var
   FontWidth, FontHeight, i, cy, cx: integer;
@@ -404,13 +443,15 @@ begin
     end else if Str[i] = '}' then begin
       ColorSel := 0;
     end else begin
-      Color := ChineseGetCharColor;
-
-      if Color = DEF_COLOR then begin
-        Color := pWord(hfont+(ColorB + ColorSel) * 2 + $1058)^;
-      end;
-
       if (str[i] > #160) and (str[i + 1] > #160) then begin
+        Color := ChineseGetCharColor;
+
+        if Color = DEF_COLOR then begin
+          Color := Color16To32(pWord(hfont+(ColorB + ColorSel) * 2 + $1058)^);
+        end else begin
+          Color := PremultiplyColorChannelsByAlpha(Color);
+        end;
+
         if FontWidth = Font12Width then MakeChar12(cy, cx, Surface, @str[i], Color);
         if FontWidth = Font11Width then MakeChar10(cy, cx, Surface, @str[i], Color);
         if FontWidth = Font24Width then MakeChar24(cy, cx, Surface, @str[i], Color);
@@ -435,8 +476,10 @@ begin
   UpdateBytesPerPixel;
 
   if TextColorMode^ = TEXTMODE_15BITS then begin
+    Color32To16 := Color32To15Func;
     Color16To32 := Color15To32Func;
   end else if TextColorMode^ = TEXTMODE_16BITS then begin
+    Color32To16 := Color32To16Func;
     Color16To32 := Color16To32Func;
   end else begin
     {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
