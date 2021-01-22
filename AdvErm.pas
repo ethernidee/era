@@ -2609,6 +2609,15 @@ begin
     end; // .if
   end; // .if
 
+  // Convert 65535 to -1, meaning none
+  if ObjType = High(word) then begin
+    ObjType := -1;
+  end;
+
+  if ObjSubtype = High(word) then begin
+    ObjSubtype := -1;
+  end;
+
   if StrValue <> nil then begin
     Utils.SetPcharValue(ppointer(C.EBP + 12)^, StrValue.Value, sizeof(Erm.z[1]));
     C.RetAddr := Ptr($74DFFB);
