@@ -193,7 +193,7 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy          := (StartY + y) * ScanlineSize + (x + StartX) * BytesPerPixel;
+        xy          := (StartY + x) * ScanlineSize + (y + StartX) * BytesPerPixel;
         OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
         
         if BytesPerPixel = sizeof(integer) then begin
@@ -242,7 +242,7 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy          := (StartY + y) * ScanlineSize + (x + StartX) * BytesPerPixel;
+        xy          := (StartY + x) * ScanlineSize + (y + StartX) * BytesPerPixel;
         OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
         
         if BytesPerPixel = sizeof(integer) then begin
@@ -291,7 +291,7 @@ begin
       dis:=dis shr 7;
       if dis=1 then
       begin
-        xy          := (StartY + y) * ScanlineSize + (x + StartX) * BytesPerPixel;
+        xy          := (StartY + x) * ScanlineSize + (y + StartX) * BytesPerPixel;
         OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
         
         if BytesPerPixel = sizeof(integer) then begin
