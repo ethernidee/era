@@ -2036,7 +2036,8 @@ end;
    - read/write integer/string from/to specific address *)
 function SN_B (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
-  Addr: pointer;
+  Addr:     pointer;
+  RealAddr: pointer;
 
 begin
   result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, TYPE_INT or PARAM_OPTIONAL, TYPE_ANY or PARAM_OPTIONAL]);
@@ -2051,22 +2052,26 @@ begin
 
     Addr := Params[0].Value.p;
 
+    if NumParams >= 2 then begin
+      RealAddr := GameExt.GetRealAddr(Addr);
+    end;
+
     if (NumParams >= 2) and (Params[1].OperGet) then begin
-      Params[1].RetInt(integer(Addr));
+      Params[1].RetInt(integer(RealAddr));
     end;
 
     if NumParams >= 3 then begin
       if Params[2].OperGet then begin
         if Params[2].IsStr then begin
-          Params[2].RetPchar(Addr);
+          Params[2].RetPchar(RealAddr);
         end else begin
-          Params[2].RetInt(pinteger(Addr)^);
+          Params[2].RetInt(pinteger(RealAddr)^);
         end;
       end else begin
         if Params[2].IsStr then begin
-          Utils.SetPcharValue(Addr, Params[2].Value.pc, High(integer));
+          Utils.SetPcharValue(RealAddr, Params[2].Value.pc, High(integer));
         end else begin
-          ApplyIntParam(Params[2], pinteger(Addr)^);
+          ApplyIntParam(Params[2], pinteger(RealAddr)^);
         end;
       end; // .else
     end; // .else
