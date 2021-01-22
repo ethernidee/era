@@ -218,7 +218,7 @@ const
   TRIGGER_PRE_HEROSCREEN                 = 77037;
   TRIGGER_POST_HEROSCREEN                = 77038;
   TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE = 77039;
-  TRIGGER_ADVMAP_TILE_HINT               = 77040;
+  TRIGGER_ADVMAP_OBJ_HINT                = 77040;
   TRIGGER_BEFORE_STACK_TURN              = 77041;
   TRIGGER_CALC_TOWN_INCOME               = 77042;
   TRIGGER_BEFORE_BATTLE_REPLAY           = 77043;
@@ -1139,7 +1139,7 @@ begin
     {*} TRIGGER_PRE_HEROSCREEN:               result := 'OnPreHeroScreen';
     {*} TRIGGER_POST_HEROSCREEN:              result := 'OnPostHeroScreen';
     {*} TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE: result := 'OnDetermineMonInfoDlgUpgrade';
-    {*} TRIGGER_ADVMAP_TILE_HINT:             result := 'OnAdvMapTileHint';
+    {*} TRIGGER_ADVMAP_OBJ_HINT:              result := 'OnAdvMapObjHint';
     {*} TRIGGER_BEFORE_STACK_TURN:            result := 'OnBeforeBattleStackTurn';
     {*} TRIGGER_CALC_TOWN_INCOME:             result := 'OnCalculateTownIncome';
     {*} TRIGGER_BEFORE_BATTLE_REPLAY:         result := 'OnBeforeBattleReplay';
@@ -3562,7 +3562,7 @@ begin
   NameTrigger(TRIGGER_PRE_HEROSCREEN,               'OnPreHeroScreen');
   NameTrigger(TRIGGER_POST_HEROSCREEN,              'OnPostHeroScreen');
   NameTrigger(TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, 'OnDetermineMonInfoDlgUpgrade');
-  NameTrigger(TRIGGER_ADVMAP_TILE_HINT,             'OnAdvMapTileHint');
+  NameTrigger(TRIGGER_ADVMAP_OBJ_HINT,              'OnAdvMapObjHint');
   NameTrigger(TRIGGER_BEFORE_STACK_TURN,            'OnBeforeBattleStackTurn');
   NameTrigger(TRIGGER_CALC_TOWN_INCOME,             'OnCalculateTownIncome');
   NameTrigger(TRIGGER_BEFORE_BATTLE_REPLAY,         'OnBeforeBattleReplay');

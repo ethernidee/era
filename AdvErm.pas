@@ -2050,7 +2050,8 @@ begin
       exit;
     end;
 
-    Addr := Params[0].Value.p;
+    Addr     := Params[0].Value.p;
+    RealAddr := Addr;
 
     if NumParams >= 2 then begin
       RealAddr := GameExt.GetRealAddr(Addr);
@@ -2594,25 +2595,6 @@ begin
   ObjSubtype  := pword(pinteger(C.EBP + 8)^ + $22)^;
   Code        := x or (y shl 8) or (z shl 16);
   StrValue    := HintSection[Ptr(Code)];
-  
-  if StrValue = nil then begin
-    Code       := ObjType or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
-    StrValue   := HintSection[Ptr(Code)];
-
-    if StrValue = nil then begin
-      Code     := ObjType or $FF00 or CODE_TYPE_SUBTYPE;
-      StrValue := HintSection[Ptr(Code)];
-
-      if StrValue = nil then begin
-        Code     := (ObjSubtype shl 8) or $FF or CODE_TYPE_SUBTYPE;
-        StrValue := HintSection[Ptr(Code)];
-
-        if StrValue = nil then begin
-          StrValue := HintSection[Ptr($FFFF or CODE_TYPE_SUBTYPE)];
-        end;
-      end;
-    end; // .if
-  end; // .if
 
   // Convert 65535 to -1, meaning none
   if ObjType = High(word) then begin
@@ -2622,6 +2604,25 @@ begin
   if ObjSubtype = High(word) then begin
     ObjSubtype := -1;
   end;
+  
+  if (StrValue = nil) and Math.InRange(ObjType, -1, 254) and Math.InRange(ObjSubtype, -1, 254) then begin
+    Code       := (ObjType and $FF) or (ObjSubtype shl 8) or CODE_TYPE_SUBTYPE;
+    StrValue   := HintSection[Ptr(Code)];
+
+    if StrValue = nil then begin
+      Code     := (ObjType and $FF) or $FF00 or CODE_TYPE_SUBTYPE;
+      StrValue := HintSection[Ptr(Code)];
+
+      if StrValue = nil then begin
+        Code     := ((ObjSubtype and $FF) shl 8) or $FF or CODE_TYPE_SUBTYPE;
+        StrValue := HintSection[Ptr(Code)];
+
+        if StrValue = nil then begin
+          StrValue := HintSection[Ptr($FFFF or CODE_TYPE_SUBTYPE)];
+        end;
+      end;
+    end; // .if
+  end; // .if
 
   if StrValue <> nil then begin
     Utils.SetPcharValue(ppointer(C.EBP + 12)^, StrValue.Value, sizeof(Erm.z[1]));
@@ -2633,7 +2634,7 @@ begin
 
   SetLength(OldHint, Windows.LStrLen(pchar(HINT_BUF)) + 1);
   Utils.CopyMem(Length(OldHint), pchar(HINT_BUF), pointer(OldHint));
-  Erm.FireErmEventEx(TRIGGER_ADVMAP_TILE_HINT, [x, y, z, ObjType, ObjSubtype]);
+  Erm.FireErmEventEx(TRIGGER_ADVMAP_OBJ_HINT, [x, y, z, ObjType, ObjSubtype]);
 
   if result and (Windows.LStrCmp(pchar(HINT_BUF), pchar(OldHint)) <> 0) then begin
     C.RetAddr := Ptr($74DFFB);
