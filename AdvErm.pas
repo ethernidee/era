@@ -2573,10 +2573,29 @@ begin
   CurrentSoundNameBuf := PrevSoundNameBuf;
 end;
 
-function Hook_ZvsCheckObjHint (C: Core.PHookContext): longbool; stdcall;
-const
-  HINT_BUF = $697428;
+type
+  TTileHintEventType = (TILE_HOVER_EVENT, TILE_POPUP_EVENT);
 
+var
+  TileHintEventType: TTileHintEventType;
+  TileCoords:        Heroes.TMapCoords;
+
+function Hook_ZvsHintControl0 (OrigFunc, Self: pointer; MapTile: Heroes.PMapTile; Unk1, Unk2: integer): integer; stdcall;
+begin
+  TileHintEventType := TILE_HOVER_EVENT;
+  Heroes.MapTileToCoords(MapTile, TileCoords);
+  result            := PatchApi.Call(THISCALL_, OrigFunc, [Self, MapTile, Unk1, Unk2]);
+end;
+
+function Hook_ZvsHintWindow (OrigFunc: pointer; Self: Heroes.PAdvManager; x, y, z: integer): integer; stdcall;
+begin
+  Heroes.TextBuf[0] := #0;
+  TileHintEventType := TILE_POPUP_EVENT;
+  Heroes.UnpackCoords(pinteger(integer(Self) + $E8)^, TileCoords);
+  result            := PatchApi.Call(THISCALL_, OrigFunc, [Self, x, y, z]);
+end;
+
+function Hook_ZvsCheckObjHint (C: Core.PHookContext): longbool; stdcall;
 var
 {U} HintSection: TObjDict;
 {U} StrValue:    TString;
@@ -2632,11 +2651,14 @@ begin
     result := Core.EXEC_DEF_CODE;
   end;
 
-  SetLength(OldHint, Windows.LStrLen(pchar(HINT_BUF)) + 1);
-  Utils.CopyMem(Length(OldHint), pchar(HINT_BUF), pointer(OldHint));
-  Erm.FireErmEventEx(TRIGGER_ADVMAP_OBJ_HINT, [x, y, z, ObjType, ObjSubtype]);
+  SetLength(OldHint, Windows.LStrLen(pchar(Heroes.TextBuf)) + 1);
+  Utils.CopyMem(Length(OldHint), pchar(Heroes.TextBuf), pointer(OldHint));
 
-  if result and (Windows.LStrCmp(pchar(HINT_BUF), pchar(OldHint)) <> 0) then begin
+  if TileHintEventType = TILE_HOVER_EVENT then begin
+    Erm.FireErmEventEx(TRIGGER_ADVMAP_TILE_HINT, [x, y, z, ObjType, ObjSubtype, TileCoords[0], TileCoords[1], TileCoords[2]]);
+  end;
+
+  if result and (Windows.LStrCmp(pchar(Heroes.TextBuf), pchar(OldHint)) <> 0) then begin
     C.RetAddr := Ptr($74DFFB);
     result    := not Core.EXEC_DEF_CODE;
   end;
@@ -3283,8 +3305,10 @@ end;
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
-  (* SN:H for adventure map object hints *)
+  (* SN:H and new events for adventure map tile hints *)
   Core.ApiHook(@Hook_ZvsCheckObjHint, Core.HOOKTYPE_BRIDGE, Ptr($74DE9D));
+  ApiJack.StdSplice(Ptr($74E007), @Hook_ZvsHintControl0, ApiJack.CONV_THISCALL, 4);
+  ApiJack.StdSplice(Ptr($74E179), @Hook_ZvsHintWindow, ApiJack.CONV_THISCALL, 4);
 
   (* ERM MP3 trigger/receivers remade *)
   // Make WoG ResetMP3, SaveMP3, LoadMP3 doing nothing
