@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   SysUtils, Math, Windows,
   Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
-  Lists, StrLib, Alg, RandMt,
+  Lists, StrLib, Alg, RandMt, DlgMes,
   Core, Heroes, GameExt, Trans, RscLists, EventMan;
 
 type
@@ -4440,7 +4440,7 @@ begin
         Inc(Caret, 2);
       end else if (c = 'G') and (Caret[1] = 'c') then begin
         Inc(Caret, 2);
-        TempStr := Heroes.ZvsGetTxtValue(62 + Heroes.GetCurrentPlayer(), 0, Heroes.PTxtFile($7C8E3C));
+        TempStr := Heroes.ZvsGetTxtValue(62 + Heroes.CurrentPlayerId^, 0, Heroes.PTxtFile($7C8E3C));
 
         if TempStr <> nil then begin
           Res.AppendBuf(Windows.LStrLen(TempStr), TempStr);
@@ -5235,7 +5235,7 @@ var
     if ZvsGmAiFlags^ >= 0 then begin
       f[1000] := ZvsGmAiFlags^ <> 0;
     end else begin
-      f[1000] := not ZvsIsAi(Heroes.GetCurrentPlayer());
+      f[1000] := not ZvsIsAi(Heroes.CurrentPlayerId^);
     end;
 
     v[998]  := EventX;
@@ -6001,7 +6001,7 @@ begin
   if (x <> Hero.x) or (y <> Hero.y) or (z <> Hero.l) then begin
     // Flag 4 is set and hero belongs to current player - do teleport with sound and redraw
     // If Flag 4 is not specified, for compatibility reasons apply smart auto behavior
-    if (Heroes.GetCurrentPlayer = Hero.Owner) and ((NumParams <= 3) or ((NumParams > 3) and (SubCmd.Nums[3] <> 0))) then begin
+    if (Heroes.CurrentPlayerId^ = Hero.Owner) and ((NumParams <= 3) or ((NumParams > 3) and (SubCmd.Nums[3] <> 0))) then begin
       PatchApi.Call(CDECL_, Ptr($712008), [Hero, x, y, z, 1]);
     end else begin
       Heroes.HideHero(Hero);
@@ -7709,6 +7709,36 @@ begin
   end;
 end; // .function Hook_FU_EXT
 
+function Hook_OW_O (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  Cmd:       PErmCmd;
+  SubCmd:    PErmSubCmd;
+  NumParams: integer;
+  ValType:   integer;
+
+begin
+  Cmd         := PErmCmd(ppointer(Context.EBP + $10)^);
+  SubCmd      := PErmSubCmd(ppointer(Context.EBP + $14)^);
+  NumParams   := pinteger(Context.EBP + $0C)^;
+  Context.EAX := 1;
+
+  if (Context.EAX = 1) and (NumParams >= 1) and (SubCmd.Params[0].GetCheckType = PARAM_CHECK_GET) then begin
+    Context.EAX := ord(SetErmParamValue(@SubCmd.Params[0], Heroes.CurrentPlayerId^));
+  end;
+
+  if (Context.EAX = 1) and (NumParams >= 2) and (SubCmd.Params[1].GetCheckType = PARAM_CHECK_GET) then begin
+    Context.EAX := ord(SetErmParamValue(@SubCmd.Params[1], Heroes.GetThisPcPlayerId));
+  end;
+
+  result := false;
+
+  if Context.EAX = 1 then begin
+    Context.RetAddr := Ptr($73872D);
+  end else begin
+    Context.RetAddr := Ptr($738737);
+  end;
+end; // .function Hook_OW_O
+
 function IntCompareFast (a, b: integer): integer; inline;
 begin
   if a > b then begin
@@ -8198,6 +8228,9 @@ begin
 
   // Add FU:A/G commands
   ApiJack.HookCode(Ptr($72D181), @Hook_FU_EXT);
+
+  // Add extended OW:C?(currentPlayer)/?(uiPlayer) syntax
+  ApiJack.HookCode(Ptr($737BCE), @Hook_OW_O);
 
   (* Rewrite ZVS Call_Function / remote function call handling *)
   Core.ApiHook(@OnFuncCalledRemotely, Core.HOOKTYPE_JUMP, Ptr($72D1D1));
