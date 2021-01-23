@@ -81,6 +81,7 @@ end;
 function MainWndProc (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
 const
   WM_KEYDOWN          = $100;
+  WM_SYSKEYDOWN       = $104;
   KEY_F11             = 122;
   KEY_F12             = 123;
   ENABLE_DEF_REACTION = 0;
@@ -93,7 +94,7 @@ var
 begin
   result := false;
   
-  if Msg = WM_KEYDOWN then begin
+  if (Msg = WM_KEYDOWN) or (Msg = WM_SYSKEYDOWN) then begin
     RootDlgId := Heroes.AdvManagerPtr^.GetRootDlgId;
     
     if wParam = KEY_F11 then begin
