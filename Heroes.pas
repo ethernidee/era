@@ -299,6 +299,25 @@ type
 
   TMapCoords = array [0..2] of integer;
 
+  PPlayer = ^TPlayer;
+  TPlayer = packed record
+    Id:                byte;
+    NumHeroes:         byte;
+    Unk1:              array [1..2] of byte;
+    ActiveHeroId:      integer;
+    VisibleHeroIds:    array [0..7] of integer;
+    TavernLeftHeroId:  integer;
+    TavernRightHeroId: integer;
+    Unk2:              array [1..13] of byte;
+    DaysLeft:          byte;
+    NumTowns:          byte;
+    ActiveTownInd:     byte;
+    TownIds:           array [0..47] of byte;
+    Unk3:              array [1..113] of byte; // +$70
+    IsThisPcPlayer:    boolean;                // +$E1
+    Unk:               array [1..134] of byte;
+  end;
+
   {$ALIGN OFF}
   // Field names should be rechecked
   PDlg = ^TDlg;
@@ -1006,7 +1025,7 @@ const
   GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
 
-  CurrentPlayer:    pinteger   = Ptr($69CCF4);
+  CurrentPlayerId:  pinteger   = Ptr($69CCF4);
   GameDate:         ^PGameDate = Ptr($840CE0);
   BytesPerPixelPtr: pbyte      = Ptr($5FA228 + 3);
 
@@ -1069,7 +1088,11 @@ function  IsTwoLevelMap: boolean;
 function  IsLocalGame: boolean;
 function  IsNetworkGame: boolean;
 function  GetTownManager: PTownManager;
-function  GetCurrentPlayer: integer;
+function  GetPlayer (PlayerId: integer): {n} PPlayer;
+
+(* Returns this PC current human player ID *)
+function GetThisPcPlayerId: integer;
+
 function  IsThisPcTurn: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
 function  PackCoords (x, y, z: integer): integer;
@@ -1763,22 +1786,27 @@ begin
   result := ppointer(TOWN_MANAGER)^;
 end;
 
-function GetCurrentPlayer: integer;
+function GetPlayer (PlayerId: integer): {n} PPlayer;
 begin
-  result := CurrentPlayer^;
+  result := nil;
+
+  if Math.InRange(PlayerId, PLAYER_FIRST, PLAYER_LAST)  then begin
+    result := Utils.PtrOfs(ppointer(GAME_MANAGER)^, $20AD0 + sizeof(TPlayer) * PlayerId);
+  end;
+end;
+
+function GetThisPcPlayerId: integer;
+begin
+  result := PatchApi.Call(THISCALL_, Ptr($4CE6E0), [ppointer(GAME_MANAGER)^]);
 end;
 
 function IsThisPcTurn: boolean;
 var
-  PlayerId: integer;
+  Player: PPlayer;
 
 begin
-  PlayerId := CurrentPlayer^;
-  result   := (PlayerId >= PLAYER_FIRST) and (PlayerId <= PLAYER_LAST);
-
-  if result then begin
-    result := pbyte(pinteger(GAME_MANAGER)^ + $20AD0 + $E1 + $168 * PlayerId)^ <> 0;
-  end;
+  Player := GetPlayer(CurrentPlayerId^);
+  result := (Player <> nil) and (Player.IsThisPcPlayer);
 end;
 
 function GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
