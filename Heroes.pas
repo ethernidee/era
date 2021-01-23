@@ -993,6 +993,9 @@ type
     property NumRows: integer read fNumRows;
   end; // .class TTextTable
 
+  PGeneralPurposeTextBuf = ^TGeneralPurposeTextBuf;
+  TGeneralPurposeTextBuf = array [0..767] of char;
+
 const
   MAlloc:    TMAlloc = Ptr($617492);
   MFree:     TMFree  = Ptr($60B0F0);
@@ -1035,6 +1038,7 @@ const
   SecSkillDescs: PSecSkillDescs = Ptr($698C34);
   SecSkillTexts: PSecSkillTexts = Ptr($698D88);
 
+  TextBuf:        PGeneralPurposeTextBuf = Ptr($697428);
   MonInfos:       PMonInfos = Ptr($7D0C90);
   NumMonstersPtr: pinteger  = Ptr($733326);
   ArtInfos:       PArtInfos = Ptr($660B68);
@@ -1068,6 +1072,9 @@ function  GetTownManager: PTownManager;
 function  GetCurrentPlayer: integer;
 function  IsThisPcTurn: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
+function  PackCoords (x, y, z: integer): integer;
+procedure UnpackCoords (PackedCoords: integer; var x, y, z: integer); overload;
+procedure UnpackCoords (PackedCoords: integer; var Coords: TMapCoords); overload;
 procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
 function  StackProp (StackId: integer; PropOfs: integer): PValue;
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
@@ -1801,6 +1808,23 @@ begin
   end else if ExtendedRes.MustHideHero then begin
     HideHero(ExtendedRes.Hero);
   end;
+end;
+
+function PackCoords (x, y, z: integer): integer;
+begin
+  result := ((z and 1) shl 26) or ((y and $3FF) shl 16) or (x and $3FF);
+end;
+
+procedure UnpackCoords (PackedCoords: integer; var x, y, z: integer); overload;
+begin
+  x := PackedCoords and $3FF;
+  y := (PackedCoords shr 16) and $3FF;
+  z := (PackedCoords and $04000000) shr 26;
+end;
+
+procedure UnpackCoords (PackedCoords: integer; var Coords: TMapCoords); overload;
+begin
+  UnpackCoords(PackedCoords, Coords[0], Coords[1], Coords[2]);
 end;
 
 procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
