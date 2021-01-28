@@ -108,6 +108,7 @@ begin
     end else begin
       Erm.ArgXVars[1] := wParam;
       Erm.ArgXVars[2] := ENABLE_DEF_REACTION;
+      Erm.ArgXVars[3] := ((lParam shr 30) and 1) xor 1;
       
       if (RootDlgId = Heroes.ADVMAP_DLGID) and (Heroes.AdvManagerPtr^.CurrentDlg.FocusedItemId = -1) then begin
         Utils.CopyMem(sizeof(SavedV), @Erm.v[1], @SavedV);
