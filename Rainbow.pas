@@ -22,15 +22,16 @@ const
   TEXTMODE_15BITS = $3E0;
   TEXTMODE_16BITS = $7E0;
 
-  DEF_COLOR = 0;
-  
+  DEF_COLOR     = 0;
+  DEF_ALIGNMENT = -1;
+
   TextColorMode: pword = Ptr($694DB0);
 
 
 type
   TColor32To16Func       = function (Color32: integer): integer;
   TGraphemWidthEstimator = function (Font: Heroes.PFontItem): integer; stdcall;
-  
+
 var
   (* Chinese loader support: {~color}...{~} => {...} *)
   ChineseLoaderOpt:             boolean;
@@ -61,13 +62,18 @@ const
   TOKEN_HASH_TOP    = 517545930;
   TOKEN_HASH_MIDDLE = -1635771697;
   TOKEN_HASH_BOTTOM = -1990233436;
+  TOKEN_HASH_LEFT   = 2053629800;
+  TOKEN_HASH_CENTER = 1089530660;
+  TOKEN_HASH_RIGHT  = -1261800172;
+
 
 type
   TTextBlockType = (TEXT_BLOCK_CHARS, TEXT_BLOCK_DEF);
 
   PEmlChars = ^TEmlChars;
   TEmlChars = record
-    Color32: integer;
+    Color32:        integer;
+    HorizAlignment: integer;
   end;
 
   PEmlImg = ^TEmlImg;
@@ -92,9 +98,8 @@ type
 
   PTextBlock = ^TTextBlock;
   TTextBlock = record
-    BlockType:      TTextBlockType;
-    BlockLen:       integer;
-    HorizAlignment: integer;
+    BlockType: TTextBlockType;
+    BlockLen:  integer;
 
     case TTextBlockType of
       TEXT_BLOCK_CHARS: (
@@ -138,7 +143,7 @@ type
 var
 {O} NamedColors:       {U} AssocArrays.TAssocArray {of Color32: integer};
 {O} LoadedResources:   {U} TDict {of loaded H3 resource};
-{O} ColorStack:        {U} Lists.TList {of Color32: integer};
+{O} TextAttrsStack:    {U} Lists.TList {of (Color32, HorizAlign: integer)...};
 {O} TextScanner:       TextScan.TTextScanner;
 {O} TaggedLineBuilder: StrLib.TStrBuilder;
     Color32To16:       TColor32To16Func;
@@ -147,11 +152,14 @@ var
 {O} CurrParsedText:   TParsedText = nil;
 {U} CurrTextBlock:    PTextBlock  = nil;
     CurrTextNumLines: integer     = 1;
+    CurrTextAlignPtr: pinteger    = nil;
+    CurrTextDefAlign: integer     = 0;
 
     CurrBlockInd:   integer;
     CurrBlockPos:   integer;
     CurrColor:      integer = DEF_COLOR;
-    
+    CurrHorizAlign: integer = DEF_ALIGNMENT;
+
     GlobalBuffer: array [0..1024 * 1024 - 1] of char;
 
 
@@ -349,7 +357,7 @@ end;
 function IsChineseLoaderPresent (out ChineseHandler: pointer): boolean;
 begin
   result := pbyte($4B5202)^ = $E9;
-  
+
   if result then begin
     ChineseHandler  := Ptr(pinteger($4B5203)^ + integer($4B5207));
   end;
@@ -383,9 +391,6 @@ begin
     GraphemSize := 1;
   end;
 end;
-
-// var
-//   List: TList;
 
 function ReadEmlValue: string;
 begin
@@ -424,7 +429,7 @@ begin
   end;
 
   TextScanner.SkipCharset(BLANKS);
-  c      := TextScanner.c;
+  c := TextScanner.c;
 
   while not (c in [#0, '}']) do begin
     TextScanner.ReadTokenTillDelim(['}', ' ', '='], Key);
@@ -468,20 +473,22 @@ var
      ValueHash:       integer;
      LinesHeight:     integer;
      ImageWidth:      integer;
-     
+
      TempStr:     string;
      FontName:    string absolute TempStr;
      ColorName:   string absolute TempStr;
      DefName:     string absolute TempStr;
      FrameIndStr: string absolute TempStr;
-     
-     NativeTag:    char;
-     NbspWidth:    integer;
-     NumFillChars: integer;
-     CharInfo:     Heroes.PFontCharInfo;
-     CurrColor:    integer;
-     ResLen:       integer;
-     i:            integer;
+     TagName:     string;
+
+     NativeTag:      char;
+     NbspWidth:      integer;
+     NumFillChars:   integer;
+     CharInfo:       Heroes.PFontCharInfo;
+     CurrColor:      integer;
+     CurrHorizAlign: integer;
+     ResLen:         integer;
+     i:              integer;
 
   procedure BeginNewColorBlock;
   begin
@@ -493,17 +500,54 @@ var
     end;
   end;
 
-  procedure PopColor;
+  procedure PopTextAttrsTuple;
+  const
+    TEXT_ATTRS_TUPLE_SIZE = 2;
+
+  var
+    StackSize: integer;
+
   begin
-    case ColorStack.Count of
-      0: CurrColor := DEF_COLOR;
-      1: begin
-           ColorStack.Pop;
-           CurrColor := DEF_COLOR;
-         end;
-    else
-      ColorStack.Pop;
-      CurrColor := integer(ColorStack.Top);
+    StackSize := TextAttrsStack.Count;
+
+    if StackSize > 0 then begin
+      TextAttrsStack.SetCount(StackSize - TEXT_ATTRS_TUPLE_SIZE);
+    end;
+
+    if StackSize > TEXT_ATTRS_TUPLE_SIZE then begin
+      CurrColor      := integer(TextAttrsStack[StackSize - TEXT_ATTRS_TUPLE_SIZE - 2]);
+      CurrHorizAlign := integer(TextAttrsStack[StackSize - TEXT_ATTRS_TUPLE_SIZE - 1]);
+    end else begin
+      CurrColor      := DEF_COLOR;
+      CurrHorizAlign := DEF_ALIGNMENT;
+    end;
+  end;
+
+  procedure HandleColorTag (const ColorName: string);
+  begin
+    CurrColor := 0;
+
+    if NamedColors.GetExistingValue(ColorName, pointer(CurrColor)) then begin
+      // Ok
+    end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
+      if Length(ColorName) < RGBA_COLOR_CODE_MIN_LEN then begin
+        CurrColor := CurrColor or Graph.FULLY_OPAQUE_MASK32;
+      end else begin
+        CurrColor := ((CurrColor and $FF) shl 24) or ((CurrColor shr 8) and Graph.RGB_MASK_32);
+      end;
+    end else begin
+      CurrColor := DEF_COLOR;
+    end;
+  end;
+
+  procedure HandleHorizAlignTag (const AttrValue: string);
+  begin
+    ValueHash := Crypto.AnsiCrc32(AttrValue);
+
+    case ValueHash of
+      TOKEN_HASH_LEFT:   CurrHorizAlign := Heroes.TEXT_ALIGN_LEFT;
+      TOKEN_HASH_CENTER: CurrHorizAlign := Heroes.TEXT_ALIGN_CENTER;
+      TOKEN_HASH_RIGHT:  CurrHorizAlign := Heroes.TEXT_ALIGN_RIGHT;
     end;
   end;
 
@@ -520,30 +564,32 @@ begin
   New(TextBlock);
   Self.Blocks.Add(TextBlock);
 
-  TextBlock.BlockLen           := Length(OrigText);
-  TextBlock.BlockType          := TEXT_BLOCK_CHARS;
-  TextBlock.CharsBlock.Color32 := DEF_COLOR;
-  CurrColor                    := DEF_COLOR;
-  NativeTag                    := #0;
+  TextBlock.BlockLen                  := Length(OrigText);
+  TextBlock.BlockType                 := TEXT_BLOCK_CHARS;
+  TextBlock.CharsBlock.Color32        := DEF_COLOR;
+  TextBlock.CharsBlock.HorizAlignment := DEF_ALIGNMENT;
+  CurrColor                           := DEF_COLOR;
+  CurrHorizAlign                      := DEF_ALIGNMENT;
+  NativeTag                           := #0;
 
   FontName := pchar(@Font.Name);
-  
+
   if LoadedResources[FontName] = nil then begin
     LoadedResources[FontName] := Font;
     Inc(Font.RefCount);
   end;
-  
+
   if Length(OrigText) <= sizeof(GlobalBuffer) - 1 then begin
-    ColorStack.Clear;
+    TextAttrsStack.Clear;
     TextScanner.Connect(OrigText, LINE_END_MARKER);
-    
+
     while not TextScanner.EndOfText do begin
       StartPos        := TextScanner.Pos;
       NumSpaceChars   := 0;
       IsTag           := false;
       IsEraTag        := false;
       IsEmbeddedImage := false;
-      
+
       while not IsTag and TextScanner.GetCurrChar(c) do begin
         if c in ['{', '}'] then begin
           IsTag           := true;
@@ -591,7 +637,7 @@ begin
         TextBlock.DefBlock.GroupInd      := 0;
         TextBlock.DefBlock.FrameInd      := 0;
         TextBlock.ImgBlock.AttrVertAlign := TOKEN_HASH_MIDDLE;
-        
+
         DefName := ReadEmlValue;
 
         if DefName <> '' then begin
@@ -616,9 +662,9 @@ begin
 
         EmlAttrs                   := ParseEmlAttrs(EmlAttrs);
         TextBlock.ImgBlock.IsBlock := EmlAttrs['block'] <> nil;
-        
+
         if EmlAttrs['mirror'] <> nil then begin
-          Include(TextBlock.ImgBlock.DrawFlags, Heroes.DFL_MIRROR);
+          System.Include(TextBlock.ImgBlock.DrawFlags, Heroes.DFL_MIRROR);
         end;
 
         if TextBlock.DefBlock.Def <> nil then begin
@@ -655,7 +701,8 @@ begin
           TextBlock.ImgBlock.AttrVertAlign := VertAlignHash;
 
           BeginNewColorBlock;
-          TextBlock.CharsBlock.Color32 := CurrColor;
+          TextBlock.CharsBlock.Color32        := CurrColor;
+          TextBlock.CharsBlock.HorizAlignment := CurrHorizAlign;
 
           // Output serie of non-breaking spaces to compensate image width
           for i := 0 to NumFillChars - 1 do begin
@@ -674,44 +721,54 @@ begin
         BeginNewColorBlock;
 
         if NativeTag = '}' then begin
-          PopColor;
+          PopTextAttrsTuple;
         end else begin
           CurrColor := HEROES_GOLD_COLOR_CODE;
-          ColorStack.Add(Ptr(CurrColor));
+          TextAttrsStack.Add(Ptr(CurrColor));
+          TextAttrsStack.Add(Ptr(CurrHorizAlign));
         end;
 
-        TextBlock.CharsBlock.Color32 := CurrColor;
+        TextBlock.CharsBlock.Color32        := CurrColor;
+        TextBlock.CharsBlock.HorizAlignment := CurrHorizAlign;
         TextScanner.GotoNextChar;
       // Handle other ERL open/close tags
-      end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}'], ColorName) then begin
+      end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}', ' '], TagName) then begin
         BeginNewColorBlock;
-        
-        if ColorName = '' then begin
-          PopColor;
+
+        if TagName = '' then begin
+          TextScanner.FindChar('}');
+          PopTextAttrsTuple;
         end else begin
-          CurrColor := 0;
-          
-          if NamedColors.GetExistingValue(ColorName, pointer(CurrColor)) then begin
-            // Ok
-          end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
-            if Length(ColorName) < RGBA_COLOR_CODE_MIN_LEN then begin
-              CurrColor := CurrColor or Graph.FULLY_OPAQUE_MASK32;
-            end else begin
-              CurrColor := ((CurrColor and $FF) shl 24) or ((CurrColor shr 8) and Graph.RGB_MASK_32);
-            end;
+          EmlAttrs := ParseEmlAttrs(EmlAttrs);
+
+          // Treat '{~xxx' as color tag, unless it's new text tag with optional "color" attribute
+          if TagName <> 'text' then begin
+            HandleColorTag(TagName);
           end else begin
-            CurrColor := DEF_COLOR;
+            AttrValue := EmlAttrs['color'];
+
+            if AttrValue <> nil then begin
+              HandleColorTag(AttrValue.Value);
+            end;
           end;
-          
-          ColorStack.Add(Ptr(CurrColor));
+
+          AttrValue := EmlAttrs['align'];
+
+          if AttrValue <> nil then begin
+            HandleHorizAlignTag(AttrValue.Value);
+          end;
+
+          TextAttrsStack.Add(Ptr(CurrColor));
+          TextAttrsStack.Add(Ptr(CurrHorizAlign));
         end; // .else
-        
-        TextBlock.CharsBlock.Color32 := CurrColor;
+
+        TextBlock.CharsBlock.Color32        := CurrColor;
+        TextBlock.CharsBlock.HorizAlignment := CurrHorizAlign;
         TextScanner.GotoNextChar;
       end; // .elseif
     end; // .while
   end; // .if
-  
+
   ResLen := integer(Buf) - integer(@GlobalBuffer[0]);
   {!} Assert(ResLen < sizeof(GlobalBuffer), 'Huge text exceeded ERA ParseText buffer capacity');
 
@@ -918,11 +975,18 @@ begin
     // Output block opening tag, if necessary
     case CurrBlock.BlockType of
       TEXT_BLOCK_CHARS: begin
-        if CurrBlock.CharsBlock.Color32 <> DEF_COLOR then begin
-          Res.Append('{~');
-          Res.Append(Color32ToCode(CurrBlock.CharsBlock.Color32));
-          Res.Append('}');
+        Res.Append('{~');
+        Res.Append(Color32ToCode(CurrBlock.CharsBlock.Color32));
+
+        if CurrBlock.CharsBlock.HorizAlignment <> DEF_ALIGNMENT then begin
+          case CurrBlock.CharsBlock.HorizAlignment of
+            Heroes.TEXT_ALIGN_LEFT:   Res.Append(' align="left"');
+            Heroes.TEXT_ALIGN_CENTER: Res.Append(' align="center"');
+            Heroes.TEXT_ALIGN_RIGHT:  Res.Append(' align="right"');
+          end;
         end;
+
+        Res.Append('}');
       end;
 
       TEXT_BLOCK_DEF: begin
@@ -976,12 +1040,10 @@ begin
     SliceLen := integer(Text) - integer(SliceStart);
     Res.AppendBuf(SliceLen, SliceStart);
 
-    // Output closing block tag if necessary
+    // Output closing block tag
     case CurrBlock.BlockType of
       TEXT_BLOCK_CHARS: begin
-        if CurrBlock.CharsBlock.Color32 <> DEF_COLOR then begin
-          Res.Append('{~}');
-        end;
+        Res.Append('{~}');
       end;
     end;
 
@@ -1019,14 +1081,20 @@ begin
 end; // .function UpdateCurrParsedText
 
 (* Determines current block, based on position in block, number of blocks left and block length.
-   Automatically skips/applies empty blocks. Updates current color if necessary.
-   Synchronizes current color with HD mod variables *)
+   Automatically skips/applies empty blocks. Updates current color if necessary *)
 procedure UpdateCurrBlock; stdcall;
 begin
   if (CurrParsedText <> nil) and (CurrTextBlock <> nil) then begin
     if CurrBlockPos < CurrTextBlock.BlockLen then begin
       if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-        CurrColor := CurrTextBlock.CharsBlock.Color32;
+        CurrColor      := CurrTextBlock.CharsBlock.Color32;
+        CurrHorizAlign := CurrTextBlock.CharsBlock.HorizAlignment;
+
+        if CurrHorizAlign <> DEF_ALIGNMENT then begin
+          CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
+        end else begin
+          CurrTextAlignPtr^ := CurrTextDefAlign;
+        end;
       end;
     end else begin
       while CurrBlockPos >= CurrTextBlock.BlockLen do begin
@@ -1038,10 +1106,17 @@ begin
           CurrTextBlock := CurrParsedText.Blocks[CurrBlockInd];
 
           if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-            CurrColor := CurrTextBlock.CharsBlock.Color32;
+            CurrColor      := CurrTextBlock.CharsBlock.Color32;
+            CurrHorizAlign := CurrTextBlock.CharsBlock.HorizAlignment;
+
+            if CurrHorizAlign <> DEF_ALIGNMENT then begin
+              CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
+            end else begin
+              CurrTextAlignPtr^ := CurrTextDefAlign;
+            end;
           end;
         // Something is broken, like invalid GBK character (missing second part of code point), mixed language, etc.
-        // Empty string, probably. Recover to use the last color.
+        // Empty string, probably. Recover to use the last attributes.
         end else begin
           CurrBlockInd := CurrParsedText.NumBlocks - 1;
           CurrBlockPos := CurrTextBlock.BlockLen;
@@ -1058,10 +1133,13 @@ begin
   UpdateCurrParsedText(Heroes.PFontItem(Context.EBX), pchar(Context.EDX), Context.ECX);
   CurrTextNumLines := CurrParsedText.CountLines(pinteger(Context.EBP + $18)^);
 
-  CurrColor     := DEF_COLOR;
-  CurrTextBlock := CurrParsedText.Blocks[0];
-  CurrBlockPos  := 0;
-  CurrBlockInd  := 0;
+  CurrColor        := DEF_COLOR;
+  CurrHorizAlign   := DEF_ALIGNMENT;
+  CurrTextAlignPtr := Ptr(Context.EBP + $24);
+  CurrTextDefAlign := CurrTextAlignPtr^;
+  CurrTextBlock    := CurrParsedText.Blocks[0];
+  CurrBlockPos     := 0;
+  CurrBlockInd     := 0;
 
   UpdateCurrBlock;
   CurrBlockPos := -1;
@@ -1070,7 +1148,7 @@ begin
   Context.EDX                  := integer(pchar(CurrParsedText.ProcessedText));
   pinteger(Context.EBP - $14)^ := Context.ECX;
   pinteger(Context.EBP + $8)^  := Context.EDX;
-  
+
   if ChineseLoaderOpt then begin
     Context.ECX     := Context.EBX;
     Context.RetAddr := ChineseHandler;
@@ -1082,13 +1160,23 @@ begin
       Context.RetAddr := Ptr($4B525B);
     end;
   end; // .else
-  
+
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_BeginParseText
 
 function Hook_CountNumTextLines (Text: pchar; BoxWidth: integer): integer; stdcall;
 begin
   result := CurrTextNumLines;
+end;
+
+function Hook_DrawScrollDlgLine: integer; stdcall; assembler;
+const
+  SCROLLBAR_WIDTH = 24;
+
+asm
+  sub dword [esp + $14], SCROLLBAR_WIDTH
+  mov eax, $4B51F0
+  jmp eax
 end;
 
 function Hook_Font_DrawTextToPcx16_End (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -1101,7 +1189,7 @@ end;
 function Hook_GetCharColor (Context: Core.PHookContext): longbool; stdcall;
 begin
   result := CurrColor = DEF_COLOR;
-  
+
   if not result then begin
     Context.EAX := CurrColor;
   end;
@@ -1209,7 +1297,7 @@ begin
   end else begin
     {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
   end;
-  
+
   NameStdColors;
 end; // .function Hook_SetupColorMode
 
@@ -1271,7 +1359,7 @@ begin
               pword(OutPixelPtr)^ := Color32To16(Graph.AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color32));
             end; 
           end; // .if   
-          
+
           Inc(pbyte(OutPixelPtr), BytesPerPixel);
           Inc(CharPixelPtr);
         end; // .for
@@ -1321,7 +1409,7 @@ end;
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   ChineseLoaderOpt := IsChineseLoaderPresent(ChineseHandler);
-  
+
   if ChineseLoaderOpt then begin
     (* Remove Chinese loader hook *)
     pword($4B5202)^    := word($840F); // JE
@@ -1334,6 +1422,7 @@ begin
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
   Core.Hook(@Hook_CountNumTextLines, Core.HOOKTYPE_CALL, 5, Ptr($4B5275));
   Core.Hook(@Hook_CountNumTextLines, Core.HOOKTYPE_CALL, 5, Ptr($4B52CA));
+  Core.Hook(@Hook_DrawScrollDlgLine, Core.HOOKTYPE_CALL, 5, Ptr($5BCA99));
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
   ApiJack.StdSplice(Ptr($4B5580), @New_Font_CountNumTextLines, ApiJack.CONV_THISCALL, 3);
   ApiJack.StdSplice(Ptr($4B5680), @New_Font_GetLineWidth, ApiJack.CONV_THISCALL, 2);
@@ -1349,10 +1438,10 @@ end; // .procedure OnAfterWoG
 begin
   NamedColors       := AssocArrays.NewSimpleAssocArr(Crypto.AnsiCrc32, SysUtils.AnsiLowerCase);
   LoadedResources   := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
-  ColorStack        := Lists.NewSimpleList;
+  TextAttrsStack    := Lists.NewSimpleList;
   TextScanner       := TextScan.TTextScanner.Create;
   TaggedLineBuilder := StrLib.TStrBuilder.Create;
-  
+
   EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
   EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
 end.
