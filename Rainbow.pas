@@ -1197,13 +1197,13 @@ begin
   result := CurrTextNumLines;
 end;
 
-function Hook_DrawScrollDlgLine: integer; stdcall; assembler;
+function Hook_ScrollTextDlg_CreateLineTextItem: integer; stdcall; assembler;
 const
   SCROLLBAR_WIDTH = 24;
 
 asm
-  sub dword [esp + $14], SCROLLBAR_WIDTH
-  mov eax, $4B51F0
+  sub dword [esp + $0C], SCROLLBAR_WIDTH
+  mov eax, $5BC6A0
   jmp eax
 end;
 
@@ -1455,7 +1455,7 @@ begin
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
   Core.Hook(@Hook_CountNumTextLines, Core.HOOKTYPE_CALL, 5, Ptr($4B5275));
   Core.Hook(@Hook_CountNumTextLines, Core.HOOKTYPE_CALL, 5, Ptr($4B52CA));
-  Core.Hook(@Hook_DrawScrollDlgLine, Core.HOOKTYPE_CALL, 5, Ptr($5BCA99));
+  Core.Hook(@Hook_ScrollTextDlg_CreateLineTextItem, Core.HOOKTYPE_CALL, 5, Ptr($5BA547));
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
   ApiJack.StdSplice(Ptr($4B5580), @New_Font_CountNumTextLines, ApiJack.CONV_THISCALL, 3);
   ApiJack.StdSplice(Ptr($4B5680), @New_Font_GetLineWidth, ApiJack.CONV_THISCALL, 2);
