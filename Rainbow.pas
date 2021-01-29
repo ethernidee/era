@@ -41,9 +41,9 @@ var
 
 procedure NameColor (Color32: integer; const Name: string); stdcall;
 
-(* Chinese only: temporal *)
 function  ChineseGetCharColor: integer; stdcall;
 procedure ChineseGotoNextChar; stdcall;
+procedure ChineseSetTextAlignmentParamPtr (NewParamPtr: pinteger); stdcall;
 procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); stdcall;
 
 
@@ -51,8 +51,10 @@ procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); s
 
 
 exports
+  (* Chinese only: temporal *)
   ChineseGetCharColor,
   ChineseGotoNextChar,
+  ChineseSetTextAlignmentParamPtr,
   SetChineseGraphemWidthEstimator;
 
 
@@ -72,8 +74,7 @@ type
 
   PEmlChars = ^TEmlChars;
   TEmlChars = record
-    Color32:        integer;
-    HorizAlignment: integer;
+    Color32: integer;
   end;
 
   PEmlImg = ^TEmlImg;
@@ -98,8 +99,9 @@ type
 
   PTextBlock = ^TTextBlock;
   TTextBlock = record
-    BlockType: TTextBlockType;
-    BlockLen:  integer;
+    BlockType:      TTextBlockType;
+    BlockLen:       integer;
+    HorizAlignment: integer;
 
     case TTextBlockType of
       TEXT_BLOCK_CHARS: (
@@ -495,8 +497,9 @@ var
     if (TextBlock.BlockType <> TEXT_BLOCK_CHARS) or (TextBlock.BlockLen > 0) then begin
       New(TextBlock);
       Self.Blocks.Add(TextBlock);
-      TextBlock.BlockLen  := 0;
-      TextBlock.BlockType := TEXT_BLOCK_CHARS;
+      TextBlock.BlockLen       := 0;
+      TextBlock.BlockType      := TEXT_BLOCK_CHARS;
+      TextBlock.HorizAlignment := CurrHorizAlign;
     end;
   end;
 
@@ -564,13 +567,13 @@ begin
   New(TextBlock);
   Self.Blocks.Add(TextBlock);
 
-  TextBlock.BlockLen                  := Length(OrigText);
-  TextBlock.BlockType                 := TEXT_BLOCK_CHARS;
-  TextBlock.CharsBlock.Color32        := DEF_COLOR;
-  TextBlock.CharsBlock.HorizAlignment := DEF_ALIGNMENT;
-  CurrColor                           := DEF_COLOR;
-  CurrHorizAlign                      := DEF_ALIGNMENT;
-  NativeTag                           := #0;
+  TextBlock.BlockLen           := Length(OrigText);
+  TextBlock.BlockType          := TEXT_BLOCK_CHARS;
+  TextBlock.CharsBlock.Color32 := DEF_COLOR;
+  TextBlock.HorizAlignment     := DEF_ALIGNMENT;
+  CurrColor                    := DEF_COLOR;
+  CurrHorizAlign               := DEF_ALIGNMENT;
+  NativeTag                    := #0;
 
   FontName := pchar(@Font.Name);
 
@@ -626,6 +629,7 @@ begin
         Self.Blocks.Add(TextBlock);
         TextBlock.BlockLen               := 0;
         TextBlock.BlockType              := TEXT_BLOCK_DEF;
+        TextBlock.HorizAlignment         := CurrHorizAlign;
         TextBlock.ImgBlock.IsBlock       := false;
         TextBlock.ImgBlock.DrawFlags     := [Heroes.DFL_CROP];
         TextBlock.ImgBlock.CharsPerLine  := 0;
@@ -701,8 +705,8 @@ begin
           TextBlock.ImgBlock.AttrVertAlign := VertAlignHash;
 
           BeginNewColorBlock;
-          TextBlock.CharsBlock.Color32        := CurrColor;
-          TextBlock.CharsBlock.HorizAlignment := CurrHorizAlign;
+          TextBlock.CharsBlock.Color32 := CurrColor;
+          TextBlock.HorizAlignment     := CurrHorizAlign;
 
           // Output serie of non-breaking spaces to compensate image width
           for i := 0 to NumFillChars - 1 do begin
@@ -728,8 +732,8 @@ begin
           TextAttrsStack.Add(Ptr(CurrHorizAlign));
         end;
 
-        TextBlock.CharsBlock.Color32        := CurrColor;
-        TextBlock.CharsBlock.HorizAlignment := CurrHorizAlign;
+        TextBlock.CharsBlock.Color32 := CurrColor;
+        TextBlock.HorizAlignment     := CurrHorizAlign;
         TextScanner.GotoNextChar;
       // Handle other ERL open/close tags
       end else if TextScanner.GotoRelPos(+2) and TextScanner.ReadTokenTillDelim(['}', ' '], TagName) then begin
@@ -762,8 +766,8 @@ begin
           TextAttrsStack.Add(Ptr(CurrHorizAlign));
         end; // .else
 
-        TextBlock.CharsBlock.Color32        := CurrColor;
-        TextBlock.CharsBlock.HorizAlignment := CurrHorizAlign;
+        TextBlock.CharsBlock.Color32 := CurrColor;
+        TextBlock.HorizAlignment     := CurrHorizAlign;
         TextScanner.GotoNextChar;
       end; // .elseif
     end; // .while
@@ -936,14 +940,15 @@ end;
 
 procedure TParsedTextLine.ToTaggedText (ParsedText: TParsedText; Res: StrLib.TStrBuilder);
 var
-  Text:       pchar;
-  TextEnd:    pchar;
-  SliceStart: pchar;
-  SliceLen:   integer;
-  BlockInd:   integer;
-  BlockPos:   integer;
-  CurrBlock:  PTextBlock;
-  NumBlocks:  integer;
+  Text:              pchar;
+  TextEnd:           pchar;
+  SliceStart:        pchar;
+  SliceLen:          integer;
+  BlockInd:          integer;
+  BlockPos:          integer;
+  CurrBlock:         PTextBlock;
+  NumBlocks:         integer;
+  InitialHorizAlign: integer;
 
 begin
   Res.Clear;
@@ -967,6 +972,17 @@ begin
     CurrBlock := ParsedText.Blocks[BlockInd];
   end;
 
+  // Always output text alignment tag as whole line wrapper tag, unless it's default alignment
+  InitialHorizAlign := CurrBlock.HorizAlignment;
+
+  if InitialHorizAlign <> DEF_ALIGNMENT then begin
+    case InitialHorizAlign of
+      Heroes.TEXT_ALIGN_LEFT:   Res.Append('{~text align=left}');
+      Heroes.TEXT_ALIGN_CENTER: Res.Append('{~text align=center}');
+      Heroes.TEXT_ALIGN_RIGHT:  Res.Append('{~text align=right}');
+    end;
+  end;
+
   // Process each physical line character
   while Text < TextEnd do begin
     {!} Assert(BlockPos < CurrBlock.BlockLen);
@@ -978,11 +994,11 @@ begin
         Res.Append('{~');
         Res.Append(Color32ToCode(CurrBlock.CharsBlock.Color32));
 
-        if CurrBlock.CharsBlock.HorizAlignment <> DEF_ALIGNMENT then begin
-          case CurrBlock.CharsBlock.HorizAlignment of
-            Heroes.TEXT_ALIGN_LEFT:   Res.Append(' align="left"');
-            Heroes.TEXT_ALIGN_CENTER: Res.Append(' align="center"');
-            Heroes.TEXT_ALIGN_RIGHT:  Res.Append(' align="right"');
+        if CurrBlock.HorizAlignment <> DEF_ALIGNMENT then begin
+          case CurrBlock.HorizAlignment of
+            Heroes.TEXT_ALIGN_LEFT:   Res.Append(' align=left');
+            Heroes.TEXT_ALIGN_CENTER: Res.Append(' align=center');
+            Heroes.TEXT_ALIGN_RIGHT:  Res.Append(' align=right');
           end;
         end;
 
@@ -1009,7 +1025,7 @@ begin
           Res.Append(' mirror');
         end;
 
-        if  CurrBlock.ImgBlock.IsBlock then begin
+        if CurrBlock.ImgBlock.IsBlock then begin
           Res.Append(' block');
         end;
 
@@ -1020,17 +1036,23 @@ begin
     end; // .switch CurrBlock.BlockType
 
     // Skip block meaningful characters
-    while (Text < TextEnd) and (BlockPos < CurrBlock.BlockLen) do begin
-      if not (Text^ in [#10, ' ']) then begin
-        Inc(BlockPos);
+    if CurrBlock.BlockType <> TEXT_BLOCK_CHARS then begin
+      BlockPos   := CurrBlock.BlockLen;
+      Text       := pointer(Min(cardinal(TextEnd), cardinal(Text) + cardinal(CurrBlock.BlockLen)));
+      SliceStart := Text;
+    end else begin
+      while (Text < TextEnd) and (BlockPos < CurrBlock.BlockLen) do begin
+        if not (Text^ in [#10, ' ']) then begin
+          Inc(BlockPos);
 
-        if ChineseLoaderOpt and (Text^ > MAX_CHINESE_LATIN_CHARACTER) and (Text[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
-          Inc(Text);
+          if ChineseLoaderOpt and (Text^ > MAX_CHINESE_LATIN_CHARACTER) and (Text[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
+            Inc(Text);
+          end;
         end;
-      end;
 
-      Inc(Text);
-    end;
+        Inc(Text);
+      end;
+    end; // .else
 
     // Skip out-of-block spacy characters
     while (Text < TextEnd) and (Text^ in [#10, ' ']) do begin
@@ -1056,6 +1078,11 @@ begin
       end;
     end;
   end; // .while
+
+  // Always output text alignment tag as whole line wrapper tag, unless it's default alignment
+  if InitialHorizAlign <> DEF_ALIGNMENT then begin
+    Res.Append('{~}');
+  end;
 end; // .procedure TParsedTextLine.ToTaggedText
 
 function UpdateCurrParsedText (Font: Heroes.PFontItem; OrigStr: pchar; OrigTextLen: integer = -1): {U} TParsedText;
@@ -1086,15 +1113,16 @@ procedure UpdateCurrBlock; stdcall;
 begin
   if (CurrParsedText <> nil) and (CurrTextBlock <> nil) then begin
     if CurrBlockPos < CurrTextBlock.BlockLen then begin
-      if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-        CurrColor      := CurrTextBlock.CharsBlock.Color32;
-        CurrHorizAlign := CurrTextBlock.CharsBlock.HorizAlignment;
+      CurrHorizAlign := CurrTextBlock.HorizAlignment;
 
-        if CurrHorizAlign <> DEF_ALIGNMENT then begin
-          CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
-        end else begin
-          CurrTextAlignPtr^ := CurrTextDefAlign;
-        end;
+      if CurrHorizAlign <> DEF_ALIGNMENT then begin
+        CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
+      end else begin
+        CurrTextAlignPtr^ := CurrTextDefAlign;
+      end;
+
+      if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
+        CurrColor := CurrTextBlock.CharsBlock.Color32;
       end;
     end else begin
       while CurrBlockPos >= CurrTextBlock.BlockLen do begin
@@ -1103,17 +1131,17 @@ begin
 
         // Normal, valid case
         if CurrBlockInd < CurrParsedText.NumBlocks then begin
-          CurrTextBlock := CurrParsedText.Blocks[CurrBlockInd];
+          CurrTextBlock  := CurrParsedText.Blocks[CurrBlockInd];
+          CurrHorizAlign := CurrTextBlock.HorizAlignment;
+
+          if CurrHorizAlign <> DEF_ALIGNMENT then begin
+            CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
+          end else begin
+            CurrTextAlignPtr^ := CurrTextDefAlign;
+          end;
 
           if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
-            CurrColor      := CurrTextBlock.CharsBlock.Color32;
-            CurrHorizAlign := CurrTextBlock.CharsBlock.HorizAlignment;
-
-            if CurrHorizAlign <> DEF_ALIGNMENT then begin
-              CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
-            end else begin
-              CurrTextAlignPtr^ := CurrTextDefAlign;
-            end;
+            CurrColor := CurrTextBlock.CharsBlock.Color32;
           end;
         // Something is broken, like invalid GBK character (missing second part of code point), mixed language, etc.
         // Empty string, probably. Recover to use the last attributes.
@@ -1279,6 +1307,11 @@ procedure ChineseGotoNextChar; stdcall;
 begin
   Inc(CurrBlockPos);
   UpdateCurrBlock;
+end;
+
+procedure ChineseSetTextAlignmentParamPtr (NewParamPtr: pinteger); stdcall;
+begin
+  CurrTextAlignPtr := NewParamPtr;
 end;
 
 procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); stdcall;

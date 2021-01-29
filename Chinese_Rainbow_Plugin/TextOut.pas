@@ -94,6 +94,7 @@ var
 
 function  ChineseGetCharColor: integer; stdcall; external 'era.dll';
 procedure ChineseGotoNextChar; stdcall; external 'era.dll';
+procedure ChineseSetTextAlignmentParamPtr (NewParamPtr: pinteger); stdcall; external 'era.dll';
 procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); stdcall; external 'era.dll';
 
 procedure UpdateBytesPerPixel;
@@ -473,6 +474,7 @@ var
   MaxRow, FontWidth, FontHeight, posStart, posEnd, l, i, row, startX, startY, space, spacerow, j:integer;
 
 begin 
+  ChineseSetTextAlignmentParamPtr(@Mode);
   UpdateBytesPerPixel;
 
   if TextColorMode^ = TEXTMODE_15BITS then begin
