@@ -83,7 +83,7 @@ type
     DrawFlags:     Heroes.TDrawImageFlags;
     OffsetX:       integer;
     OffsetY:       integer;
-    CharsPerLine:  integer;
+    NumFillChars:  integer;
     Height:        integer;
     NumLines:      integer;
     AttrVertAlign: integer;
@@ -632,7 +632,7 @@ begin
         TextBlock.HorizAlignment         := CurrHorizAlign;
         TextBlock.ImgBlock.IsBlock       := false;
         TextBlock.ImgBlock.DrawFlags     := [Heroes.DFL_CROP];
-        TextBlock.ImgBlock.CharsPerLine  := 0;
+        TextBlock.ImgBlock.NumFillChars  := 0;
         TextBlock.ImgBlock.OffsetX       := 0;
         TextBlock.ImgBlock.OffsetY       := 0;
         TextBlock.ImgBlock.Height        := 0;
@@ -676,7 +676,7 @@ begin
           NbspWidth                       := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
           ImageWidth                      := TextBlock.DefBlock.Def.GetFrameWidth(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
           NumFillChars                    := (ImageWidth + NbspWidth - 1) div NbspWidth;
-          TextBlock.ImgBlock.CharsPerLine := Math.Max(1, NumFillChars);
+          TextBlock.ImgBlock.NumFillChars := NumFillChars;
           TextBlock.ImgBlock.Height       := TextBlock.DefBlock.Def.GetFrameHeight(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
           TextBlock.ImgBlock.OffsetX      := (NumFillChars * NbspWidth - ImageWidth) div 2;
           TextBlock.BlockLen              := NumFillChars;
@@ -704,16 +704,40 @@ begin
 
           TextBlock.ImgBlock.AttrVertAlign := VertAlignHash;
 
-          BeginNewColorBlock;
-          TextBlock.CharsBlock.Color32 := CurrColor;
-          TextBlock.HorizAlignment     := CurrHorizAlign;
+          // Force line break for block image not at line start
+          if TextBlock.ImgBlock.IsBlock and (Buf <> @GlobalBuffer) and (Buf[-1] <> LINE_END_MARKER) then begin
+            Buf^ := LINE_END_MARKER;
+            Inc(Buf);
+          end;
 
           // Output serie of non-breaking spaces to compensate image width
           for i := 0 to NumFillChars - 1 do begin
             Buf^ := NBSP;
             Inc(Buf);
           end;
-        end;
+
+          // For block images output serie (LINE_END, NBSP) lines to compensate image height
+          if TextBlock.ImgBlock.IsBlock then begin
+            for i := 1 to TextBlock.ImgBlock.NumLines - 1 do begin
+              Buf^ := LINE_END_MARKER;
+              Inc(Buf);
+              Buf^ := NBSP;
+              Inc(Buf);
+            end;
+
+            Inc(TextBlock.BlockLen, TextBlock.ImgBlock.NumLines - 1);
+
+            // Force line end after image block, unless it's already present
+            if TextScanner.CharsRel[+1] <> LINE_END_MARKER then begin
+              Buf^ := LINE_END_MARKER;
+              Inc(Buf);
+            end;
+          end; // .if
+
+          BeginNewColorBlock;
+          TextBlock.CharsBlock.Color32 := CurrColor;
+          TextBlock.HorizAlignment     := CurrHorizAlign;
+        end; // .if
 
         TextScanner.GotoNextChar();
 
