@@ -153,11 +153,11 @@ var
     Color32To16:       TColor32To16Func;
     Color16To32:       function (Color16: integer): integer;
 
-{O} CurrParsedText:   TParsedText = nil;
-{U} CurrTextBlock:    PTextBlock  = nil;
-    CurrTextNumLines: integer     = 1;
-    CurrTextAlignPtr: pinteger    = nil;
-    CurrTextDefAlign: integer     = 0;
+{O} CurrParsedText:        TParsedText = nil;
+{U} CurrTextBlock:         PTextBlock  = nil;
+    CurrTextNumLines:      integer     = 1;
+    CurrTextAlignPtr:      pinteger    = nil;
+    CurrTextDefHorizAlign: integer     = 0;
 
     CurrBlockInd:   integer;
     CurrBlockPos:   integer;
@@ -1081,7 +1081,6 @@ begin
 
         if CurrBlock.ImgBlock.IsBlock then begin
           Res.Append(' block');
-          ImageLineN := 0;
 
           if BlockPos >= CurrBlock.ImgBlock.NumFillChars then begin
             ImageLineN  := BlockPos - CurrBlock.ImgBlock.NumFillChars + 1;
@@ -1183,11 +1182,11 @@ begin
     if CurrBlockPos < CurrTextBlock.BlockLen then begin
       CurrHorizAlign := CurrTextBlock.HorizAlignment;
 
-      if CurrHorizAlign <> DEF_ALIGNMENT then begin
-        CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
-      end else begin
-        CurrTextAlignPtr^ := CurrTextDefAlign;
+      if CurrHorizAlign = DEF_ALIGNMENT then begin
+        CurrHorizAlign := CurrTextDefHorizAlign;
       end;
+
+      CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
 
       if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
         CurrColor := CurrTextBlock.CharsBlock.Color32;
@@ -1202,11 +1201,11 @@ begin
           CurrTextBlock  := CurrParsedText.Blocks[CurrBlockInd];
           CurrHorizAlign := CurrTextBlock.HorizAlignment;
 
-          if CurrHorizAlign <> DEF_ALIGNMENT then begin
-            CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
-          end else begin
-            CurrTextAlignPtr^ := CurrTextDefAlign;
+          if CurrHorizAlign = DEF_ALIGNMENT then begin
+            CurrHorizAlign := CurrTextDefHorizAlign;
           end;
+
+          CurrTextAlignPtr^ := (CurrTextAlignPtr^ and not Heroes.HORIZ_TEXT_ALIGNMENT_MASK) or CurrHorizAlign;
 
           if CurrTextBlock.BlockType = TEXT_BLOCK_CHARS then begin
             CurrColor := CurrTextBlock.CharsBlock.Color32;
@@ -1232,7 +1231,7 @@ begin
   CurrColor        := DEF_COLOR;
   CurrHorizAlign   := DEF_ALIGNMENT;
   CurrTextAlignPtr := Ptr(Context.EBP + $24);
-  CurrTextDefAlign := CurrTextAlignPtr^;
+  CurrTextDefHorizAlign := CurrTextAlignPtr^ and Heroes.HORIZ_TEXT_ALIGNMENT_MASK;
   CurrTextBlock    := CurrParsedText.Blocks[0];
   CurrBlockPos     := 0;
   CurrBlockInd     := 0;
