@@ -83,6 +83,8 @@ type
     DrawFlags:     Heroes.TDrawImageFlags;
     OffsetX:       integer;
     OffsetY:       integer;
+    SliceStartY:   integer;
+    SliceHeight:   integer;
     NumFillChars:  integer;
     Height:        integer;
     NumLines:      integer;
@@ -635,6 +637,8 @@ begin
         TextBlock.ImgBlock.NumFillChars  := 0;
         TextBlock.ImgBlock.OffsetX       := 0;
         TextBlock.ImgBlock.OffsetY       := 0;
+        TextBlock.ImgBlock.SliceStartY   := 0;
+        TextBlock.ImgBlock.SliceHeight   := 0;
         TextBlock.ImgBlock.Height        := 0;
         TextBlock.ImgBlock.NumLines      := 1;
         TextBlock.DefBlock.Def           := nil;
@@ -678,12 +682,26 @@ begin
           NumFillChars                    := (ImageWidth + NbspWidth - 1) div NbspWidth;
           TextBlock.ImgBlock.NumFillChars := NumFillChars;
           TextBlock.ImgBlock.Height       := TextBlock.DefBlock.Def.GetFrameHeight(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
+          TextBlock.ImgBlock.SliceHeight  := TextBlock.ImgBlock.Height;
           TextBlock.ImgBlock.OffsetX      := (NumFillChars * NbspWidth - ImageWidth) div 2;
           TextBlock.BlockLen              := NumFillChars;
 
           if TextBlock.ImgBlock.IsBlock then begin
-            TextBlock.ImgBlock.NumLines := (TextBlock.ImgBlock.Height + Font.Height - 1) div Font.Height;
-          end;
+            // Handle image slicing (internal purposes only)
+            AttrValue := EmlAttrs['from-y'];
+
+            if AttrValue <> nil then begin
+              SysUtils.TryStrToInt(AttrValue.Value, TextBlock.ImgBlock.SliceStartY);
+            end;
+
+            AttrValue := EmlAttrs['height'];
+
+            if AttrValue <> nil then begin
+              SysUtils.TryStrToInt(AttrValue.Value, TextBlock.ImgBlock.SliceHeight);
+            end;
+
+            TextBlock.ImgBlock.NumLines := (TextBlock.ImgBlock.SliceHeight + Font.Height - 1) div Font.Height;
+          end; // .if
 
           LinesHeight   := TextBlock.ImgBlock.NumLines * Font.Height;
           VertAlignHash := TOKEN_HASH_MIDDLE;
@@ -698,11 +716,19 @@ begin
           end;
 
           case VertAlignHash of
-            TOKEN_HASH_MIDDLE: TextBlock.ImgBlock.OffsetY := (LinesHeight - TextBlock.ImgBlock.Height) div 2;
-            TOKEN_HASH_BOTTOM: TextBlock.ImgBlock.OffsetY := LinesHeight - TextBlock.ImgBlock.Height;
+            TOKEN_HASH_MIDDLE: TextBlock.ImgBlock.OffsetY := (LinesHeight - TextBlock.ImgBlock.SliceHeight) div 2;
+            TOKEN_HASH_BOTTOM: TextBlock.ImgBlock.OffsetY := LinesHeight - TextBlock.ImgBlock.SliceHeight;
           end;
 
           TextBlock.ImgBlock.AttrVertAlign := VertAlignHash;
+
+          if TextBlock.ImgBlock.IsBlock then begin
+            AttrValue := EmlAttrs['offset-y'];
+
+            if AttrValue <> nil then begin
+              SysUtils.TryStrToInt(AttrValue.Value, TextBlock.ImgBlock.OffsetY);
+            end;
+          end;
 
           // Force line break for block image not at line start
           if TextBlock.ImgBlock.IsBlock and (Buf <> @GlobalBuffer) and (Buf[-1] <> LINE_END_MARKER) then begin
@@ -728,7 +754,7 @@ begin
             Inc(TextBlock.BlockLen, TextBlock.ImgBlock.NumLines - 1);
 
             // Force line end after image block, unless it's already present
-            if TextScanner.CharsRel[+1] <> LINE_END_MARKER then begin
+            if not (TextScanner.CharsRel[+1] in [#0, LINE_END_MARKER]) then begin
               Buf^ := LINE_END_MARKER;
               Inc(Buf);
             end;
@@ -973,6 +999,10 @@ var
   CurrBlock:         PTextBlock;
   NumBlocks:         integer;
   InitialHorizAlign: integer;
+  SliceStartY:       integer;
+  SliceHeight:       integer;
+  ImageLineN:        integer;
+  OffsetY:           integer;
 
 begin
   Res.Clear;
@@ -1051,32 +1081,46 @@ begin
 
         if CurrBlock.ImgBlock.IsBlock then begin
           Res.Append(' block');
-        end;
+          ImageLineN := 0;
+
+          if BlockPos >= CurrBlock.ImgBlock.NumFillChars then begin
+            ImageLineN  := BlockPos - CurrBlock.ImgBlock.NumFillChars + 1;
+            SliceStartY := ImageLineN * ParsedText.Font.Height - CurrBlock.ImgBlock.OffsetY;
+            SliceHeight := Min(CurrBlock.ImgBlock.Height - SliceStartY, ParsedText.Font.Height);
+            OffsetY     := 0;
+          end else begin
+            SliceStartY := 0;
+            SliceHeight := Min(CurrBlock.ImgBlock.Height, ParsedText.Font.Height - CurrBlock.ImgBlock.OffsetY);
+            OffsetY     := CurrBlock.ImgBlock.OffsetY;
+          end;
+
+          Res.Append(' from-y=' + SysUtils.IntToStr(SliceStartY));
+          Res.Append(' offset-y=' + SysUtils.IntToStr(OffsetY));
+          Res.Append(' height=' + SysUtils.IntToStr(SliceHeight));
+        end; // .if
 
         Res.Append('}');
-      end;
+      end; // TEXT_BLOCK_DEF
     else
       {!} Assert(false, 'ToTaggedText: unsupported BlockType = ' + SysUtils.IntToStr(ord(CurrBlock.BlockType)));
     end; // .switch CurrBlock.BlockType
 
     // Skip block meaningful characters
-    if CurrBlock.BlockType <> TEXT_BLOCK_CHARS then begin
-      BlockPos   := CurrBlock.BlockLen;
-      Text       := pointer(Min(cardinal(TextEnd), cardinal(Text) + cardinal(CurrBlock.BlockLen)));
-      SliceStart := Text;
-    end else begin
-      while (Text < TextEnd) and (BlockPos < CurrBlock.BlockLen) do begin
-        if not (Text^ in [#10, ' ']) then begin
-          Inc(BlockPos);
+    while (Text < TextEnd) and (BlockPos < CurrBlock.BlockLen) do begin
+      if not (Text^ in [#10, ' ']) then begin
+        Inc(BlockPos);
 
-          if ChineseLoaderOpt and (Text^ > MAX_CHINESE_LATIN_CHARACTER) and (Text[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
-            Inc(Text);
-          end;
+        if ChineseLoaderOpt and (Text^ > MAX_CHINESE_LATIN_CHARACTER) and (Text[1] > MAX_CHINESE_LATIN_CHARACTER) then begin
+          Inc(Text);
         end;
-
-        Inc(Text);
       end;
-    end; // .else
+
+      Inc(Text);
+    end;
+
+    if CurrBlock.BlockType <> TEXT_BLOCK_CHARS then begin
+      SliceStart := Text;
+    end;
 
     // Skip out-of-block spacy characters
     while (Text < TextEnd) and (Text^ in [#10, ' ']) do begin
@@ -1441,8 +1485,10 @@ begin
       Def.DrawFrameToBuf(
         CurrTextBlock.DefBlock.GroupInd,
         CurrTextBlock.DefBlock.FrameInd,
-        0, 0,
-        Def.Width, Def.Height,
+        0,
+        CurrTextBlock.ImgBlock.SliceStartY,
+        Def.Width,
+        CurrTextBlock.ImgBlock.SliceStartY + CurrTextBlock.ImgBlock.SliceHeight,
         Canvas.Buffer,
         x + CurrTextBlock.ImgBlock.OffsetX, y + CurrTextBlock.ImgBlock.OffsetY,
         Canvas.Width, Canvas.Height,
