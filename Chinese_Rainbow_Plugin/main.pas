@@ -139,11 +139,13 @@ begin
       WriteProcessMemory(GetCurrentProcess, pointer($004b5203), @pMyTextOut, 4, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004b5207), @data1, 1, BytesRead);
       //和下一个修正一起使用
+      // Patch GetMaxWordWidth
       WriteProcessMemory(GetCurrentProcess, pointer($004f6569), @data4, 5, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f656e), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f656f), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f6570), @data1, 1, BytesRead);
       //此修正是解决中文化后冒险界面下一些右键显示对话框长度太长问题，比如右键点击地层切换按钮
+      // Patch GetMaxLineWidth to be 352px
       WriteProcessMemory(GetCurrentProcess, pointer($004f6599), @data4, 5, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f659e), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f659f), @data1, 1, BytesRead);

@@ -113,7 +113,7 @@ type
       TEXT_BLOCK_DEF: (
         ImgBlock: TEmlImg;
         DefBlock: TEmlDef;
-      );    
+      );
   end; // .record TTextBlock
 
   TParsedText = class
@@ -939,9 +939,17 @@ begin
 
       // Move position in block
       if c <> ' ' then begin
+        // First skip empty blocks
+        while (Cursor.BlockPos >= CurrBlock.BlockLen) and (Cursor.BlockInd + 1 < NumBlocks) do begin
+          Inc(Cursor.BlockInd);
+          Cursor.BlockPos := 0;
+          CurrBlock       := Self.Blocks[Cursor.BlockInd];
+        end;
+
+        // It's guaranteed to move by at least single meaningful character and start at next, probably empty, block
         Inc(Cursor.BlockPos);
 
-        while (Cursor.BlockPos >= CurrBlock.BlockLen) and (Cursor.BlockInd + 1 < NumBlocks) do begin
+        if (Cursor.BlockPos >= CurrBlock.BlockLen) and (Cursor.BlockInd + 1 < NumBlocks) then begin
           Inc(Cursor.BlockInd);
           Cursor.BlockPos := 0;
           CurrBlock       := Self.Blocks[Cursor.BlockInd];
@@ -955,6 +963,8 @@ begin
     Line.BlockInd := LineStart.BlockInd;
     Line.BlockPos := LineStart.BlockPos;
     Line.Len      := Cursor.Len;
+
+    // VarDump(['#ToLines#', Copy(Self.ProcessedText, Line.Offset + 1, Line.Len), Line.BlockInd, Line.BlockPos]);
 
     // Add the line to the result
     result.Add(Line); Line := nil;
@@ -1223,7 +1233,7 @@ begin
   end; // .if
 end; // .procedure UpdateCurrBlock
 
-function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;  
+function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
 begin
   UpdateCurrParsedText(Heroes.PFontItem(Context.EBX), pchar(Context.EDX), Context.ECX);
   CurrTextNumLines := CurrParsedText.CountLines(pinteger(Context.EBP + $18)^);
@@ -1457,8 +1467,8 @@ begin
               pinteger(OutPixelPtr)^ := Graph.AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color32);
             end else begin
               pword(OutPixelPtr)^ := Color32To16(Graph.AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color32));
-            end; 
-          end; // .if   
+            end;
+          end; // .if
 
           Inc(pbyte(OutPixelPtr), BytesPerPixel);
           Inc(CharPixelPtr);
@@ -1504,7 +1514,7 @@ end; // .function New_Font_DrawCharacter
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 begin
-  SetupColorMode; 
+  SetupColorMode;
   ApiJack.StdSplice(Ptr($4B4F00), @New_Font_DrawCharacter, ApiJack.CONV_THISCALL, 6);
 end;
 
@@ -1518,7 +1528,7 @@ begin
     pinteger($4B5204)^ := $02E7;       // 4B54EF
   end else begin
     Core.Hook(@Hook_HandleTags, Core.HOOKTYPE_BRIDGE, 7, Ptr($4B509B));
-  end; 
+  end;
 
   Core.Hook(@Hook_GetCharColor, Core.HOOKTYPE_BRIDGE, 8, Ptr($4B4F74));
   Core.Hook(@Hook_BeginParseText, Core.HOOKTYPE_BRIDGE, 6, Ptr($4B5255));
