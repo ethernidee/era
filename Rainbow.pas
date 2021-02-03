@@ -927,7 +927,7 @@ begin
       end;
 
       // Track word end
-      if (GraphemSize > 1) or (PrevGraphemSize > 1) or ((c = ' ') and (Cursor.TextPtr <> LineStart.TextPtr) and (Cursor.TextPtr[-1] <> ' ')) then begin
+      if (GraphemSize > 1) or (PrevGraphemSize > 1) or ((Cursor.TextPtr <> LineStart.TextPtr) and (((c = ' ') and (Cursor.TextPtr[-1] <> ' ') or ((c <> ' ') and (Cursor.TextPtr[-1] = ' '))))) then begin
         LastWordEnd := Cursor;
       end;
 
@@ -964,7 +964,9 @@ begin
     Line.BlockPos := LineStart.BlockPos;
     Line.Len      := Cursor.Len;
 
-    // VarDump(['#ToLines#', Copy(Self.ProcessedText, Line.Offset + 1, Line.Len), Line.BlockInd, Line.BlockPos]);
+    // if Self.NumBlocks > 1 then begin
+    //   VarDump(['#ToLines#', Copy(Self.ProcessedText, Line.Offset + 1, Line.Len), Line.BlockInd, Line.BlockPos, Line.Offset, Line.Len]);
+    // end;
 
     // Add the line to the result
     result.Add(Line); Line := nil;
@@ -1029,13 +1031,6 @@ begin
   NumBlocks := ParsedText.NumBlocks;
   CurrBlock := ParsedText.Blocks[BlockInd];
 
-  // Skip leading empty blocks
-  while (BlockPos >= CurrBlock.BlockLen) and (BlockInd + 1 < NumBlocks) do begin
-    Inc(BlockInd);
-    BlockPos  := 0;
-    CurrBlock := ParsedText.Blocks[BlockInd];
-  end;
-
   // Always output text alignment tag as whole line wrapper tag, unless it's default alignment
   InitialHorizAlign := CurrBlock.HorizAlignment;
 
@@ -1049,10 +1044,24 @@ begin
 
   // Process each physical line character
   while Text < TextEnd do begin
-    {!} Assert(BlockPos < CurrBlock.BlockLen);
     SliceStart := Text;
 
-    // Output block opening tag, if necessary
+    // Skip spacy characters, which do not belong to blocks
+    while (Text < TextEnd) and (Text^ in [#10, ' ']) do begin
+      Inc(Text);
+    end;
+
+    // Exit if there is no meaningful character to process
+    if Text >= TextEnd then begin
+      break;
+    end;
+
+    // Output spacy characters and start new slice
+    SliceLen := integer(Text) - integer(SliceStart);
+    Res.AppendBuf(SliceLen, SliceStart);
+    SliceStart := Text;
+
+    // Output block opening tag
     case CurrBlock.BlockType of
       TEXT_BLOCK_CHARS: begin
         Res.Append('{~');
@@ -1127,13 +1136,9 @@ begin
       Inc(Text);
     end;
 
+    // Do not output image placeholder characters
     if CurrBlock.BlockType <> TEXT_BLOCK_CHARS then begin
       SliceStart := Text;
-    end;
-
-    // Skip out-of-block spacy characters
-    while (Text < TextEnd) and (Text^ in [#10, ' ']) do begin
-      Inc(Text);
     end;
 
     SliceLen := integer(Text) - integer(SliceStart);
@@ -1146,13 +1151,11 @@ begin
       end;
     end;
 
-    // Proceed to the next non-empty block
-    if Text < TextEnd then begin
-      while (BlockPos >= CurrBlock.BlockLen) and (BlockInd + 1 < NumBlocks) do begin
-        Inc(BlockInd);
-        BlockPos  := 0;
-        CurrBlock := ParsedText.Blocks[BlockInd];
-      end;
+    // Proceed to the next block
+    if (BlockPos >= CurrBlock.BlockLen) and (BlockInd + 1 < NumBlocks) then begin
+      Inc(BlockInd);
+      BlockPos  := 0;
+      CurrBlock := ParsedText.Blocks[BlockInd];
     end;
   end; // .while
 
@@ -1282,6 +1285,28 @@ asm
   sub dword [esp + $0C], SCROLLBAR_WIDTH
   mov eax, $5BC6A0
   jmp eax
+end;
+
+function Hook_Font_DrawTextToPcx16_DetermineLineAlignment (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SavedCurrBlockInd:  integer;
+  SavedCurrBlockPos:  integer;
+  SavedCurrTextBlock: PTextBlock;
+
+begin
+  // Get text alignment from the next character to ensure, that line is drawn with valid horizontal alignment
+  SavedCurrBlockInd  := CurrBlockInd;
+  SavedCurrBlockPos  := CurrBlockPos;
+  SavedCurrTextBlock := CurrTextBlock;
+
+  Inc(CurrBlockPos);
+  UpdateCurrBlock;
+
+  CurrBlockInd  := SavedCurrBlockInd;
+  CurrBlockPos  := SavedCurrBlockPos;
+  CurrTextBlock := SavedCurrTextBlock;
+
+  result := true;
 end;
 
 function Hook_Font_DrawTextToPcx16_End (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -1535,6 +1560,7 @@ begin
   Core.Hook(@Hook_CountNumTextLines, Core.HOOKTYPE_CALL, 5, Ptr($4B5275));
   Core.Hook(@Hook_CountNumTextLines, Core.HOOKTYPE_CALL, 5, Ptr($4B52CA));
   Core.Hook(@Hook_ScrollTextDlg_CreateLineTextItem, Core.HOOKTYPE_CALL, 5, Ptr($5BA547));
+  ApiJack.HookCode(Ptr($4B547B), @Hook_Font_DrawTextToPcx16_DetermineLineAlignment);
   ApiJack.HookCode(Ptr($4B54EF), @Hook_Font_DrawTextToPcx16_End);
   ApiJack.StdSplice(Ptr($4B5580), @New_Font_CountNumTextLines, ApiJack.CONV_THISCALL, 3);
   ApiJack.StdSplice(Ptr($4B5680), @New_Font_GetLineWidth, ApiJack.CONV_THISCALL, 2);
