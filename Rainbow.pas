@@ -1537,10 +1537,60 @@ begin
   end;
 end; // .function New_Font_DrawCharacter
 
+function New_Pcx16_FillRect (OrigFunc: pointer; Canvas: Heroes.PPcx16Item; x, y, Width, Height, FillColor16: integer): integer; stdcall;
+var
+  BytesPerPixel:  integer;
+  Color32:        integer;
+  OutPixelPtr:    pinteger;
+  OutRowStartPtr: pinteger;
+  i, j:           integer;
+
+begin
+  BytesPerPixel := BytesPerPixelPtr^;
+
+  if BytesPerPixel = sizeof(word) then begin
+    result := PatchApi.Call(THISCALL_, OrigFunc, [Canvas, x, y, Width, Height, FillColor16]);
+  end else begin
+    result := Height;
+
+    if x < 0 then begin
+      x := 0;
+      Inc(Width, x);
+    end;
+
+    if y < 0 then begin
+      y := 0;
+      Inc(Height, y);
+    end;
+
+    Width  := Min(Canvas.Width - x, Width);
+    Height := Min(Canvas.Height - y, Height);
+
+    if (x >= Canvas.Width) or (y >= Canvas.Height) or (Width <= 0) or (Height <= 0) then begin
+      exit;
+    end;
+
+    Color32        := Color16To32(FillColor16);
+    OutRowStartPtr := Utils.PtrOfs(Canvas.Buffer, y * Canvas.ScanlineSize + x * BytesPerPixel);
+
+    for j := y to y + Height - 1 do begin
+      OutPixelPtr := OutRowStartPtr;
+
+      for i := x to x + Width - 1 do begin
+        OutPixelPtr^ := Color32;
+        Inc(OutPixelPtr);
+      end;
+
+      Inc(pbyte(OutRowStartPtr), Canvas.ScanlineSize);
+    end;
+  end; // .else
+end; // .function New_Pcx16_FillRect
+
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 begin
   SetupColorMode;
   ApiJack.StdSplice(Ptr($4B4F00), @New_Font_DrawCharacter, ApiJack.CONV_THISCALL, 6);
+  ApiJack.StdSplice(Ptr($44E190), @New_Pcx16_FillRect, ApiJack.CONV_THISCALL, 6);
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
