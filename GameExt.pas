@@ -41,8 +41,8 @@ const
   
   NO_EVENT_DATA = nil;
   
-  ERA_VERSION_STR = '3.3.3';
-  ERA_VERSION_INT = 3303;
+  ERA_VERSION_STR = '3.3.4';
+  ERA_VERSION_INT = 3304;
 
   FALLBACK_TO_ORIGINAL      = true;
   DONT_FALLBACK_TO_ORIGINAL = false;
