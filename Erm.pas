@@ -221,9 +221,9 @@ const
   TRIGGER_ADVMAP_TILE_HINT               = 77040;
   TRIGGER_BEFORE_STACK_TURN              = 77041;
   TRIGGER_CALC_TOWN_INCOME               = 77042;
-  TRIGGER_BEFORE_BATTLE_REPLAY           = 77043;
-  TRIGGER_AFTER_BATTLE_REPLAY            = 77044;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_AFTER_BATTLE_REPLAY;
+  TRIGGER_BATTLE_REPLAY                  = 77043;
+  TRIGGER_BEFORE_BATTLE_REPLAY           = 77044;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_BEFORE_BATTLE_REPLAY;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1020,7 +1020,7 @@ begin
 
   Temp.f := -Infinity;
   GlobalConsts['FLOAT_NEG_INF'] := Ptr(Temp.v);
-  
+
   GlobalConsts['TRUE']  := Ptr(1);
   GlobalConsts['FALSE'] := Ptr(0);
 end;
@@ -1142,8 +1142,8 @@ begin
     {*} TRIGGER_ADVMAP_TILE_HINT:             result := 'OnAdvMapTileHint';
     {*} TRIGGER_BEFORE_STACK_TURN:            result := 'OnBeforeBattleStackTurn';
     {*} TRIGGER_CALC_TOWN_INCOME:             result := 'OnCalculateTownIncome';
+    {*} TRIGGER_BATTLE_REPLAY:                result := 'OnBattleReplay';
     {*} TRIGGER_BEFORE_BATTLE_REPLAY:         result := 'OnBeforeBattleReplay';
-    {*} TRIGGER_AFTER_BATTLE_REPLAY:          result := 'OnAfterBattleReplay';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -1924,7 +1924,7 @@ var
 
       if result then begin
         Token := StrLib.ExtractFromPchar(StartPtr, integer(VarName) - integer(StartPtr));
-        
+
         if HasNumericSize then begin
           result := SysUtils.TryStrToInt(Token, ParsedVar.Index);
         end else begin
@@ -2047,7 +2047,7 @@ var
       end; // .else
 
       PrevRange := VarRange;
-    end; // .while  
+    end; // .while
 
     if not result then begin
       if VarsPool.Count < Count then begin
@@ -2141,7 +2141,7 @@ var
           if not IsIndirectAddressing then begin
             Buf.Add('%');
           end;
-          
+
           Buf.Add(LocalVar.VarType + IntToStr(VarIndex));
         end else begin
           Buf.Add(LocalVar.VarType + IntToStr(VarIndex));
@@ -2213,7 +2213,7 @@ var
         Scanner.GotoNextChar;
         Scanner.SkipCharset(DIGITS);
       end;
-      
+
       result := Scanner.c = ';';
 
       if not result then begin
@@ -2349,7 +2349,7 @@ var
                     Buf.Add(ScriptName);
                   end else begin
                     Buf.Add('^' + ScriptName + '^');
-                  end;                  
+                  end;
                 end else if IdentAsInt = LITERAL_LINE then begin
                   Buf.Add(SysUtils.IntToStr(Scanner.LineN));
                 end else begin
@@ -2369,7 +2369,7 @@ var
                       Buf.Add('^' + CodeExcerpt + '^');
                     end;
                   end;
-                  
+
                   Scanner.GotoPos(SavedPos);
                 end; // .else
               end else if GlobalConsts.GetExistingValue(Ident, pointer(ConstValue)) then begin
@@ -3565,8 +3565,8 @@ begin
   NameTrigger(TRIGGER_ADVMAP_TILE_HINT,             'OnAdvMapTileHint');
   NameTrigger(TRIGGER_BEFORE_STACK_TURN,            'OnBeforeBattleStackTurn');
   NameTrigger(TRIGGER_CALC_TOWN_INCOME,             'OnCalculateTownIncome');
+  NameTrigger(TRIGGER_BATTLE_REPLAY,                'OnBattleReplay');
   NameTrigger(TRIGGER_BEFORE_BATTLE_REPLAY,         'OnBeforeBattleReplay');
-  NameTrigger(TRIGGER_AFTER_BATTLE_REPLAY,          'OnAfterBattleReplay');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
@@ -3740,7 +3740,7 @@ var
 begin
   {!} Assert(BufPos <> nil);
   result := BufPos;
-  
+
   // Determine delimiter to handle both ^....^ and %s(...)
   if pchar(integer(BufPos) - 1)^ = '^' then begin
     Delimiter := '^';
@@ -4149,7 +4149,7 @@ begin
           ShowErmError(Format('Invalid quick var %d. Expected %d..%d', [Value, Low(QuickVars^), High(QuickVars^)]));
           result := false; exit;
         end;
-        
+
         Value := integer(@QuickVars[Value]);
       end;
 
@@ -4476,7 +4476,7 @@ begin
           IndexTypeChar := Caret^;
         end else begin
           IndexTypeChar := c;
-        end;        
+        end;
 
         if (IndexTypeChar in ['i', 's']) and (Caret[1] = '(') then begin
           Inc(Caret, 2);
@@ -4638,7 +4638,7 @@ begin
     result   := InterpolateErmStr(Start);
     Caret^   := EndChar;
     TokenLen := Caret - Start;
-  end; // .else  
+  end; // .else
 end; // .function Hook_ERM2String
 
 function Hook_ERM2String2 (BufInd: integer; Str: pchar): pchar; cdecl;
@@ -5348,7 +5348,13 @@ begin
   Erm.FuncArgs                := nil;
 
   NumericEventName := 'OnTrigger ' + SysUtils.IntToStr(TriggerId);
-  HumanEventName   := GetTriggerReadableName(TriggerId);
+  HumanEventName   := NumericEventName;
+
+  // Do not recurse for external plugin events
+  if (TriggerId <> TRIGGER_BATTLE_REPLAY) and (TriggerId <> TRIGGER_BEFORE_BATTLE_REPLAY) then begin
+    HumanEventName := GetTriggerReadableName(TriggerId);
+  end;
+
   HasEventHandlers := (StartTrigger.Id <> 0) or EventManager.HasEventHandlers(NumericEventName) or EventManager.HasEventHandlers(HumanEventName);
 
   if HasEventHandlers then begin
@@ -5618,7 +5624,7 @@ begin
       for j := LocalData.Items.Count - 1 downto 0 do begin
         LocalData.Items[j] := nil;
       end;
-      
+
       LocalData.Items.Free;
     end;
 
@@ -5868,7 +5874,7 @@ begin
     Context.EAX := ord((SubCmd.Params[3].GetType() in PARAM_VARTYPES_INTS) and (SubCmd.Params[3].GetCheckType() = PARAM_CHECK_NONE) and
                        (SubCmd.Params[4].GetType() in PARAM_VARTYPES_INTS) and (SubCmd.Params[4].GetCheckType() = PARAM_CHECK_NONE) and
                        (SubCmd.Params[5].GetType() in PARAM_VARTYPES_INTS) and (SubCmd.Params[5].GetCheckType() = PARAM_CHECK_NONE));
-    
+
     if Context.EAX = 0 then begin
       ShowErmError('"UN:U" - Invalid parameters for search coordinates' + SysUtils.IntToStr(FirstVarInd));
     end else begin
@@ -6200,7 +6206,7 @@ begin
   end;
 
   if Context.EAX <> 0 then begin
-    case Action of      
+    case Action of
       ACTION_SET_SMALL_PORTAIT: begin
         Heroes.ZvsChangeHeroPortrait(Hero.Id, nil, GetInterpolatedZVarAddr(SubCmd.Nums[1]));
       end;
@@ -6227,7 +6233,7 @@ begin
       end;
     end; // .switch Action
   end;
-  
+
   if Context.EAX = 0 then begin
     Context.RetAddr := Ptr($749631);
   end else begin
@@ -6431,7 +6437,7 @@ begin
   Context.RetAddr := Ptr($74914C);
   SubCmd          := pointer(Context.EBP - $300);
   result          := false;
-  
+
   // txt = @z
   ppointer(Context.EBP - $520)^ := GetInterpolatedZVarAddr(SubCmd.Nums[0]);
 end; // .function Hook_IF_N
@@ -6961,7 +6967,7 @@ begin
     ShowErmError('"!!VR" - bit operations are supported for integers only');
     result := 0; exit;
   end;
-  
+
   Value.v       := GetErmParamValue(VarParam, ValType);
   SecondValue.v := SubCmd.Nums[0];
 
@@ -7083,7 +7089,7 @@ begin
     ShowErmError('"!!VR:C" - only x, y, v, w, e variables are supported for mass assignment');
     result := 0; exit;
   end;
-  
+
   StartInd := ZvsGetVarValIndex(VarParam);
   DestVar  := GetVarArrayAddr(VarParamType, StartInd, NumParams);
 
@@ -7319,7 +7325,7 @@ begin
             ShowErmError('"!!VR:M1" - insufficient parameters');
             result := 0; exit;
           end;
-          
+
           result := ord(SetErmParamValue(VarParam, integer(pchar(StrLib.Substr(GetInterpolatedZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2], SubCmd.Nums[3]))), FLAG_ASSIGNABLE_STRINGS));
         end;
 
@@ -7329,7 +7335,7 @@ begin
             ShowErmError('"!!VR:M2" - insufficient parameters');
             result := 0; exit;
           end;
-          
+
           result := ord(SetErmParamValue(VarParam, integer(pchar(VrGetNthToken(GetInterpolatedZVarAddr(SubCmd.Nums[1]), SubCmd.Nums[2]))), FLAG_ASSIGNABLE_STRINGS));
         end;
 
@@ -7358,7 +7364,7 @@ begin
           end;
 
           SecondValue.v := StrLib.StrLen(pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX)));
-          
+
           result := ord(SetErmParamValue(@SubCmd.Params[1], SecondValue.v));
         end;
 
@@ -7380,7 +7386,7 @@ begin
           if SecondValue.pc^ = #0 then begin
             i := -1;
           end;
-          
+
           result := ord(SetErmParamValue(@SubCmd.Params[1], i));
         end;
 
@@ -7404,7 +7410,7 @@ begin
 
             Inc(SecondValue.pc);
           end;
-          
+
           result := ord(SetErmParamValue(@SubCmd.Params[1], SecondValue.v - Value.v - i - 1));
         end;
       end; // .switch M#
@@ -7418,7 +7424,7 @@ begin
 
       Value.pc       := pchar(GetErmParamValue(VarParam, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX));
       SecondValue.pc := pchar(GetErmParamValue(@SubCmd.Params[0], ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX));
-      
+
       f[1] := System.Pos(SysUtils.Trim(SysUtils.AnsiLowerCase(SecondValue.pc)), SysUtils.Trim(SysUtils.AnsiLowerCase(Value.pc))) <> 0;
     end;
   else
@@ -7629,7 +7635,7 @@ begin
     if SubCmd.Modifiers[i] = PARAM_MODIFIER_SUB then begin
       ArgXVars[i + 1] := -ArgXVars[i + 1];
     end;
-    
+
     FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (GetParamFuSyntaxFlags(Param, SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) shl (i shl 1));
   end;
 
@@ -7690,7 +7696,7 @@ begin
         for i := NumFuncArgsReceived to NumParams - 1 do begin
           x[i + 1] := SubCmd.Nums[i];
         end;
-      end; // .else      
+      end; // .else
     end else if CmdChar = 'S' then begin
       if (NumParams <> 2) or (SubCmd.Params[0].GetCheckType() = PARAM_CHECK_GET) or (SubCmd.Params[1].GetCheckType() <> PARAM_CHECK_GET) or
          not Math.InRange(SubCmd.Nums[0], Low(x^), High(x^))
@@ -8188,7 +8194,7 @@ begin
 
   (* Fix BA:B to allow both numeric field ID and string as the only argument *)
   ApiJack.HookCode(Ptr($76242B), @Hook_BA_B);
-  
+
   (* Fix MM:M to allow all strings *)
   ApiJack.HookCode(Ptr($74FD94), @Hook_MM_M);
 
