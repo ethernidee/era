@@ -96,6 +96,7 @@ function  ChineseGetCharColor: integer; stdcall; external 'era.dll';
 procedure ChineseGotoNextChar; stdcall; external 'era.dll';
 procedure ChineseSetTextAlignmentParamPtr (NewParamPtr: pinteger); stdcall; external 'era.dll';
 procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); stdcall; external 'era.dll';
+procedure UpdateTextAttrsFromNextChar; stdcall; external 'era.dll';
 
 procedure UpdateBytesPerPixel;
 begin
@@ -553,6 +554,8 @@ begin
     posEnd:=i;
     startX:=x;
     startY:=y+FontHeight*Row;
+
+    UpdateTextAttrsFromNextChar;
     
     case mode of
       0,4,8 :startX:=x;

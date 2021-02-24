@@ -45,6 +45,7 @@ function  ChineseGetCharColor: integer; stdcall;
 procedure ChineseGotoNextChar; stdcall;
 procedure ChineseSetTextAlignmentParamPtr (NewParamPtr: pinteger); stdcall;
 procedure SetChineseGraphemWidthEstimator (Estimator: TGraphemWidthEstimator); stdcall;
+procedure UpdateTextAttrsFromNextChar; stdcall;
 
 
 (***) implementation (***)
@@ -55,7 +56,8 @@ exports
   ChineseGetCharColor,
   ChineseGotoNextChar,
   ChineseSetTextAlignmentParamPtr,
-  SetChineseGraphemWidthEstimator;
+  SetChineseGraphemWidthEstimator,
+  UpdateTextAttrsFromNextChar;
 
 
 const
@@ -1236,6 +1238,25 @@ begin
   end; // .if
 end; // .procedure UpdateCurrBlock
 
+procedure UpdateTextAttrsFromNextChar; stdcall;
+var
+  SavedCurrBlockInd:  integer;
+  SavedCurrBlockPos:  integer;
+  SavedCurrTextBlock: PTextBlock;
+
+begin
+  SavedCurrBlockInd  := CurrBlockInd;
+  SavedCurrBlockPos  := CurrBlockPos;
+  SavedCurrTextBlock := CurrTextBlock;
+
+  Inc(CurrBlockPos);
+  UpdateCurrBlock;
+
+  CurrBlockInd  := SavedCurrBlockInd;
+  CurrBlockPos  := SavedCurrBlockPos;
+  CurrTextBlock := SavedCurrTextBlock;
+end;
+
 function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
 begin
   UpdateCurrParsedText(Heroes.PFontItem(Context.EBX), pchar(Context.EDX), Context.ECX);
@@ -1288,24 +1309,8 @@ asm
 end;
 
 function Hook_Font_DrawTextToPcx16_DetermineLineAlignment (Context: ApiJack.PHookContext): longbool; stdcall;
-var
-  SavedCurrBlockInd:  integer;
-  SavedCurrBlockPos:  integer;
-  SavedCurrTextBlock: PTextBlock;
-
 begin
-  // Get text alignment from the next character to ensure, that line is drawn with valid horizontal alignment
-  SavedCurrBlockInd  := CurrBlockInd;
-  SavedCurrBlockPos  := CurrBlockPos;
-  SavedCurrTextBlock := CurrTextBlock;
-
-  Inc(CurrBlockPos);
-  UpdateCurrBlock;
-
-  CurrBlockInd  := SavedCurrBlockInd;
-  CurrBlockPos  := SavedCurrBlockPos;
-  CurrTextBlock := SavedCurrTextBlock;
-
+  UpdateTextAttrsFromNextChar;
   result := true;
 end;
 
