@@ -36,13 +36,13 @@ const
   DEBUG_PATCH_LIST_PATH     = DEBUG_DIR + '\patch list.txt';
   DEBUG_MOD_LIST_PATH       = DEBUG_DIR + '\mod list.txt';
   DEBUG_X86_PATCH_LIST_PATH = DEBUG_DIR + '\x86 patches.txt';
-  
+
   CONST_STR = -1;
-  
+
   NO_EVENT_DATA = nil;
-  
-  ERA_VERSION_STR = '3.3.4';
-  ERA_VERSION_INT = 3304;
+
+  ERA_VERSION_STR = '3.3.5';
+  ERA_VERSION_INT = 3305;
 
   FALLBACK_TO_ORIGINAL      = true;
   DONT_FALLBACK_TO_ORIGINAL = false;
@@ -52,7 +52,7 @@ type
 
   PEraEventParams = ^TEraEventParams;
   TEraEventParams = array [0..15] of integer;
-  
+
   PMemRedirection = ^TMemRedirection;
   TMemRedirection = record
     OldAddr:    pointer;
@@ -125,14 +125,14 @@ var
   DllHandle:           integer;
   FileExt:             string;
   ForbiddenPluginPath: string;
-  
+
 begin
   with Files.Locate(GameDir + '\' + PLUGINS_PATH + '\*.' + Ext, Files.ONLY_FILES) do begin
     while FindNext do begin
       if (FoundRec.Rec.Size > 0) then begin
         DllName := SysUtils.AnsiLowerCase(FoundName);
         FileExt := StrLib.ExtractExt(FoundName);
-        
+
         if (FileExt = 'dll') or (FileExt = 'era') then begin
           ForbiddenPluginPath := SysUtils.ChangeFileExt(FoundPath, Utils.IfThen(FileExt = 'dll', '.era', '.dll'));
 
@@ -182,7 +182,7 @@ function CompareMemoryBlocks (Addr1: pointer; Size1: integer; Addr2: pointer; Si
 begin
   {!} Assert(Size1 > 0);
   {!} Assert(Size2 > 0);
-  
+
   if (Math.Max(cardinal(Addr1) + cardinal(Size1), cardinal(Addr2) + cardinal(Size2)) - Math.Min(cardinal(Addr1), cardinal(Addr2))) < (cardinal(Size1) + cardinal(Size2)) then begin
     result := 0;
   end else if cardinal(Addr1) < cardinal(Addr2) then begin
@@ -197,23 +197,23 @@ var
 {U} Redirection:    PMemRedirection;
     LeftInd:        integer;
     RightInd:       integer;
-    ComparisonRes:  integer; 
-  
+    ComparisonRes:  integer;
+
 begin
   {!} Assert(Size >= 0);
   Redirection := nil;
-  
+
   // * * * * * //
   result   := false;
   LeftInd  := 0;
   RightInd := MemRedirections.Count - 1;
-  
+
   while (LeftInd <= RightInd) and not result do begin
     BlockInd      := LeftInd + (RightInd - LeftInd) div 2;
     Redirection   := MemRedirections[BlockInd];
     ComparisonRes := CompareMemoryBlocks(Addr, Size, Redirection.OldAddr, Redirection.BlockSize);
     result        := ComparisonRes = 0;
-    
+
     if ComparisonRes < 0 then begin
       RightInd := BlockInd - 1;
     end else if ComparisonRes > 0 then begin
@@ -231,7 +231,7 @@ var
 {U} OldRedirection: PMemRedirection;
 {O} NewRedirection: PMemRedirection;
     BlockInd:       integer;
-   
+
 begin
   {!} Assert(OldAddr <> nil);
   {!} Assert(BlockSize > 0);
@@ -272,7 +272,7 @@ begin
   Redirection := nil;
   // * * * * * //
   result := Addr;
-  
+
   if FindMemoryRedirection(Addr, sizeof(byte), BlockInd) then begin
     Redirection := MemRedirections[BlockInd];
     result      := Utils.PtrOfs(Redirection.NewAddr, integer(Addr) - integer(Redirection.OldAddr));
@@ -288,7 +288,7 @@ begin
       MapDir := GameDir + '\Maps\Resources\' + SysUtils.ChangeFileExt(Heroes.GetMapFileName, '');
     end;
   end;
-  
+
   result := MapDir;
 end;
 
@@ -376,7 +376,7 @@ var
     ModPath:         string;
     ModInd:          integer;
     i:               integer;
-   
+
 begin
   FileLines := Lists.NewSimpleStrList();;
   result    := Lists.NewSimpleStrList();
@@ -387,10 +387,10 @@ begin
   if ModListFilePath = '' then begin
     ModListFilePath := DEFAULT_MOD_LIST_FILE;
   end;
-  
+
   if Files.ReadFileContents(ModListFilePath, ModListText) then begin
     FileLines.LoadFromText(ModListText, #13#10);
-    
+
     for i := FileLines.Count - 1 downto 0 do begin
       ModName := SysUtils.ExcludeTrailingBackslash( SysUtils.ExtractFileName( SysUtils.Trim(FileLines[i]) ) );
 
@@ -442,7 +442,7 @@ begin
   if ModListFilePath = '' then begin
     ModListFilePath := GameDir + '\' + DEFAULT_MOD_LIST_FILE;
   end;
-  
+
   VfsImport.MapModsFromListA(pchar(GameDir), pchar(ModsDir), pchar(ModListFilePath));
   Log.Write('Core', 'ReportModList', #13#10 + VfsImport.GetMappingsReportA);
 
@@ -489,10 +489,10 @@ begin
     ],
     '~'
   );
-  
+
   Log.Write('Core', 'AssertHandler', CrashMes);
   DlgMes.MsgError(CrashMes);
-  
+
   // Better callstack
   pinteger(0)^ := 0;
   //raise EAssertFailure.Create(CrashMes) at Address;
@@ -503,7 +503,7 @@ begin
   PluginsList            := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   MemRedirections        := DataLib.NewList(not Utils.OWNS_ITEMS);
   ReportedPluginVersions := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
-  
+
   // Find out path to game directory and force it as current directory
   GameDir := StrLib.ExtractDirPathW(WinUtils.GetExePath());
   {!} Assert(GameDir <> '', 'Failed to obtain game directory path');
