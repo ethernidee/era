@@ -605,6 +605,34 @@ begin
   result := Erm.RetXVars[ARG_INCOME];
 end;
 
+function Hook_BeforeHumanLocalEvent (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  x, y, z: integer;
+
+begin
+  Heroes.UnpackCoords(pinteger(Context.EBP + $10)^, x, y, z);
+
+  Erm.ZvsGmAiFlags^ := -1;
+  Erm.SetErmCurrHero(PHero(ppointer(Context.EBP + 8)^));
+  Erm.FireErmEventEx(Erm.TRIGGER_BEFORE_LOCAL_EVENT, [x, y, z]);
+
+  result := true;
+end;
+
+function Hook_AfterHumanLocalEvent (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  x, y, z: integer;
+
+begin
+  Heroes.UnpackCoords(pinteger(Context.EBP + $10)^, x, y, z);
+
+  Erm.ZvsGmAiFlags^ := -1;
+  Erm.SetErmCurrHero(PHero(ppointer(Context.EBP + 8)^));
+  Erm.FireErmEventEx(Erm.TRIGGER_AFTER_LOCAL_EVENT, [x, y, z]);
+
+  result := true;
+end;
+
 procedure OnExternalGameLeave (Event: GameExt.PEvent); stdcall;
 begin
   Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
@@ -682,6 +710,10 @@ begin
   Core.p.WriteDataPatch(Ptr($530AE6), ['909090']);
   Core.p.WriteDataPatch(Ptr($5C6C19), ['909090']);
   ApiJack.StdSplice(Ptr($5BFA00), @Hook_CalculateTownIncome, ApiJack.CONV_THISCALL, 1);
+
+  (* OnBeforeLocalEvent, OnAfterLocalEvent *)
+  ApiJack.HookCode(Ptr($74DB1D), @Hook_BeforeHumanLocalEvent);
+  ApiJack.HookCode(Ptr($74DC24), @Hook_AfterHumanLocalEvent);
 end; // .procedure OnAfterWoG
 
 begin

@@ -223,7 +223,9 @@ const
   TRIGGER_CALC_TOWN_INCOME               = 77042;
   TRIGGER_BATTLE_REPLAY                  = 77043;
   TRIGGER_BEFORE_BATTLE_REPLAY           = 77044;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_BEFORE_BATTLE_REPLAY;
+  TRIGGER_BEFORE_LOCAL_EVENT             = 77045;
+  TRIGGER_AFTER_LOCAL_EVENT              = 77046;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_AFTER_LOCAL_EVENT;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1144,6 +1146,8 @@ begin
     {*} TRIGGER_CALC_TOWN_INCOME:             result := 'OnCalculateTownIncome';
     {*} TRIGGER_BATTLE_REPLAY:                result := 'OnBattleReplay';
     {*} TRIGGER_BEFORE_BATTLE_REPLAY:         result := 'OnBeforeBattleReplay';
+    {*} TRIGGER_BEFORE_LOCAL_EVENT:           result := 'OnBeforeLocalEvent';
+    {*} TRIGGER_AFTER_LOCAL_EVENT:            result := 'OnAfterLocalEvent';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -3567,6 +3571,8 @@ begin
   NameTrigger(TRIGGER_CALC_TOWN_INCOME,             'OnCalculateTownIncome');
   NameTrigger(TRIGGER_BATTLE_REPLAY,                'OnBattleReplay');
   NameTrigger(TRIGGER_BEFORE_BATTLE_REPLAY,         'OnBeforeBattleReplay');
+  NameTrigger(TRIGGER_BEFORE_LOCAL_EVENT,           'OnBeforeLocalEvent');
+  NameTrigger(TRIGGER_AFTER_LOCAL_EVENT,            'OnAfterLocalEvent');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
