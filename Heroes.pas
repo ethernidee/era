@@ -44,11 +44,11 @@ const
   (* Game settings *)
   GAME_SETTINGS_FILE    = 'heroes3.ini';
   GAME_SETTINGS_SECTION = 'Settings';
-  
+
   (* Stacks on battlefield *)
   NUM_BATTLE_STACKS          = 42;
   NUM_BATTLE_STACKS_PER_SIDE = 21;
-  
+
   (*  BattleMon  *)
   STACK_STRUCT_SIZE = 1352;
   STACK_TYPE        = $34;
@@ -86,7 +86,7 @@ const
   SKILL_LEVEL_BASIC    = 1;
   SKILL_LEVEL_ADVANCED = 2;
   SKILL_LEVEL_EXPERT   = 3;
-  
+
   SHOW_INTRO_OPT:             pinteger  = Ptr($699410);
   MUSIC_VOLUME_OPT:           pinteger  = Ptr($6987B0);
   SOUND_VOLUME_OPT:           pinteger  = Ptr($6987B4);
@@ -126,7 +126,7 @@ const
   MAIN_GAME_FULL_SCREEN_OPT:  pinteger  = Ptr($698808);
   APP_PATH_OPT:               pchar     = Ptr($698614);
   CD_DRIVE_OPT:               pchar     = Ptr($698888);
-  
+
   (* Dialog Ids *)
   ADVMAP_DLGID              = $402AE0;
   BATTLE_DLGID              = $4723E0;
@@ -146,21 +146,21 @@ const
 
   (* Limits *)
   MAX_MONS_IN_STACK = 32767;
-  
+
   hWnd:           pinteger  = Ptr($699650);
   hHeroes3Event:  pinteger  = Ptr($69965C);
   MarkedSavegame: pchar     = Ptr($68338C);
   Mp3Name:        pchar     = Ptr($6A33F4);
   GameType:       PGameType = Ptr($698A40);
   GameVersion:    pinteger  = Ptr($67F554);
-  
+
   (* Managers *)
   GAME_MANAGER   = $699538;
   TOWN_MANAGER   = $69954C;
   WND_MANAGER    = $6992D0;
   SOUND_MANAGER  = $699414;
   COMBAT_MANAGER = $699420;
-  
+
   (* Colors *)
   RED_COLOR              = 'F2223E';
   HEROES_GOLD_COLOR      = 'FFE794';
@@ -228,7 +228,7 @@ type
     RefCount: integer;
     (* Dummy *)
   end;
-  
+
   PLod = ^TLod;
   TLod = packed record
     Dummy: array [0..399] of byte;
@@ -283,7 +283,7 @@ type
     procedure Reset;
     procedure AppendLine ({n} Line: pchar; LineLen: integer = -1);
   end;
-  
+
   PGameState  = ^TGameState;
   TGameState  = packed record
     RootDlgId:    integer;
@@ -437,7 +437,7 @@ type
     // _Dlg_* dlg;       // + 0x132FC
     // _byte_ field_13300[3564];
   end; // .TCombatManager
-  
+
   PScreenPcx16  = ^TScreenPcx16;
   TScreenPcx16  = packed record
     Dummy:  array [0..35] of byte;
@@ -445,7 +445,7 @@ type
     Height: integer;
     (* Dummy *)
   end; // .record TScreenPcx16
-  
+
   PWndManager = ^TWndManager;
   TWndManager = packed record
     _1:           array [1..55] of byte;
@@ -498,11 +498,11 @@ type
 
   TMAlloc = function (Size: integer): pointer; cdecl;
   TMFree  = procedure (Addr: pointer); cdecl;
-  
+
   TGzipWrite  = procedure (Data: pointer; DataSize: integer); cdecl;
   TGzipRead   = function (Dest: pointer; DataSize: integer): integer; cdecl;
   TWndProc    = function (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
-  
+
   TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
   TMemAllocFunc       = function (Size: integer): pointer; cdecl;
   TMemFreeFunc        = procedure (Buf: pointer); cdecl;
@@ -700,7 +700,7 @@ type
     (* Create new Pcx16 image with RefCount = 0 and not assigned to any binary tree *)
     class function Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item; static;
     class function Create_ (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item; static;
-    
+
     (* Uses default pcx loading mechanism to load item, RefCount is increased by one *)
     class function Load (const aName: string): {U} PPcx16Item; static;
   end;
@@ -715,9 +715,9 @@ type
     Group:        integer; // +0  0...8,-1 - neutral
     SubGroup:     integer; // +4  0...6,-1 - not available (423D87, 42A0FC)
     ShortName:    pchar;   // +8  (4242B7)
-    DefName:      pchar;   // +C  loading and setting battlefield in 43DA45 
+    DefName:      pchar;   // +C  loading and setting battlefield in 43DA45
     Flags:        integer; // +10 (424354, 42C6C0)
-    
+
     Names:        packed record
       case byte of
         1: (
@@ -777,12 +777,12 @@ type
                                                   // +0A db - l(?) musor (k y)
     PlMapItem:    integer;                        // MixedPos
                                                   // +0B db - (?) l
-    _u1:          byte;                           
+    _u1:          byte;
                                                   // +0C dd - tip ob'ekta na kotorom geroj stoyal
     PlOType:      integer;                        // dd +1E s karty
                                                   // +10 db - bit zanyatosti vo flagah poverhnosti 00001000
                                                   // eto bit oznachayuschij, chto zdes' est'/byla tochka vhoda (zheltaya kletka)
-    Pl0Cflag:     integer;                        
+    Pl0Cflag:     integer;
                                                   // +14 dd - SetUp s karty
     PlSetUp:      integer;                        // dd +0 s karty
     SpPoints:     word;                           // +18  dw    = bally zaklinanij
@@ -795,12 +795,12 @@ type
                                                   // dw +35 ???
                                                   // dw +41 ???
                                                   // db +43 0
-    _u2:          array [0..14] of byte;          
+    _u2:          array [0..14] of byte;
                                                   // +3E db -??? 4E3BB5 - used in luck calculation
     x0:           byte;                           // +44  db    = bazovyj x dlya obeganiya (FF-ne ogranichen)
     y0:           byte;                           // +45  db    = bazovyj y dlya obeganiya (FF-ne ogranichen)
     Run:          byte;                           // +46  db    = radius obeganiya (FF-ne ogranichen)
-    _u3:          byte;                           // +47  db    = ??? 
+    _u3:          byte;                           // +47  db    = ???
     Flags:        byte;                           // +48  8*bb  (463253)
                                                   // 01 - tip gruppirovki yunitov
                                                   // 02 - razreshena taktika dlya geroya
@@ -818,15 +818,15 @@ type
                                                   // Dword  VArena;   // +73 arena
                                                   // Dword  VSMagic;  // +77 shkola magov
                                                   // Dword  VSWar;    // +7B shkola vojny
-    Visited:      array [0..9] of integer;        
+    Visited:      array [0..9] of integer;
     _u4:          array [0..17] of byte;          // +7F
     MonTypes:     array [0..6] of integer;        // +91  dd*7  = tip suschestv (-1 - net)
     MonNums:      array [0..6] of integer;        // +AD  dd*7  = kolichestvo
     SSkill:       array [0..27] of byte;          // +C9  db*1C = uroven' 2-h skilov (odin bajt - uroven' etogo nomera skila 1,2,3) 0-net
-                                                  // C9=Pathfinding CA=Archery CB=Logistics CC=Scouting CD=Diplomacy CE=Navigation CF=Leadership 
-                                                  // D0=Wisdom D1=Mysticism D2=Luck D3=Ballistics D4=Eagle Eye D5=Necromancy D6=Estates D7=Fire Magic 
-                                                  // D8=Air Magic D9=Water Magic DA=Earth Magic DB=Scholar DC=Tactics DD=Artillery DE=Learning DF=Offence 
-                                                  // E0=Armorer E1=Intelligence E2=Sorcery E3=Resistance E4=First Aid 
+                                                  // C9=Pathfinding CA=Archery CB=Logistics CC=Scouting CD=Diplomacy CE=Navigation CF=Leadership
+                                                  // D0=Wisdom D1=Mysticism D2=Luck D3=Ballistics D4=Eagle Eye D5=Necromancy D6=Estates D7=Fire Magic
+                                                  // D8=Air Magic D9=Water Magic DA=Earth Magic DB=Scholar DC=Tactics DD=Artillery DE=Learning DF=Offence
+                                                  // E0=Armorer E1=Intelligence E2=Sorcery E3=Resistance E4=First Aid
     SShow:        array [0..27] of byte;          // +E5  db*1C = poryadok otobrazheniya 2-h skilov v okne geroya (1,2,3,4,5,6)
     SSNum:        integer;                        // +101 dd    = kolichestvo 2-h skilov
                                                   // Word  RefData1;  //   +105  4814D3+...
@@ -844,12 +844,12 @@ type
                                                   //  00800000 = Give Maximum Moral
                                                   //  38000000 = konkretnyj tip fontana udachi
     _u6:          array [0..8] of byte;           // +109
-    _u7:          integer;                        // +112 
+    _u7:          integer;                        // +112
     DMorale:      byte;                           // +116 modifikatory morali (nakaplivayutsya)
-    _u60:         array [0..2] of byte;           
+    _u60:         array [0..2] of byte;
     DMorale1:     byte;                           // +11A modif morali (oazis)
     DLuck:        byte;                           // +11B modif udachi do sled bitvy
-    _u6a:         array [0..16] of byte;          
+    _u6a:         array [0..16] of byte;
     IArt:         array [0..18, 0..1] of integer; // +12D dd*2*13h = artifakty dd-nomer,dd-(FF) (kniga 3,FF)
     FreeAddSlots: byte;                           // +1C5 kolichestvo pustyh dop. slotov sleva
     LockedSlot:   array [0..13] of byte;          // +1C6
@@ -935,21 +935,21 @@ type
     IHero:         integer;                      // +0Ch = nomer geroya vnutri goroda (-1 - nikogo net)
     VHero:         integer;                      // +10h = nomer geroya snaruzhi goroda (-1 - nikogo net)
     MagLevel:      char;                         // +14h = uroven' magicheskoj gil'dii v gorode (isp. AI dlya postrojki)
-    _u15:          byte;                         
+    _u15:          byte;
     DwellingMons:  array [0..1, 0..6] of word;   // +16h ko-lvo prostyh i apgrejdnutyh
     _u32:          char;                         // +32 = ?
     _u33:          char;                         // +33 = 1
     _u34:          char;                         // +34 = 0
-    _u35a:         array [0..2] of byte;         
+    _u35a:         array [0..2] of byte;
     _u38:          integer;                      // +38 = -1
     _u3C:          integer;                      // +3C = -1
     _u40:          short;                        // +40
     _u42:          word;                         // +42
     Spells:        array [0..4, 0..5] of integer;// +44 sami zaklinaniya
     MagicHild:     array [0..4] of char;         // +BCh = kolvo zaklinanij v urovne gil'dii
-    _uC1:          array [0..2] of byte;         
+    _uC1:          array [0..2] of byte;
     _uC4:          char;                         // +C4 = 0
-    _uC5:          array [0..2] of byte;         
+    _uC5:          array [0..2] of byte;
     Name:          TExtString;                   // +C8 -> Imya goroda
     _u8:           array [0..2] of integer;      // +D4 = 0
     GuardTypes:    array [0..6] of integer;      // +E0 = ohrana zamka
@@ -1047,12 +1047,12 @@ const
   ZvsRedrawMap:   procedure = Ptr($7126EA);
   a2i:            function (Str: pchar): int cdecl = Ptr($6184D9);
   a2f:            function (Str: pchar): single cdecl = Ptr($619366);
-  
+
   GetBattleCellByPos:  TGetBattleCellByPos = Ptr($715872);
   MemAllocFunc:        TMemAllocFunc       = Ptr($617492);
   MemFree:             TMemFreeFunc        = Ptr($60B0F0);
   ComplexDlgResItemId: pinteger            = Ptr($699424);
-  
+
   MapItemToCoords:  TMapItemToCoords  = Ptr($711EC6);
   CoordsToMixedPos: TCoordsToMixedPos = Ptr($711E7F);
 
@@ -1085,6 +1085,7 @@ function  GzipRead (Count: integer; {n} Addr: pointer): integer;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
 procedure LoadLod (const LodName: string; Res: PLod);
 function  LoadDef (const DefName: string): {n} PDefItem;
+function  LoadPcx8 (const PcxName: string): {n} PPcxItem;
 procedure GetGameState (out GameState: TGameState); stdcall;
 function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
@@ -1228,7 +1229,7 @@ var
   MesStr:     pchar;
   MesTypeInt: integer;
   Res:        integer;
-  
+
 begin
   MesStr     := pchar(Mes);
   MesTypeInt := ORD(MesType);
@@ -1244,7 +1245,7 @@ begin
     PUSH Pic1SubType
     PUSH Pic1Type
     PUSH -1
-    PUSH -1 
+    PUSH -1
     MOV EAX, $4F6C00
     MOV EDX, MesTypeInt
     CALL EAX
@@ -1252,15 +1253,15 @@ begin
     MOV EAX, [EAX + $38]
     MOV Res, EAX
   end; // .asm
-  
+
   result := MSG_RES_OK;
-  
+
   if MesType = MES_QUESTION then begin
     if Res = 30726 then begin
       result := MSG_RES_CANCEL;
     end // .if
   end else if MesType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
-    case Res of 
+    case Res of
       30729: result := MSG_RES_LEFTPIC;
       30730: result := MSG_RES_RIGHTPIC;
     else
@@ -1490,7 +1491,7 @@ begin
   NewItem.Name    := aItem.Name;
   NewItem.NameEnd := 0;
   NewItem.Item    := aItem;
-  
+
   PatchApi.Call(PatchApi.THISCALL_, Ptr($55DDF0), [@Self, @ResPtrs, @NewItem]);
 end; // .procedure TBinaryTreeNode.AddItem
 
@@ -1692,7 +1693,7 @@ var
 begin
   Temp       := pointer(p);
   pointer(p) := nil;
-  
+
   if Temp <> nil then begin
     MemFree(Temp);
   end;
@@ -1728,7 +1729,7 @@ function GzipRead (Count: integer; {n} Addr: pointer): integer;
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Count));
   result := ZvsGzipRead(Addr, Count) + Count;
-end; 
+end;
 
 function LoadTxt (Name: pchar): {n} PTxtFile;
 begin
@@ -1754,6 +1755,11 @@ end;
 function LoadDef (const DefName: string): {n} PDefItem;
 begin
   result := PDefItem(PatchApi.Call(THISCALL_, Ptr($55C9C0), [pchar(DefName)]));
+end;
+
+function LoadPcx8 (const PcxName: string): {n} PPcxItem;
+begin
+  result := PPcxItem(PatchApi.Call(THISCALL_, Ptr($55AA10), [pchar(PcxName)]));
 end;
 
 procedure GetGameState (out GameState: TGameState);
@@ -1878,13 +1884,13 @@ const
   SLOTS_PER_SIDE  = 21;
   SIDE_OFFSET     = $18;
   STACKID_OFFSET  = $19;
-  
+
 var
   Side: byte;
 
 begin
   Side := BattleCell[SIDE_OFFSET];
-  
+
   if Side = 255 then begin
     result := -1;
   end else begin
@@ -1910,7 +1916,7 @@ const
 
 var
   i: integer;
-  
+
 begin
   result := NO_STACK;
 
@@ -2013,7 +2019,7 @@ begin
     CALL EAX
     MOV [FuncResPtr], EAX
   end; // .asm
-  
+
   result := FuncResPtr.CampaignFileName;
 end; // .function GetCampaignFileName
 
