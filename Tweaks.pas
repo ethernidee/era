@@ -914,6 +914,28 @@ begin
   result := true;
 end; // .function Hook_ParsePicture_Start
 
+function Hook_HDlg_BuildPcx (OrigFunc: pointer; x, y, dx, dy, ItemId: integer; PcxFile: pchar; Flags: integer): pointer; stdcall;
+const
+  DLG_ITEM_STRUCT_SIZE = 52;
+
+var
+  FileName:       string;
+  FileExt:        string;
+  PcxConstructor: pointer;
+
+begin
+  FileName       := PcxFile;
+  FileExt        := SysUtils.AnsiLowerCase(StrLib.ExtractExt(FileName));
+  PcxConstructor := Ptr($44FFA0);
+
+  if FileExt = 'pcx16' then begin
+    FileName       := SysUtils.ChangeFileExt(FileName, '') + '.pcx';
+    PcxConstructor := Ptr($450340);
+  end;
+
+  result := Ptr(PatchApi.Call(THISCALL_, PcxConstructor, [Heroes.MAlloc(DLG_ITEM_STRUCT_SIZE), x, y, dx, dy, ItemId, pchar(FileName), Flags]));
+end;
+
 function Hook_HandleMonsterCast_End (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   CASTER_MON         = 1;
@@ -1346,6 +1368,9 @@ begin
   Core.p.WriteDataPatch(Ptr($4F555A), ['B4000000']);
   // Unpack highest bit of Type parameter as "display 0 quantities" flag into new local variable
   ApiJack.HookCode(Ptr($4F5564), @Hook_ParsePicture_Start);
+
+  (* Fix WoG HDlg::BuildPcx to allow .pcx16 virtual file extension to load image as pcx16 *)
+  ApiJack.StdSplice(Ptr($7287FB), @Hook_HDlg_BuildPcx, ApiJack.CONV_STDCALL, 7);
 
   (* Fix Santa-Gremlins *)
   // Remove WoG FairePower hook
