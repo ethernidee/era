@@ -11,7 +11,7 @@ uses
 
 const
   NO_STACK = -1;
-  
+
   STACK_POS_OFS = $38;
 
 
@@ -29,10 +29,10 @@ const
   MIN_DAMAGE_PARAM        = 3;
   MAX_DAMAGE_PARAM        = 4;
 
-  
+
 var
   PrevWndProc:  Heroes.TWndProc;
-  
+
   (* Calculate damage delayed parameters *)
   AttackerId:           integer;
   DefenderId:           integer;
@@ -41,14 +41,14 @@ var
   IsDistantAttack:      integer;
   IsTheoreticalAttack:  integer;
   Distance:             integer;
-  
+
   (* AI Calculate stack attack effect delayed parameters *)
   AIAttackerId: integer;
   AIDefenderId: integer;
-  
+
   (* Controlling OnGameEnter and OnGameLeave events *)
   MainGameLoopDepth: integer = 0;
-  
+
 
 function IsGameLoop: boolean;
 begin
@@ -61,7 +61,7 @@ begin
   Erm.ArgXVars[DEFENDER_STACK_N_PARAM] := NO_STACK;
   Erm.ArgXVars[MIN_DAMAGE_PARAM]       := -1;
   Erm.ArgXVars[MAX_DAMAGE_PARAM]       := -1;
-  
+
   result := Core.EXEC_DEF_CODE;
 end;
 
@@ -82,6 +82,8 @@ function MainWndProc (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
 const
   WM_KEYDOWN          = $100;
   WM_SYSKEYDOWN       = $104;
+  WM_SYSCOMMAND       = $112;
+  SC_KEYMENU          = $F100;
   KEY_F11             = 122;
   KEY_F12             = 123;
   ENABLE_DEF_REACTION = 0;
@@ -90,13 +92,18 @@ var
   RootDlgId: integer;
   SavedV:    array [1..10] of integer;
   SavedZ:    Erm.TErmZVar;
-  
+
 begin
   result := false;
-  
+
+  // Disable ALT + KEY menu shortcuts to allow scripts to use ALT for their own needs.
+  if (Msg = WM_SYSCOMMAND) and (wParam = SC_KEYMENU) then begin
+    exit;
+  end;
+
   if (Msg = WM_KEYDOWN) or (Msg = WM_SYSKEYDOWN) then begin
     RootDlgId := Heroes.AdvManagerPtr^.GetRootDlgId;
-    
+
     if wParam = KEY_F11 then begin
       GameExt.GenerateDebugInfo;
 
@@ -109,11 +116,11 @@ begin
       Erm.ArgXVars[1] := wParam;
       Erm.ArgXVars[2] := ENABLE_DEF_REACTION;
       Erm.ArgXVars[3] := ((lParam shr 30) and 1) xor 1;
-      
+
       if (RootDlgId = Heroes.ADVMAP_DLGID) and (Heroes.AdvManagerPtr^.CurrentDlg.FocusedItemId = -1) then begin
         Utils.CopyMem(sizeof(SavedV), @Erm.v[1], @SavedV);
         Utils.CopyMem(sizeof(SavedZ), @Erm.z[1], @SavedZ);
-        
+
         Erm.FireErmEvent(Erm.TRIGGER_KEYPRESS);
 
         Utils.CopyMem(sizeof(SavedV), @SavedV, @Erm.v[1]);
@@ -121,9 +128,9 @@ begin
       end else begin
         EventMan.GetInstance.Fire('OnKeyPressed', GameExt.NO_EVENT_DATA, 0);
       end; // .else
-      
+
       result := Erm.RetXVars[2] = ENABLE_DEF_REACTION;
-      
+
       if result then begin
         PrevWndProc(hWnd, Msg, wParam, lParam);
       end;
@@ -138,7 +145,7 @@ begin
   PrevWndProc := Ptr(Windows.SetWindowLong(Heroes.hWnd^, Windows.GWL_WNDPROC, integer(@MainWndProc)));
 
   EventMan.GetInstance.Fire('OnAfterCreateWindow');
-  
+
   result := true;
 end;
 
@@ -146,12 +153,12 @@ function Hook_StartCalcDamage (Context: Core.PHookContext): longbool; stdcall;
 begin
   AttackerId := Heroes.GetStackIdByPos(pinteger(Context.EBX + STACK_POS_OFS)^);
   DefenderId := Heroes.GetStackIdByPos(pinteger(Context.ESI + STACK_POS_OFS)^);
-  
+
   BasicDamage         := pinteger(Context.EBP + 12)^;
   IsDistantAttack     := pinteger(Context.EBP + 16)^;
   IsTheoreticalAttack := pinteger(Context.EBP + 20)^;
   Distance            := pinteger(Context.EBP + 24)^;
-  
+
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_StartCalcDamage
 
@@ -185,7 +192,7 @@ begin
   Erm.ArgXVars[IS_THEORETICAL]     := IsTheoreticalAttack;
 
   Erm.FireErmEvent(Erm.TRIGGER_ONSTACKTOSTACKDAMAGE);
-  
+
   Context.EAX := Erm.RetXVars[FINAL_DAMAGE];
   result      := Core.EXEC_DEF_CODE;
 end; // .function Hook_EndCalcDamage
@@ -211,7 +218,7 @@ begin
   Erm.ArgXVars[EFFECT_VALUE_CONST] := Context.EAX;
 
   Erm.FireErmEvent(Erm.TRIGGER_ONAICALCSTACKATTACKEFFECT);
-  
+
   Context.EAX := Erm.RetXVars[EFFECT_VALUE];
   result      := true;
 end; // .function Hook_AI_CalcStackAttackEffect_End
@@ -219,20 +226,20 @@ end; // .function Hook_AI_CalcStackAttackEffect_End
 function Hook_EnterChat (Context: Core.PHookContext): longbool; stdcall;
 const
   NUM_ARGS = 0;
-  
+
   (* Event parameters *)
   EVENT_SUBTYPE = 1;
   BLOCK_CHAT    = 2;
-  
+
   ON_ENTER_CHAT = 0;
 
-begin  
+begin
   Erm.ArgXVars[EVENT_SUBTYPE] := ON_ENTER_CHAT;
   Erm.ArgXVars[BLOCK_CHAT]    := 0;
-  
+
   Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
   result := not longbool(Erm.RetXVars[BLOCK_CHAT]);
-  
+
   if not result then begin
     Context.RetAddr := Core.Ret(NUM_ARGS);
   end;
@@ -248,15 +255,15 @@ asm
 end;
 
 function Hook_ChatInput (Context: Core.PHookContext): longbool; stdcall;
-const 
+const
   (* Event parameters *)
   ARG_EVENT_SUBTYPE = 1;
   ARG_CHAT_INPUT    = 2;
   ARG_ACTION        = 3;
-  
+
   (* Event subtype *)
   ON_CHAT_INPUT = 1;
-  
+
   (* Action flags *)
   ACTION_CLEAR_BOX  = 0;
   ACTION_CLOSE_BOX  = 1;
@@ -270,24 +277,24 @@ begin
   Erm.ArgXVars[ARG_EVENT_SUBTYPE] := ON_CHAT_INPUT;
   Erm.ArgXVars[ARG_CHAT_INPUT]    := pinteger(Context.ECX + $34)^;
   Erm.ArgXVars[ARG_ACTION]        := ACTION_DEFAULT;
-  
+
   Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
   Action := Erm.RetXVars[ARG_ACTION];
   Obj    := Context.ECX;
   result := false;
-  
-  case Action of 
+
+  case Action of
     ACTION_CLEAR_BOX: Context.RetAddr := @ClearChatBox;
     ACTION_CLOSE_BOX: begin
       Context.RetAddr := @ClearChatBox;
-    
+
       asm
         MOV ECX, Obj
         MOV EDX, [ECX]
         MOV EAX, [EDX + $64]
         CALL EAX
       end; // .asm
-    end; // .case ACTION_CLOSE_BOX    
+    end; // .case ACTION_CLOSE_BOX
   else
     result := true;
   end; // .switch Action
@@ -297,13 +304,13 @@ function Hook_LeaveChat (Context: Core.PHookContext): longbool; stdcall;
 const
   (* Event parameters *)
   EVENT_SUBTYPE = 1;
-  
+
   ON_LEAVE_CHAT = 2;
 
-begin 
+begin
   Erm.ArgXVars[EVENT_SUBTYPE] := ON_LEAVE_CHAT;
   Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
-  
+
   result := true;
 end;
 
@@ -314,9 +321,9 @@ begin
   if MainGameLoopDepth = 1 then begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);
   end;
-  
+
   PatchApi.Call(PatchApi.THISCALL_, h.GetDefaultFunc(), [This]);
-  
+
   if MainGameLoopDepth = 1 then begin
     Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
     GameExt.SetMapDir('');
@@ -378,12 +385,12 @@ begin
 
   Erm.SetErmCurrHero(HeroInd);
   Erm.FireErmEventEx(Erm.TRIGGER_OPEN_HEROSCREEN, [HeroInd]);
-  
+
   result := PatchApi.Call(FASTCALL_, OrigFunc, [HeroInd, ord(ViewOnly), Unk1, Unk2]);
-  
+
   Erm.SetErmCurrHero(HeroInd);
   Erm.FireErmEventEx(Erm.TRIGGER_POST_HEROSCREEN, [PrevHeroScreenHeroInd]);
-  
+
   PrevHeroScreenHeroInd := SavedPrevHeroScreenHeroInd;
   Erm.SetErmCurrHero(HeroInd);
   Erm.FireErmEventEx(Erm.TRIGGER_CLOSE_HEROSCREEN, [HeroInd]);
@@ -406,7 +413,7 @@ begin
 
   PrevHeroScreenHeroInd := HeroInd;
   Erm.FireErmEventEx(Erm.TRIGGER_PRE_HEROSCREEN, [HeroInd]);
-  
+
   result := true;
 end;
 
@@ -424,7 +431,7 @@ begin
   StackId    := Heroes.GetVal(Stack, STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(Stack, STACK_IND).v;
   Erm.FireErmEventEx(Erm.TRIGGER_BEFORE_STACK_TURN, [StackId]);
   NewStackId := Erm.RetXVars[PARAM_STACK_ID];
-  
+
   if (NewStackId >= 0) and (NewStackId < Heroes.NUM_BATTLE_STACKS) then begin
     // Replace active stack pointer both in register and local variable
     Context.EDI                 := integer(Heroes.StackProp(0, 0)) + Heroes.STACK_STRUCT_SIZE * NewStackId;
@@ -432,7 +439,7 @@ begin
   end else begin
     ShowMessage('OnBeforeBattleStackTurn: invalid stack ID. Expected 0..41. Got: ' + SysUtils.IntToStr(NewStackId));
   end;
- 
+
   result := true;
 end; // .function Hook_BeforeBattleStackTurn
 
@@ -449,7 +456,7 @@ begin
   Erm.FireErmEventEx(Erm.TRIGGER_STACK_OBTAINS_TURN, [Side, StackInd]);
   NewSide     := Erm.RetXVars[PARAM_SIDE];
   NewStackInd := Erm.RetXVars[PARAM_STACK_IND];
-  
+
   if (NewSide >= 0) and (NewSide <= 1) then begin
     Side := NewSide;
   end else begin
@@ -461,7 +468,7 @@ begin
   end else begin
     ShowMessage('OnBattleStackObtainsTurn: invalid new stack index, set in event handler. Expected: 0..20. Got: = ' + SysUtils.IntToStr(NewStackInd));
   end;
- 
+
   result := PatchApi.Call(THISCALL_, OrigFunc, [CombatManager, Side, StackInd]);
 end; // .function Hook_Battle_StackObtainsTurn
 
@@ -516,13 +523,13 @@ begin
     result := PatchApi.Call(THISCALL_, OrigFunc, [DlgManager, TownDlg]);
   end else begin
     TownId := Heroes.GetTownManager.Town.Id;
-    
+
     Erm.FireErmEventEx(Erm.TRIGGER_OPEN_TOWN_SCREEN, [TownId]);
     PrevTownScreenId := TownId;
     Erm.FireErmEventEx(Erm.TRIGGER_PRE_TOWN_SCREEN, [TownId]);
-    
+
     result := PatchApi.Call(THISCALL_, OrigFunc, [DlgManager, TownDlg]);
-    
+
     Erm.FireErmEventEx(Erm.TRIGGER_POST_TOWN_SCREEN, [PrevTownScreenId]);
     PrevTownScreenId := -1;
     Erm.FireErmEventEx(Erm.TRIGGER_CLOSE_TOWN_SCREEN, [TownId]);
@@ -578,7 +585,7 @@ begin
     if Hero <> nil then begin
       HeroId := Hero.Id;
     end;
-    
+
     Erm.FireErmEventEx(Erm.TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, [MonType, UpgradeType, TownId, HeroId]);
     pinteger(Context.EBP - $14)^ := Erm.RetXVars[ARG_MON_UPGRADE_TYPE];
   end; // .if
@@ -610,25 +617,25 @@ begin
   Core.Hook(@Hook_BattleHint_GetAttacker, Core.HOOKTYPE_BRIDGE, 7, Ptr($492409));
   Core.Hook(@Hook_BattleHint_GetDefender, Core.HOOKTYPE_BRIDGE, 7, Ptr($492442));
   Core.Hook(@Hook_BattleHint_CalcMinMaxDamage, Core.HOOKTYPE_BRIDGE, 5, Ptr($493053));
-  
+
   (* Key handling trigger *)
   Core.Hook(@Hook_AfterCreateWindow, Core.HOOKTYPE_BRIDGE, 6, Ptr($4F8226));
-  
+
   (* Stack to stack damage calculation *)
   Core.Hook(@Hook_StartCalcDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($443C88));
   Core.Hook(@Hook_CalcDamage_GetDamageBonus, Core.HOOKTYPE_BRIDGE, 5, Ptr($443CA1));
   Core.Hook(@Hook_EndCalcDamage, Core.HOOKTYPE_BRIDGE, 5, Ptr($443DA7));
-  
+
   (* AI Target attack effect *)
   Core.Hook(@Hook_AI_CalcStackAttackEffect_Start, Core.HOOKTYPE_BRIDGE, 6, Ptr($4357E0));
   Core.Hook(@Hook_AI_CalcStackAttackEffect_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($4358AA));
-  
+
   (* OnChat trigger *)
   Core.Hook(@Hook_EnterChat, Core.HOOKTYPE_BRIDGE, 5, Ptr($4022B0));
   Core.Hook(@Hook_ChatInput, Core.HOOKTYPE_BRIDGE, 6, Ptr($554780));
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402298));
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
-  
+
   (* MainGameCycle: OnEnterGame, OnLeaveGame and MapFolder settings*)
   Core.p.WriteHiHook(Ptr($4B0BA0), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,  @Hook_MainGameLoop);
 
