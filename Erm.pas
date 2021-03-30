@@ -2239,6 +2239,12 @@ var
         end else begin
           VarIndex := LocalVar.StartIndex + ArrIndex;
         end;
+
+        // The last condition part is an small hack to make an exception for SIZE constant
+        if not Math.InRange(ArrIndex, 0, LocalVar.Count - 1) and (not IsAddr or (VarIndex <> LocalVar.Count)) then begin
+          ShowError(VarPos, SysUtils.Format('Array index %d is out of [%d..%d] range', [ArrIndex, 0, LocalVar.Count - 1]));
+          VarIndex := Alg.ToRange(VarIndex, LocalVar.StartIndex, LocalVar.StartIndex + LocalVar.Count - 1);
+        end;
       end else begin
         // Allocate temporary compiler variable to hold var item pointer
         Inc(NumAllocatedCompilerVars);
