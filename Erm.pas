@@ -7233,10 +7233,11 @@ var
   MinValue:        Heroes.TValue;
   MaxValue:        Heroes.TValue;
   FinalValue:      Heroes.TValue;
+  DoShowErrors:    boolean;
 
 begin
-  if NumParams <> 2 then begin
-    ShowErmError('"!!VR:F" - expected exactly two parameters');
+  if (NumParams < 2) or (NumParams > 3) then begin
+    ShowErmError('"!!VR:F" - expected 2-3 parameters');
     result := 0; exit;
   end;
 
@@ -7250,8 +7251,9 @@ begin
     result := 0; exit;
   end;
 
-  MinValue.v := SubCmd.Nums[0];
-  MaxValue.v := SubCmd.Nums[1];
+  MinValue.v   := SubCmd.Nums[0];
+  MaxValue.v   := SubCmd.Nums[1];
+  DoShowErrors := (NumParams = 3) and (SubCmd.Nums[2] <> 0);
 
   if VarParamValType = VALTYPE_INT then begin
     if MinValueValType = VALTYPE_FLOAT  then begin
@@ -7263,10 +7265,18 @@ begin
     end;
 
     if FinalValue.v > MaxValue.v then begin
+      if DoShowErrors then begin
+        ShowErmError(SysUtils.Format('"SN:F" - value %d is out of allowed range [%d..%d]. Forced value to range.', [FinalValue.v, MinValue.v, MaxValue.v]));
+      end;
+
       FinalValue.v := MaxValue.v;
     end;
 
     if FinalValue.v < MinValue.v then begin
+      if DoShowErrors then begin
+        ShowErmError(SysUtils.Format('"SN:F" - value %d is out of allowed range [%d..%d]. Forced value to range.', [FinalValue.v, MinValue.v, MaxValue.v]));
+      end;
+
       FinalValue.v := MinValue.v;
     end;
 
@@ -7281,10 +7291,18 @@ begin
     end;
 
     if FinalValue.f > MaxValue.f then begin
+      if DoShowErrors then begin
+        ShowErmError(SysUtils.Format('"SN:F" - value %f is out of allowed range [%f..%f]. Forced value to range.', [FinalValue.f, MinValue.f, MaxValue.f]));
+      end;
+
       FinalValue.f := MaxValue.f;
     end;
 
     if FinalValue.f < MinValue.f then begin
+      if DoShowErrors then begin
+        ShowErmError(SysUtils.Format('"SN:F" - value %f is out of allowed range [%f..%f]. Forced value to range.', [FinalValue.f, MinValue.f, MaxValue.f]));
+      end;
+
       FinalValue.f := MinValue.f;
     end;
 
@@ -7837,7 +7855,6 @@ var
   Cmd:       PErmCmd;
   SubCmd:    PErmSubCmd;
   NumParams: integer;
-  ValType:   integer;
 
 begin
   Cmd         := PErmCmd(ppointer(Context.EBP + $10)^);
