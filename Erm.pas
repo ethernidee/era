@@ -2257,9 +2257,13 @@ var
         end;
 
         if IndexVar.VarType in ['f'..'t'] then begin
-          Buf.Insert(SysUtils.Format('!!VRy%d:S%d +%s; ', [TempVar.StartIndex, LocalVar.StartIndex, IndexVar.VarType]), CmdStartBufPos);
+          Buf.Insert(SysUtils.Format('!!VRy%d:S%d +%s F%d/%d/1; ', [
+            TempVar.StartIndex, LocalVar.StartIndex, IndexVar.VarType, LocalVar.StartIndex, LocalVar.StartIndex + LocalVar.Count - 1
+          ]), CmdStartBufPos);
         end else begin
-          Buf.Insert(SysUtils.Format('!!VRy%d:S%d +%s%d; ', [TempVar.StartIndex, LocalVar.StartIndex, IndexVar.VarType, IndexVar.StartIndex]), CmdStartBufPos);
+          Buf.Insert(SysUtils.Format('!!VRy%d:S%d +%s%d F%d/%d/1; ', [
+            TempVar.StartIndex, LocalVar.StartIndex, IndexVar.VarType, IndexVar.StartIndex, LocalVar.StartIndex, LocalVar.StartIndex + LocalVar.Count - 1
+          ]), CmdStartBufPos);
         end;
 
         Inc(CmdStartBufPos);
