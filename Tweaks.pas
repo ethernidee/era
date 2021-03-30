@@ -991,6 +991,107 @@ begin
   Context.RetAddr := Ptr($4483DD);
 end; // .function Hook_HandleMonsterCast_End
 
+function Hook_ErmDlgFunctionActionSwitch (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  ARG_DLG_ID = 1;
+
+  DLG_MOUSE_EVENT_INFO_VAR       = $887654;
+  DLG_USER_COMMAND_VAR           = $887658;
+  DLG_BODY_VAR                   = -$5C;
+  DLG_BODY_ID_FIELD              = 200;
+  DLG_COMMAND_CLOSE              = 1;
+  DLG_ACTION_HOVER               = 4;
+  DLG_ACTION_INDLG_CLICK         = 512;
+  DLG_ACTION_SCROLL_WHEEL        = 522;
+  DLG_ACTION_KEY_PRESSED         = 256;
+  DLG_ACTION_OUTDLG_LMB_PRESSED  = 8;
+  DLG_ACTION_OUTDLG_LMB_RELEASED = 16;
+  DLG_ACTION_OUTDLG_RMB_PRESSED  = 32;
+  DLG_ACTION_OUTDLG_RMB_RELEASED = 64;
+  DLG_ACTION_OUTDLG_CLICK        = 8;
+  MOUSE_OK_CLICK                 = 10;
+  MOUSE_LMB_PRESSED              = 12;
+  MOUSE_LMB_RELEASED             = 13;
+  MOUSE_RMB_PRESSED              = 14;
+  ACTION_KEY_PRESSED             = 20;
+  ITEM_INSIDE_DLG                = -1;
+  ITEM_OUTSIDE_DLG               = -2;
+
+var
+  MouseEventInfo: Heroes.PMouseEventInfo;
+  SavedEventX:    integer;
+  SavedEventY:    integer;
+  SavedEventZ:    integer;
+
+begin
+  MouseEventInfo := ppointer(Context.EBP + $8)^;
+  result         := false;
+
+  case MouseEventInfo.ActionType of
+    DLG_ACTION_INDLG_CLICK:  begin end;
+    DLG_ACTION_SCROLL_WHEEL: begin MouseEventInfo.Item := ITEM_INSIDE_DLG; end;
+
+    DLG_ACTION_KEY_PRESSED: begin
+      MouseEventInfo.Item := ITEM_INSIDE_DLG;
+    end;
+
+    DLG_ACTION_OUTDLG_RMB_PRESSED: begin
+      MouseEventInfo.Item          := ITEM_OUTSIDE_DLG;
+      MouseEventInfo.ActionSubtype := MOUSE_RMB_PRESSED;
+    end;
+
+    DLG_ACTION_OUTDLG_LMB_PRESSED: begin
+      MouseEventInfo.Item          := ITEM_OUTSIDE_DLG;
+      MouseEventInfo.ActionSubtype := MOUSE_LMB_PRESSED;
+    end;
+
+    DLG_ACTION_OUTDLG_LMB_RELEASED: begin
+      MouseEventInfo.Item          := ITEM_OUTSIDE_DLG;
+      MouseEventInfo.ActionSubtype := MOUSE_LMB_RELEASED;
+    end;
+  else
+    result := true;
+  end; // .switch MouseEventInfo.ActionType
+
+  if result then begin
+    exit;
+  end;
+
+  ppointer(DLG_MOUSE_EVENT_INFO_VAR)^ := MouseEventInfo;
+  pinteger(DLG_USER_COMMAND_VAR)^     := 0;
+
+  SavedEventX := Erm.ZvsEventX^;
+  SavedEventY := Erm.ZvsEventY^;
+  SavedEventZ := Erm.ZvsEventZ^;
+
+  Erm.ArgXVars[ARG_DLG_ID] := pinteger(pinteger(Context.EBP + DLG_BODY_VAR)^ + DLG_BODY_ID_FIELD)^;
+
+  Erm.ZvsEventX^ := Erm.ArgXVars[ARG_DLG_ID];
+  Erm.ZvsEventY^ := MouseEventInfo.Item;
+  Erm.ZvsEventZ^ := MouseEventInfo.ActionSubtype;
+
+  Erm.FireMouseEvent(Erm.TRIGGER_DL, MouseEventInfo);
+
+  Erm.ZvsEventX^ := SavedEventX;
+  Erm.ZvsEventY^ := SavedEventY;
+  Erm.ZvsEventZ^ := SavedEventZ;
+
+  Context.EAX := 1;
+  ppointer(DLG_MOUSE_EVENT_INFO_VAR)^ := nil;
+
+  if pinteger(DLG_USER_COMMAND_VAR)^ = DLG_COMMAND_CLOSE then begin
+    Context.EAX                  := 2;
+    MouseEventInfo.ActionType    := DLG_ACTION_INDLG_CLICK;
+    MouseEventInfo.ActionSubtype := MOUSE_OK_CLICK;
+
+    // Assign result item
+    pinteger(pinteger(Context.EBP - $10)^ + 56)^ := MouseEventInfo.Item;
+  end;
+
+  result          := false;
+  Context.RetAddr := Ptr($7297C6);
+end; // .function Hook_ErmDlgFunctionActionSwitch
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1400,6 +1501,9 @@ begin
   (* Replace Heroes 3 PRNG with thread-safe Mersenne Twister, except of multiplayer battles *)
   ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_Rand, ApiJack.CONV_FASTCALL, 2);
+
+  (* Allow to handle dialog outer clicks and provide full mouse info for event *)
+  ApiJack.HookCode(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
