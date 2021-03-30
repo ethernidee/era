@@ -2231,6 +2231,8 @@ var
     end
     // It it's not free var operation
     else if LocalVar <> nil then begin
+      VarIndex := Low(integer);
+
       if IndexVar = nil then begin
         if LocalVar.IsNegative then begin
           VarIndex := -LocalVar.StartIndex - LocalVar.Count + 1 + ArrIndex;
