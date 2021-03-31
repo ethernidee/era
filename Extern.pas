@@ -21,6 +21,8 @@ type
   PErmXVars = ^TErmXVars;
   TErmXVars = array [1..16] of integer;
 
+  TDwordBool = integer; // 0 or 1
+
 
 (***) implementation (***)
 
@@ -72,23 +74,23 @@ begin
   Ini.ClearIniCache(FileName);
 end;
 
-function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): longbool; stdcall;
+function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): TDwordBool; stdcall;
 var
   ResStr: string;
 
 begin
-  result := longbool(ord(Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr)));
+  result := TDwordBool(ord(Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr)));
   Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
 end;
 
-function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): longbool; stdcall;
+function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): TDwordBool; stdcall;
 begin
-  result := longbool(ord(Ini.WriteStrToIni(Key, Value, SectionName, FilePath)));
+  result := TDwordBool(ord(Ini.WriteStrToIni(Key, Value, SectionName, FilePath)));
 end;
 
-function SaveIni (FilePath: pchar): longbool; stdcall;
+function SaveIni (FilePath: pchar): TDwordBool; stdcall;
 begin
-  result := longbool(ord(Ini.SaveIni(FilePath)));
+  result := TDwordBool(ord(Ini.SaveIni(FilePath)));
 end;
 
 procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
@@ -136,14 +138,14 @@ begin
   result := EraButtons.GetButtonID(ButtonName);
 end;
 
-function PatchExists (PatchName: pchar): longbool; stdcall;
+function PatchExists (PatchName: pchar): TDwordBool; stdcall;
 begin
-  result := longbool(ord(GameExt.PatchExists(PatchName)));
+  result := TDwordBool(ord(GameExt.PatchExists(PatchName)));
 end;
 
-function PluginExists (PluginName: pchar): longbool; stdcall;
+function PluginExists (PluginName: pchar): TDwordBool; stdcall;
 begin
-  result := longbool(ord(GameExt.PluginExists(PluginName)));
+  result := TDwordBool(ord(GameExt.PluginExists(PluginName)));
 end;
 
 procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
@@ -196,9 +198,9 @@ begin
   Heroes.ShowMessage(Mes);
 end;
 
-function Ask (Question: pchar): longbool; stdcall;
+function Ask (Question: pchar): TDwordBool; stdcall;
 begin
-  result := longbool(ord(Heroes.Ask(Question)));
+  result := TDwordBool(ord(Heroes.Ask(Question)));
 end;
 
 procedure ReportPluginVersion (const VersionLine: pchar); stdcall;
@@ -414,6 +416,21 @@ begin
   Utils.CopyMem(Length(ProcessGuid) + 1, pchar(ProcessGuid), Buf);
 end;
 
+function IsCampaign: TDwordBool; stdcall;
+begin
+  result := TDwordBool(ord(Heroes.IsCampaign));
+end;
+
+procedure GetCampaignFileName (Buf: pchar); stdcall;
+begin
+  Utils.SetPcharValue(Buf, Heroes.GetCampaignFileName, sizeof(Erm.z[1]));
+end;
+
+procedure GetMapFileName (Buf: pchar); stdcall;
+begin
+  Utils.SetPcharValue(Buf, Heroes.GetMapFileName, sizeof(Erm.z[1]));
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -448,6 +465,8 @@ exports
   GameExt.RedirectMemoryBlock,
   GetArgXVars,
   GetButtonID,
+  GetCampaignFileName,
+  GetMapFileName,
   GetProcessGuid,
   GetRetXVars,
   GetVersion,
@@ -458,6 +477,7 @@ exports
   Heroes.LoadTxt,
   HookCode,
   Ini.ClearAllIniCache,
+  IsCampaign,
   LoadImageAsPcx16,
   MemFree,
   NameColor,
