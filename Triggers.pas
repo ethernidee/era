@@ -126,8 +126,8 @@ begin
         Utils.CopyMem(sizeof(SavedV), @SavedV, @Erm.v[1]);
         Utils.CopyMem(sizeof(SavedZ), @SavedZ, @Erm.z[1]);
       end else begin
-        EventMan.GetInstance.Fire('OnKeyPressed', GameExt.NO_EVENT_DATA, 0);
-      end; // .else
+        Erm.RetXVars[2] := ENABLE_DEF_REACTION;
+      end;
 
       result := Erm.RetXVars[2] = ENABLE_DEF_REACTION;
 

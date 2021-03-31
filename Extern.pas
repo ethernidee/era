@@ -234,7 +234,7 @@ begin
     New(ApiJack.PAppliedPatch(AppliedPatch^));
     AppliedPatch := AppliedPatch^;
   end;
-  
+
   result := ApiJack.HookCode(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch));
 end;
 
@@ -410,7 +410,7 @@ begin
 
     ProcessGuid := StrLib.BinToHex(sizeof(ProcessGuidBuf), @ProcessGuidBuf);
   end;
-  
+
   Utils.CopyMem(Length(ProcessGuid) + 1, pchar(ProcessGuid), Buf);
 end;
 
