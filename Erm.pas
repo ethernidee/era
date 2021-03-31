@@ -225,7 +225,10 @@ const
   TRIGGER_BEFORE_BATTLE_REPLAY           = 77044;
   TRIGGER_BEFORE_LOCAL_EVENT             = 77045;
   TRIGGER_AFTER_LOCAL_EVENT              = 77046;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_AFTER_LOCAL_EVENT;
+  TRIGGER_WIN_GAME                       = 77047;
+  TRIGGER_LOSE_GAME                      = 77048;
+  TRIGGER_TRANSFER_HERO                  = 77049;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_TRANSFER_HERO;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1148,6 +1151,9 @@ begin
     {*} TRIGGER_BEFORE_BATTLE_REPLAY:         result := 'OnBeforeBattleReplay';
     {*} TRIGGER_BEFORE_LOCAL_EVENT:           result := 'OnBeforeLocalEvent';
     {*} TRIGGER_AFTER_LOCAL_EVENT:            result := 'OnAfterLocalEvent';
+    {*} TRIGGER_WIN_GAME:                     result := 'OnWinGame';
+    {*} TRIGGER_LOSE_GAME:                    result := 'OnLoseGame';
+    {*} TRIGGER_TRANSFER_HERO:                result := 'OnTransferHero';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -3694,6 +3700,9 @@ begin
   NameTrigger(TRIGGER_BEFORE_BATTLE_REPLAY,         'OnBeforeBattleReplay');
   NameTrigger(TRIGGER_BEFORE_LOCAL_EVENT,           'OnBeforeLocalEvent');
   NameTrigger(TRIGGER_AFTER_LOCAL_EVENT,            'OnAfterLocalEvent');
+  NameTrigger(TRIGGER_WIN_GAME,                     'OnWinGame');
+  NameTrigger(TRIGGER_LOSE_GAME,                    'OnLoseGame');
+  NameTrigger(TRIGGER_TRANSFER_HERO,                'OnTransferHero');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);

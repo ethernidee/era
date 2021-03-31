@@ -633,6 +633,29 @@ begin
   result := true;
 end;
 
+function Hook_ScenarioEnd (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  IS_GAME_WON_GLOBAL_ADDR = $699560; // boolean
+
+begin
+  if pbyte(IS_GAME_WON_GLOBAL_ADDR)^ <> 0 then begin
+    Erm.FireErmEvent(Erm.TRIGGER_WIN_GAME);
+  end else begin
+    Erm.FireErmEvent(Erm.TRIGGER_LOSE_GAME);
+  end;
+
+  result := true;
+end;
+
+function Hook_TransferHeroToNextScenario (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  TRANSFERRED_HERO_GLOBAL_ADDR = $280761C; // int
+
+begin
+  Erm.FireErmEventEx(Erm.TRIGGER_TRANSFER_HERO, [pinteger(TRANSFERRED_HERO_GLOBAL_ADDR)^]);
+  result := true;
+end;
+
 procedure OnExternalGameLeave (Event: GameExt.PEvent); stdcall;
 begin
   Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
@@ -714,6 +737,12 @@ begin
   (* OnBeforeLocalEvent, OnAfterLocalEvent *)
   ApiJack.HookCode(Ptr($74DB1D), @Hook_BeforeHumanLocalEvent);
   ApiJack.HookCode(Ptr($74DC24), @Hook_AfterHumanLocalEvent);
+
+  (* OnWinGame, OnLoseGame *)
+  ApiJack.HookCode(Ptr($4EFEEA), @Hook_ScenarioEnd);
+
+  (* OnWinGame, OnLoseGame *)
+  ApiJack.HookCode(Ptr($755E00), @Hook_TransferHeroToNextScenario);
 end; // .procedure OnAfterWoG
 
 begin
