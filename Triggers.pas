@@ -656,6 +656,23 @@ begin
   result := true;
 end;
 
+function Hook_AfterHeroGainLevel (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  Hero:     Heroes.PHero;
+  PrevHero: Heroes.PHero;
+
+begin
+  result        := true;
+  Hero          := PHero(Context.EBX);
+  ZvsGmAiFlags^ := ord(not Erm.ZvsIsAi(Hero.Owner));
+  PrevHero      := Erm.GetErmCurrHero();
+  Erm.SetErmCurrHero(Hero);
+
+  Erm.FireErmEventEx(Erm.TRIGGER_AFTER_HERO_GAIN_LEVEL, [Hero.Id]);
+
+  Erm.SetErmCurrHero(PrevHero);
+end;
+
 procedure OnExternalGameLeave (Event: GameExt.PEvent); stdcall;
 begin
   Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
@@ -743,6 +760,9 @@ begin
 
   (* OnWinGame, OnLoseGame *)
   ApiJack.HookCode(Ptr($755E00), @Hook_TransferHeroToNextScenario);
+
+  (* OnAfterHeroGainLevel *)
+  ApiJack.HookCode(Ptr($4DAF06), @Hook_AfterHeroGainLevel);
 end; // .procedure OnAfterWoG
 
 begin
