@@ -431,6 +431,11 @@ begin
   Utils.SetPcharValue(Buf, Heroes.GetMapFileName, sizeof(Erm.z[1]));
 end;
 
+function GetCampaignMapInd: integer; stdcall;
+begin
+  result := Heroes.GetCampaignMapInd;
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -466,6 +471,7 @@ exports
   GetArgXVars,
   GetButtonID,
   GetCampaignFileName,
+  GetCampaignMapInd,
   GetMapFileName,
   GetProcessGuid,
   GetRetXVars,
