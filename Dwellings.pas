@@ -142,7 +142,7 @@ type
 var
   ZvsRecruitMonsDlgSetupPtr: ^PRecruitMonsDlgSetup = Ptr($836A18);
   ZvsTownManagerPtr:         ppointer              = Ptr($83A86C);
-  
+
   RecruitMonsDlgOpenEvent:               TRecruitMonsDlgOpenEvent;
   RecruitMonsDlgOpenEventAutoId:         integer = 0;
   NextRecruitMonsDlgOpenEventTownId:     integer = -1;
@@ -303,7 +303,7 @@ begin
     end else begin
       Slots[SlotInd].SourceNum := SourceNum;
       Self.AllocSource(SourceId, SourceNum, IS_DISPOSABLE);
-    end;    
+    end;
   end; // .else
 
   for i := 0 to High(Self.Slots) do begin
@@ -443,7 +443,7 @@ var
 
 begin
   {!} Assert(DlgSetup <> nil);
-  
+
   for i := 0 to High(Self.Slots) do begin
     Self.InitSlotFromDlgSetup(DlgSetup, i);
   end;
@@ -505,10 +505,10 @@ var
 begin
   {!} Assert(DlgSetup <> nil);
   j := 0;
-  
+
   for i := 0 to High(Self.Slots) do begin
     DlgSetup.MonTypes[i] := -1;
-    
+
     if Self.Slots[i].MonType <> -1 then begin
       Self.ApplySlotToDlg(DlgSetup, i, j);
 
@@ -562,7 +562,7 @@ begin
   end;
 
   PrevEvent := RecruitMonsDlgOpenEvent;
-  
+
   Inc(RecruitMonsDlgOpenEventAutoId);
   RecruitMonsDlgOpenEvent.Reset;
   RecruitMonsDlgOpenEvent.Mem           := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
@@ -658,7 +658,7 @@ end;
 
 function Hook_TownHallMouseClick (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
-  result := Erm.FireMouseEvent(Erm.TRIGGER_TOWN_HALL_MOUSE_CLICK, Ptr(Context.EBX));
+  result := Erm.FireMouseEvent(Erm.TRIGGER_TOWN_FORT_MOUSE_CLICK, Ptr(Context.EBX));
 
   if not result then begin
     Context.RetAddr := Ptr($5DD64A);
@@ -820,7 +820,7 @@ begin
       end else begin
         MonNum := RecruitMonsDlgOpenEvent.Slots[SlotInd].SourceNum^;
         AdvErm.ApplyIntParam(Params[3], MonNum);
-        
+
         if not Params[3].OperGet then begin
           RecruitMonsDlgOpenEvent.Slots[SlotInd].SourceNum^ := MonNum;
         end;
@@ -882,7 +882,7 @@ begin
     Error  := Format('Invalid dialog slot index: %d. Expected 0..3', [DlgSlotInd]);
     exit;
   end;
-  
+
   AdvErm.ApplyIntParam(Params[2], RecruitMonsDlgOpenEvent.DlgSlotToSlotMap[DlgSlotInd]);
 end; // .function Command_RecruitDlg_SlotIndex
 
@@ -998,9 +998,9 @@ begin
   end else begin
     AssocVarName := SysUtils.IntToStr(Params[1].Value.v);
   end;
-  
+
   AssocVarValue := RecruitMonsDlgOpenEvent.Mem[AssocVarName];
-  
+
   if Params[2].OperGet then begin
     if Params[2].IsStr then begin
       if (AssocVarValue = nil) or (AssocVarValue.StrValue = '') then begin
@@ -1020,7 +1020,7 @@ begin
       AssocVarValue                             := TAssocVar.Create;
       RecruitMonsDlgOpenEvent.Mem[AssocVarName] := AssocVarValue;
     end;
-    
+
     if Params[2].IsStr then begin
       AdvErm.AssignStrFromParam(Params[2], AssocVarValue.StrValue);
     end else begin
@@ -1172,11 +1172,11 @@ procedure OnAfterWoG (Event: EventMan.PEvent); stdcall;
 begin
   ApiJack.StdSplice(Ptr($4B0770), @Hook_OpenRecruitMonsDlg, ApiJack.CONV_THISCALL, 1);
   ApiJack.HookCode(Ptr($70DD4A), @Hook_OpenTownDwelling);
-  
+
   // Prevent ESI (PTown) := EAX override. Exchange ESI, EAX instead
   Core.p.WriteDataPatch(Ptr($51FB9F), ['9690']);
   ApiJack.HookCode(Ptr($51FBB5), @Hook_OpenTownDwellingFromKingdomOverview);
-  
+
   ApiJack.HookCode(Ptr($5DD2FC), @Hook_OpenTownHallDwelling);
   ApiJack.HookCode(Ptr($5D4271), @Hook_OpenTownHordeDwelling);
   ApiJack.HookCode(Ptr($5510D2), @Hook_UpdateAdvMapInRecruitMonsDlg);
@@ -1186,16 +1186,16 @@ begin
   ApiJack.HookCode(Ptr($551089), @Hook_RecruitDlgAction);
   ApiJack.HookCode(Ptr($550989), @Hook_AllowZeroCost);
   ApiJack.HookCode(Ptr($5509A4), @Hook_AllowZeroResourceCost);
-  
+
   // Move close on buy logics down the code after update adv map logics
   Core.p.WriteDataPatch(Ptr($5510B1), ['9090909090909090909090909090909090909090']);
   ApiJack.HookCode(Ptr($5510FA), @Hook_RecruitDlgCloseOnBuy);
-  
+
   AdvErm.RegisterErmReceiver('RD', @Receiver_RD, AdvErm.CMD_PARAMS_CONFIG_NONE);
 end; // .procedure OnAfterWoG
 
 begin
   RecruitMonsDlgOpenEvent.Inited := false;
-  
+
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

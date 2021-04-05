@@ -204,7 +204,7 @@ const
   TRIGGER_OPEN_RECRUIT_DLG               = 77023;
   TRIGGER_CLOSE_RECRUIT_DLG              = 77024;
   TRIGGER_RECRUIT_DLG_MOUSE_CLICK        = 77025;
-  TRIGGER_TOWN_HALL_MOUSE_CLICK          = 77026;
+  TRIGGER_TOWN_FORT_MOUSE_CLICK          = 77026;
   TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK   = 77027;
   TRIGGER_RECRUIT_DLG_RECALC             = 77028;
   TRIGGER_RECRUIT_DLG_ACTION             = 77029;
@@ -1131,7 +1131,7 @@ begin
     {*} TRIGGER_OPEN_RECRUIT_DLG:             result := 'OnOpenRecruitDlg';
     {*} TRIGGER_CLOSE_RECRUIT_DLG:            result := 'OnCloseRecruitDlg';
     {*} TRIGGER_RECRUIT_DLG_MOUSE_CLICK:      result := 'OnRecruitDlgMouseClick';
-    {*} TRIGGER_TOWN_HALL_MOUSE_CLICK:        result := 'OnTownHallMouseClick';
+    {*} TRIGGER_TOWN_FORT_MOUSE_CLICK:        result := 'OnTownFortMouseClick';
     {*} TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK: result := 'OnKingdomOverviewMouseClick';
     {*} TRIGGER_RECRUIT_DLG_RECALC:           result := 'OnRecruitDlgRecalc';
     {*} TRIGGER_RECRUIT_DLG_ACTION:           result := 'OnRecruitDlgAction';
@@ -3684,7 +3684,7 @@ begin
   NameTrigger(TRIGGER_OPEN_RECRUIT_DLG,             'OnOpenRecruitDlg');
   NameTrigger(TRIGGER_CLOSE_RECRUIT_DLG,            'OnCloseRecruitDlg');
   NameTrigger(TRIGGER_RECRUIT_DLG_MOUSE_CLICK,      'OnRecruitDlgMouseClick');
-  NameTrigger(TRIGGER_TOWN_HALL_MOUSE_CLICK,        'OnTownHallMouseClick');
+  NameTrigger(TRIGGER_TOWN_FORT_MOUSE_CLICK,        'OnTownFortMouseClick');
   NameTrigger(TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK, 'OnKingdomOverviewMouseClick');
   NameTrigger(TRIGGER_RECRUIT_DLG_RECALC,           'OnRecruitDlgRecalc');
   NameTrigger(TRIGGER_RECRUIT_DLG_ACTION,           'OnRecruitDlgAction');
