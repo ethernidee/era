@@ -44,6 +44,8 @@ var
 const
   RNG_SAVE_SECTION = 'Era.RNG';
 
+  DL_GROUP_INDEX_MARKER = 100000; // DL frame index column is DL_GROUP_INDEX_MARKER * groupIndex + frameIndex
+
 type
   TWogMp3Process = procedure; stdcall;
 
@@ -1096,6 +1098,71 @@ begin
   Context.RetAddr := Ptr($7297C6);
 end; // .function Hook_ErmDlgFunctionActionSwitch
 
+const
+  SET_DEF_ITEM_FRAME_INDEX_FUNC = $4EB0D0;
+  HDLG_BUILD_DEF_FUNC           = $728DA1;
+  HDLG_ADD_ITEM_FUNC            = $7287A1;
+  HDLG_SET_ANIM_DEF_FUNC        = $7286A0;
+
+type
+  PAnimDefDlgItem = ^TAnimDefDlgItem;
+  TAnimDefDlgItem = packed record
+    _Unk1:    array [1..52] of byte;
+    FrameInd: integer; // +0x34
+    GroupInd: integer; // +0x38
+    // ...
+  end;
+
+  PAnimatedDefWrapper = ^TAnimatedDefWrapper;
+  TAnimatedDefWrapper = packed record
+    ZvsDefFrameInd: integer;
+    DefItem:        PAnimDefDlgItem;
+  end;
+
+function Hook_DL_D_ItemCreation (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  DefItem:  PAnimDefDlgItem;
+  GroupInd: integer;
+  FrameInd: integer;
+
+begin
+  DefItem  := ppointer(Context.EBP - $4)^;
+  FrameInd := pinteger(Context.EBP - $44)^;
+  GroupInd := 0;
+
+  // DL frame index column is DL_GROUP_INDEX_MARKER * groupIndex + frameIndex
+  if FrameInd >= DL_GROUP_INDEX_MARKER then begin
+    GroupInd := FrameInd div DL_GROUP_INDEX_MARKER;
+    FrameInd := FrameInd mod DL_GROUP_INDEX_MARKER;
+  end;
+
+  DefItem.GroupInd := GroupInd;
+
+  PatchApi.Call(THISCALL_, Ptr(SET_DEF_ITEM_FRAME_INDEX_FUNC), [DefItem, FrameInd]);
+
+  // Animated defs must contain 'animated' substring in name
+  if System.Pos('animated', ppchar(Context.EBP - $74)^) <> 0 then begin
+    PatchApi.Call(THISCALL_, Ptr(HDLG_SET_ANIM_DEF_FUNC), [pinteger(Context.EBP - $78)^, DefItem]);
+  end;
+
+  result := true;
+end; // .function Hook_DL_D_ItemCreation
+
+function Hook_ErmDlgFunction_HandleAnimatedDef (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  AnimatedDefWrapper: PAnimatedDefWrapper;
+  AnimatedDefItem:    PAnimDefDlgItem;
+
+begin
+  AnimatedDefWrapper := ppointer(Context.EBP - $28)^;
+  AnimatedDefItem    := AnimatedDefWrapper.DefItem;
+
+  PatchApi.Call(THISCALL_, Ptr(SET_DEF_ITEM_FRAME_INDEX_FUNC), [AnimatedDefItem, AnimatedDefItem.FrameInd + 1]);
+
+  result          := false;
+  Context.RetAddr := Ptr($7294E8);
+end; // .function Hook_ErmDlgFunction_HandleAnimatedDef
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1508,6 +1575,10 @@ begin
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
   ApiJack.HookCode(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
+
+  (* Add up to 10 animated DEFs support in DL-dialogs by restoring commented ZVS code *)
+  ApiJack.HookCode(Ptr($72A1F6), @Hook_DL_D_ItemCreation);
+  ApiJack.HookCode(Ptr($729513), @Hook_ErmDlgFunction_HandleAnimatedDef);
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
