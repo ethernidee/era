@@ -1424,6 +1424,8 @@ begin
   ScriptMan.SaveScripts;
 end;
 
+procedure RegisterErmEventNames; forward;
+
 procedure OnEraLoadScripts (Event: GameExt.PEvent); stdcall;
 begin
   (* Read function names and auto ID *)
@@ -1434,6 +1436,7 @@ begin
 
   FreeAndNil(FuncIdToNameMap);
   FuncIdToNameMap := DataLib.FlipDict(FuncNames);
+  RegisterErmEventNames;
 
   (* Load scripts *)
   ScriptMan.LoadScriptsFromSavedGame;

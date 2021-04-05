@@ -1022,6 +1022,7 @@ var
   SavedEventX:    integer;
   SavedEventY:    integer;
   SavedEventZ:    integer;
+  PrevUserCmd:    integer;
 
 begin
   MouseEventInfo := ppointer(Context.EBP + $8)^;
@@ -1058,11 +1059,11 @@ begin
   end;
 
   ppointer(DLG_MOUSE_EVENT_INFO_VAR)^ := MouseEventInfo;
-  pinteger(DLG_USER_COMMAND_VAR)^     := 0;
 
   SavedEventX := Erm.ZvsEventX^;
   SavedEventY := Erm.ZvsEventY^;
   SavedEventZ := Erm.ZvsEventZ^;
+  PrevUserCmd := pinteger(DLG_USER_COMMAND_VAR)^;
 
   Erm.ArgXVars[ARG_DLG_ID] := pinteger(pinteger(Context.EBP + DLG_BODY_VAR)^ + DLG_BODY_ID_FIELD)^;
 
@@ -1070,6 +1071,7 @@ begin
   Erm.ZvsEventY^ := MouseEventInfo.Item;
   Erm.ZvsEventZ^ := MouseEventInfo.ActionSubtype;
 
+  pinteger(DLG_USER_COMMAND_VAR)^ := 0;
   Erm.FireMouseEvent(Erm.TRIGGER_DL, MouseEventInfo);
 
   Erm.ZvsEventX^ := SavedEventX;
@@ -1080,13 +1082,15 @@ begin
   ppointer(DLG_MOUSE_EVENT_INFO_VAR)^ := nil;
 
   if pinteger(DLG_USER_COMMAND_VAR)^ = DLG_COMMAND_CLOSE then begin
-    Context.EAX                  := 2;
-    MouseEventInfo.ActionType    := DLG_ACTION_INDLG_CLICK;
-    MouseEventInfo.ActionSubtype := MOUSE_OK_CLICK;
+    Context.EAX                     := 2;
+    MouseEventInfo.ActionType       := DLG_ACTION_INDLG_CLICK;
+    MouseEventInfo.ActionSubtype    := MOUSE_OK_CLICK;
 
     // Assign result item
     pinteger(pinteger(Context.EBP - $10)^ + 56)^ := MouseEventInfo.Item;
   end;
+
+  pinteger(DLG_USER_COMMAND_VAR)^ := PrevUserCmd;
 
   result          := false;
   Context.RetAddr := Ptr($7297C6);
