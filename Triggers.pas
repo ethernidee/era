@@ -647,13 +647,35 @@ begin
   result := true;
 end;
 
-function Hook_TransferHeroToNextScenario (Context: ApiJack.PHookContext): longbool; stdcall;
+function Hook_ApplyTransferedCampaignHero (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   TRANSFERRED_HERO_GLOBAL_ADDR = $280761C; // int
 
 begin
   Erm.FireErmEventEx(Erm.TRIGGER_TRANSFER_HERO, [pinteger(TRANSFERRED_HERO_GLOBAL_ADDR)^]);
   result := true;
+end;
+
+function Hook_MarkTransferedCampaignHero (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  TRANSFERRED_HERO_GLOBAL_ADDR      = $280761C; // int
+  COPY_HERO_START_INFO_TO_HERO_FUNC = $485C30;
+  ZVS_CARRY_OVER_HERO_FUNC          = $755DD9;  // no args
+
+var
+  MarkedHeroId: integer;
+
+begin
+  MarkedHeroId                            := pinteger(pinteger(Context.ESI + $4)^ + Context.EDI + $1A)^;
+  pinteger(TRANSFERRED_HERO_GLOBAL_ADDR)^ := MarkedHeroId;
+
+  PatchApi.Call(THISCALL_, Ptr(COPY_HERO_START_INFO_TO_HERO_FUNC), [Heroes.GameManagerPtr^, MarkedHeroId]);
+  PatchApi.Call(STDCALL_,  Ptr(ZVS_CARRY_OVER_HERO_FUNC),          []);
+
+  Erm.FireErmEventEx(Erm.TRIGGER_TRANSFER_HERO, [MarkedHeroId]);
+
+  result          := false;
+  Context.RetAddr := Ptr($48607C);
 end;
 
 function Hook_AfterHeroGainLevel (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -758,8 +780,12 @@ begin
   (* OnWinGame, OnLoseGame *)
   ApiJack.HookCode(Ptr($4EFEEA), @Hook_ScenarioEnd);
 
-  (* OnWinGame, OnLoseGame *)
-  ApiJack.HookCode(Ptr($755E00), @Hook_TransferHeroToNextScenario);
+  (* OnTransferHero *)
+  // Disable WoG call from CarryOverHero to _CarryOverHero. _CarryOverHero will be called in Hook_MarkTransferedCampaignHero
+  Core.p.WriteDataPatch(Ptr($755E17), ['9090909090']);
+
+  // Provide handling of all transferred campaign heroes, even inactive ones in transition zones
+  ApiJack.HookCode(Ptr($486069), @Hook_MarkTransferedCampaignHero);
 
   (* OnAfterHeroGainLevel *)
   ApiJack.HookCode(Ptr($4DAF06), @Hook_AfterHeroGainLevel);
