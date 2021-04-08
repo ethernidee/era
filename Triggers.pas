@@ -647,15 +647,6 @@ begin
   result := true;
 end;
 
-function Hook_ApplyTransferedCampaignHero (Context: ApiJack.PHookContext): longbool; stdcall;
-const
-  TRANSFERRED_HERO_GLOBAL_ADDR = $280761C; // int
-
-begin
-  Erm.FireErmEventEx(Erm.TRIGGER_TRANSFER_HERO, [pinteger(TRANSFERRED_HERO_GLOBAL_ADDR)^]);
-  result := true;
-end;
-
 function Hook_MarkTransferedCampaignHero (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   TRANSFERRED_HERO_GLOBAL_ADDR      = $280761C; // int
@@ -664,6 +655,7 @@ const
 
 var
   MarkedHeroId: integer;
+  PrevHeroId:   integer;
 
 begin
   MarkedHeroId                            := pinteger(pinteger(Context.ESI + $4)^ + Context.EDI + $1A)^;
@@ -672,7 +664,12 @@ begin
   PatchApi.Call(THISCALL_, Ptr(COPY_HERO_START_INFO_TO_HERO_FUNC), [Heroes.GameManagerPtr^, MarkedHeroId]);
   PatchApi.Call(STDCALL_,  Ptr(ZVS_CARRY_OVER_HERO_FUNC),          []);
 
+  PrevHeroId := Erm.GetErmCurrHeroId;
+  Erm.SetErmCurrHero(MarkedHeroId);
+
   Erm.FireErmEventEx(Erm.TRIGGER_TRANSFER_HERO, [MarkedHeroId]);
+
+  Erm.SetErmCurrHero(PrevHeroId);
 
   result          := false;
   Context.RetAddr := Ptr($48607C);

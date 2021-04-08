@@ -759,7 +759,7 @@ procedure FireRemoteErmEvent (EventId: integer; Args: array of integer);
 procedure SetErmCurrHero (NewInd: integer); overload;
 procedure SetErmCurrHero ({n} NewHero: Heroes.PHero); overload;
 function  GetErmCurrHero: {n} Heroes.PHero;
-function  GetErmCurrHeroInd: integer; // or -1
+function  GetErmCurrHeroId: integer; // or -1
 
 (* Integration with WoG Native Dialogs: possibility to set preselected item for DisplayComplexDialog and text alignment for ShowParsedDlg8Items *)
 function  GetPreselectedDialog8ItemId: integer; stdcall;
@@ -3778,7 +3778,7 @@ begin
   result := ppointer($27F9970)^;
 end;
 
-function GetErmCurrHeroInd: integer; // or -1
+function GetErmCurrHeroId: integer; // or -1
 var
 {n} Hero: Heroes.PHero;
 
