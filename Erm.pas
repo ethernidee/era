@@ -567,6 +567,7 @@ type
   TTriggerLocalData = record
       PrevTriggerData: PTriggerLocalData;
       CmdIndPtr:       pinteger;
+      IsQuitTrigger:   longbool;
   {O} Items:           {O} TList {of TObject};
   end;
 
@@ -685,6 +686,9 @@ var
     ErmCmdOptimizer:     procedure (Cmd: PErmCmd) = nil;
     QuitTriggerFlag:     boolean = false;
     TriggerLoopCallback: TTriggerLoopCallback;
+
+    // Global signal variable for FireErmEvent, marking trigger as Quit trigger where SN:Q works as FU:E.
+    IsQuitTrigger: longbool = false;
 
     // Single linked list of trigger local items, that will be freed on particular trigger end
     TriggerLocalData: PTriggerLocalData = nil;
@@ -5490,12 +5494,15 @@ begin
   FuncArgs                    := Erm.FuncArgs;
   Erm.FuncArgs                := nil;
 
-  NumericEventName := 'OnTrigger ' + SysUtils.IntToStr(TriggerId);
-  HumanEventName   := NumericEventName;
+  NumericEventName        := 'OnTrigger ' + SysUtils.IntToStr(TriggerId);
+  HumanEventName          := NumericEventName;
+  OnQuitTriggerId         := 0;
+  LocalData.IsQuitTrigger := IsQuitTrigger;
+  IsQuitTrigger           := false;
 
   // Do not recurse for external plugin events
   if (TriggerId <> TRIGGER_BATTLE_REPLAY) and (TriggerId <> TRIGGER_BEFORE_BATTLE_REPLAY) then begin
-    HumanEventName := GetTriggerReadableName(TriggerId);
+    HumanEventName  := GetTriggerReadableName(TriggerId);
   end;
 
   HasEventHandlers := (StartTrigger.Id <> 0) or EventManager.HasEventHandlers(NumericEventName) or EventManager.HasEventHandlers(HumanEventName);
@@ -5512,6 +5519,10 @@ begin
 
     if TrackingOpts.Enabled then begin
       EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_START_TRIGGER, TriggerId);
+    end;
+
+    if not LocalData.IsQuitTrigger then begin
+      OnQuitTriggerId := integer(FuncNames[HumanEventName + '_Quit']);
     end;
 
     LocalData.PrevTriggerData := TriggerLocalData;
@@ -5722,14 +5733,12 @@ begin
                   break;
                 end else if QuitTriggerFlag then begin
                   QuitTriggerFlag := false;
-                  OnQuitTriggerId := integer(FuncNames[HumanEventName + '_Quit']);
 
-                  if OnQuitTriggerId <> 0 then begin
-                    ArgXVars := x^;
-                    FireErmEvent(OnQuitTriggerId);
+                  if not LocalData.IsQuitTrigger then begin
+                    goto TriggersProcessed;
+                  end else begin
+                    break;
                   end;
-
-                  goto TriggersProcessed;
                 end;
               end; // .else
 
@@ -5742,6 +5751,12 @@ begin
       end; // .while
 
       TriggersProcessed:
+
+      if OnQuitTriggerId <> 0 then begin
+        ArgXVars      := x^;
+        IsQuitTrigger := true;
+        FireErmEvent(OnQuitTriggerId);
+      end;
 
       // Loop handling
       if (@LoopCallback.Handler = nil) or not LoopCallback.Handler(LoopCallback.Data) then begin
