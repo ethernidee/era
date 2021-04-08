@@ -5343,6 +5343,7 @@ var
   EventY:               integer;
   EventZ:               integer;
   TriggerId:            integer;
+  OnQuitTriggerId:      integer;
   StartTrigger:         PErmTrigger;
   Trigger:              PErmTrigger;
   EventManager:         TEventManager;
@@ -5721,6 +5722,13 @@ begin
                   break;
                 end else if QuitTriggerFlag then begin
                   QuitTriggerFlag := false;
+                  OnQuitTriggerId := integer(FuncNames[HumanEventName + '_Quit']);
+
+                  if OnQuitTriggerId <> 0 then begin
+                    ArgXVars := x^;
+                    FireErmEvent(OnQuitTriggerId);
+                  end;
+
                   goto TriggersProcessed;
                 end;
               end; // .else
