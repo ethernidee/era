@@ -1420,7 +1420,7 @@ begin
   ppointer($50C371)^ := Ptr(integer(@WriteGameSettings) - $50C375);
 
   (* Fix game version to enable map generator *)
-  Heroes.GameVersion^ :=  Heroes.SOD_AND_AB;
+  Heroes.GameVersion^ := Heroes.SOD_AND_AB;
 
   (* Fix gethostbyname function to return external IP address at first place *)
   if FixGetHostByNameOpt then begin
@@ -1497,6 +1497,7 @@ begin
   Core.ApiHook(@Hook_OnAfterTacticsPhase,        Core.HOOKTYPE_BRIDGE, Ptr($75D137));
   Core.ApiHook(@Hook_OnCombatRound_Start,        Core.HOOKTYPE_BRIDGE, Ptr($76065B));
   Core.ApiHook(@Hook_OnCombatRound_End,          Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
+
   // Disable BACall2 function, generating !?BR event, because !?BR will be the same as OnCombatRound now
   Core.p.WriteDataPatch(Ptr($74D1AB), ['C3']);
 

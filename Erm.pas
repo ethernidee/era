@@ -590,6 +590,7 @@ const
   ZvsTriggerIfsDepth:         pbyte                  = Ptr($A46D22);
   ZvsChestsEnabled:           ^TZvsCheckEnabled      = Ptr($27F99B0);
   ZvsGmAiFlags:               pinteger               = Ptr($793C80);
+  ZvsCurrHeroPtr:             ^Heroes.PHero          = Ptr($27F9970);
   ZvsAllowDefMouseReaction:   plongbool              = Ptr($A4AAFC);
   ZvsMouseEventInfo:          Heroes.PMouseEventInfo = Ptr($8912A8);
   ZvsEventX:                  pinteger               = Ptr($27F9964);
@@ -3765,17 +3766,17 @@ end;
 
 procedure SetErmCurrHero (NewInd: integer); overload;
 begin
-  ppointer($27F9970)^ := Heroes.ZvsGetHero(NewInd);
+  ZvsCurrHeroPtr^ := Heroes.ZvsGetHero(NewInd);
 end;
 
 procedure SetErmCurrHero ({n} NewHero: Heroes.PHero); overload;
 begin
-  ppointer($27F9970)^ := NewHero;
+  ZvsCurrHeroPtr^ := NewHero;
 end;
 
 function GetErmCurrHero: {n} Heroes.PHero;
 begin
-  result := ppointer($27F9970)^;
+  result := ZvsCurrHeroPtr^;
 end;
 
 function GetErmCurrHeroId: integer; // or -1
@@ -5370,6 +5371,7 @@ var
   LoopVarValue:         integer;
   TargetLoopLevel:      integer;
   ParamValType:         integer;
+  CurrHero:             Heroes.PHero;
   Cmd:                  PErmCmd;
   CmdId:                TErmCmdId;
   i, j:                 integer;
@@ -5511,9 +5513,10 @@ begin
     SaveVars;
     ResetLocalVars;
 
-    EventX := ZvsEventX^;
-    EventY := ZvsEventY^;
-    EventZ := ZvsEventZ^;
+    EventX   := ZvsEventX^;
+    EventY   := ZvsEventY^;
+    EventZ   := ZvsEventZ^;
+    CurrHero := ZvsCurrHeroPtr^;
 
     SetTriggerQuickVarsAndFlags;
 
@@ -5726,6 +5729,7 @@ begin
                   end; // .else
                 end; // .if
               end else if ((FlowOpersLevel < 0) or (FlowOpers[FlowOpersLevel].State = STATE_TRUE)) and not ZvsCheckFlags(@Cmd.Conditions) then begin
+                ZvsCurrHeroPtr^ := CurrHero;
                 ZvsProcessCmd(Cmd);
 
                 if ZvsBreakTrigger^ then begin
