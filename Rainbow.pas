@@ -1543,6 +1543,9 @@ begin
 end; // .function New_Font_DrawCharacter
 
 function New_Pcx16_FillRect (OrigFunc: pointer; Canvas: Heroes.PPcx16Item; x, y, Width, Height, FillColor16: integer): integer; stdcall;
+const
+  MAGIC_COLOR = $1;
+
 var
   BytesPerPixel:  integer;
   Color32:        integer;
@@ -1575,7 +1578,12 @@ begin
       exit;
     end;
 
-    Color32        := Color16To32(FillColor16);
+    if FillColor16 = MAGIC_COLOR then begin
+      Color32 := MAGIC_COLOR;
+    end else begin
+      Color32 := Color16To32(FillColor16);
+    end;
+
     OutRowStartPtr := Utils.PtrOfs(Canvas.Buffer, y * Canvas.ScanlineSize + x * BytesPerPixel);
 
     for j := y to y + Height - 1 do begin
