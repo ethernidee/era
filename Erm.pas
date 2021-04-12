@@ -7200,6 +7200,38 @@ begin
   result := ord(SetErmParamValue(VarParam, SecondValue.v));
 end; // .function VR_V
 
+function VR_B (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
+var
+  VarParam:        PErmCmdParam;
+  VarParamType:    integer;
+  VarParamValType: integer;
+  FinalValue:      Heroes.TValue;
+
+begin
+  result       := 1;
+  VarParam     := @ErmCmd.Params[0];
+  VarParamType := VarParam.GetType();
+
+  if not (VarParamType in PARAM_VARTYPES_NUMERIC) then begin
+    ShowErmError('"!!VR:B" - only numeric variables can be casted to TRUE/FALSE');
+    result := 0; exit;
+  end;
+
+  FinalValue.v := GetErmParamValue(VarParam, VarParamValType);
+
+  if VarParamType in PARAM_VARTYPES_INTS then begin
+    if FinalValue.v <> 0 then begin
+      FinalValue.v := 1;
+    end;
+  end else begin
+    if FinalValue.f <> 0.0 then begin
+      FinalValue.f := 1.0;
+    end;
+  end;
+
+  result := ord(SetErmParamValue(VarParam, FinalValue.v));
+end; // .function VR_B
+
 function VR_C (NumParams: integer; ErmCmd: PErmCmd; SubCmd: PErmSubCmd): integer;
 var
   VarParam:     PErmCmdParam;
@@ -7633,6 +7665,7 @@ begin
   case Cmd of
     '&', 'X', '|', '~':      result := VR_Bits(Cmd, NumParams, ErmCmd, SubCmd);
     '%', '*', '+', '-', ':': result := VR_Arithmetic(Cmd, NumParams, ErmCmd, SubCmd);
+    'B':                     result := VR_B(NumParams, ErmCmd, SubCmd);
     'C':                     result := VR_C(NumParams, ErmCmd, SubCmd);
     'F':                     result := VR_F(NumParams, ErmCmd, SubCmd);
     'H', 'M', 'U':           result := VR_Strings(Cmd, NumParams, ErmCmd, SubCmd);
