@@ -31,10 +31,10 @@ const
   ERM_TRACKING_REPORT_PATH = DEBUG_DIR + '\erm tracking.erm';
 
   (* Erm command conditions *)
-  LEFT_COND  = 0;
-  RIGHT_COND = 1;
-  COND_AND   = 0;
-  COND_OR    = 1;
+  LEFT_PARAM  = 0;
+  RIGHT_PARAM = 1;
+  COND_AND    = 0;
+  COND_OR     = 1;
 
   (* ERM param check type *)
   // 0=nothing, 1?, 2=, 3<>, 4>, 5<, 6>=, 7<=
@@ -334,7 +334,7 @@ type
   end; // .record TGameString
 
   PErmCmdConditions = ^TErmCmdConditions;
-  TErmCmdConditions = array [COND_AND..COND_OR, 0..15, LEFT_COND..RIGHT_COND] of TErmCmdParam;
+  TErmCmdConditions = array [COND_AND..COND_OR, 0..15, LEFT_PARAM..RIGHT_PARAM] of TErmCmdParam;
 
   PErmCmdParams = ^TErmCmdParams;
   TErmCmdParams = array [0..ERM_CMD_MAX_PARAMS_NUM - 1] of TErmCmdParam;
@@ -461,6 +461,7 @@ type
   TZvsLoadErmTxt    = function (IsNewLoad: integer): integer; cdecl;
   TZvsLoadErtFile   = function (Dummy, FileName: pchar): integer; cdecl;
   TZvsShowMessage   = function (Mes: pchar; MesType: integer; DummyZero: integer = 0): integer; cdecl;
+  TZvsGetFlags      = function (SubCmd: PErmSubCmd): longbool; cdecl;
   TZvsCheckFlags    = function (Flags: PErmCmdConditions): longbool; cdecl;
   TFireErmEvent     = function (EventId: integer): integer; cdecl;
   TZvsDumpErmVars   = procedure (Error, {n} ErmCmdPtr: pchar); cdecl;
@@ -630,6 +631,7 @@ const
   ZvsLoadErtFile:     TZvsLoadErtFile   = Ptr($72C641);
   ZvsShowMessage:     TZvsShowMessage   = Ptr($70FB63);
   ZvsDisplay8Dialog:  function (Message: pchar; DialogPics: pointer; MsgType: Heroes.TMesType; TextAlignment: integer): integer cdecl = Ptr($7169A8);
+  ZvsGetFlags:        TZvsGetFlags      = Ptr($73F4AF);
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   ZvsGetNum:          function (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool cdecl = Ptr($73E970);
   ZvsGetVal:          function (ValuePtr: pointer; ValueSize: byte): integer cdecl = Ptr($7418B0);
@@ -4093,25 +4095,29 @@ begin
         PARAM_VARTYPE_STR: begin
           ValType := VALTYPE_STR;
 
-          if result = 0 then begin
-            ShowErmError('Impossible case: string literal has null address');
-            ResValType := VALTYPE_ERROR; result := 0; exit;
-          end;
+          if result <> 0 then begin
+            if Param.NeedsInterpolation() then begin
+              StrLiteral := GetInterpolatedErmStrLiteral(pchar(result));
+              StrLen     := Windows.LStrLen(StrLiteral);
+            end else begin
+              StrLiteral := pchar(result);
+              StrLen     := GetErmStrLiteralLen(StrLiteral);
+            end;
 
-          if Param.NeedsInterpolation() then begin
-            StrLiteral := GetInterpolatedErmStrLiteral(pchar(result));
-            StrLen     := Windows.LStrLen(StrLiteral);
+            if (Flags and FLAG_STR_EVALS_TO_ADDR_NOT_INDEX) <> 0 then begin
+              result := integer(ServiceMemAllocator.AllocStr(StrLen));
+              Utils.CopyMem(StrLen, StrLiteral, pchar(result));
+            end else begin
+              result := CreateCmdLocalErt(StrLiteral, StrLen);
+            end;
           end else begin
-            StrLiteral := pchar(result);
-            StrLen     := GetErmStrLiteralLen(StrLiteral);
-          end;
-
-          if (Flags and FLAG_STR_EVALS_TO_ADDR_NOT_INDEX) <> 0 then begin
-            result := integer(ServiceMemAllocator.AllocStr(StrLen));
-            Utils.CopyMem(StrLen, StrLiteral, pchar(result));
-          end else begin
-            result := CreateCmdLocalErt(StrLiteral, StrLen);
-          end;
+            if (Flags and FLAG_STR_EVALS_TO_ADDR_NOT_INDEX) <> 0 then begin
+              result := integer(pchar(''));
+            end else begin
+              ShowErmError('Impossible case: string literal has null address');
+              ResValType := VALTYPE_ERROR; result := 0; exit;
+            end;
+          end; // .else
         end; // .case PARAM_VARTYPE_STR
 
         PARAM_VARTYPE_Z: begin
@@ -7986,10 +7992,101 @@ begin
   end;
 end;
 
+function Hook_ZvsGetFlags (SubCmd: PErmSubCmd): longbool; cdecl;
+const
+  COMPARISON_CHARS = ['<', '>', '='];
+  DONT_EVAL        = 0;
+
+var
+  CondChars: array [COND_AND..COND_OR] of char;
+  Buf:       TErmSubCmd;
+  ParamType: integer;
+  i, j:      integer;
+
+label
+  Error;
+
+begin
+  Buf.Code := SubCmd.Code;
+  Buf.Pos  := SubCmd.Pos;
+  System.FillChar(SubCmd.Conditions, sizeof(SubCmd.Conditions), #0);
+
+  while Buf.Code.Value[Buf.Pos] in [#1..#32] do begin
+    Inc(Buf.Pos);
+  end;
+
+  CondChars[COND_AND] := '&';
+  CondChars[COND_OR]  := '|';
+
+  for j := Low(CondChars) to High(CondChars) do begin
+    if Buf.Code.Value[Buf.Pos] = CondChars[j] then begin
+      Inc(Buf.Pos);
+
+      for i := 0 to High(SubCmd.Conditions[j]) do begin
+        if ZvsGetNum(@Buf, 0, DONT_EVAL) then begin
+          goto Error;
+        end;
+
+        if Buf.Params[0].GetCheckType() <> PARAM_CHECK_NONE then begin
+          ShowErmError('"CheckConditions" - cannot get or compare the first argument in receiver condition.');
+        end;
+
+        SubCmd.Conditions[j][i][LEFT_PARAM] := Buf.Params[0];
+
+        // Two operands
+        if Buf.Code.Value[Buf.Pos] in COMPARISON_CHARS then begin
+          if ZvsGetNum(@Buf, 0, DONT_EVAL) then begin
+            goto Error;
+          end;
+
+          if Buf.Params[0].GetCheckType() in [PARAM_CHECK_NONE, PARAM_CHECK_GET] then begin
+            ShowErmError('"CheckConditions" - cannot set or get the second argument in receiver condition.');
+          end;
+
+          SubCmd.Conditions[j][i][RIGHT_PARAM] := Buf.Params[0];
+        // Single operand: flag or other value, casted to boolean
+        end else begin
+          ParamType := Buf.Params[0].GetType();
+
+          // Treat single number as flag: &500 => &f[500]=
+          if ParamType = PARAM_VARTYPE_NUM then begin
+            SubCmd.Conditions[j][i][LEFT_PARAM].SetType(PARAM_VARTYPE_FLAG);
+
+            if SubCmd.Conditions[j][i][LEFT_PARAM].Value >= 0 then begin
+              SubCmd.Conditions[j][i][LEFT_PARAM].SetCheckType(PARAM_CHECK_EQUAL);
+            end else begin
+              SubCmd.Conditions[j][i][LEFT_PARAM].Value := -SubCmd.Conditions[j][i][LEFT_PARAM].Value;
+              SubCmd.Conditions[j][i][LEFT_PARAM].SetCheckType(PARAM_CHECK_NOT_EQUAL);
+            end;
+          // Cast single value to boolean otherwise
+          end else begin
+            SubCmd.Conditions[j][i][RIGHT_PARAM].SetCheckType(PARAM_CHECK_NOT_EQUAL);
+
+            if ParamType in PARAM_VARTYPES_STRINGS then begin
+              SubCmd.Conditions[j][i][RIGHT_PARAM].SetType(PARAM_VARTYPE_STR);
+            end;
+          end;
+        end; // .else
+
+        if Buf.Code.Value[Buf.Pos] = '/' then begin
+          Inc(Buf.Pos);
+        end else begin
+          break;
+        end;
+      end;
+    end; // .if
+  end; // .for
+
+  SubCmd.Pos := Buf.Pos;
+  result     := false;
+  exit;
+Error:
+  result := true;
+end; // .function Hook_ZvsGetFlags
+
 function Hook_ZvsCheckFlags (Conds: PErmCmdConditions): longbool; cdecl;
 var
   results:    array [COND_AND..COND_OR] of longbool;
-  CheckType:  integer;
   ValType1:   integer;
   Value1:     Heroes.TValue;
   ValType2:   integer;
@@ -8002,11 +8099,11 @@ label
   ContinueOuterLoop, LoopsEnd;
 
 begin
-  results[COND_AND] := Conds[COND_AND][0][LEFT_COND].GetType() <> PARAM_VARTYPE_NUM;
+  result            := false;
+  results[COND_AND] := (Conds[COND_AND][0][LEFT_PARAM].ValType or Conds[COND_AND][0][RIGHT_PARAM].ValType) <> 0;
 
   // Fast exit on no condition
-  if not results[COND_AND] and (Conds[COND_OR][0][LEFT_COND].GetType() = PARAM_VARTYPE_NUM) then begin
-    result := false;
+  if not results[COND_AND] and ((Conds[COND_OR][0][LEFT_PARAM].ValType or Conds[COND_OR][0][RIGHT_PARAM].ValType) = 0) then begin
     exit;
   end;
 
@@ -8014,22 +8111,22 @@ begin
 
   for j := COND_AND to COND_OR do begin
     for i := Low(Conds[j]) to High(Conds[j]) do begin
-      if Conds[j][i][LEFT_COND].GetType() = PARAM_VARTYPE_NUM then begin
+      if (Conds[j][i][LEFT_PARAM].ValType or Conds[j][i][RIGHT_PARAM].ValType) = 0 then begin
         goto ContinueOuterLoop;
       end;
 
-      Value1.v := GetErmParamValue(@Conds[j][i][LEFT_COND], ValType1, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
+      Value1.v := GetErmParamValue(@Conds[j][i][LEFT_PARAM], ValType1, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
 
       if ValType1 = VALTYPE_BOOL then begin
-        case Conds[j][i][LEFT_COND].GetCheckType() of
+        case Conds[j][i][LEFT_PARAM].GetCheckType() of
           PARAM_CHECK_EQUAL:     Value1.v := ord(Value1.v <> 0);
           PARAM_CHECK_NOT_EQUAL: Value1.v := ord(Value1.v = 0);
         else
-          ShowErmError(Format('Unknown check type for flag: %d', [Conds[j][i][RIGHT_COND].GetCheckType()]));
+          ShowErmError(Format('Unknown check type for flag: %d', [Conds[j][i][RIGHT_PARAM].GetCheckType()]));
           result := true; exit;
         end;
       end else begin
-        Value2.v := GetErmParamValue(@Conds[j][i][RIGHT_COND], ValType2, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
+        Value2.v := GetErmParamValue(@Conds[j][i][RIGHT_PARAM], ValType2, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
         CmpRes   := 0;
 
         // Number comparison
@@ -8076,7 +8173,7 @@ begin
           result := true; exit;
         end; // .else
 
-        case Conds[j][i][RIGHT_COND].GetCheckType() of
+        case Conds[j][i][RIGHT_PARAM].GetCheckType() of
           PARAM_CHECK_EQUAL:         Value1.longbool := CmpRes = 0;
           PARAM_CHECK_NOT_EQUAL:     Value1.longbool := CmpRes <> 0;
           PARAM_CHECK_GREATER:       Value1.longbool := CmpRes > 0;
@@ -8084,7 +8181,7 @@ begin
           PARAM_CHECK_GREATER_EQUAL: Value1.longbool := CmpRes >= 0;
           PARAM_CHECK_LOWER_EQUAL:   Value1.longbool := CmpRes <= 0;
         else
-          ShowErmError(Format('Unknown check type: %d', [Conds[j][i][RIGHT_COND].GetCheckType()]));
+          ShowErmError(Format('Unknown check type: %d', [Conds[j][i][RIGHT_PARAM].GetCheckType()]));
           result := true; exit;
         end; // .switch
       end; // .else
@@ -8462,6 +8559,9 @@ begin
 
   // Rewrite DO:P implementation
   Core.ApiHook(@Hook_DO_P, Core.HOOKTYPE_JUMP, Ptr($72D79C));
+
+  // Replace ZvsCheckFlags with own implementation, free from e-variables issues
+  Core.ApiHook(@Hook_ZvsGetFlags, Core.HOOKTYPE_JUMP, @ZvsGetFlags);
 
   // Replace ZvsCheckFlags with own implementation, free from e-variables issues
   Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
