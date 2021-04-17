@@ -4906,6 +4906,10 @@ begin
     end;
   end; // .switch Caret^
 
+  while Caret^ in [#1..#32] do begin
+    Inc(Caret);
+  end;
+
   BaseTypeChar := Caret^;
   IsIndexed    := BaseTypeChar in INDEXABLE_PAR_TYPES;
   AddCurrDay   := BaseTypeChar = 'c';
