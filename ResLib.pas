@@ -3,8 +3,7 @@ unit ResLib;
   Library for game resources management, particulary storing them in shared memory, reference counting,
   caching support.
 
-  TODO: rescan resource time to time to alove live reloading?
-  TODO: export flush cache function?
+  @todo: add global ini config for ResourceManager.MaxTotalSize
 *)
 
 
@@ -35,7 +34,7 @@ type
   TResourceManager = class
    protected
    {O}  fResourceMap:   TDict {of TResQueueItem}; // Used to track all loaded resources by relative path.
-   {On} fResQueueStart: TResQueueItem;            // Resource queue is used to eliminate last recently used items without users.
+   {On} fResQueueStart: TResQueueItem;            // Resource queue is used to eliminate least recently used items without users.
    {On} fResQueueEnd:   TResQueueItem;
         fTotalSize:     integer;                  // Total size of all cached resources.
         fMaxTotalSize:  integer;                  // Maximum desired size of all cached resources. Real total size may exceed this value
@@ -44,21 +43,24 @@ type
     procedure RemoveItemFromResQueue (ResQueueItem: TResQueueItem);
     procedure PrependItemToResQueue (ResQueueItem: TResQueueItem);
     procedure MoveResQueueItemToStart (ResQueueItem: TResQueueItem);
-    procedure RemoveResource (const Source: string);
+    procedure OnResourceDestruction (const Source: string);
     procedure CollectGarbage;
 
    public
     constructor Create (MaxTotalSize: integer);
     destructor Destroy; override;
 
+    (* Creates TSharedResource and increases its reference counter by one, placing its in global cache. Client must call DecRef when resource is no longer needed *)
     function AddResource (Data: TObject; Size: integer; const Source: string): TSharedResource;
+
+    (* Returns existing resource from cache, if it's found. Client must call DecRef when resource is no longer needed *)
     function GetResource (const Source: string): {n} TSharedResource;
 
     property Resources[const ResourceSource: string]: {n} TSharedResource read GetResource;
   end; // .class TResourceManager
 
   (*
-    Shared resource. Uses refcounting. Do not call destructor manually. Use IncRef/DecRef only.
+    Shared resource. Not thread safe. Uses refcounting. Do not call destructor manually. Use IncRef/DecRef only.
     Do no use resource after calling DecRef;
   *)
   TSharedResource = class
@@ -67,7 +69,7 @@ type
     {O} fData:     TObject;          // Resource underlying data.
     fSize:         integer;          // Estimated resource size in memory in bytes.
     fRefCount:     integer;          // Number of resource users.
-    fSource:       string;           // Always normalized and validated relative file path.
+    fSource:       string;           // The source of resource. Usually relative file path.
 
     constructor CreateAndBind (Manager: TResourceManager; Data: TObject; Size: integer; const Source: string);
 
@@ -88,21 +90,11 @@ type
 (***)  implementation  (***)
 
 
-function IsValidResourceSource (const Source: string): boolean;
-var
-  FoundPos: integer;
-
-begin
-  result := (Source <> '') and (Source <> '.') and ((Length(Source) < 2) or ((Source[1] <> '/') and (Source[1] <> '\') and (Source[2] <> '/') and (Source[2] <> '\'))) and
-            (System.Pos('..', Source) = 0) and not StrLib.FindCharset([#0, ':'], Source, FoundPos);
-end;
-
 constructor TSharedResource.CreateAndBind (Manager: TResourceManager; Data: TObject; Size: integer; const Source: string);
 begin
   {!} Assert(Manager <> nil);
   {!} Assert(Data <> nil);
   {!} Assert(Size > 0, 'Resource size cannot be negative. Given: ' + SysUtils.IntToStr(Size));
-  {!} Assert(IsValidResourceSource(Source));
 
   inherited Create;
 
@@ -121,6 +113,7 @@ end;
 destructor TSharedResource.Destroy;
 begin
   {!} Assert(Self.fRefCount = 0, 'Cannot destroy resource with ' + SysUtils.IntToStr(Self.fRefCount) + ' references left');
+  SysUtils.FreeAndNil(Self.fData);
 end;
 
 procedure TSharedResource.IncRef;
@@ -135,9 +128,9 @@ begin
   Dec(Self.fRefCount);
 
   if Self.fRefCount = 0 then begin
-    Self.fManager.RemoveResource(Self.Source);
+    Self.fManager.OnResourceDestruction(Self.Source);
 
-    inherited Destroy;
+    Self.Destroy;
   end;
 end;
 
@@ -182,7 +175,7 @@ begin
   end;
 
   if ResQueueItem.PrevItem <> nil then begin
-    ResQueueItem.PrevItem.PrevItem := ResQueueItem.NextItem;
+    ResQueueItem.PrevItem.NextItem := ResQueueItem.NextItem;
   end else begin
     Self.fResQueueStart := ResQueueItem.NextItem;
   end;
@@ -197,9 +190,12 @@ begin
     ResQueueItem.NextItem        := Self.fResQueueStart;
     Self.fResQueueStart.PrevItem := ResQueueItem;
   end else begin
-    Self.fResQueueStart := ResQueueItem;
-    Self.fResQueueEnd   := ResQueueItem;
+    ResQueueItem.PrevItem := nil;
+    ResQueueItem.NextItem := nil;
+    Self.fResQueueEnd     := ResQueueItem;
   end;
+
+  Self.fResQueueStart := ResQueueItem;
 end;
 
 procedure TResourceManager.MoveResQueueItemToStart (ResQueueItem: TResQueueItem);
@@ -210,7 +206,7 @@ begin
   Self.PrependItemToResQueue(ResQueueItem);
 end;
 
-procedure TResourceManager.RemoveResource (const Source: string);
+procedure TResourceManager.OnResourceDestruction (const Source: string);
 var
 {Un} ResQueueItem: TResQueueItem;
 
@@ -243,14 +239,15 @@ begin
     while (Self.fTotalSize > Self.fMaxTotalSize) and (PrevProcessedItem <> SavedQueueStart) do begin
       PrevProcessedItem := CurrItem;
 
+      // ResourceManager cache is the only only of resource. The resource can be deallocated safely.
       if CurrItem.Resource.RefCount = 1 then begin
-        Dec(Self.fTotalSize, CurrItem.Resource.Size);
+        NextItemToProcess := CurrItem.PrevItem;
+
+        // Here OnResourceDestruction will be called automatically, unregistering resource and freeing CurrItem
         CurrItem.Resource.DecRef;
 
-        NextItemToProcess := CurrItem.PrevItem;
-        Self.RemoveItemFromResQueue(CurrItem);
-        SysUtils.FreeAndNil(CurrItem);
-        CurrItem          := NextItemToProcess;
+        CurrItem := NextItemToProcess;
+      // There are active resources users, move it to the queue start
       end else begin
         NextItemToProcess := CurrItem.PrevItem;
         Self.MoveResQueueItemToStart(CurrItem);
@@ -274,6 +271,8 @@ begin
   Self.PrependItemToResQueue(ResQueueItem);
   Inc(Self.fTotalSize, Size);
 
+  // We own resource and collect garbage only if cache capacity is not zero. Otherwise ResourceManager works
+  // as simple loaded resource locator.
   if Self.fMaxTotalSize > 0 then begin
     Resource.IncRef;
     Self.CollectGarbage;
@@ -292,6 +291,7 @@ begin
 
   if ResQueueItem <> nil then begin
     Self.MoveResQueueItemToStart(ResQueueItem);
+    ResQueueItem.Resource.IncRef;
     result := ResQueueItem.Resource;
   end;
 end;
@@ -358,23 +358,6 @@ end;
 
 //   result := TResource.Create(PngImage, PngImage.Width * PngImage.Height * RGBA_BYTES_PER_PIXEL);
 //   RawImageCache.AddItem(result);
-// end;
-
-// 1) Ситуация
-// Клиент берёт ресурс, RefCount = 2
-// ...
-// Кэш переполняется, RefCount = 1, ресурс удалён из кэша
-// Второй клиент загружает копию ресурса в кэш
-// Нельзя удалять из кэша при RefCount > 0, объект принудительно сохраняется
-
-// constructor TResourceCache.Create;
-// begin
-
-// end;
-
-// destructor TResourceCahce.Destroy;
-// begin
-
 // end;
 
 end.
