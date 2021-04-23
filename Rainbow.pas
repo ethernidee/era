@@ -6,9 +6,28 @@ unit Rainbow;
 
 (***)  interface  (***)
 uses
-  Math, SysUtils, Windows,
-  Utils, Crypto, Lists, AssocArrays, TextScan, ApiJack, PatchApi, DataLib, StrLib, TypeWrappers,
-  Core, GameExt, Heroes, Graph, Memory, EventMan, DlgMes;
+  Math,
+  SysUtils,
+  Windows,
+
+  ApiJack,
+  AssocArrays,
+  Core,
+  Crypto,
+  DataLib,
+  DlgMes,
+  EventMan,
+  GameExt,
+  Graph,
+  GraphTypes,
+  Heroes,
+  Lists,
+  Memory,
+  PatchApi,
+  StrLib,
+  TextScan,
+  TypeWrappers,
+  Utils;
 
 type
   (* Import *)
@@ -187,17 +206,17 @@ end;
 
 function Color16To32Func (Color16: integer): integer;
 begin
-  result := (({BLUE} (Color16 and $1F) shl 3) or ({GREEN} (Color16 and $7E0) shl 5) or ({RED} (Color16 and $F800) shl 8) or Graph.FULLY_OPAQUE_MASK32) and $FFF8FCF8;
+  result := (({BLUE} (Color16 and $1F) shl 3) or ({GREEN} (Color16 and $7E0) shl 5) or ({RED} (Color16 and $F800) shl 8) or GraphTypes.FULLY_OPAQUE_MASK32) and $FFF8FCF8;
 end;
 
 function Color15To32Func (Color15: integer): integer;
 begin
-  result := (({BLUE} (Color15 and $1F) shl 3) or ({GREEN} (Color15 and $3E0) shl 6) or ({RED} (Color15 and $F800) shl 9) or Graph.FULLY_OPAQUE_MASK32) and $FFF8F8F8;
+  result := (({BLUE} (Color15 and $1F) shl 3) or ({GREEN} (Color15 and $3E0) shl 6) or ({RED} (Color15 and $F800) shl 9) or GraphTypes.FULLY_OPAQUE_MASK32) and $FFF8F8F8;
 end;
 
 function Color32ToCode (Color32: integer): string;
 begin
-  result := SysUtils.Format('%.8x', [((Color32 and Graph.RGB_MASK_32) shl 8) or ((Color32 shr 24) and $FF)]);
+  result := SysUtils.Format('%.8x', [((Color32 and GraphTypes.RGB_MASK_32) shl 8) or ((Color32 shr 24) and $FF)]);
 end;
 
 procedure NameStdColors;
@@ -538,9 +557,9 @@ var
       // Ok
     end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
       if Length(ColorName) < RGBA_COLOR_CODE_MIN_LEN then begin
-        CurrColor := CurrColor or Graph.FULLY_OPAQUE_MASK32;
+        CurrColor := CurrColor or GraphTypes.FULLY_OPAQUE_MASK32;
       end else begin
-        CurrColor := ((CurrColor and $FF) shl 24) or ((CurrColor shr 8) and Graph.RGB_MASK_32);
+        CurrColor := ((CurrColor and $FF) shl 24) or ((CurrColor shr 8) and GraphTypes.RGB_MASK_32);
       end;
     end else begin
       CurrColor := DEF_COLOR;
@@ -1475,7 +1494,7 @@ begin
     if (CharWidth > 0) and (FontHeight > 0) then begin
       CurrColor32     := Graph.PremultiplyColorChannelsByAlpha(CurrColor32);
       ShadowColor32   := Graph.PremultiplyColorChannelsByAlpha(ShadowColor32);
-      ColorOpaqueness := (CurrColor32 and Graph.ALPHA_CHANNEL_MASK_32) shr 24;
+      ColorOpaqueness := (CurrColor32 and GraphTypes.ALPHA_CHANNEL_MASK_32) shr 24;
 
       CharPixelPtr   := @Font.CharsDataPtr[Font.CharDataOffsets[c]];
       OutRowStartPtr := Utils.PtrOfs(Canvas.Buffer, y * Canvas.ScanlineSize + (x + Font.CharInfos[c].SpaceBefore) * BytesPerPixel);
@@ -1490,7 +1509,7 @@ begin
             if CharPixel = 255 then begin
               Color32 := CurrColor32;
             end else begin
-              Color32 := (ShadowColor32 and Graph.RGB_MASK_32) or ((((256 - CharPixel) * ColorOpaqueness) and $FF00) shl 16);
+              Color32 := (ShadowColor32 and GraphTypes.RGB_MASK_32) or ((((256 - CharPixel) * ColorOpaqueness) and $FF00) shl 16);
             end;
 
             if BytesPerPixel = sizeof(integer) then begin
