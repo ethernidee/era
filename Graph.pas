@@ -3,8 +3,26 @@ unit Graph;
 (***)  interface  (***)
 
 uses
-  SysUtils, Math, Graphics, Jpeg, Types, PngImage, Utils, Core, Alg,
-  Heroes, GameExt, EventMan;
+  Jpeg,
+  Math,
+  SysUtils,
+  Windows,
+
+  Alg,
+  Core,
+  DataLib,
+  DlgMes,
+  EventMan,
+  Files,
+  GameExt,
+  Graphics,
+  GraphTypes,
+  Heroes,
+  Libspng,
+  PngImage,
+  ResLib,
+  Types,
+  Utils;
 
 const
   (* ResizeBmp24.FreeOriginal argument *)
@@ -17,12 +35,8 @@ const
   AUTO_WIDTH  = 0;
   AUTO_HEIGHT = 0;
 
-  ALPHA_CHANNEL_MASK_32        = integer($FF000000);
-  RED_BLUE_CHANNELS_MASK_32    = $00FF00FF;
-  GREEN_CHANNEL_MASK_32        = $0000FF00;
-  ALPHA_GREEN_CHANNELS_MASK_32 = integer(ALPHA_CHANNEL_MASK_32 or GREEN_CHANNEL_MASK_32);
-  FULLY_OPAQUE_MASK32          = integer($FF000000);
-  RGB_MASK_32                  = $FFFFFF;
+  (* Paths *)
+  DEF_PNG_FRAMES_DIR = 'Data\Defs';
 
 type
   (* Import *)
@@ -30,31 +44,12 @@ type
   TBitmap    = Graphics.TBitmap;
   TJpegImage = Jpeg.TJpegImage;
   TPngObject = PngImage.TPngObject;
+  TDict      = DataLib.TDict;
 
   TImageType = (IMG_UNKNOWN, IMG_BMP, IMG_JPG, IMG_PNG);
   TResizeAlg = (ALG_NO_RESIZE = 0, ALG_STRETCH = 1, ALG_CONTAIN = 2, ALG_DOWNSCALE = 3, ALG_UPSCALE = 4, ALG_COVER = 5, ALG_FILL = 6);
 
   TDimensionsDetectionType = (USE_IMAGE_VALUES, CALC_PROPORTIONALLY);
-
-  PColor24 = ^TColor24;
-  TColor24 = packed record
-    Blue:  byte;
-    Green: byte;
-    Red:   byte;
-  end;
-
-  PColor24Arr = ^TColor24Arr;
-  TColor24Arr = array [0..MAXLONGINT div sizeof(TColor24) - 1] of TColor24;
-
-  TImageRatio = record
-    Width:  single;
-    Height: single;
-  end;
-
-  TImageSize = record
-    Width:  integer;
-    Height: integer;
-  end;
 
 
 (* Premultiplies RGB color channels by color opaqueness *)
@@ -83,6 +78,11 @@ procedure DecRef (Resource: Heroes.PBinaryTreeItem); stdcall;
 
 
 (***)  implementation  (***)
+
+
+var
+// Caseinsensitive map of "defname.def\frame_index.png" => 1 if frame png file exists.
+{O} DefFramesPngFileMap: {U} TDict {of Ptr(1)};
 
 
 (* Checks, that image is valid object with non-null dimensions and forces required pixel format. Returns same object instance. *)
@@ -229,7 +229,7 @@ begin
   result.Canvas.FillRect(Rect);
 end; // .function CreateDefaultBmp24
 
-function GetImageRatio (Image: TBitmap): TImageRatio;
+function GetImageRatio (Image: TBitmap): GraphTypes.TImageRatio;
 var
   Width, Height: integer;
 
@@ -267,7 +267,7 @@ begin
         end;
       end; // .switch
     end; // .else
-  end; // .if  
+  end; // .if
 end; // .procedure DetectMissingDimensions
 
 procedure ApplyMinMaxDimensionConstraints (var Width, Height: integer; MinWidth, MinHeight, MaxWidth, MaxHeight: integer);
@@ -309,7 +309,7 @@ begin
 
   DetectMissingDimensions(Image, NewWidth, NewHeight, DimensionsDetectionType);
   // End
-  
+
   ApplyMinMaxDimensionConstraints(NewWidth, NewHeight, 1, 1, MaxWidth, MaxHeight);
 
   if (Image.Width = NewWidth) and (Image.Height = NewHeight) then begin
@@ -353,7 +353,7 @@ begin
           NewWidth  := round(Width);
           NewHeight := round(height);
           ApplyMinMaxDimensionConstraints(NewWidth, NewHeight, 1, 1, MaxWidth, MaxHeight);
-          
+
           result.SetSize(NewWidth, NewHeight);
           result.Canvas.StretchDraw(Rect(0, 0, NewWidth, NewHeight), Image);
         end else begin
@@ -376,11 +376,11 @@ begin
   end;
 end; // .procedure ResizeBmp24
 
-function GetScaledBmp24Size (Image: TBitmap; NewWidth, NewHeight: integer): TImageSize;
+function GetScaledBmp24Size (Image: TBitmap; NewWidth, NewHeight: integer): GraphTypes.TImageSize;
 var
   OldWidth:   integer;
   OldHeight:  integer;
-  ImageRatio: TImageRatio;
+  ImageRatio: GraphTypes.TImageRatio;
 
 begin
   ValidateBmp24(Image);
@@ -443,13 +443,13 @@ begin
   bTmp.SetSize(NewWidth, NewHeight);
   xscale           := bTmp.Width / (abmp.Width - 1);
   yscale           := bTmp.Height / (abmp.Height - 1);
-  
+
   for to_y := 0 to bTmp.Height - 1 do begin
     sfrom_y     := to_y / yscale;
     ifrom_y     := Trunc(sfrom_y);
     weight_y[1] := sfrom_y - ifrom_y;
     weight_y[0] := 1 - weight_y[1];
-    
+
     for to_x := 0 to bTmp.Width - 1 do begin
       sfrom_x     := to_x / xscale;
       ifrom_x     := Trunc(sfrom_x);
@@ -458,7 +458,7 @@ begin
       total_blue  := 0.0;
       total_green := 0.0;
       total_red   := 0.0;
-      
+
       for ix := 0 to 1 do begin
         for iy := 0 to 1 do begin
           sli         := abmp.Scanline[ifrom_y + iy];
@@ -471,14 +471,14 @@ begin
           total_red   := total_red   + new_red   * weight;
         end;
       end;
-      
+
       slo             := bTmp.ScanLine[to_y];
       slo[to_x].Blue  := Round(total_blue);
       slo[to_x].Green := Round(total_green);
       slo[to_x].Red   := Round(total_red);
     end;
   end;
-  
+
   result := bTmp;
 
   if FreeOriginal then begin
@@ -643,7 +643,7 @@ begin
   if result = nil then begin
     FilePath := SysUtils.ExpandFileName(FilePath);
     Bmp      := ResizeBmp24(LoadImageAsBmp24(FilePath), Width, Height, MaxWidth, MaxHeight, ResizeAlg, FREE_ORIGINAL_BMP);
-  
+
     // Perform image conversion and resource insertion
     Pcx24  := Bmp24ToPcx24(Bmp, PcxName);
     result := Heroes.TPcx16ItemStatic.Create(PcxName, Bmp.Width, Bmp.Height);
@@ -663,17 +663,62 @@ begin
   Resource.DecRef;
 end;
 
-procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
+// procedure LoadPng (const FilePath: string);
+// var
+// {On} Image:        GraphTypes.TRawImage32;
+//      FileContents: string;
+//      Png: TPngObject;
+
+// begin
+//   Files.ReadFileContents(FilePath, FileContents);
+//   Image := Libspng.DecodePng(pchar(FileContents), Length(FileContents));
+//   Png := TPngObject.Create;
+//   Png.LoadFromFile(FilePath);
+// end;
+
+procedure RescanDefFramesPngFiles;
 var
-  pic: PPcx16Item;
+  DefName: string;
 
 begin
-  (* testing *)
-  pic := LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600, 400, 300, ALG_CONTAIN);
+  DefFramesPngFileMap.Clear;
+
+  with Files.Locate(GameExt.GameDir + '\' + DEF_PNG_FRAMES_DIR + '\*', Files.ONLY_DIRS) do begin
+    if FindNext then begin
+      if (FoundName <> '.') and (FoundName <> '..') then begin
+        DefName := FoundName;
+
+        with Files.Locate(FoundPath + '\' + '*.png', Files.ONLY_FILES) do begin
+          if FindNext then begin
+            if FoundRec.Rec.Size > 0 then begin
+              DefFramesPngFileMap[DefName + '\' + FoundName] := Ptr(1);
+            end;
+          end;
+        end; // .with
+      end; // .if
+    end; // .if
+  end; // .with
+end; // .procedure RescanDefFramesPngFiles
+
+procedure OnBeforeScriptsReload (Event: GameExt.PEvent); stdcall;
+begin
+  RescanDefFramesPngFiles;
+end;
+
+procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
+begin
+
+end;
+
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+begin
+  RescanDefFramesPngFiles;
 end;
 
 begin
-  if false (* testing *) then begin
-    EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
-  end;
+  DefFramesPngFileMap := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  EventMan.GetInstance.On('OnBeforeScriptsReload', OnBeforeScriptsReload);
+  EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
 end.

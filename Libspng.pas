@@ -110,7 +110,7 @@ var
 
 begin
   {!} Assert(PngBuf <> nil);
-  {!} Assert(PngbufSize > 0);
+  {!} Assert(PngBufSize > 0);
   {!} Assert(MaxWidth > 0);
   {!} Assert(MaxHeight > 0);
 
