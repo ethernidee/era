@@ -2,8 +2,6 @@ unit ResLib;
 (*
   Library for game resources management, particulary storing them in shared memory, reference counting,
   caching support.
-
-  @todo: add global ini config for ResourceManager.MaxTotalSize
 *)
 
 
@@ -14,6 +12,8 @@ uses
   Utils,
 
   DataLib,
+  EventMan,
+  GameExt,
   StrLib;
 
 type
@@ -85,6 +85,14 @@ type
     property RefCount: integer read fRefCount;
     property Source:   string  read fSource;
   end; // .class TSharedResource
+
+
+var
+(* Parsed/decoded resources manager. Provides possibility to share the same resource by multiple clients and automatical resource caching *)
+{O} ResMan: TResourceManager;
+
+  // This config parameter must be set before OnAfterWoG event
+  ResManCacheSize: integer = 0;
 
 
 (***)  implementation  (***)
@@ -239,7 +247,7 @@ begin
     while (Self.fTotalSize > Self.fMaxTotalSize) and (PrevProcessedItem <> SavedQueueStart) do begin
       PrevProcessedItem := CurrItem;
 
-      // ResourceManager cache is the only only of resource. The resource can be deallocated safely.
+      // ResMan cache is the only only of resource. The resource can be deallocated safely.
       if CurrItem.Resource.RefCount = 1 then begin
         NextItemToProcess := CurrItem.PrevItem;
 
@@ -271,7 +279,7 @@ begin
   Self.PrependItemToResQueue(ResQueueItem);
   Inc(Self.fTotalSize, Size);
 
-  // We own resource and collect garbage only if cache capacity is not zero. Otherwise ResourceManager works
+  // We own resource and collect garbage only if cache capacity is not zero. Otherwise ResMan works
   // as simple loaded resource locator.
   if Self.fMaxTotalSize > 0 then begin
     Resource.IncRef;
@@ -360,4 +368,12 @@ end;
 //   RawImageCache.AddItem(result);
 // end;
 
+
+procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
+begin
+  ResMan := TResourceManager.Create(ResManCacheSize);
+end;
+
+begin
+  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

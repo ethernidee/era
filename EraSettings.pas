@@ -6,9 +6,24 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, Math, Utils, Log, Ini, Core,
-  VfsImport, Heroes, GameExt, EraLog, SndVid, Tweaks, Stores, Erm, EventMan;
-  
+  Math,
+  SysUtils,
+
+  Core,
+  EraLog,
+  Erm,
+  EventMan,
+  GameExt,
+  Heroes,
+  Ini,
+  Log,
+  ResLib,
+  SndVid,
+  Stores,
+  Tweaks,
+  Utils,
+  VfsImport;
+
 const
   LOG_FILE_NAME = 'log.txt';
 
@@ -44,7 +59,7 @@ end;
 
 function GetDebugOpt (const OptionName: string; DefValue: boolean = false): boolean;
 begin
-  result := DebugOpt and (DebugEverythingOpt or GetOptBoolValue(OptionName, DefValue)); 
+  result := DebugOpt and (DebugEverythingOpt or GetOptBoolValue(OptionName, DefValue));
 end;
 
 function GetOptIntValue (const OptionName: string; DefValue: integer = 0): integer;
@@ -72,7 +87,7 @@ begin
   while Log.Read(LogRec) do begin
     Logger.Write(LogRec.EventSource, LogRec.Operation, LogRec.Description);
   end;
-  
+
   Log.InstallLogger(Logger, Log.FREE_OLD_LOGGER);
 end; // .procedure InstallLogger
 
@@ -89,7 +104,7 @@ begin
   if DebugOpt then begin
     if GetOptValue('Debug.LogDestination', 'File') = 'File' then begin
       InstallLogger(EraLog.TFileLogger.Create(GameExt.DEBUG_DIR + '\' + LOG_FILE_NAME));
-    end else begin     
+    end else begin
       InstallLogger(EraLog.TConsoleLogger.Create('Era Log'));
     end;
   end else begin
@@ -105,7 +120,8 @@ begin
   Tweaks.UseOnlyOneCpuCoreOpt    := GetOptBoolValue('UseOnlyOneCpuCore',           true);
   Stores.DumpSavegameSectionsOpt := GetDebugOpt(    'Debug.DumpSavegameSections',  false);
   GameExt.DumpVfsOpt             := GetDebugOpt(    'Debug.DumpVirtualFileSystem', false);
-  
+  ResLib.ResManCacheSize         := GetOptIntValue( 'ResourceCacheSize',           200000000);
+
   if GetDebugOpt('Debug.LogVirtualFileSystem', false) then begin
     VfsImport.SetLoggingProc(@VfsLogger);
   end;
