@@ -35,12 +35,11 @@ var
 
 function GetOptValue (const OptionName: string; const DefVal: string = ''): string;
 const
-  ERA_SECTION               = 'Era';
-  DEFAULT_ERA_SETTINGS_FILE = 'default era settings.ini';
+  ERA_SECTION = 'Era';
 
 begin
-  if Ini.ReadStrFromIni(OptionName, ERA_SECTION, GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE, result) or
-     Ini.ReadStrFromIni(OptionName, ERA_SECTION, GameExt.GameDir + '\' + DEFAULT_ERA_SETTINGS_FILE, result)
+  if Ini.ReadStrFromIni(OptionName, ERA_SECTION, GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE,         result) or
+     Ini.ReadStrFromIni(OptionName, ERA_SECTION, GameExt.GameDir + '\' + Heroes.DEFAULT_GAME_SETTINGS_FILE, result)
   then begin
     result := SysUtils.Trim(result);
   end else begin

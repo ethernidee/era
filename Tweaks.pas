@@ -266,37 +266,41 @@ begin
 end; // .function New_Zvslib_GetPrivateProfileStringA
 
 procedure ReadGameSettings;
+var
+  DefaultGameSettingsFilePath: string;
+  GameSettingsFilePath:        string;
+
+  function ReadValue (const Key: string; const DefVal: string = ''): string;
+  begin
+    if Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, GameSettingsFilePath,        result) or
+       Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, DefaultGameSettingsFilePath, result)
+    then begin
+      result := SysUtils.Trim(result);
+    end else begin
+      result := DefVal;
+    end;
+  end;
+
   procedure ReadInt (const Key: string; Res: pinteger);
   var
-    StrValue: string;
-    Value:    integer;
+    Value: integer;
 
   begin
-    if
-      Ini.ReadStrFromIni
-      (
-        Key,
-        Heroes.GAME_SETTINGS_SECTION,
-        Heroes.GAME_SETTINGS_FILE,
-        StrValue
-      ) and
-      SysUtils.TryStrToInt(StrValue, Value)
-    then begin
-      Res^  :=  Value;
-    end; // .if
-  end; // .procedure ReadInt
+    if SysUtils.TryStrToInt(ReadValue(Key, '0'), Value) then begin
+      Res^ := Value;
+    end else begin
+      Res^ := 0;
+    end;
+  end;
 
   procedure ReadStr (const Key: string; Res: pchar);
   var
     StrValue: string;
 
   begin
-    if
-      Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, Heroes.GAME_SETTINGS_FILE, StrValue)
-    then begin
-      Utils.CopyMem(Length(StrValue) + 1, pchar(StrValue), Res);
-    end;
-  end; // .procedure ReadStr
+    StrValue := ReadValue(Key, '');
+    Utils.CopyMem(Length(StrValue) + 1, pchar(StrValue), Res);
+  end;
 
 const
   UNIQUE_ID_LEN   = 3;
@@ -311,7 +315,10 @@ begin
   asm
     MOV EAX, Heroes.LOAD_DEF_SETTINGS
     CALL EAX
-  end; // .asm
+  end;
+
+  DefaultGameSettingsFilePath := GameExt.GameDir + '\' + Heroes.DEFAULT_GAME_SETTINGS_FILE;
+  GameSettingsFilePath        := GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE;
 
   ReadInt('Show Intro',             Heroes.SHOW_INTRO_OPT);
   ReadInt('Music Volume',           Heroes.MUSIC_VOLUME_OPT);
@@ -337,12 +344,12 @@ begin
 
   if Heroes.UNIQUE_SYSTEM_ID_OPT^ = #0 then begin
     Randomize;
-    RandomValue :=  (integer(Windows.GetTickCount) + Random(MAXLONGINT)) and UNIQUE_ID_MASK;
+    RandomValue := (integer(Windows.GetTickCount) + Random(MAXLONGINT)) and UNIQUE_ID_MASK;
     SetLength(RandomStr, UNIQUE_ID_LEN);
 
     for i:=1 to UNIQUE_ID_LEN do begin
-      RandomStr[i]  :=  UPCASE(StrLib.ByteToHexChar(RandomValue and $F));
-      RandomValue   :=  RandomValue shr 4;
+      RandomStr[i] := Upcase(StrLib.ByteToHexChar(RandomValue and $F));
+      RandomValue  := RandomValue shr 4;
     end;
 
     Utils.CopyMem(Length(RandomStr) + 1, pointer(RandomStr), Heroes.UNIQUE_SYSTEM_ID_OPT);
