@@ -10,6 +10,8 @@ uses
   SysUtils,
   Windows,
 
+  Libspng,
+
   ApiJack,
   AssocArrays,
   Core,
@@ -38,17 +40,11 @@ type
 const
   MAX_CHINESE_LATIN_CHARACTER = #160;
 
-  TEXTMODE_15BITS = $3E0;
-  TEXTMODE_16BITS = $7E0;
-
   DEF_COLOR     = 0;
   DEF_ALIGNMENT = -1;
 
-  TextColorMode: pword = Ptr($694DB0);
-
 
 type
-  TColor32To16Func       = function (Color32: integer): integer;
   TGraphemWidthEstimator = function (Font: Heroes.PFontItem): integer; stdcall;
 
 var
@@ -171,8 +167,6 @@ var
 {O} TextAttrsStack:    {U} Lists.TList {of (Color32, HorizAlign: integer)...};
 {O} TextScanner:       TextScan.TTextScanner;
 {O} TaggedLineBuilder: StrLib.TStrBuilder;
-    Color32To16:       TColor32To16Func;
-    Color16To32:       function (Color16: integer): integer;
 
 {O} CurrParsedText:        TParsedText = nil;
 {U} CurrTextBlock:         PTextBlock  = nil;
@@ -188,36 +182,7 @@ var
     GlobalBuffer: array [0..1024 * 1024 - 1] of char;
 
 
-function Color32To15Func (Color32: integer): integer;
-begin
-  result  :=
-    ((Color32 and $0000F8) shr 3) or
-    ((Color32 and $00F800) shr 6) or
-    ((Color32 and $F80000) shr 9);
-end;
 
-function Color32To16Func (Color32: integer): integer;
-begin
-  result  :=
-    ((Color32 and $0000F8) shr 3) or
-    ((Color32 and $00FC00) shr 5) or
-    ((Color32 and $F80000) shr 8);
-end;
-
-function Color16To32Func (Color16: integer): integer;
-begin
-  result := (({BLUE} (Color16 and $1F) shl 3) or ({GREEN} (Color16 and $7E0) shl 5) or ({RED} (Color16 and $F800) shl 8) or GraphTypes.FULLY_OPAQUE_MASK32) and $FFF8FCF8;
-end;
-
-function Color15To32Func (Color15: integer): integer;
-begin
-  result := (({BLUE} (Color15 and $1F) shl 3) or ({GREEN} (Color15 and $3E0) shl 6) or ({RED} (Color15 and $F800) shl 9) or GraphTypes.FULLY_OPAQUE_MASK32) and $FFF8F8F8;
-end;
-
-function Color32ToCode (Color32: integer): string;
-begin
-  result := SysUtils.Format('%.8x', [((Color32 and GraphTypes.RGB_MASK_32) shl 8) or ((Color32 shr 24) and $FF)]);
-end;
 
 procedure NameStdColors;
 begin
@@ -559,7 +524,7 @@ var
       if Length(ColorName) < RGBA_COLOR_CODE_MIN_LEN then begin
         CurrColor := CurrColor or GraphTypes.FULLY_OPAQUE_MASK32;
       end else begin
-        CurrColor := ((CurrColor and $FF) shl 24) or ((CurrColor shr 8) and GraphTypes.RGB_MASK_32);
+        CurrColor := ((CurrColor and $FF) shl 24) or ((CurrColor shr 8) and GraphTypes.RGB_CHANNELS_MASK_32);
       end;
     end else begin
       CurrColor := DEF_COLOR;
@@ -1086,7 +1051,7 @@ begin
     case CurrBlock.BlockType of
       TEXT_BLOCK_CHARS: begin
         Res.Append('{~');
-        Res.Append(Color32ToCode(CurrBlock.CharsBlock.Color32));
+        Res.Append(GraphTypes.Color32ToCode(CurrBlock.CharsBlock.Color32));
 
         if CurrBlock.HorizAlignment <> DEF_ALIGNMENT then begin
           case CurrBlock.HorizAlignment of
@@ -1281,13 +1246,13 @@ begin
   UpdateCurrParsedText(Heroes.PFontItem(Context.EBX), pchar(Context.EDX), Context.ECX);
   CurrTextNumLines := CurrParsedText.CountLines(pinteger(Context.EBP + $18)^);
 
-  CurrColor        := DEF_COLOR;
-  CurrHorizAlign   := DEF_ALIGNMENT;
-  CurrTextAlignPtr := Ptr(Context.EBP + $24);
+  CurrColor             := DEF_COLOR;
+  CurrHorizAlign        := DEF_ALIGNMENT;
+  CurrTextAlignPtr      := Ptr(Context.EBP + $24);
   CurrTextDefHorizAlign := CurrTextAlignPtr^ and Heroes.HORIZ_TEXT_ALIGNMENT_MASK;
-  CurrTextBlock    := CurrParsedText.Blocks[0];
-  CurrBlockPos     := 0;
-  CurrBlockInd     := 0;
+  CurrTextBlock         := CurrParsedText.Blocks[0];
+  CurrBlockPos          := 0;
+  CurrBlockInd          := 0;
 
   UpdateCurrBlock;
   CurrBlockPos := -1;
@@ -1445,21 +1410,6 @@ begin
   ChineseGraphemWidthEstimator := Estimator;
 end;
 
-procedure SetupColorMode;
-begin
-  if TextColorMode^ = TEXTMODE_15BITS then begin
-    Color32To16 := Color32To15Func;
-    Color16To32 := Color15To32Func;
-  end else if TextColorMode^ = TEXTMODE_16BITS then begin
-    Color32To16 := Color32To16Func;
-    Color16To32 := Color16To32Func;
-  end else begin
-    {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
-  end;
-
-  NameStdColors;
-end; // .function Hook_SetupColorMode
-
 function DrawCharacterToPcx (Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; ColorInd: integer): Heroes.PPcx16Item;
 var
   CharWidth:       integer;
@@ -1472,7 +1422,7 @@ var
   Color32:         integer;
   CurrColor32:     integer;
   ShadowColor32:   integer;
-  ColorOpaqueness: integer;
+  ColorOpacity:    integer;
   i, j:            integer;
   c:               char;
 
@@ -1480,21 +1430,21 @@ begin
   result := Heroes.PPcx16Item(Ch); // Vanilla code. Like error marker?
 
   if (Ch >= 0) and (Ch <= 255) then begin
-    BytesPerPixel := BytesPerPixelPtr^;
+    BytesPerPixel := Heroes.BytesPerPixelPtr^;
     c             := chr(Ch);
     CharWidth     := Font.CharInfos[c].Width;
     FontHeight    := Font.Height;
-    ShadowColor32 := Color16To32(Font.Palette16.Colors[32]);
+    ShadowColor32 := GraphTypes.Color16To32(Font.Palette16.Colors[32]);
     CurrColor32   := CurrColor;
 
     if CurrColor32 = DEF_COLOR then begin
-      CurrColor32 := Color16To32(Font.Palette16.Colors[ColorInd]);
+      CurrColor32 := GraphTypes.Color16To32(Font.Palette16.Colors[ColorInd]);
     end;
 
     if (CharWidth > 0) and (FontHeight > 0) then begin
-      CurrColor32     := Graph.PremultiplyColorChannelsByAlpha(CurrColor32);
-      ShadowColor32   := Graph.PremultiplyColorChannelsByAlpha(ShadowColor32);
-      ColorOpaqueness := (CurrColor32 and GraphTypes.ALPHA_CHANNEL_MASK_32) shr 24;
+      CurrColor32   := GraphTypes.PremultiplyColorChannelsByAlpha(CurrColor32);
+      ShadowColor32 := GraphTypes.PremultiplyColorChannelsByAlpha(ShadowColor32);
+      ColorOpacity  := 255 - ((CurrColor32 and GraphTypes.ALPHA_CHANNEL_MASK_32) shr 24);
 
       CharPixelPtr   := @Font.CharsDataPtr[Font.CharDataOffsets[c]];
       OutRowStartPtr := Utils.PtrOfs(Canvas.Buffer, y * Canvas.ScanlineSize + (x + Font.CharInfos[c].SpaceBefore) * BytesPerPixel);
@@ -1509,13 +1459,13 @@ begin
             if CharPixel = 255 then begin
               Color32 := CurrColor32;
             end else begin
-              Color32 := (ShadowColor32 and GraphTypes.RGB_MASK_32) or ((((256 - CharPixel) * ColorOpaqueness) and $FF00) shl 16);
+              Color32 := (ShadowColor32 and GraphTypes.RGB_CHANNELS_MASK_32) or (255 - ((((256 - CharPixel) * ColorOpacity) and $FF00) shl 16));
             end;
 
-            if BytesPerPixel = sizeof(integer) then begin
-              pinteger(OutPixelPtr)^ := Graph.AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color32);
+            if BytesPerPixel = sizeof(GraphTypes.TColor32) then begin
+              pinteger(OutPixelPtr)^ := GraphTypes.AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color32);
             end else begin
-              pword(OutPixelPtr)^ := Color32To16(Graph.AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color32));
+              pword(OutPixelPtr)^ := GraphTypes.Color32To16(GraphTypes.AlphaBlendWithPremultiplied32(GraphTypes.Color16To32(pword(OutPixelPtr)^), Color32));
             end;
           end; // .if
 
@@ -1573,9 +1523,9 @@ var
   i, j:           integer;
 
 begin
-  BytesPerPixel := BytesPerPixelPtr^;
+  BytesPerPixel := Heroes.BytesPerPixelPtr^;
 
-  if BytesPerPixel = sizeof(word) then begin
+  if BytesPerPixel = sizeof(GraphTypes.TColor16) then begin
     result := PatchApi.Call(THISCALL_, OrigFunc, [Canvas, x, y, Width, Height, FillColor16]);
   end else begin
     result := Height;
@@ -1600,7 +1550,7 @@ begin
     if FillColor16 = MAGIC_COLOR then begin
       Color32 := MAGIC_COLOR;
     end else begin
-      Color32 := Color16To32(FillColor16);
+      Color32 := GraphTypes.Color16To32(FillColor16);
     end;
 
     OutRowStartPtr := Utils.PtrOfs(Canvas.Buffer, y * Canvas.ScanlineSize + x * BytesPerPixel);
@@ -1620,7 +1570,8 @@ end; // .function New_Pcx16_FillRect
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 begin
-  SetupColorMode;
+  NameStdColors;
+
   ApiJack.StdSplice(Ptr($4B4F00), @New_Font_DrawCharacter, ApiJack.CONV_THISCALL, 6);
   ApiJack.StdSplice(Ptr($44E190), @New_Pcx16_FillRect, ApiJack.CONV_THISCALL, 6);
 end;
