@@ -50,13 +50,18 @@ type
     constructor Create (MaxTotalSize: integer);
     destructor Destroy; override;
 
+    (* Returns number of all loaded resources *)
+    function CountResources: integer;
+
     (* Creates TSharedResource and increases its reference counter by one, placing its in global cache. Client must call DecRef when resource is no longer needed *)
-    function AddResource (Data: TObject; Size: integer; const Source: string): TSharedResource;
+    function AddResource (Data: TObject; Size: integer; const Source: string): {O} TSharedResource;
 
     (* Returns existing resource from cache, if it's found. Client must call DecRef when resource is no longer needed *)
-    function GetResource (const Source: string): {n} TSharedResource;
+    function GetResource (const Source: string): {On} TSharedResource;
 
-    property Resources[const ResourceSource: string]: {n} TSharedResource read GetResource;
+    property TotalSize:    integer read fTotalSize;
+    property MaxTotalSize: integer read fMaxTotalSize;
+    property NumResources: integer read CountResources;
   end; // .class TResourceManager
 
   (*
@@ -265,7 +270,12 @@ begin
   end; // .if
 end; // .procedure CollectGarbage
 
-function TResourceManager.AddResource (Data: TObject; Size: integer; const Source: string): TSharedResource;
+function TResourceManager.CountResources: integer;
+begin
+  result := Self.fResourceMap.NodeCount;
+end;
+
+function TResourceManager.AddResource (Data: TObject; Size: integer; const Source: string): {O} TSharedResource;
 var
 {U} Resource:     TSharedResource;
 {U} ResQueueItem: TResQueueItem;
@@ -289,7 +299,7 @@ begin
   result := Resource;
 end;
 
-function TResourceManager.GetResource (const Source: string): {n} TSharedResource;
+function TResourceManager.GetResource (const Source: string): {On} TSharedResource;
 var
 {U} ResQueueItem: TResQueueItem;
 
@@ -303,71 +313,6 @@ begin
     result := ResQueueItem.Resource;
   end;
 end;
-
-// Img := LoadFileFromPac(FileName);
-// Resource := TResource.Create(Img, Img.Size);
-// Resource := TResource.Create(Img, Img.Width * Img.Height * RGBA_BYTES_PER_PIXEL);
-// Resource := NewPngResource(Img, Img.Size);
-
-// LoadPng => automatically
-
-// Cache.AddItem(FileName, Resource); // if added to cache, IncRef called automatically
-// ...
-// Resource.DecRef;
-
-// function LoadPng (FilePath: string): {O} TResource;
-// var
-//   FileData: string;
-//   PngImage: TPngImage;
-
-// begin
-//   result := RawImageCache.GetItem(FilePath);
-
-//   if result <> nil then begin
-//     if result.Data instanceof TPngImage then begin
-//       result.IncRef;
-
-//       exit;
-//     end else begin
-//       result := MakeDefPngImage();
-
-//       exit;
-//     end;
-//   end;
-
-//   FileResource := FileCache.GetItem(FilePath);
-
-//   if FileResource <> nil then begin
-//     FileResource.IncRef;
-//   end else if if not LoadFileFromZip(FilePath, FileData) then begin
-//     result := MakeDefPngImage();
-
-//     exit;
-//   end else begin
-//     FileResource := TResource.Create(TString.Create(FileData), Length(FileData));
-//     FileCache.AddItem(FileResource);
-//   end;
-
-//   try
-//     Stream   := TStringStream.Create(FileData);
-//     PngImage := TPngImage.LoadFromStream(Stream);
-//   except
-//     FreeAndNil(PngImage);
-
-//     result := MakeDefPngImage();
-
-//     exit;
-//   finally
-//     if Stream then
-//       FreeAndNil(Stream);
-//   end;
-
-//   FileResource.DecRef; // call later?
-
-//   result := TResource.Create(PngImage, PngImage.Width * PngImage.Height * RGBA_BYTES_PER_PIXEL);
-//   RawImageCache.AddItem(result);
-// end;
-
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
