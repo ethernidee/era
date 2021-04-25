@@ -22,6 +22,7 @@ uses
   PngImage,
   ResLib,
   Types,
+  WinUtils,
   Utils;
 
 const
@@ -52,15 +53,6 @@ type
   TDimensionsDetectionType = (USE_IMAGE_VALUES, CALC_PROPORTIONALLY);
 
 
-(* Premultiplies RGB color channels by color opaqueness *)
-function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
-
-(* Performans ARBG pixels alpha blending *)
-function AlphaBlend32 (FirstColor32, SecondColor32: integer): integer;
-
-(* Performans ARBG pixels alpha blending. RGB channels of the second color must be premultiplied by opaqueness *)
-function AlphaBlendWithPremultiplied32 (FirstColor32, SecondColor32Premultiplied: integer): integer;
-
 function LoadImage (const FilePath: string): {n} TGraphic;
 
 (* Fast bitmap scaling. Input bitmap is forced to be 24 bit. *)
@@ -75,6 +67,12 @@ function LoadImageAsPcx16 (FilePath:  string;      PcxName:   string  = '';
                            ResizeAlg: TResizeAlg = ALG_DOWNSCALE): {OU} Heroes.PPcx16Item;
 
 procedure DecRef (Resource: Heroes.PBinaryTreeItem); stdcall;
+
+(* Loads given png file from cache or file system and returns TRawImage in the best format wrapped into shared resource *)
+function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
+
+(* Draws any raw image to Pcx16 canvas *)
+procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item);
 
 
 (***)  implementation  (***)
@@ -98,52 +96,6 @@ procedure ValidateImageSize (Width: integer; Height: integer);
 begin
   {!} Assert((Width > 0) and (Height > 0), Format('Invalid image dimensions specified: %dx%d', [Width, Height]));
 end;
-
-function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
-var
-  AlphaChannel:    integer;
-  ColorOpaqueness: integer;
-
-begin
-  AlphaChannel    := Color32 and ALPHA_CHANNEL_MASK_32;
-  ColorOpaqueness := AlphaChannel shr 24;
-  result          := (((ColorOpaqueness * (Color32 and RED_BLUE_CHANNELS_MASK_32)) shr 8) and RED_BLUE_CHANNELS_MASK_32) or
-                     (((ColorOpaqueness * (Color32 and GREEN_CHANNEL_MASK_32)) shr 8) and GREEN_CHANNEL_MASK_32) or
-                     AlphaChannel;
-end;
-
-function AlphaBlendWithPremultiplied32 (FirstColor32, SecondColor32Premultiplied: integer): integer;
-var
-  SecondColorOpacity: integer;
-
-begin
-  SecondColorOpacity := 255 - ((SecondColor32Premultiplied and ALPHA_CHANNEL_MASK_32) shr 24);
-
-  result := ((((SecondColorOpacity * (FirstColor32 and RED_BLUE_CHANNELS_MASK_32))  shr 8)  and RED_BLUE_CHANNELS_MASK_32) or
-            ((SecondColorOpacity * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8)) and ALPHA_GREEN_CHANNELS_MASK_32))
-            + SecondColor32Premultiplied;
-end;
-
-function AlphaBlend32 (FirstColor32, SecondColor32: integer): integer;
-const
-  ONE_ALPHA_CHANNEL_MASK_32 = $01000000;
-
-var
-  SecondColorOpacity:    integer;
-  SecondColorOpaqueness: integer;
-  RedBlueChannels:       integer;
-  AlphaGreenChannels:    integer;
-
-begin
-  SecondColorOpaqueness := (SecondColor32 and ALPHA_CHANNEL_MASK_32) shr 24;
-  SecondColorOpacity    := 255 - SecondColorOpaqueness;
-  RedBlueChannels       := (SecondColorOpacity    * (FirstColor32  and RED_BLUE_CHANNELS_MASK_32) +
-                            SecondColorOpaqueness * (SecondColor32 and RED_BLUE_CHANNELS_MASK_32)) shr 8;
-  AlphaGreenChannels    := SecondColorOpacity     * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8) +
-                           SecondColorOpaqueness  * (ONE_ALPHA_CHANNEL_MASK_32 or ((SecondColor32 and GREEN_CHANNEL_MASK_32) shr 8));
-  result                := (RedBlueChannels and RED_BLUE_CHANNELS_MASK_32) or (AlphaGreenChannels and ALPHA_GREEN_CHANNELS_MASK_32);
-end;
-
 
 (* Returns number of bits per pixels, 0 for unknown or unsupported. *)
 function GetBmpColorDepth (Image: TBitmap): integer;
@@ -429,7 +381,7 @@ var
   total_blue:             single;
   ix, iy:                 integer;
   bTmp:                   TBitmap;
-  sli, slo:               PColor24Arr;
+  sli, slo:               GraphTypes.PColor24Arr;
 
 begin
   with GetScaledBmp24Size(abmp, NewWidth, NewHeight) do begin
@@ -538,7 +490,7 @@ function Bmp24ToPcx16 (Image: TBitmap; const Name: string): {O} Heroes.PPcx16Ite
 var
     Width:           integer;
     Height:          integer;
-{U} BmpPixels:       PColor24;
+{U} BmpPixels:       GraphTypes.PColor24;
 {U} PcxPixels:       pword;
     PcxScanlineSize: integer;
     x, y:            integer;
@@ -574,8 +526,8 @@ function Bmp24ToPcx24 (Image: TBitmap; const Name: string): {O} Heroes.PPcx24Ite
 var
     Width:           integer;
     Height:          integer;
-{U} BmpPixels:       PColor24;
-{U} PcxPixels:       pword;
+{U} BmpPixels:       GraphTypes.PColor24;
+{U} PcxPixels:       GraphTypes.PColor24;
     PcxScanlineSize: integer;
     y:               integer;
 
@@ -663,6 +615,89 @@ begin
   Resource.DecRef;
 end;
 
+function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
+var
+{On} Image:        GraphTypes.TRawImage;
+{On} Image16:      GraphTypes.TRawImage16;
+{On} Image32:      GraphTypes.TRawImage32;
+{On} Image32Alpha: GraphTypes.TPremultipliedRawImage32;
+     FileContents: string;
+     ImageSize:    integer;
+     Image16Setup: GraphTypes.TRawImage16Setup;
+     Image32Setup: GraphTypes.TRawImage32Setup;
+
+begin
+  Image        := nil;
+  Image16      := nil;
+  Image32      := nil;
+  Image32Alpha := nil;
+  // * * * * * //
+  result := ResLib.ResMan.GetResource(FilePath);
+
+  if result <> nil then begin
+    if not (result.Data is GraphTypes.TRawImage) then begin
+      result.DecRef;
+      result := nil;
+    end;
+
+    exit;
+  end;
+
+  if not Files.ReadFileContents(FilePath, FileContents) then begin
+    exit;
+  end;
+
+  Image32 := Libspng.DecodePng(pchar(FileContents), Length(FileContents));
+
+  if Image32 = nil then begin
+    exit;
+  end;
+
+  ImageSize := Length(Image32.Pixels) * sizeof(Image32.Pixels[0]);
+
+  if Image32.HasTransparency then begin
+    Image32Setup.Init;
+    Image32Setup.HasTransparency := true;
+    Image32Alpha                 := TPremultipliedRawImage32.Create(Image32.Pixels, Image32.Width, Image32.Height, Image32.ScanlineSize);
+    Utils.Exchange(Image, Image32Alpha);
+  end else if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
+    Utils.Exchange(Image, Image32);
+  end else begin
+    Image16Setup.Init;
+    Image16Setup.Color16Mode := GraphTypes.GetColor16Mode;
+
+    Image16 := TRawImage16.Create(
+      GraphTypes.Color32ToColor16Pixels(Image32.Pixels),
+      Image32.Width,
+      Image32.Height,
+      Image32.ScanlineSize div (sizeof(GraphTypes.TColor32) div sizeof(GraphTypes.TColor16)),
+      Image16Setup
+    );
+
+    ImageSize := Length(Image16.Pixels) * sizeof(Image16.Pixels[0]);
+    Utils.Exchange(Image, Image16);
+  end;
+
+  result := ResLib.ResMan.AddResource(Image, ImageSize, FilePath); Image := nil;
+  // * * * * * //
+  SysUtils.FreeAndNil(Image);
+  SysUtils.FreeAndNil(Image16);
+  SysUtils.FreeAndNil(Image32);
+  SysUtils.FreeAndNil(Image32Alpha);
+end; // .function LoadPngResource
+
+procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item);
+begin
+  {!} Assert(Image <> nil);
+  {!} Assert(Canvas <> nil);
+
+  if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
+    Image.DrawToOpaque32Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Canvas.Width, Canvas.Height, pointer(Canvas.Buffer), Canvas.ScanlineSize);
+  end else begin
+    Image.DrawToOpaque16Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Canvas.Width, Canvas.Height, pointer(Canvas.Buffer), Canvas.ScanlineSize);
+  end;
+end;
+
 // procedure LoadPng (const FilePath: string);
 // var
 // {On} Image:        GraphTypes.TRawImage32;
@@ -700,14 +735,61 @@ begin
   end; // .with
 end; // .procedure RescanDefFramesPngFiles
 
+procedure SetupColorMode;
+var
+  Color16Mode: GraphTypes.TColor16Mode;
+
+begin
+  Color16Mode := GraphTypes.COLOR_16_MODE_565;
+
+  if Heroes.Color16GreenChannelMaskPtr^ = GraphTypes.GREEN_CHANNEL_MASK16 then begin
+    Color16Mode := GraphTypes.COLOR_16_MODE_565;
+  end else if Heroes.Color16GreenChannelMaskPtr^ = GREEN_CHANNEL_MASK15 then begin
+    Color16Mode := GraphTypes.COLOR_16_MODE_555;
+  end else begin
+    {!} Assert(false, Format('Invalid color 16 green channel mask: %d', [Heroes.Color16GreenChannelMaskPtr^]));
+  end;
+
+  GraphTypes.SetColor16Mode(Color16Mode);
+end;
+
 procedure OnBeforeScriptsReload (Event: GameExt.PEvent); stdcall;
 begin
   RescanDefFramesPngFiles;
 end;
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
-begin
+var
+  i:           integer;
+  StartTime:   Int64;
+  ImgResource: ResLib.TSharedResource;
+  Img:         GraphTypes.TRawImage;
+  Pixels:      GraphTypes.TArrayOfColor32;
+  Canvas:      GraphTypes.TArrayOfColor16;
 
+
+begin
+  SetupColorMode;
+  //LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
+  //ImgResource := LoadPngResource('D:\forum_ava_source.png');
+  // StartTime   := GetMicroTime();
+  // ImgResource := LoadPngResource('D:\forum_ava_source.png');
+  // Img         := ImgResource.Data as GraphTypes.TRawImage;
+  // VarDump([GetMicroTime - StartTime, Img.ClassType]);
+  // SetLength(Canvas, Img.Width * Img.Height);
+  // StartTime   := GetMicroTime();
+  // Img.DrawToOpaque16Buf(0, 0, 0, 0, Img.Width, Img.Height, Img.Width, Img.Height, pointer(Canvas), Img.Width * sizeof(Canvas[0]));
+  // DlgMes.Msg('draw time: ' + inttostr(GetMicroTime - StartTime));
+  // FileWrite(FileCreate('D:\forum_ava_source.raw'), Canvas[0], Length(Canvas) * sizeof(Canvas[0]));
+  //ImgResource := LoadPngResource('Data\defs\AVMsulf0.def\0.png');
+  //Img := ImgResource.Data as TRawImage32;
+  //VarDump([Ptr(Img.Pixels[0].Value)]);
+
+  // SetLength(Pixels, 10);
+  // //Img := TRawImage32.Create(Pixels, 5, 2, 20, [RIF_HAS_TRANSPARENCY]);
+  // Pixels := nil;
+  // Pixels := Img.Pixels;
+  // Pixels[3].Value := -1;
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
