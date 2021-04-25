@@ -1031,7 +1031,9 @@ const
 
   CurrentPlayerId:  pinteger   = Ptr($69CCF4);
   GameDate:         ^PGameDate = Ptr($840CE0);
-  BytesPerPixelPtr: pbyte      = Ptr($5FA228 + 3);
+
+  BytesPerPixelPtr:        pbyte = Ptr($5FA228 + 3);
+  Color16GreenChannelMaskPtr: pword = Ptr($694DB0);
 
   ZvsGzipWrite:   TGzipWrite = Ptr($704062);
   ZvsGzipRead:    TGzipRead  = Ptr($7040A7);
