@@ -11,6 +11,7 @@ uses
   SysUtils,
 
   GraphTypes,
+  DlgMes,
   Utils;
 
 
@@ -29,7 +30,14 @@ const
 
   NO_FLAGS = 0;
 
-  SPNG_FMT_RGBA8 = 1;
+  SPNG_FMT_RGBA8   = 1;
+  SPNG_DECODE_TRNS = 1;
+
+  SPNG_COLOR_TYPE_GRAYSCALE       = 0;
+  SPNG_COLOR_TYPE_TRUECOLOR       = 2;
+  SPNG_COLOR_TYPE_INDEXED         = 3;
+  SPNG_COLOR_TYPE_GRAYSCALE_ALPHA = 4;
+  SPNG_COLOR_TYPE_TRUECOLOR_ALPHA = 6;
 
 type
   TPngContext = pointer;
@@ -46,6 +54,15 @@ type
     _Align1:           array [1..3] of byte;
   end;
 
+  TPngTransparency = packed record
+    Gray:              word;
+    Red:               word;
+    Green:             word;
+    Blue:              word;
+    NumPaletteEntries: integer;
+    PaletteAlphas:     array [0..255] of byte;
+  end;
+
   PMemoryHandlers = ^TMemoryHandlers;
   TMemoryHandlers = packed record
     Alloc:      function (Size: integer): pointer; cdecl;
@@ -59,6 +76,7 @@ function spng_ctx_new2 (MemoryHandlers: PMemoryHandlers; Flags: integer): TPngCo
 function spng_set_png_buffer (Context: TPngContext; Buf: pointer; Size: integer): integer; cdecl external LIB_SPNG;
 function spng_set_image_limits (Context: TPngContext; MaxWidth, MaxHeight: integer): integer; cdecl external LIB_SPNG;
 function spng_get_ihdr (Context: TPngContext; var Header: TPngHeader): integer; cdecl external LIB_SPNG;
+function spng_get_trns (Context: TPngContext; var Transparency: TPngTransparency): integer; cdecl external LIB_SPNG;
 function spng_decoded_image_size (Context: TPngContext; Format: integer; out ImageSize: integer): integer; cdecl external LIB_SPNG;
 function spng_decode_image (Context: TPngContext; OutBuf: pointer; BufSize: integer; Format: integer; Flags: integer): integer; cdecl external LIB_SPNG;
 procedure spng_ctx_free (Context: TPngContext); cdecl external LIB_SPNG;
@@ -101,12 +119,14 @@ end;
 
 function DecodePng (PngBuf: pointer; PngBufSize: integer; MaxWidth: integer = GraphTypes.MAX_IMAGE_WIDTH; MaxHeight: integer = GraphTypes.MAX_IMAGE_HEIGHT): {On} GraphTypes.TRawImage32;
 var
-  MemoryHandlers: TMemoryHandlers;
-  LastResult:     integer;
-  PngContext:     TPngContext;
-  PngHeader:      TPngHeader;
-  ImageSize:      integer;
-  Pixels:         GraphTypes.TArrayOfColor32;
+  LastResult:      integer;
+  MemoryHandlers:  TMemoryHandlers;
+  PngContext:      TPngContext;
+  PngHeader:       TPngHeader;
+  PngTransparency: TPngTransparency;
+  ImageSize:       integer;
+  Pixels:          GraphTypes.TArrayOfColor32;
+  RawImage32Setup: GraphTypes.TRawImage32Setup;
 
 begin
   {!} Assert(PngBuf <> nil);
@@ -118,6 +138,9 @@ begin
   LastResult := NO_ERROR;
   PngContext := nil;
   // * * * * * //
+  RawImage32Setup.Init;
+  RawImage32Setup.HasTransparency := false;
+
   InitMemoryHandlers(MemoryHandlers);
   PngContext := spng_ctx_new2(@MemoryHandlers, NO_FLAGS);
 
@@ -138,16 +161,26 @@ begin
   end;
 
   if LastResult = NO_ERROR then begin
-    LastResult := spng_decoded_image_size(PngContext, SPNG_FMT_RGBA8, ImageSize);
+    if (PngHeader.ColorType in [SPNG_COLOR_TYPE_GRAYSCALE_ALPHA, SPNG_COLOR_TYPE_TRUECOLOR_ALPHA]) or (spng_get_trns(PngContext, PngTransparency) = 0) then begin
+      RawImage32Setup.HasTransparency := true;
+    end;
+
+    LastResult := spng_decoded_image_size(PngContext, 1, ImageSize);
   end;
 
   if LastResult = NO_ERROR then begin
     SetLength(Pixels, ImageSize div sizeof(Pixels[0]));
-    LastResult := spng_decode_image(PngContext, @Pixels[0], ImageSize, SPNG_FMT_RGBA8, NO_FLAGS);
+
+    if RawImage32Setup.HasTransparency then begin
+      LastResult := spng_decode_image(PngContext, @Pixels[0], ImageSize, SPNG_FMT_RGBA8, SPNG_DECODE_TRNS);
+    end else begin
+      LastResult := spng_decode_image(PngContext, @Pixels[0], ImageSize, SPNG_FMT_RGBA8, NO_FLAGS);
+    end;
   end;
 
   if LastResult = NO_ERROR then begin
-    result := GraphTypes.TRawImage32.Create(Pixels, PngHeader.Width, PngHeader.Height, ImageSize div PngHeader.Height);
+    GraphTypes.RgbaToBgraPixels(Pixels);
+    result := GraphTypes.TRawImage32.Create(Pixels, PngHeader.Width, PngHeader.Height, ImageSize div PngHeader.Height, RawImage32Setup);
   end;
 
   if PngContext <> nil then begin
