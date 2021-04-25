@@ -10,7 +10,7 @@ unit TextOut;
 interface
 uses
   Dialogs, Windows, SysUtils, Math;
-  
+
   procedure DoMyTextOut_New (str:pAnsiChar; Surface, x, y, BoxWidth, BoxHeight, ColorA, Mode, hfont, unknow:integer); stdcall;
   procedure DoMyDialog (hfont, MaxWidth: integer; s: pAnsiChar); stdcall;
 
@@ -131,15 +131,15 @@ end;
 
 function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
 var
-  AlphaChannel:    integer;
-  ColorOpaqueness: integer;
+  AlphaChannel: integer;
+  ColorOpacity: integer;
 
 begin
-  AlphaChannel    := Color32 and ALPHA_CHANNEL_MASK_32;
-  ColorOpaqueness := AlphaChannel shr 24;
-  result          := (((ColorOpaqueness * (Color32 and RED_BLUE_CHANNELS_MASK_32)) shr 8) and RED_BLUE_CHANNELS_MASK_32) or
-                     (((ColorOpaqueness * (Color32 and GREEN_CHANNEL_MASK_32)) shr 8) and GREEN_CHANNEL_MASK_32) or
-                     AlphaChannel;
+  AlphaChannel := Color32 and ALPHA_CHANNEL_MASK_32;
+  ColorOpacity := AlphaChannel shr 24;
+  result       := (((ColorOpacity * (Color32 and RED_BLUE_CHANNELS_MASK_32)) shr 8) and RED_BLUE_CHANNELS_MASK_32) or
+                  (((ColorOpacity * (Color32 and GREEN_CHANNEL_MASK_32)) shr 8) and GREEN_CHANNEL_MASK_32) or
+                  AlphaChannel;
 end;
 
 function AlphaBlendWithPremultiplied32 (FirstColor32, SecondColor32Premultiplied: integer): integer;
@@ -182,11 +182,11 @@ begin
   OffSet:=(94*(Q-1)+(W-1))*24;
   F12.Position:=OffSet;
   F12.Read(GetStr,sizeof(GetStr));
-  
+
   x:=0;
   y:=0;
   i:=0;
-  
+
   while(i<=23) do
   begin
     temp:=GetStr[i];
@@ -197,12 +197,12 @@ begin
       begin
         xy          := (StartY + x) * ScanlineSize + (y + StartX) * BytesPerPixel;
         OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
-        
+
         if BytesPerPixel = sizeof(integer) then begin
           pinteger(OutPixelPtr)^ := AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color);
         end else begin
           pword(OutPixelPtr)^ := Color32To16(AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color));
-        end; 
+        end;
       end;
       Inc(x);
       if x>15 then
@@ -246,12 +246,12 @@ begin
       begin
         xy          := (StartY + y) * ScanlineSize + (x + StartX) * BytesPerPixel;
         OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
-        
+
         if BytesPerPixel = sizeof(integer) then begin
           pinteger(OutPixelPtr)^ := AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color);
         end else begin
           pword(OutPixelPtr)^ := Color32To16(AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color));
-        end; 
+        end;
       end;
       Inc(x);
       if x>15 then
@@ -295,12 +295,12 @@ begin
       begin
         xy          := (StartY + y) * ScanlineSize + (x + StartX) * BytesPerPixel;
         OutPixelPtr := pointer(pinteger(Surface + $30)^ + xy);
-        
+
         if BytesPerPixel = sizeof(integer) then begin
           pinteger(OutPixelPtr)^ := AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color);
         end else begin
           pword(OutPixelPtr)^ := Color32To16(AlphaBlendWithPremultiplied32(Color16To32(pword(OutPixelPtr)^), Color));
-        end; 
+        end;
       end;
       Inc(x);
       if x>23 then
@@ -375,7 +375,7 @@ begin
   i:=0;
   Length:=0;
   Row:=1;
-  
+
   while str[i] <> #0 do begin
     if (str[i] = '{') or (str[i] = '}') then begin
       Inc(i);
@@ -386,10 +386,10 @@ begin
     end else if (str[i] > #160) and (str[i+1] > #160) then begin
       Length := Length+FontWidth;
       i      := i+2;
-      
+
       if Length>RowWidth then begin
         Length:=0;
-        
+
         if str[i]<>#0 then begin
           row:=row+1;
         end
@@ -397,17 +397,17 @@ begin
     end else begin
       Length:=Length+GetEngCharWidth(byte(str[i]),hfont);
       Inc(i);
-      
+
       if Length>RowWidth then begin
         Length:=0;
-        
+
         if str[i]<>#0 then begin
           row:=row+1;
         end;
       end;
     end;
   end;
-  
+
   result:=Row;
 end;
 
@@ -418,7 +418,7 @@ end;
 
 //输出一行文字,其中CharLength为字符个数
 procedure DrawLineToPcx16 (str: pAnsiChar; StrLen, ColorA, hfont, y, x: integer; Surface: integer); stdcall;
-const 
+const
   DEF_COLOR = 0;
 
 var
@@ -434,12 +434,12 @@ begin
   cx       := x;
   ColorB   := GetColor(ColorA);
   ColorSel := 0;
-  
+
   while (i < StrLen) and not (Str[i] in [#0, #10]) do begin
     if not (Str[i] in [#10, ' ']) then begin
       ChineseGotoNextChar;
     end;
-  
+
     if Str[i] = '{' then begin
       ColorSel := 1;
     end else if Str[i] = '}' then begin
@@ -457,7 +457,7 @@ begin
         if FontWidth = Font12Width then MakeChar12(cy, cx, Surface, @str[i], Color);
         if FontWidth = Font11Width then MakeChar10(cy, cx, Surface, @str[i], Color);
         if FontWidth = Font24Width then MakeChar24(cy, cx, Surface, @str[i], Color);
-        
+
         cx := cx + FontWidth;
         Inc(i);
       end else begin
@@ -465,7 +465,7 @@ begin
         cx := cx + GetEngCharWidth(byte(str[i]), hfont);
       end;
     end; // .else
-    
+
     Inc(i);
   end; // .while
 end; // .procedure DrawLineToPcx16
@@ -474,7 +474,7 @@ procedure DoMyTextOut_New (str:pAnsiChar; Surface, x, y, BoxWidth, BoxHeight, Co
 var
   MaxRow, FontWidth, FontHeight, posStart, posEnd, l, i, row, startX, startY, space, spacerow, j:integer;
 
-begin 
+begin
   ChineseSetTextAlignmentParamPtr(@Mode);
   UpdateBytesPerPixel;
 
@@ -497,13 +497,13 @@ begin
   Row      := -1;
   SpaceRow := -1;
   Space    := -1;
-  
+
   while Str[PosEnd] <> #0 do begin
     Row      := Row + 1;
     PosStart := PosEnd;
     i        := posEnd;
     l        := 0;
-    
+
     while str[i] <> #0 do begin
       if str[i] = #10 then begin
         i := i + 1;
@@ -515,7 +515,7 @@ begin
         SpaceRow := Row;
         l        := l + FontWidth;
         i        := i + 2;
-        
+
         if l>BoxWidth then begin
           //目前没有对标点符号进行处理
           //if byte(str[i])>160 True then
@@ -528,11 +528,11 @@ begin
           Space    := i+1;
           SpaceRow := Row;
         end;
-        
+
         l := l + GetEngCharWidth(byte(str[i]), hfont);
-        
+
         Inc(i);
-        
+
         if l>BoxWidth then begin
           //英文必须以单词为单位，整个单词换行，以SPACE记录上个空格或汉字位置，以SPACEROW记录上个空格所在行
           if (SpaceRow=Row)and (Space>-1) then
@@ -550,19 +550,19 @@ begin
         end;
       end;
     end;
-    
+
     posEnd:=i;
     startX:=x;
     startY:=y+FontHeight*Row;
 
     UpdateTextAttrsFromNextChar;
-    
+
     case mode of
       0,4,8 :startX:=x;
       1,5,9 :startX:=x+((BoxWidth-l) div 2);
       2,6,10:startX:=x+BoxWidth-l;
     end;
-    
+
     case mode of
       0,1,2,3:startY:=y+(FontHeight)*Row;
       4,5,6,7:begin
