@@ -291,6 +291,10 @@ var
 begin
   SecondColorTransparency := (SecondColor32Premultiplied and ALPHA_CHANNEL_MASK_32) shr 24;
 
+  // Convert TransparencyMult=255 into TransparencyMult=256 to prevent original pixel changing if the second one is fully transparent
+  // *255 shr 8 (same as div 256) was not ideal solution
+  Inc(SecondColorTransparency, (SecondColorTransparency + 1) shr 8);
+
   result := ((((SecondColorTransparency * (FirstColor32  and RED_BLUE_CHANNELS_MASK_32))   shr 8)  and RED_BLUE_CHANNELS_MASK_32) or
             ((  SecondColorTransparency * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8)) and ALPHA_GREEN_CHANNELS_MASK_32))
             + SecondColor32Premultiplied;
