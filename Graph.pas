@@ -774,7 +774,7 @@ begin
   RescanDefFramesPngFiles;
 end;
 
-procedure Hook_DrawInterfaceDef (
+procedure Hook_DrawInterfaceDef_Frame (
   OrigFunc: pointer;
   Def: Heroes.PDefItem;
   FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer;
@@ -790,7 +790,7 @@ var
 
 begin
   ImageResource := nil;
-  DefRelPath    := StrLib.Concat([pchar(@Def.Name[0]), '\', SysUtils.IntToStr(FrameInd), '.png']);
+  DefRelPath    := StrLib.Concat([pchar(@Def.Name[0]), '\0_', SysUtils.IntToStr(FrameInd), '.png']);
 
   if DefFramesPngFileMap[DefRelPath] <> nil then begin
     ImageResource := LoadPngResource(DefFramePngFilePathPrefix + DefRelPath);
@@ -807,7 +807,44 @@ begin
   end else begin
     PatchApi.Call(THISCALL_, OrigFunc, [Def, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror)]);
   end;
-end;
+end; // .procedure Hook_DrawInterfaceDef_Frame
+
+procedure Hook_DrawInterfaceDef_Group_Frame (
+  OrigFunc: pointer;
+  Def: Heroes.PDefItem;
+  GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer;
+  Buf: pointer;
+  DstX, DstY, DstW, DstH, ScanlineSize: integer;
+  DoMirror, UsePaletteSpecialColors: boolean
+); stdcall;
+
+var
+{On} ImageResource:  ResLib.TSharedResource;
+     DefRelPath:     string;
+     DrawImageSetup: GraphTypes.TDrawImageSetup;
+
+begin
+  ImageResource := nil;
+  DefRelPath    := StrLib.Concat([pchar(@Def.Name[0]), '\', SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
+
+  if DefFramesPngFileMap[DefRelPath] <> nil then begin
+    ImageResource := LoadPngResource(DefFramePngFilePathPrefix + DefRelPath);
+  end;
+
+  if ImageResource <> nil then begin
+    DrawImageSetup.Init;
+    DrawImageSetup.EnableFilters := DoMirror;
+    DrawImageSetup.DoHorizMirror := DoMirror;
+
+    DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+
+    ImageResource.DecRef;
+  end else begin
+    PatchApi.Call(THISCALL_, OrigFunc, [
+      Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror), ord(UsePaletteSpecialColors)
+    ]);
+  end;
+end; // .procedure Hook_DrawInterfaceDef_Group_Frame
 
 function GetMicroTime: Int64;
 var
@@ -833,7 +870,8 @@ var
 
 begin
   SetupColorMode;
-  ApiJack.StdSplice(Ptr($47B820), @Hook_DrawInterfaceDef, ApiJack.CONV_THISCALL, 13);
+  ApiJack.StdSplice(Ptr($47B820), @Hook_DrawInterfaceDef_Frame, ApiJack.CONV_THISCALL, 13);
+  ApiJack.StdSplice(Ptr($47B610), @Hook_DrawInterfaceDef_Group_Frame, ApiJack.CONV_THISCALL, 15);
   //LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
   // ***ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
   // StartTime   := GetMicroTime();
