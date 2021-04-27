@@ -74,9 +74,13 @@ procedure DecRef (Resource: Heroes.PBinaryTreeItem); stdcall;
 (* Loads given png file from cache or file system and returns TRawImage in the best format wrapped into shared resource *)
 function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
 
-(* Draws any raw image to Pcx16 canvas *)
-procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item);
+(* Draws any raw image to game draw buffer *)
+procedure DrawRawImageToGameBuf (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer;
+                                 const DrawImageSetup: GraphTypes.TDrawImageSetup);
 
+(* Draws any raw image to Pcx16 canvas *)
+procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item;
+                                     const DrawImageSetup: GraphTypes.TDrawImageSetup);
 
 (***)  implementation  (***)
 
@@ -691,28 +695,23 @@ begin
   SysUtils.FreeAndNil(Image32Alpha);
 end; // .function LoadPngResource
 
-procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item);
-begin
-  {!} Assert(Image <> nil);
-  {!} Assert(Canvas <> nil);
-
-  if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
-    Image.DrawToOpaque32Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Canvas.Width, Canvas.Height, pointer(Canvas.Buffer), Canvas.ScanlineSize);
-  end else begin
-    Image.DrawToOpaque16Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Canvas.Width, Canvas.Height, pointer(Canvas.Buffer), Canvas.ScanlineSize);
-  end;
-end;
-
-procedure DrawRawImageToGameBuf (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer);
+procedure DrawRawImageToGameBuf (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer;
+                                 const DrawImageSetup: GraphTypes.TDrawImageSetup);
 begin
   {!} Assert(Image <> nil);
   {!} Assert(Buf <> nil);
 
   if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
-    Image.DrawToOpaque32Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH, Buf, DstScanlineSize);
+    Image.DrawToOpaque32Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH, Buf, DstScanlineSize, DrawImageSetup);
   end else begin
-    Image.DrawToOpaque16Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH, Buf, DstScanlineSize);
+    Image.DrawToOpaque16Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH, Buf, DstScanlineSize, DrawImageSetup);
   end;
+end;
+
+procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item;
+                                     const DrawImageSetup: GraphTypes.TDrawImageSetup);
+begin
+  DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Canvas.Width, Canvas.Height, pointer(Canvas.Buffer), Canvas.ScanlineSize, DrawImageSetup);
 end;
 
 // procedure LoadPng (const FilePath: string);
@@ -785,8 +784,9 @@ procedure Hook_DrawInterfaceDef (
 ); stdcall;
 
 var
-{On} ImageResource: ResLib.TSharedResource;
-     DefRelPath:    string;
+{On} ImageResource:  ResLib.TSharedResource;
+     DefRelPath:     string;
+     DrawImageSetup: GraphTypes.TDrawImageSetup;
 
 begin
   ImageResource := nil;
@@ -797,39 +797,45 @@ begin
   end;
 
   if ImageResource <> nil then begin
-    DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize);
+    DrawImageSetup.Init;
+    DrawImageSetup.EnableFilters := DoMirror;
+    DrawImageSetup.DoHorizMirror := DoMirror;
+
+    DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+
     ImageResource.DecRef;
   end else begin
     PatchApi.Call(THISCALL_, OrigFunc, [Def, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror)]);
   end;
 end;
 
-// function GetMicroTime: Int64;
-// var
-//   Freq: Int64;
+function GetMicroTime: Int64;
+var
+  Freq: Int64;
 
-// begin
-//   QueryPerformanceCounter(result);
-//   QueryPerformanceFrequency(Freq);
-//   result := result * 1000 div Freq;
-// end;
+begin
+  QueryPerformanceCounter(result);
+  QueryPerformanceFrequency(Freq);
+  result := result * 1000000 div Freq;
+end;
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 var
-  i:            integer;
-  StartTime:    Int64;
-  ImgResource:  ResLib.TSharedResource;
-  Img:          GraphTypes.TRawImage;
-  Pixels:       GraphTypes.TArrayOfColor32;
-  Canvas:       GraphTypes.TArrayOfColor32;
-  PngImage:     TPngObject;
-  FileContents: string;
+  i:              integer;
+  StartTime:      Int64;
+  ImgResource:    ResLib.TSharedResource;
+  Img:            GraphTypes.TRawImage;
+  Pixels:         GraphTypes.TArrayOfColor32;
+  Canvas:         GraphTypes.TArrayOfColor32;
+  PngImage:       TPngObject;
+  FileContents:   string;
+  DrawImageSetup: GraphTypes.TDrawImageSetup;
 
 begin
   SetupColorMode;
   ApiJack.StdSplice(Ptr($47B820), @Hook_DrawInterfaceDef, ApiJack.CONV_THISCALL, 13);
   //LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
-  //ImgResource := LoadPngResource('D:\forum_ava_source.png');
+  // ***ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
   // StartTime   := GetMicroTime();
   // ReadFileContents('D:\forum_ava_source_alpha2.png', FileContents);
   // VarDump(['load file', GetMicroTime - StartTime]);
@@ -838,17 +844,20 @@ begin
   // VarDump(['decode from memory', GetMicroTime - StartTime]);
   // StartTime   := GetMicroTime();
   // ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
-  // Img         := ImgResource.Data as GraphTypes.TRawImage;
+  // ***Img         := ImgResource.Data as GraphTypes.TRawImage;
   // VarDump([GetMicroTime - StartTime, Img.ClassType]);
   // StartTime := GetMicroTime();
   // PngImage  := TPngObject.Create;
   // PngImage.LoadFromFile('D:\forum_ava_source_alpha2.png');
   // VarDump([GetMicroTime - StartTime]);
-  // SetLength(Canvas, Img.Width * Img.Height);
-  // StartTime   := GetMicroTime();
-  // Img.DrawToOpaque32Buf(0, 0, 0, 0, Img.Width, Img.Height, Img.Width, Img.Height, pointer(Canvas), Img.Width * sizeof(Canvas[0]));
-  // DlgMes.Msg('draw time: ' + inttostr(GetMicroTime - StartTime));
-  //FileWrite(FileCreate('D:\forum_ava_source.raw'), Canvas[0], Length(Canvas) * sizeof(Canvas[0]));
+  // ***SetLength(Canvas, Img.Width * Img.Height);
+  // ***StartTime   := GetMicroTime();
+  // ***DrawImageSetup.Init;
+  // ***DrawImageSetup.EnableFilters := true;
+  //DrawImageSetup.DoHorizMirror := true;
+  // ***Img.DrawToOpaque32Buf(0, 0, 0, 0, Img.Width, Img.Height, Img.Width, Img.Height, pointer(Canvas), Img.Width * sizeof(Canvas[0]), DrawImageSetup);
+  // ***DlgMes.Msg('draw time: ' + inttostr(GetMicroTime - StartTime));
+  // ***FileWrite(FileCreate('D:\forum_ava_source.raw'), Canvas[0], Length(Canvas) * sizeof(Canvas[0]));
   //ImgResource := LoadPngResource('Data\defs\AVMsulf0.def\0.png');
   //Img := ImgResource.Data as TRawImage32;
   //VarDump([Ptr(Img.Pixels[0].Value)]);
