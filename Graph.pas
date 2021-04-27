@@ -49,11 +49,15 @@ type
   TJpegImage = Jpeg.TJpegImage;
   TPngObject = PngImage.TPngObject;
   TDict      = DataLib.TDict;
+  TRect      = Types.TRect;
 
   TImageType = (IMG_UNKNOWN, IMG_BMP, IMG_JPG, IMG_PNG);
   TResizeAlg = (ALG_NO_RESIZE = 0, ALG_STRETCH = 1, ALG_CONTAIN = 2, ALG_DOWNSCALE = 3, ALG_UPSCALE = 4, ALG_COVER = 5, ALG_FILL = 6);
 
   TDimensionsDetectionType = (USE_IMAGE_VALUES, CALC_PROPORTIONALLY);
+
+  TDrawDefFrameFlag  = (DDF_CROP, DDF_MIRROR, DDF_NO_SPECIAL_PALETTE_COLORS);
+  TDrawDefFrameFlags = set of TDrawDefFrameFlag;
 
 
 function LoadImage (const FilePath: string): {n} TGraphic;
@@ -73,6 +77,13 @@ procedure DecRef (Resource: Heroes.PBinaryTreeItem); stdcall;
 
 (* Loads given png file from cache or file system and returns TRawImage in the best format wrapped into shared resource *)
 function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
+
+function GetDefFrameWidth (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): integer;
+function GetDefFrameHeight (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): integer;
+
+procedure DrawInterfaceDefFrameEx (Def: Heroes.PDefItem; GroupInd, FrameInd: integer; SrcX, SrcY, BoxWidth, BoxHeight: integer; Buf: pointer;
+                                   DstX, DstY, DstWidth, DstHeight, DstScanlineSize: integer;
+                                   const DrawFlags: TDrawDefFrameFlags = []);
 
 (* Draws any raw image to game draw buffer *)
 procedure DrawRawImageToGameBuf (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer;
@@ -170,7 +181,7 @@ const
   DEF_IMAGE_SIZE = 32;
 
 var
-  Rect: Types.TRect;
+  Rect: TRect;
 
 begin
   ValidateImageSize(Width, Height);
@@ -668,6 +679,7 @@ begin
     Image32Setup.Init;
     Image32Setup.HasTransparency := true;
     Image32Alpha                 := TPremultipliedRawImage32.Create(Image32.Pixels, Image32.Width, Image32.Height, Image32.ScanlineSize);
+    Image32Alpha.AutoSetCroppingRect;
     Utils.Exchange(Image, Image32Alpha);
   end else if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
     Utils.Exchange(Image, Image32);
@@ -714,18 +726,90 @@ begin
   DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Canvas.Width, Canvas.Height, pointer(Canvas.Buffer), Canvas.ScanlineSize, DrawImageSetup);
 end;
 
-// procedure LoadPng (const FilePath: string);
-// var
-// {On} Image:        GraphTypes.TRawImage32;
-//      FileContents: string;
-//      Png: TPngObject;
+function GetDefPngFrame (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): {On} ResLib.TSharedResource;
+var
+  DefRelPath: string;
 
-// begin
-//   Files.ReadFileContents(FilePath, FileContents);
-//   Image := Libspng.DecodePng(pchar(FileContents), Length(FileContents));
-//   Png := TPngObject.Create;
-//   Png.LoadFromFile(FilePath);
-// end;
+begin
+  result     := nil;
+  DefRelPath := StrLib.Concat([pchar(@Def.Name[0]), '\', SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
+
+  if DefFramesPngFileMap[DefRelPath] <> nil then begin
+    result := LoadPngResource(DefFramePngFilePathPrefix + DefRelPath);
+  end;
+end;
+
+function GetDefFrameCroppingRect (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): TRect;
+var
+{On} ImageResource: ResLib.TSharedResource;
+{U}  DefFrame:      PDefFrame;
+
+begin
+  result.Left   := 0;
+  result.Top    := 0;
+  result.Right  := Def.Width;
+  result.Bottom := Def.Height;
+
+  ImageResource := GetDefPngFrame(Def, GroupInd, FrameInd);
+
+  if ImageResource <> nil then begin
+    result := (ImageResource.Data as GraphTypes.TRawImage).CroppingRect;
+    ImageResource.DecRef;
+  end else begin
+    DefFrame := Def.GetFrame(GroupInd, FrameInd);
+
+    if DefFrame <> nil then begin
+      result.Left   := DefFrame.FrameLeft;
+      result.Top    := DefFrame.FrameTop;
+      result.Right  := DefFrame.FrameLeft + DefFrame.FrameWidth;
+      result.Bottom := DefFrame.FrameTop  + DefFrame.FrameHeight;
+    end;
+  end;
+end; // .function GetDefFrameCroppingRect
+
+function GetDefFrameWidth (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): integer;
+begin
+  result := GraphTypes.GetRectWidth(GetDefFrameCroppingRect(Def, GroupInd, FrameInd));
+end;
+
+function GetDefFrameHeight (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): integer;
+begin
+  result := GraphTypes.GetRectHeight(GetDefFrameCroppingRect(Def, GroupInd, FrameInd));
+end;
+
+procedure DrawInterfaceDefFrameEx (Def: Heroes.PDefItem; GroupInd, FrameInd: integer; SrcX, SrcY, BoxWidth, BoxHeight: integer; Buf: pointer;
+                                   DstX, DstY, DstWidth, DstHeight, DstScanlineSize: integer;
+                                   const DrawFlags: TDrawDefFrameFlags = []);
+var
+  FrameCroppingRect: TRect;
+
+begin
+  if (BoxWidth <= 0) or (BoxHeight <= 0) or (DstWidth <= 0) or (DstHeight <= 0) then begin
+    exit;
+  end;
+
+  if DDF_CROP in DrawFlags then begin
+    FrameCroppingRect := GetDefFrameCroppingRect(Def, GroupInd, FrameInd);
+
+    BoxWidth  := Math.Min(GraphTypes.GetRectWidth(FrameCroppingRect) - SrcX, BoxWidth);
+    BoxHeight := Math.Min(GraphTypes.GetRectHeight(FrameCroppingRect) - SrcY, BoxHeight);
+    Inc(SrcX, FrameCroppingRect.Left);
+    Inc(SrcY, FrameCroppingRect.Top);
+  end;
+
+  if not GraphTypes.RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, GraphTypes.MAX_IMAGE_WIDTH, GraphTypes.MAX_IMAGE_HEIGHT, DstWidth, DstHeight) then begin
+    exit;
+  end;
+
+  if DDF_MIRROR in DrawFlags then begin
+    SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth(FrameCroppingRect);
+  end;
+
+  PatchApi.Call(THISCALL_, Ptr($47B610), [
+    Def, GroupInd, FrameInd, SrcX, SrcY, BoxWidth, BoxHeight, Buf, DstX, DstY, DstWidth, DstHeight, DstScanlineSize,
+    ord(DDF_MIRROR in DrawFlags), ord(not (DDF_NO_SPECIAL_PALETTE_COLORS in DrawFlags))
+  ]);
+end; // .procedure DrawInterfaceDefFrameEx
 
 procedure RescanDefFramesPngFiles;
 var
@@ -785,21 +869,19 @@ procedure Hook_DrawInterfaceDef_Frame (
 
 var
 {On} ImageResource:  ResLib.TSharedResource;
-     DefRelPath:     string;
      DrawImageSetup: GraphTypes.TDrawImageSetup;
 
 begin
-  ImageResource := nil;
-  DefRelPath    := StrLib.Concat([pchar(@Def.Name[0]), '\0_', SysUtils.IntToStr(FrameInd), '.png']);
-
-  if DefFramesPngFileMap[DefRelPath] <> nil then begin
-    ImageResource := LoadPngResource(DefFramePngFilePathPrefix + DefRelPath);
-  end;
+  ImageResource := GetDefPngFrame(Def, 0, FrameInd);
 
   if ImageResource <> nil then begin
     DrawImageSetup.Init;
     DrawImageSetup.EnableFilters := DoMirror;
     DrawImageSetup.DoHorizMirror := DoMirror;
+
+    if DoMirror then begin
+      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth((ImageResource.Data as GraphTypes.TRawImage).CroppingRect);
+    end;
 
     DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
 
@@ -820,21 +902,19 @@ procedure Hook_DrawInterfaceDef_Group_Frame (
 
 var
 {On} ImageResource:  ResLib.TSharedResource;
-     DefRelPath:     string;
      DrawImageSetup: GraphTypes.TDrawImageSetup;
 
 begin
-  ImageResource := nil;
-  DefRelPath    := StrLib.Concat([pchar(@Def.Name[0]), '\', SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
-
-  if DefFramesPngFileMap[DefRelPath] <> nil then begin
-    ImageResource := LoadPngResource(DefFramePngFilePathPrefix + DefRelPath);
-  end;
+  ImageResource := GetDefPngFrame(Def, GroupInd, FrameInd);
 
   if ImageResource <> nil then begin
     DrawImageSetup.Init;
     DrawImageSetup.EnableFilters := DoMirror;
     DrawImageSetup.DoHorizMirror := DoMirror;
+
+    if DoMirror then begin
+      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth((ImageResource.Data as GraphTypes.TRawImage).CroppingRect);
+    end;
 
     DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
 

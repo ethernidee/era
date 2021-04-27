@@ -97,7 +97,7 @@ type
   PEmlImg = ^TEmlImg;
   TEmlImg = record
     IsBlock:       boolean;
-    DrawFlags:     Heroes.TDrawImageFlags;
+    DrawFlags:     Graph.TDrawDefFrameFlags;
     OffsetX:       integer;
     OffsetY:       integer;
     SliceStartY:   integer;
@@ -619,7 +619,7 @@ begin
         TextBlock.BlockType              := TEXT_BLOCK_DEF;
         TextBlock.HorizAlignment         := CurrHorizAlign;
         TextBlock.ImgBlock.IsBlock       := false;
-        TextBlock.ImgBlock.DrawFlags     := [Heroes.DFL_CROP];
+        TextBlock.ImgBlock.DrawFlags     := [Graph.DDF_CROP];
         TextBlock.ImgBlock.NumFillChars  := 0;
         TextBlock.ImgBlock.OffsetX       := 0;
         TextBlock.ImgBlock.OffsetY       := 0;
@@ -658,16 +658,16 @@ begin
         TextBlock.ImgBlock.IsBlock := EmlAttrs['block'] <> nil;
 
         if EmlAttrs['mirror'] <> nil then begin
-          System.Include(TextBlock.ImgBlock.DrawFlags, Heroes.DFL_MIRROR);
+          System.Include(TextBlock.ImgBlock.DrawFlags, Graph.DDF_MIRROR);
         end;
 
         if TextBlock.DefBlock.Def <> nil then begin
           CharInfo                        := @Font.CharInfos[NBSP];
           NbspWidth                       := Math.Max(1, CharInfo.SpaceBefore + CharInfo.Width + CharInfo.SpaceAfter);
-          ImageWidth                      := TextBlock.DefBlock.Def.GetFrameWidth(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
+          ImageWidth                      := Graph.GetDefFrameWidth(TextBlock.DefBlock.Def, TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
           NumFillChars                    := (ImageWidth + NbspWidth - 1) div NbspWidth;
           TextBlock.ImgBlock.NumFillChars := NumFillChars;
-          TextBlock.ImgBlock.Height       := TextBlock.DefBlock.Def.GetFrameHeight(TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
+          TextBlock.ImgBlock.Height       := Graph.GetDefFrameHeight(TextBlock.DefBlock.Def, TextBlock.DefBlock.GroupInd, TextBlock.DefBlock.FrameInd);
           TextBlock.ImgBlock.SliceHeight  := TextBlock.ImgBlock.Height;
           TextBlock.ImgBlock.OffsetX      := (NumFillChars * NbspWidth - ImageWidth) div 2;
           TextBlock.BlockLen              := NumFillChars;
@@ -1080,7 +1080,7 @@ begin
           end;
         end;
 
-        if Heroes.DFL_MIRROR in CurrBlock.ImgBlock.DrawFlags then begin
+        if Graph.DDF_MIRROR in CurrBlock.ImgBlock.DrawFlags then begin
           Res.Append(' mirror');
         end;
 
@@ -1490,13 +1490,14 @@ begin
     Def := CurrTextBlock.DefBlock.Def;
 
     if CurrBlockPos = 0 then begin
-      Def.DrawFrameToBuf(
+      Graph.DrawInterfaceDefFrameEx(
+        Def,
         CurrTextBlock.DefBlock.GroupInd,
         CurrTextBlock.DefBlock.FrameInd,
         0,
         CurrTextBlock.ImgBlock.SliceStartY,
-        Def.Width,
-        CurrTextBlock.ImgBlock.SliceStartY + CurrTextBlock.ImgBlock.SliceHeight,
+        GraphTypes.MAX_IMAGE_WIDTH,
+        CurrTextBlock.ImgBlock.SliceHeight,
         Canvas.Buffer,
         x + CurrTextBlock.ImgBlock.OffsetX, y + CurrTextBlock.ImgBlock.OffsetY,
         Canvas.Width, Canvas.Height,
