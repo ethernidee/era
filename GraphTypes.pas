@@ -41,6 +41,9 @@ const
   MAX_IMAGE_HEIGHT = 10000;
 
 type
+  (* Import *)
+  TRect = Types.TRect;
+
   (* Color encoding in 16 bits: R5G5B5 or R5G6B5*)
   TColor16Mode = (COLOR_16_MODE_565, COLOR_16_MODE_555);
 
@@ -124,6 +127,7 @@ type
     fWidth:           integer;
     fHeight:          integer;
     fHasTransparency: boolean;
+    fCroppingRect:    TRect;
 
    public
     constructor Create (Width, Height: integer; const Setup: TRawImageSetup);
@@ -131,6 +135,7 @@ type
     property Width:           integer read fWidth;
     property Height:          integer read fHeight;
     property HasTransparency: boolean read fHasTransparency;
+    property CroppingRect:    TRect   read fCroppingRect write fCroppingRect;
 
     procedure DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                  const DrawImageSetup: TDrawImageSetup); virtual;
@@ -175,6 +180,8 @@ type
    public
     constructor Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer);
 
+    procedure AutoSetCroppingRect;
+
     procedure DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                  const DrawImageSetup: TDrawImageSetup); override;
     procedure DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
@@ -208,6 +215,10 @@ type
 
   (* Converts Color32 pixels array into Color16 pixels array. Alpha channel is ignored *)
   function Color32ToColor16Pixels (Pixels: TArrayOfColor32): TArrayOfColor16;
+
+  (* TRect dimensions calculation routines *)
+  function GetRectWidth  (const Rect: TRect): integer;
+  function GetRectHeight (const Rect: TRect): integer;
 
   (* Returns true if there is intersected area to copy pixels from/to. Updates input parameters with new fixed values *)
   function RefineDrawBox (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer): boolean;
@@ -383,6 +394,16 @@ begin
   end;
 end;
 
+function GetRectWidth (const Rect: TRect): integer;
+begin
+  result := Rect.Right - Rect.Left;
+end;
+
+function GetRectHeight (const Rect: TRect): integer;
+begin
+  result := Rect.Bottom - Rect.Top;
+end;
+
 function RefineDrawBox (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer): boolean;
 var
   SrcBox: TRect;
@@ -417,6 +438,21 @@ begin
     DstY      := DstBox.Top;
   end;
 end; // .function RefineDrawBox
+
+function RefineDrawBoxWithSourceCropping (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer;
+                                          const SourceCroppingRect: TRect): boolean;
+var
+  SrcBox: TRect;
+
+begin
+  result := Types.IntersectRect(SrcBox, Types.Rect(SrcX, SrcY, SrcX + SrcWidth, SrcY + SrcHeight), SourceCroppingRect) and
+            RefineDrawBox(SrcBox.Left, SrcBox.Top, DstX, DstY, BoxWidth, BoxHeight, SrcBox.Right, SrcBox.Bottom, DstWidth, DstHeight);
+
+  if result then begin
+    SrcX := SrcBox.Left;
+    SrcY := SrcBox.Top;
+  end;
+end;
 
 procedure DrawPixelWithFilters (SrcPixelValue, DstPixelValue: integer; DstPixelPtr: pointer; DstPixelSize: integer; UseBlending: boolean; const DrawImageSetup: TDrawImageSetup); inline;
 begin
@@ -472,7 +508,9 @@ var
   j:            integer;
 
 begin
-  if (DstBuf <> nil) and (DstScanlineSize > 0) and RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight) then begin
+  if (DstBuf <> nil) and (DstScanlineSize > 0) and
+     RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+  then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
       SrcScanlineSize := Self.fScanlineSize;
@@ -530,9 +568,10 @@ begin
   {!} Assert(Width > 0);
   {!} Assert(Height > 0);
 
-  Self.fWidth      := Width;
-  Self.fHeight     := Height;
+  Self.fWidth           := Width;
+  Self.fHeight          := Height;
   Self.fHasTransparency := Setup.HasTransparency;
+  Self.fCroppingRect    := Types.Rect(0, 0, Self.fWidth, Self.fHeight);
 end;
 
 constructor TRawImage16.Create (Pixels: TArrayOfColor16; Width, Height, ScanlineSize: integer; const Setup: TRawImage16Setup);
@@ -580,7 +619,9 @@ var
 begin
   {!} Assert(not Self.HasTransparency, 'TRawImage32.DrawToOpaque16Buffer does not support alpha channel yet. Use TPremultipliedRawImage32');
 
-  if (DstBuf <> nil) and (DstScanlineSize > 0) and RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight) then begin
+  if (DstBuf <> nil) and (DstScanlineSize > 0) and
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+  then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
       SrcScanlineSize := Self.fScanlineSize;
@@ -645,7 +686,9 @@ var
 begin
   {!} Assert(not Self.HasTransparency, 'TRawImage32.DrawToOpaque32Buffer does not support alpha channel yet. Use TPremultipliedRawImage32');
 
-  if (DstBuf <> nil) and (DstScanlineSize > 0) and RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight) then begin
+  if (DstBuf <> nil) and (DstScanlineSize > 0) and
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+  then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
       SrcScanlineSize := Self.fScanlineSize;
@@ -701,6 +744,124 @@ begin
   PremultiplyImageColorChannels(Self.fPixels);
 end;
 
+procedure TPremultipliedRawImage32.AutoSetCroppingRect;
+var
+  CroppingRect: TRect;
+  Scanline:     PColor32;
+  ScanlineEnd:  PColor32;
+  Pixel:        PColor32;
+  LeftBorder:   integer;
+  RightBorder:  integer;
+  j:            integer;
+
+begin
+  CroppingRect := Types.Rect(0, 0, Self.fWidth, Self.fHeight);
+
+  // Trim from top
+  j        := 0;
+  Scanline := @Self.fPixels[0];
+
+  while (j < CroppingRect.Bottom) do begin
+    Pixel       := Scanline;
+    ScanlineEnd := Utils.PtrOfs(Scanline, Self.fWidth * sizeof(Self.fPixels[0]));
+
+    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
+      Inc(Pixel);
+    end;
+
+    if cardinal(Pixel) < cardinal(ScanlineEnd) then begin
+      break;
+    end;
+
+    Inc(j);
+    Inc(integer(Scanline), Self.fScanlineSize);
+  end;
+
+  CroppingRect.Top := j;
+
+  // Trim from bottom
+  j        := CroppingRect.Bottom - 1;
+  Scanline := Utils.PtrOfs(@Self.fPixels[0], j * Self.fScanlineSize);
+
+  while (j > CroppingRect.Top) do begin
+    Pixel       := Scanline;
+    ScanlineEnd := Utils.PtrOfs(Scanline, Self.fWidth * sizeof(Self.fPixels[0]));
+
+    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
+      Inc(Pixel);
+    end;
+
+    if cardinal(Pixel) < cardinal(ScanlineEnd) then begin
+      break;
+    end;
+
+    Dec(j);
+    Dec(integer(Scanline), Self.fScanlineSize);
+  end;
+
+  CroppingRect.Bottom := j;
+
+  // Trim from left
+  LeftBorder := CroppingRect.Right;
+
+  j        := CroppingRect.Top;
+  Scanline := Utils.PtrOfs(@Self.fPixels[0], j * Self.fScanlineSize);
+
+  while (j < CroppingRect.Bottom) do begin
+    Pixel       := Scanline;
+    ScanlineEnd := Utils.PtrOfs(Scanline, LeftBorder * sizeof(Self.fPixels[0]));
+
+    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
+      Inc(Pixel);
+    end;
+
+    if cardinal(Pixel) < cardinal(ScanlineEnd) then begin
+      LeftBorder := integer((cardinal(Pixel) - cardinal(Scanline)) div sizeof(Pixel^));
+
+      if LeftBorder = 0 then begin
+        break;
+      end;
+    end;
+
+    Inc(j);
+    Inc(integer(Scanline), Self.fScanlineSize);
+  end;
+
+  CroppingRect.Left := LeftBorder;
+
+  // Trim from right
+  RightBorder := CroppingRect.Left;
+
+  j        := CroppingRect.Top;
+  Scanline := Utils.PtrOfs(@Self.fPixels[0], j * Self.fScanlineSize);
+
+  while (j < CroppingRect.Bottom) do begin
+    Pixel       := Utils.PtrOfs(Scanline, CroppingRect.Right * sizeof(Self.fPixels[0]));
+    ScanlineEnd := Utils.PtrOfs(Scanline, RightBorder        * sizeof(Self.fPixels[0]));
+
+    while (cardinal(Pixel) > cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
+      Dec(Pixel);
+    end;
+
+    if cardinal(Pixel) > cardinal(ScanlineEnd) then begin
+      RightBorder := integer((cardinal(Pixel) - cardinal(Scanline)) div sizeof(Pixel^));
+
+      if RightBorder = 0 then begin
+        break;
+      end;
+    end;
+
+    Inc(j);
+    Inc(integer(Scanline), Self.fScanlineSize);
+  end;
+
+  CroppingRect.Right := RightBorder;
+
+  //VarDump([CroppingRect.Left, CroppingRect.Top, CroppingRect.Right, CroppingRect.Bottom]);
+
+  Self.fCroppingRect := CroppingRect;
+end; // .procedure TPremultipliedRawImage32.AutoSetCroppingRect
+
 procedure TPremultipliedRawImage32.DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                                       const DrawImageSetup: TDrawImageSetup);
 var
@@ -714,7 +875,9 @@ var
   DstPixelStep: integer;
 
 begin
-  if (DstBuf <> nil) and (DstScanlineSize > 0) and RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight) then begin
+  if (DstBuf <> nil) and (DstScanlineSize > 0) and
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+  then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
       SrcScanlineSize := Self.fScanlineSize;
@@ -778,7 +941,9 @@ var
   DstPixelStep: integer;
 
 begin
-  if (DstBuf <> nil) and (DstScanlineSize > 0) and RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight) then begin
+  if (DstBuf <> nil) and (DstScanlineSize > 0) and
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+  then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
       SrcScanlineSize := Self.fScanlineSize;
