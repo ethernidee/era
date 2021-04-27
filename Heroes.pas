@@ -530,9 +530,6 @@ type
   PChars12 = ^TChars12;
   TChars12 = packed array [0..11] of char;
 
-  TDrawImageFlag  = (DFL_CROP, DFL_MIRROR, DFL_NO_SPECIAL_PALETTE_COLORS);
-  TDrawImageFlags = set of TDrawImageFlag;
-
   {$ALIGN OFF}
   PBinaryTreeItem = ^TBinaryTreeItem;
   TBinaryTreeItem = object
@@ -625,8 +622,6 @@ type
     FrameTop:        integer;
     Unk1:            integer;
     Buffer:          pointer;
-
-    procedure DrawFrameToBufEx (SrcX, SrcY, SrcWidth, SrcHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; Palette16: PPalette16; DrawFlags: TDrawImageFlags = []);
   end; // .object TDefFrame
   {$ALIGN ON}
 
@@ -655,10 +650,7 @@ type
     Width:         integer;
     Height:        integer;
 
-    function  GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
-    function  GetFrameWidth (GroupInd, FrameInd: integer): integer;
-    function  GetFrameHeight (GroupInd, FrameInd: integer): integer;
-    procedure DrawFrameToBuf (GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DrawFlags: TDrawImageFlags = []);
+    function GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
   end; // .object TDefItem
   {$ALIGN ON}
 
@@ -1498,54 +1490,6 @@ begin
   PatchApi.Call(PatchApi.THISCALL_, Ptr($55DDF0), [@Self, @ResPtrs, @NewItem]);
 end; // .procedure TBinaryTreeNode.AddItem
 
-procedure TDefFrame.DrawFrameToBufEx (SrcX, SrcY, SrcWidth, SrcHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; Palette16: PPalette16; DrawFlags: TDrawImageFlags = []);
-var
-  SrcMaxWidth:  integer;
-  SrcMaxHeight: integer;
-
-begin
-  if (SrcWidth <= 0) or (SrcHeight <= 0) or (DstX >= DstW) or (DstY >= DstH) then begin
-    exit;
-  end;
-
-  if DFL_CROP in DrawFlags then begin
-    SrcMaxWidth  := Self.FrameWidth;
-    SrcMaxHeight := Self.FrameHeight;
-  end else begin
-    SrcMaxWidth  := Self.DefWidth;
-    SrcMaxHeight := Self.DefHeight;
-  end;
-
-  if SrcX < 0 then begin
-    Inc(SrcWidth, SrcX);
-    SrcX := 0;
-  end;
-
-  if SrcY < 0 then begin
-    Inc(SrcHeight, SrcY);
-    SrcY := 0;
-  end;
-
-  if (SrcWidth <= 0) or (SrcHeight <= 0) then begin
-    exit;
-  end;
-
-  SrcWidth  := Math.Min(SrcMaxWidth,  SrcWidth - SrcX);
-  SrcHeight := Math.Min(SrcMaxHeight, SrcHeight - SrcY);
-
-  if DFL_CROP in DrawFlags then begin
-    if DFL_MIRROR in DrawFlags then begin
-      Inc(SrcX, Self.DefWidth - Self.FrameLeft - Self.FrameWidth)
-    end else begin
-      Inc(SrcX, Self.FrameLeft);
-    end;
-
-    Inc(SrcY, Self.FrameTop);
-  end;
-
-  PatchApi.Call(THISCALL_, Ptr($47BE90), [@Self, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Palette16, ord(DFL_MIRROR in DrawFlags), ord(not (DFL_NO_SPECIAL_PALETTE_COLORS in DrawFlags))]);
-end; // .procedure TDefFrame.DrawFrameToBufEx
-
 function TDefItem.GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
 var
 {U} DefGroup: PDefGroup;
@@ -1559,46 +1503,6 @@ begin
     if Math.InRange(FrameInd, 0, DefGroup.NumFrames - 1) then begin
       result := DefGroup.Frames[FrameInd];
     end;
-  end;
-end;
-
-function TDefItem.GetFrameWidth (GroupInd, FrameInd: integer): integer;
-var
-{U} DefFrame: PDefFrame;
-
-begin
-  DefFrame := Self.GetFrame(GroupInd, FrameInd);
-
-  if DefFrame <> nil then begin
-    result := DefFrame.FrameWidth;
-  end else begin
-    result := 0;
-  end;
-end;
-
-function TDefItem.GetFrameHeight (GroupInd, FrameInd: integer): integer;
-var
-{U} DefFrame: PDefFrame;
-
-begin
-  DefFrame := Self.GetFrame(GroupInd, FrameInd);
-
-  if DefFrame <> nil then begin
-    result := DefFrame.FrameHeight;
-  end else begin
-    result := 0;
-  end;
-end;
-
-procedure TDefItem.DrawFrameToBuf (GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer; DrawFlags: TDrawImageFlags = []);
-var
-{U} DefFrame: PDefFrame;
-
-begin
-  DefFrame := Self.GetFrame(GroupInd, FrameInd);
-
-  if DefFrame <> nil then begin
-    DefFrame.DrawFrameToBufEx(SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, Self.Palette16, DrawFlags);
   end;
 end;
 
