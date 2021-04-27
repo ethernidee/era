@@ -1459,7 +1459,7 @@ begin
             if CharPixel = 255 then begin
               Color32 := CurrColor32;
             end else begin
-              Color32 := (ShadowColor32 and GraphTypes.RGB_CHANNELS_MASK_32) or (255 - ((((256 - CharPixel) * ColorOpacity) and $FF00) shl 16));
+              Color32 := (ShadowColor32 and GraphTypes.RGB_CHANNELS_MASK_32) or (GraphTypes.ALPHA_CHANNEL_MASK_32 - ((((256 - CharPixel) * ColorOpacity) and $FF00) shl 16));
             end;
 
             if BytesPerPixel = sizeof(GraphTypes.TColor32) then begin
