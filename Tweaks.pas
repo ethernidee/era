@@ -267,14 +267,11 @@ end; // .function New_Zvslib_GetPrivateProfileStringA
 
 procedure ReadGameSettings;
 var
-  DefaultGameSettingsFilePath: string;
-  GameSettingsFilePath:        string;
+  GameSettingsFilePath: string;
 
   function ReadValue (const Key: string; const DefVal: string = ''): string;
   begin
-    if Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, GameSettingsFilePath,        result) or
-       Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, DefaultGameSettingsFilePath, result)
-    then begin
+    if Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, GameSettingsFilePath, result) then begin
       result := SysUtils.Trim(result);
     end else begin
       result := DefVal;
@@ -317,8 +314,7 @@ begin
     CALL EAX
   end;
 
-  DefaultGameSettingsFilePath := GameExt.GameDir + '\' + Heroes.DEFAULT_GAME_SETTINGS_FILE;
-  GameSettingsFilePath        := GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE;
+  GameSettingsFilePath := GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE;
 
   ReadInt('Show Intro',             Heroes.SHOW_INTRO_OPT);
   ReadInt('Music Volume',           Heroes.MUSIC_VOLUME_OPT);

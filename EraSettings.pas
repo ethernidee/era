@@ -38,14 +38,12 @@ const
   ERA_SECTION = 'Era';
 
 begin
-  if Ini.ReadStrFromIni(OptionName, ERA_SECTION, GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE,         result) or
-     Ini.ReadStrFromIni(OptionName, ERA_SECTION, GameExt.GameDir + '\' + Heroes.DEFAULT_GAME_SETTINGS_FILE, result)
-  then begin
+  if Ini.ReadStrFromIni(OptionName, ERA_SECTION, GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE, result) then begin
     result := SysUtils.Trim(result);
   end else begin
     result := DefVal;
   end;
-end; // .function GetOptValue
+end;
 
 function GetOptBoolValue (const OptionName: string; DefValue: boolean = false): boolean;
 var
@@ -73,7 +71,7 @@ begin
                                             + '" value: "' + OptVal + '". Assumed ' + IntToStr(DefValue));
     result := DefValue;
   end;
-end; // .function GetOptIntValue
+end;
 
 procedure InstallLogger (Logger: Log.TLogger);
 var
@@ -97,6 +95,10 @@ end;
 
 procedure OnEraStart (Event: GameExt.PEvent); stdcall;
 begin
+  Ini.LoadIni(Heroes.GAME_SETTINGS_FILE);
+  Ini.LoadIni(Heroes.DEFAULT_GAME_SETTINGS_FILE);
+  Ini.MergeIniWithDefault(Heroes.GAME_SETTINGS_FILE, Heroes.DEFAULT_GAME_SETTINGS_FILE);
+
   DebugOpt           := GetOptBoolValue('Debug', true);
   DebugEverythingOpt := GetOptBoolValue('Debug.Everything', false);
 
