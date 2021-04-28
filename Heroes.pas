@@ -651,6 +651,9 @@ type
     Height:        integer;
 
     function GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
+
+    function DrawInterfaceDefGroupFrame (GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer;
+                                         DoMirror, UsePaletteSpecialColors: boolean): integer;
   end; // .object TDefItem
   {$ALIGN ON}
 
@@ -1504,6 +1507,14 @@ begin
       result := DefGroup.Frames[FrameInd];
     end;
   end;
+end;
+
+function TDefItem.DrawInterfaceDefGroupFrame (GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer;
+                                              DoMirror, UsePaletteSpecialColors: boolean): integer;
+begin
+  result := PatchApi.Call(THISCALL_, Ptr($47B610), [
+    @Self, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror), ord(UsePaletteSpecialColors)
+  ]);
 end;
 
 class function TPcx16ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;
