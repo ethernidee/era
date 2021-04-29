@@ -759,6 +759,27 @@ type
     Param2:        integer;
   end;
 
+  PSpell = ^TSpell;
+  TSpell = packed record // size 0x88 = 136
+    TargetType:          integer;                 // +0 -1=enemy, 0=square/global/area, 1=friend
+    SoundFileName:       pchar;                   // +4
+    DefIndex:            integer;                 // +8 used to get DefName
+    Flags:               integer;                 // +C
+    Name:                pchar;                   // +10h
+    ShortName:           pchar;                   // +14h
+    Level:               integer;                 // +18h
+    SchoolBits:          integer;                 // +1Ch Air=1,Fire=2,Water=4,Earth=8
+    Cost:                array [0..3] of integer; // +20h cost mana per skill level
+    Power:               integer;                 // +30h
+    Effect:              array [0..3] of integer; // +34h effect per skill level
+    ChanceToGetForClass: array [0..8] of integer; // +44h chance per class
+    AiValue:             array [0..3] of integer; // +68h
+    Description:         array [0..3] of pchar;   // +78h
+  end;
+
+  PSpells = ^TSpells;
+  TSpells = array [0..high(integer) div sizeof(TSpell) - 1] of TSpell;
+
   (* Ported from WoG. Needs refactoring *)
   PHero = ^THero;
   THero = packed record
@@ -1057,6 +1078,8 @@ const
   SecSkillNames: PSecSkillNames = Ptr($698BC4);
   SecSkillDescs: PSecSkillDescs = Ptr($698C34);
   SecSkillTexts: PSecSkillTexts = Ptr($698D88);
+
+  Spells: PSpells = Ptr($7BD2C0);
 
   TextBuf:        PGeneralPurposeTextBuf = Ptr($697428);
   MonInfos:       PMonInfos = Ptr($7D0C90);
@@ -2047,6 +2070,7 @@ begin
   SecSkillTexts := GameExt.GetRealAddr(SecSkillTexts);
   MonInfos      := GameExt.GetRealAddr(MonInfos);
   ArtInfos      := ppointer(ArtInfos)^;
+  Spells        := GameExt.GetRealAddr(Spells);
 end;
 
 begin
