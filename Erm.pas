@@ -8558,6 +8558,10 @@ begin
   // Add extended OW:C?(currentPlayer)/?(uiPlayer) syntax
   ApiJack.HookCode(Ptr($737BCE), @Hook_OW_O);
 
+  // Fix HE:V#1/#2/#3 to allow #2 to be any positive object ID, applying mod 32 to it.
+  // This fix allows to play XXL maps without scripts fixing.
+  Core.p.WriteDataPatch(Ptr($746319), ['8365B01FEB19']);
+
   (* Rewrite ZVS Call_Function / remote function call handling *)
   Core.ApiHook(@OnFuncCalledRemotely, Core.HOOKTYPE_JUMP, Ptr($72D1D1));
 
