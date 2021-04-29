@@ -436,6 +436,43 @@ begin
   result := Heroes.GetCampaignMapInd;
 end;
 
+function GetAssocVarIntValue (const VarName: pchar): integer; stdcall;
+var
+  AssocVar: AdvErm.TAssocVar;
+
+begin
+  AssocVar := AdvErm.AssocMem[VarName];
+  result   := 0;
+
+  if AssocVar <> nil then begin
+    result := AssocVar.IntValue;
+  end;
+end;
+
+function GetAssocVarStrValue (const VarName: pchar): {O} pchar; stdcall;
+var
+  AssocVar: AdvErm.TAssocVar;
+
+begin
+  AssocVar := AdvErm.AssocMem[VarName];
+
+  if AssocVar <> nil then begin
+    result := Externalize(AssocVar.StrValue);
+  end else begin
+    result := Externalize('');
+  end;
+end;
+
+procedure SetAssocVarIntValue (const VarName: pchar; NewValue: integer); stdcall;
+begin
+  AdvErm.GetOrCreateAssocVar(VarName).IntValue := NewValue;
+end;
+
+procedure SetAssocVarStrValue (const VarName, NewValue: pchar); stdcall;
+begin
+  AdvErm.GetOrCreateAssocVar(VarName).StrValue := NewValue;
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -469,6 +506,8 @@ exports
   GameExt.GetRealAddr,
   GameExt.RedirectMemoryBlock,
   GetArgXVars,
+  GetAssocVarIntValue,
+  GetAssocVarStrValue,
   GetButtonID,
   GetCampaignFileName,
   GetCampaignMapInd,
@@ -498,6 +537,8 @@ exports
   RegisterHandler,
   ReportPluginVersion,
   SaveIni,
+  SetAssocVarIntValue,
+  SetAssocVarStrValue,
   ShowErmError,
   ShowMessage,
   Splice,
