@@ -488,7 +488,7 @@ begin
   result := nil;
   // * * * * * //
   if Image = nil then begin
-    Core.NotifyError(Format('Failed to load image at "%s"', [FilePath]));
+    //Core.NotifyError(Format('Failed to load image at "%s"', [FilePath]));
     result := CreateDefaultBmp24();
   end else begin
     if GetImageType(Image) = IMG_BMP then begin
