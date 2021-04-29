@@ -775,6 +775,9 @@ type
     ChanceToGetForClass: array [0..8] of integer; // +44h chance per class
     AiValue:             array [0..3] of integer; // +68h
     Description:         array [0..3] of pchar;   // +78h
+
+    // 0 for name, 1 short name, 2 - description without magic skill, 3..5 - description with basic..expert skill, 6 - sound name
+    function GetTextField (Ind: integer): PValue;
   end;
 
   PSpells = ^TSpells;
@@ -1079,7 +1082,8 @@ const
   SecSkillDescs: PSecSkillDescs = Ptr($698C34);
   SecSkillTexts: PSecSkillTexts = Ptr($698D88);
 
-  Spells: PSpells = Ptr($7BD2C0);
+  Spells:       PSpells  = Ptr($7BD2C0);
+  NumSpellsPtr: pinteger = Ptr($7751ED + 3);
 
   TextBuf:        PGeneralPurposeTextBuf = Ptr($697428);
   MonInfos:       PMonInfos = Ptr($7D0C90);
@@ -1184,6 +1188,22 @@ begin
     result := nil;
     {!} Assert(false, 'Cannot get TArtInfo field with invalid index ' + SysUtils.IntToStr(Ind));
   end;
+end;
+
+function TSpell.GetTextField (Ind: integer): PValue;
+begin
+  case Ind of
+    0: result := @Self.Name;
+    1: result := @Self.ShortName;
+    2: result := @Self.Description[0];
+    3: result := @Self.Description[1];
+    4: result := @Self.Description[2];
+    5: result := @Self.Description[3];
+    6: result := @Self.SoundFileName;
+  else
+    result := nil;
+    {!} Assert(false, 'Cannot get TSpell field with invalid index ' + SysUtils.IntToStr(Ind));
+  end; // .switch Ind
 end;
 
 constructor TTextTable.Create (Cells: TTextTableCells);

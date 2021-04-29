@@ -280,6 +280,17 @@ const
 
   NUM_WOG_HEROES = 156;
 
+  (* SN:H spell text type *)
+  SPELL_TEXT_FIRST          = 0;
+  SPELL_TEXT_NAME           = 0;
+  SPELL_TEXT_SHORT_NAME     = 1;
+  SPELL_TEXT_DESCR          = 2;
+  SPELL_TEXT_DESCR_BASIC    = 3;
+  SPELL_TEXT_DESCR_ADVANCED = 4;
+  SPELL_TEXT_DESCR_EXPERT   = 5;
+  SPELL_TEXT_SOUND          = 6;
+  SPELL_TEXT_LAST           = 6;
+
 
 type
   TErmValType   = (ValNum, ValF, ValQuick, ValV, ValW, ValX, ValY, ValZ);
@@ -554,6 +565,9 @@ type
   PArtNamesSettingsTable = ^TArtNamesSettingsTable;
   TArtNamesSettingsTable = array [0..high(integer) div sizeof(TArtNamesSettings) div 3 - 1] of TArtNamesSettings;
 
+  PSpellSettingsTable = ^TSpellSettingsTable;
+  TSpellSettingsTable = array [0..high(word) - 1, SPELL_TEXT_FIRST..SPELL_TEXT_LAST] of integer;
+
   TFireRemoteEventProc = procedure (EventId: integer; Data: pinteger; NumInts: integer); cdecl;
   TZvsPlaceMapObject   = function (x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; cdecl;
   TZvsCheckEnabled     = array [0..19] of integer;
@@ -620,6 +634,7 @@ const
   MonNamesSpecialtyTableBack: Utils.PEndlessPcharArr = Ptr($A88E78);
   ArtNamesSettingsTable:      PArtNamesSettingsTable = Ptr($A4A588);
   ArtInfosBack:               Heroes.PArtInfos       = Ptr($2731070);
+  SpellSettingsTable:         PSpellSettingsTable    = Ptr($28B1C54);
 
   (* WoG funcs *)
   ZvsProcessCmd:      procedure (Cmd: PErmCmd; Dummy: integer = 0; IsPostInstr: longbool = false) cdecl = Ptr($741DF0);
@@ -8647,6 +8662,7 @@ begin
   MonNamesTablesBack[0]      := MonNamesSingularTableBack;
   MonNamesTablesBack[1]      := MonNamesPluralTableBack;
   MonNamesTablesBack[2]      := MonNamesSpecialtyTableBack;
+  SpellSettingsTable         := GameExt.GetRealAddr(SpellSettingsTable);
 end; // .procedure OnAfterStructRelocations
 
 begin

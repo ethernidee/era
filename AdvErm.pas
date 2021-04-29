@@ -1257,6 +1257,7 @@ var
     Skill:    integer;
     Monster:  integer absolute Skill;
     Art:      integer absolute Skill;
+    SpellId:  integer absolute Skill;
 
   (* Returns new hint address or nil if hint was deleted *)
   function UpdateHint (HintParamN: integer): {n} pchar;
@@ -1482,6 +1483,36 @@ begin
                     Heroes.ArtInfos[Art].GetTextField(NameType).pc := Erm.ArtInfosBack[Art].GetTextField(NameType).pc;
                   end else begin
                     Heroes.ArtInfos[Art].GetTextField(NameType).pc := HintRaw;
+                  end;
+                end; // .else
+              end; // .if
+            end; // .if
+          end else begin
+            result := false;
+            Error  := 'Invalid number of command parameters';
+          end; // .else
+        // SN:H^spell^/spell/^name^ or ^short name^ or ^desc^ or ^basic desc^ or ^adv desc^ or ^exp desc^ or ^sound^ or /text
+        end else if SectionName = 'spell' then begin
+          if NumParams = 4 then begin
+            result := CheckCmdParamsEx(Params, NumParams, [TYPE_ANY, ACTION_SET or TYPE_INT, ACTION_SET or TYPE_INT, TYPE_STR]);
+
+            if result then begin
+              SpellId  := Params[1].Value.v;
+              NameType := Params[2].Value.v;
+              result   := Math.InRange(SpellId, 0, Heroes.NumSpellsPtr^ - 1) and Math.InRange(NameType, SPELL_TEXT_FIRST, SPELL_TEXT_LAST);
+
+              if result then begin
+                if Params[3].OperGet then begin
+                  Params[3].RetPchar(Heroes.Spells[SpellId].GetTextField(NameType).pc);
+                end else begin
+                  Code    := SpellId or (NameType shl 16);
+                  HintRaw := UpdateHint(3);
+                  Erm.SpellSettingsTable[SpellId][NameType] := 0;
+
+                  if DeleteHint then begin
+                    // No text backup table. Spell will be restored on game reload only
+                  end else begin
+                    Heroes.Spells[SpellId].GetTextField(NameType).pc := HintRaw;
                   end;
                 end; // .else
               end; // .if
@@ -2454,6 +2485,7 @@ var
     Skill:    integer;
     Monster:  integer absolute Skill;
     Art:      integer absolute Skill;
+    SpellId:  integer absolute Skill;
     NameType: integer;
 
 begin
@@ -2546,6 +2578,22 @@ begin
 
         Erm.ArtNamesSettingsTable[Art].Texts[NameType] := 0;
         Heroes.ArtInfos[Art].GetTextField(NameType).pc := Name;
+      end; // .while
+    end; // .with
+  end; // .if
+
+  (* Apply spell texts *)
+  HintSection := TObjDict(Hints['spell']);
+
+  if HintSection <> nil then begin
+    with DataLib.IterateObjDict(HintSection) do begin
+      while IterNext do begin
+        SpellId  := integer(IterKey) and $FFFF;
+        NameType := integer(IterKey) shr 16;
+        Name     := pchar(TString(IterValue).Value);
+
+        Erm.SpellSettingsTable[SpellId][NameType]        := 0;
+        Heroes.Spells[SpellId].GetTextField(NameType).pc := Name;
       end; // .while
     end; // .with
   end; // .if
@@ -3343,6 +3391,7 @@ begin
   Hints['secskill'] := DataLib.NewObjDict(Utils.OWNS_ITEMS);
   Hints['monname']  := DataLib.NewObjDict(Utils.OWNS_ITEMS);
   Hints['art']      := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  Hints['spell']    := DataLib.NewObjDict(Utils.OWNS_ITEMS);
 end;
 
 begin
