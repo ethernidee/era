@@ -9,7 +9,7 @@ unit Extern;
 
 uses
   Windows, SysUtils, Math,
-  Utils, Alg, StrLib, Core, ApiJack, WinUtils,
+  Utils, Alg, StrLib, Core, ApiJack, WinUtils, DataLib, TypeWrappers,
   GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
   EraButtons, Lodman, Graph, Trans, Memory, EraUtils,
   EventMan;
@@ -17,6 +17,8 @@ uses
 type
   (* Import *)
   TEventHandler = EventMan.TEventHandler;
+  TDict         = DataLib.TDict;
+  TString       = TypeWrappers.TString;
 
   PErmXVars = ^TErmXVars;
   TErmXVars = array [1..16] of integer;
@@ -25,6 +27,11 @@ type
 
 
 (***) implementation (***)
+
+
+var
+{O} IntRegistry: {U} TDict {of Ptr(integer)};
+{O} StrRegistry: {O} TDict {of TString};
 
 
 const
@@ -473,6 +480,32 @@ begin
   AdvErm.GetOrCreateAssocVar(VarName).StrValue := NewValue;
 end;
 
+function GetEraRegistryIntValue (const Key: pchar): integer; stdcall;
+begin
+  result := integer(IntRegistry[Key]);
+end;
+
+procedure SetEraRegistryIntValue (const Key: pchar; NewValue: integer); stdcall;
+begin
+  IntRegistry[Key] := Ptr(NewValue);
+end;
+
+function GetEraRegistryStrValue (const Key: pchar): {O} pchar; stdcall;
+begin
+  result := StrRegistry[Key];
+
+  if result <> nil then begin
+    result := Externalize(TString(result).Value);
+  end else begin
+    result := Externalize('');
+  end;
+end;
+
+procedure SetEraRegistryStrValue (const Key: pchar; NewValue: pchar); stdcall;
+begin
+  StrRegistry[Key] := TString.Create(NewValue);
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -511,6 +544,8 @@ exports
   GetButtonID,
   GetCampaignFileName,
   GetCampaignMapInd,
+  GetEraRegistryIntValue,
+  GetEraRegistryStrValue,
   GetMapFileName,
   GetProcessGuid,
   GetRetXVars,
@@ -539,6 +574,8 @@ exports
   SaveIni,
   SetAssocVarIntValue,
   SetAssocVarStrValue,
+  SetEraRegistryIntValue,
+  SetEraRegistryStrValue,
   ShowErmError,
   ShowMessage,
   Splice,
@@ -546,4 +583,8 @@ exports
   tr,
   WriteSavegameSection,
   WriteStrToIni;
+
+begin
+  IntRegistry := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  StrRegistry := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
 end.
