@@ -573,6 +573,13 @@ type
   PBinaryTree = ^TBinaryTree;
   TBinaryTree = TBinaryTreeNode;
 
+  PPalette24Color = ^TPalette24Color;
+  TPalette24Color = packed record
+    Blue:  byte;
+    Green: byte;
+    Red:   byte;
+  end;
+
   {$ALIGN OFF}
   PPalette16 = ^TPalette16;
   TPalette16 = object (TBinaryTreeItem)
@@ -585,7 +592,7 @@ type
   PPalette24 = ^TPalette24;
   TPalette24 = object (TBinaryTreeItem)
    public
-    Colors: array [0..255] of integer;
+    Colors: array [0..255] of TPalette24Color;
   end;
   {$ALIGN ON}
 
@@ -668,6 +675,16 @@ type
     ScanlineSize: integer;
     Buffer:       Utils.PEndlessByteArr;
   end; // .object TPcxItem
+  {$ALIGN ON}
+
+  {$ALIGN OFF}
+  PPcx8Item = ^TPcx8Item;
+  TPcx8Item = object (TPcxItem)
+   public
+    Unk1:          array [1..7] of integer;
+    DevicePalette: array [0..255] of word;
+    Palette24:     TPalette24; // Or PPalette24
+  end;
   {$ALIGN ON}
 
   {$ALIGN OFF}
