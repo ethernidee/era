@@ -25,6 +25,7 @@ uses
   ResLib,
   StrLib,
   Types,
+  TypeWrappers,
   WinUtils,
   Utils;
 
@@ -41,6 +42,7 @@ const
 
   (* Paths *)
   DEF_PNG_FRAMES_DIR = 'Data\Defs';
+  PCX_PNG_FRAMES_DIR = 'Data\Pcx';
 
 type
   (* Import *)
@@ -50,6 +52,7 @@ type
   TPngObject = PngImage.TPngObject;
   TDict      = DataLib.TDict;
   TRect      = Types.TRect;
+  TString    = TypeWrappers.TString;
 
   TImageType = (IMG_UNKNOWN, IMG_BMP, IMG_JPG, IMG_PNG);
   TResizeAlg = (ALG_NO_RESIZE = 0, ALG_STRETCH = 1, ALG_CONTAIN = 2, ALG_DOWNSCALE = 3, ALG_UPSCALE = 4, ALG_COVER = 5, ALG_FILL = 6);
@@ -99,6 +102,7 @@ procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, Ds
 var
 // Caseinsensitive map of "defname.def\frame_index.png" => 1 if frame png file exists.
 {O} DefFramesPngFileMap: {U} TDict {of Ptr(1)};
+{O} PcxPngFileMap:       {O} TDict {of png file path: TString};
 
   DefFramePngFilePathPrefix: string; // Like "D:\Games\Heroes 3\Data\Defs\"
 
@@ -739,6 +743,19 @@ begin
   end;
 end;
 
+function GetPcxPngFrame (Pcx: Heroes.PBinaryTreeItem): {On} ResLib.TSharedResource;
+var
+  PngFilePath: TString;
+
+begin
+  result      := nil;
+  PngFilePath := PcxPngFileMap[pchar(@Pcx.Name[0])];
+
+  if PngFilePath <> nil then begin
+    result := LoadPngResource(PngFilePath.Value);
+  end;
+end;
+
 function GetDefFrameCroppingRect (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): TRect;
 var
 {On} ImageResource: ResLib.TSharedResource;
@@ -835,6 +852,35 @@ begin
   end; // .with
 end; // .procedure RescanDefFramesPngFiles
 
+procedure RescanDirPcxPngFiles (const DirPath: string);
+var
+  DefName: string;
+
+begin
+  PcxPngFileMap.Clear;
+
+  with Files.Locate(DirPath + '\*', Files.FILES_AND_DIRS) do begin
+    while FindNext do begin
+      if (FoundName <> '.') and (FoundName <> '..') then begin
+        if FoundRec.IsDir then begin
+          RescanDirPcxPngFiles(FoundPath);
+        end else if (FoundRec.Rec.Size > 0) and (SysUtils.AnsiLowerCase(SysUtils.ExtractFileExt(FoundName)) = '.png') then begin
+          PcxPngFileMap[SysUtils.ChangeFileExt(FoundName, '.pcx')] := TString.Create(FoundPath);
+        end;
+      end;
+    end; // .while
+  end; // .with
+end; // .procedure RescanDirPcxPngFiles
+
+procedure RescanPcxPngFiles;
+var
+  DefName: string;
+
+begin
+  PcxPngFileMap.Clear;
+  RescanDirPcxPngFiles(GameExt.GameDir + '\' + PCX_PNG_FRAMES_DIR);
+end;
+
 procedure SetupColorMode;
 var
   Color16Mode: GraphTypes.TColor16Mode;
@@ -856,6 +902,7 @@ end;
 procedure OnBeforeScriptsReload (Event: GameExt.PEvent); stdcall;
 begin
   RescanDefFramesPngFiles;
+  RescanPcxPngFiles;
 end;
 
 function Hook_DrawInterfaceDefFrame (
@@ -919,6 +966,81 @@ begin
   end;
 end; // .procedure Hook_DrawInterfaceDefGroupFrame
 
+procedure Hook_DrawPcx16ToPcx16 (
+  OrigFunc: pointer;
+  Pcx: Heroes.PPcx16Item;
+  SrcX, SrcY, SrcWidth, SrcHeight: integer;
+  Buf: pointer;
+  DstX, DstY, DstW, DstH, ScanlineSize, TransparentColor: integer
+); stdcall;
+
+var
+{On} ImageResource:  ResLib.TSharedResource;
+     DrawImageSetup: GraphTypes.TDrawImageSetup;
+
+begin
+  ImageResource := GetPcxPngFrame(Pcx);
+
+  if ImageResource <> nil then begin
+    DrawImageSetup.Init;
+    DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+
+    ImageResource.DecRef;
+  end else begin
+    PatchApi.Call(THISCALL_, OrigFunc, [Pcx, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, TransparentColor]);
+  end;
+end; // .procedure Hook_DrawPcx16ToPcx16
+
+procedure Hook_DrawPcx8ToPcx16 (
+  OrigFunc: pointer;
+  Pcx: Heroes.PPcx8Item;
+  SrcX, SrcY, SrcWidth, SrcHeight: integer;
+  Buf: pointer;
+  DstX, DstY, DstW, DstH, ScanlineSize, TransparentColor: integer
+); stdcall;
+
+var
+{On} ImageResource:  ResLib.TSharedResource;
+     DrawImageSetup: GraphTypes.TDrawImageSetup;
+
+begin
+  ImageResource := GetPcxPngFrame(Pcx);
+
+  if ImageResource <> nil then begin
+    DrawImageSetup.Init;
+    DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+
+    ImageResource.DecRef;
+  end else begin
+    PatchApi.Call(THISCALL_, OrigFunc, [Pcx, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, TransparentColor]);
+  end;
+end; // .procedure Hook_DrawPcx8ToPcx16
+
+function Hook_LoadPcx8 (
+  OrigFunc: pointer;
+  FileName: pchar
+): Heroes.PPcx8Item; stdcall;
+
+var
+  FromAddr: pointer;
+
+begin
+  result := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [FileName]));
+
+  //FillChar(result.DevicePalette[0], 512, #0);
+  //FillChar(result.Palette24.Colors[0], 768, #0);
+
+  if FileName = 'heroscr4.pcx' then begin
+    asm
+      mov eax, [ebp]
+      mov eax, [eax + 4]
+      mov FromAddr, eax
+    end;
+
+    VarDump([FileName, FromAddr, Ptr(cardinal(@result.DevicePalette[0]))]);
+  end;
+end; // .procedure Hook_LoadPcx8
+
 function GetMicroTime: Int64;
 var
   Freq: Int64;
@@ -946,6 +1068,9 @@ begin
   ApiJack.StdSplice(Ptr($47B820), @Hook_DrawInterfaceDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($47B7D0), @Hook_DrawInterfaceDefButtonFrame, ApiJack.CONV_THISCALL, 9);
   ApiJack.StdSplice(Ptr($47B610), @Hook_DrawInterfaceDefGroupFrame, ApiJack.CONV_THISCALL, 15);
+  ApiJack.StdSplice(Ptr($44DF80), @Hook_DrawPcx16ToPcx16, ApiJack.CONV_THISCALL, 12);
+  ApiJack.StdSplice(Ptr($44F940), @Hook_DrawPcx8ToPcx16, ApiJack.CONV_THISCALL, 12);
+  ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
   //LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
   // ***ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
   // StartTime   := GetMicroTime();
@@ -985,10 +1110,12 @@ procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   DefFramePngFilePathPrefix := GameExt.GameDir + '\' + DEF_PNG_FRAMES_DIR + '\';
   RescanDefFramesPngFiles;
+  RescanPcxPngFiles;
 end;
 
 begin
   DefFramesPngFileMap := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  PcxPngFileMap       := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
 
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeScriptsReload', OnBeforeScriptsReload);
