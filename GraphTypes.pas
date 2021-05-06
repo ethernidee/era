@@ -445,12 +445,16 @@ var
   SrcBox: TRect;
 
 begin
-  result := Types.IntersectRect(SrcBox, Types.Rect(SrcX, SrcY, SrcX + SrcWidth, SrcY + SrcHeight), SourceCroppingRect) and
-            RefineDrawBox(SrcBox.Left, SrcBox.Top, DstX, DstY, BoxWidth, BoxHeight, SrcBox.Right, SrcBox.Bottom, DstWidth, DstHeight);
+  result := Types.IntersectRect(SrcBox, Types.Rect(SrcX, SrcY, SrcX + BoxWidth, SrcY + BoxHeight), SourceCroppingRect);
 
   if result then begin
-    SrcX := SrcBox.Left;
-    SrcY := SrcBox.Top;
+    BoxWidth  := SrcBox.Right  - SrcBox.Left;
+    BoxHeight := SrcBox.Bottom - SrcBox.Top;
+    Inc(DstX, SrcBox.Left - SrcX);
+    Inc(DstY, SrcBox.Top  - SrcY);
+    SrcX      := SrcBox.Left;
+    SrcY      := SrcBox.Top;
+    result    := RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, SrcBox.Right, SrcBox.Bottom, DstWidth, DstHeight);
   end;
 end;
 
@@ -763,7 +767,7 @@ begin
 
   while (j < CroppingRect.Bottom) do begin
     Pixel       := Scanline;
-    ScanlineEnd := Utils.PtrOfs(Scanline, Self.fWidth * sizeof(Self.fPixels[0]));
+    ScanlineEnd := Utils.PtrOfs(Scanline, Self.fWidth, sizeof(Pixel^));
 
     while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
       Inc(Pixel);
@@ -785,7 +789,7 @@ begin
 
   while (j > CroppingRect.Top) do begin
     Pixel       := Scanline;
-    ScanlineEnd := Utils.PtrOfs(Scanline, Self.fWidth * sizeof(Self.fPixels[0]));
+    ScanlineEnd := Utils.PtrOfs(Scanline, Self.fWidth, sizeof(Pixel^));
 
     while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
       Inc(Pixel);
@@ -799,24 +803,25 @@ begin
     Dec(integer(Scanline), Self.fScanlineSize);
   end;
 
-  CroppingRect.Bottom := j;
+  CroppingRect.Bottom := j + 1;
 
   // Trim from left
   LeftBorder := CroppingRect.Right;
 
-  j        := CroppingRect.Top;
-  Scanline := Utils.PtrOfs(@Self.fPixels[0], j * Self.fScanlineSize);
+  j           := CroppingRect.Top;
+  Scanline    := Utils.PtrOfs(@Self.fPixels[0], j, Self.fScanlineSize);
+  ScanlineEnd := Utils.PtrOfs(Scanline, LeftBorder, sizeof(Pixel^));
 
   while (j < CroppingRect.Bottom) do begin
     Pixel       := Scanline;
-    ScanlineEnd := Utils.PtrOfs(Scanline, LeftBorder * sizeof(Self.fPixels[0]));
+    ScanlineEnd := Utils.PtrOfs(Scanline, LeftBorder, sizeof(Pixel^));
 
     while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
       Inc(Pixel);
     end;
 
     if cardinal(Pixel) < cardinal(ScanlineEnd) then begin
-      LeftBorder := integer((cardinal(Pixel) - cardinal(Scanline)) div sizeof(Pixel^));
+      LeftBorder := Utils.ItemPtrToIndex(Pixel, Scanline, sizeof(Pixel^));
 
       if LeftBorder = 0 then begin
         break;
@@ -833,20 +838,20 @@ begin
   RightBorder := CroppingRect.Left;
 
   j        := CroppingRect.Top;
-  Scanline := Utils.PtrOfs(@Self.fPixels[0], j * Self.fScanlineSize);
+  Scanline := Utils.PtrOfs(@Self.fPixels[0], j, Self.fScanlineSize);
 
   while (j < CroppingRect.Bottom) do begin
-    Pixel       := Utils.PtrOfs(Scanline, CroppingRect.Right * sizeof(Self.fPixels[0]));
-    ScanlineEnd := Utils.PtrOfs(Scanline, RightBorder        * sizeof(Self.fPixels[0]));
+    Pixel       := Utils.PtrOfs(Scanline, CroppingRect.Right - 1, sizeof(Pixel^));
+    ScanlineEnd := Utils.PtrOfs(Scanline, RightBorder, sizeof(Pixel^));
 
     while (cardinal(Pixel) > cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
       Dec(Pixel);
     end;
 
     if cardinal(Pixel) > cardinal(ScanlineEnd) then begin
-      RightBorder := integer((cardinal(Pixel) - cardinal(Scanline)) div sizeof(Pixel^));
+      RightBorder := Utils.ItemPtrToIndex(Pixel, Scanline, sizeof(Pixel^));
 
-      if RightBorder = 0 then begin
+      if (RightBorder + 1) = CroppingRect.Right then begin
         break;
       end;
     end;
@@ -855,9 +860,11 @@ begin
     Inc(integer(Scanline), Self.fScanlineSize);
   end;
 
-  CroppingRect.Right := RightBorder;
+  CroppingRect.Right := RightBorder + 1;
 
-  //VarDump([CroppingRect.Left, CroppingRect.Top, CroppingRect.Right, CroppingRect.Bottom]);
+  if Types.IsRectEmpty(CroppingRect) then begin
+    System.FillChar(CroppingRect, sizeof(CroppingRect), #0);
+  end;
 
   Self.fCroppingRect := CroppingRect;
 end; // .procedure TPremultipliedRawImage32.AutoSetCroppingRect
