@@ -137,6 +137,10 @@ type
     property HasTransparency: boolean read fHasTransparency;
     property CroppingRect:    TRect   read fCroppingRect write fCroppingRect;
 
+    procedure MakeBackup; virtual;
+    procedure RestoreFromBackup; virtual;
+    procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); virtual;
+
     procedure DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                  const DrawImageSetup: TDrawImageSetup); virtual;
     procedure DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
@@ -147,9 +151,14 @@ type
    protected
     fScanlineSize: integer;
     fPixels:       TArrayOfColor16;
+    fPixelsBackup: TArrayOfColor16;
 
    public
     constructor Create (Pixels: TArrayOfColor16; Width, Height, ScanlineSize: integer; const Setup: TRawImage16Setup);
+
+    procedure MakeBackup; override;
+    procedure RestoreFromBackup; override;
+    procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); override;
 
     procedure DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                  const DrawImageSetup: TDrawImageSetup); override;
@@ -162,9 +171,14 @@ type
    protected
     fScanlineSize: integer;
     fPixels:       TArrayOfColor32;
+    fPixelsBackup: TArrayOfColor32;
 
    public
     constructor Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer; const Setup: TRawImage32Setup);
+
+    procedure MakeBackup; override;
+    procedure RestoreFromBackup; override;
+    procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); override;
 
     procedure DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                  const DrawImageSetup: TDrawImageSetup); override;
@@ -180,6 +194,7 @@ type
    public
     constructor Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer);
 
+    procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); override;
     procedure AutoSetCroppingRect;
 
     procedure DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
@@ -480,6 +495,32 @@ begin
   Self.HasTransparency := false;
 end;
 
+constructor TRawImage.Create (Width, Height: integer; const Setup: TRawImageSetup);
+begin
+  {!} Assert(Width > 0);
+  {!} Assert(Height > 0);
+
+  Self.fWidth           := Width;
+  Self.fHeight          := Height;
+  Self.fHasTransparency := Setup.HasTransparency;
+  Self.fCroppingRect    := Types.Rect(0, 0, Self.fWidth, Self.fHeight);
+end;
+
+procedure TRawImage.MakeBackup;
+begin
+  // Implement in descendants
+end;
+
+procedure TRawImage.RestoreFromBackup;
+begin
+  // Implement in descendants
+end;
+
+procedure TRawImage.ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer);
+begin
+  // Implement in descendants
+end;
+
 procedure TRawImage.DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                        const DrawImageSetup: TDrawImageSetup);
 begin
@@ -496,6 +537,76 @@ procedure TRawImage16Setup.Init;
 begin
   Self.Color16Mode := GetColor16Mode;
 end;
+
+constructor TRawImage16.Create (Pixels: TArrayOfColor16; Width, Height, ScanlineSize: integer; const Setup: TRawImage16Setup);
+var
+  RawImageSetup: TRawImageSetup;
+
+begin
+  {!} Assert(Pixels <> nil);
+  RawImageSetup.Init;
+  RawImageSetup.HasTransparency := false;
+  inherited Create(Width, Height, RawImageSetup);
+  {!} Assert(ScanlineSize >= Width * sizeof(Pixels[0]));
+
+  Self.fPixels       := Pixels;
+  Self.fScanlineSize := ScanlineSize;
+end;
+
+procedure TRawImage16.MakeBackup;
+begin
+  if (Self.fPixelsBackup = nil) and (Self.fPixels <> nil) then begin
+    SetLength(Self.fPixelsBackup, Length(Self.fPixels));
+    Utils.CopyMem(Length(Self.fPixels) * sizeof(Self.fPixels[0]), @Self.fPixels[0], @Self.fPixelsBackup[0]);
+  end;
+end;
+
+procedure TRawImage16.RestoreFromBackup;
+begin
+  if Self.fPixelsBackup <> nil then begin
+    Utils.CopyMem(Length(Self.fPixels) * sizeof(Self.fPixels[0]), @Self.fPixelsBackup[0], @Self.fPixels[0]);
+  end;
+end;
+
+procedure TRawImage16.ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer);
+var
+  WhatColors16: TArrayOfColor16;
+  Scanline:     PColor16;
+  Pixel:        PColor16;
+  PixelValue:   integer;
+  ColorInd:     integer;
+  i, j:         integer;
+
+begin
+  SetLength(WhatColors16, NumColors);
+
+  for i := 0 to NumColors - 1 do begin
+    WhatColors16[i].Value := Color32To16(WhatColors[i].Value);
+  end;
+
+  Scanline := @Self.fPixels[0];
+
+  for j := 0 to Self.fHeight - 1 do begin
+    Pixel := Scanline;
+
+    for i := 0 to Self.fWidth - 1 do begin
+      ColorInd   := 0;
+      PixelValue := Pixel.Value;
+
+      while (ColorInd < NumColors) and (WhatColors16[ColorInd].Value <> PixelValue) do begin
+        Inc(ColorInd);
+      end;
+
+      if ColorInd < NumColors then begin
+        Pixel.Value := Color32To16(WithColors[ColorInd].Value);
+      end;
+
+      Inc(Pixel);
+    end;
+
+    Inc(integer(Scanline), Self.fScanlineSize);
+  end;
+end; // .procedure TRawImage16.ReplaceColors
 
 procedure TRawImage16.DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                          const DrawImageSetup: TDrawImageSetup);
@@ -567,32 +678,6 @@ begin
   System.FillChar(Self, sizeof(Self), #0);
 end;
 
-constructor TRawImage.Create (Width, Height: integer; const Setup: TRawImageSetup);
-begin
-  {!} Assert(Width > 0);
-  {!} Assert(Height > 0);
-
-  Self.fWidth           := Width;
-  Self.fHeight          := Height;
-  Self.fHasTransparency := Setup.HasTransparency;
-  Self.fCroppingRect    := Types.Rect(0, 0, Self.fWidth, Self.fHeight);
-end;
-
-constructor TRawImage16.Create (Pixels: TArrayOfColor16; Width, Height, ScanlineSize: integer; const Setup: TRawImage16Setup);
-var
-  RawImageSetup: TRawImageSetup;
-
-begin
-  {!} Assert(Pixels <> nil);
-  RawImageSetup.Init;
-  RawImageSetup.HasTransparency := false;
-  inherited Create(Width, Height, RawImageSetup);
-  {!} Assert(ScanlineSize >= Width * sizeof(Pixels[0]));
-
-  Self.fPixels       := Pixels;
-  Self.fScanlineSize := ScanlineSize;
-end;
-
 constructor TRawImage32.Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer; const Setup: TRawImage32Setup);
 var
   RawImageSetup: TRawImageSetup;
@@ -607,6 +692,54 @@ begin
   Self.fPixels       := Pixels;
   Self.fScanlineSize := ScanlineSize;
 end;
+
+procedure TRawImage32.MakeBackup;
+begin
+  if (Self.fPixelsBackup = nil) and (Self.fPixels <> nil) then begin
+    SetLength(Self.fPixelsBackup, Length(Self.fPixels));
+    Utils.CopyMem(Length(Self.fPixels) * sizeof(Self.fPixels[0]), @Self.fPixels[0], @Self.fPixelsBackup[0]);
+  end;
+end;
+
+procedure TRawImage32.RestoreFromBackup;
+begin
+  if Self.fPixelsBackup <> nil then begin
+    Utils.CopyMem(Length(Self.fPixels) * sizeof(Self.fPixels[0]), @Self.fPixelsBackup[0], @Self.fPixels[0]);
+  end;
+end;
+
+procedure TRawImage32.ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer);
+var
+  Scanline:   PColor32;
+  Pixel:      PColor32;
+  PixelValue: integer;
+  ColorInd:   integer;
+  i, j:       integer;
+
+begin
+  Scanline := @Self.fPixels[0];
+
+  for j := 0 to Self.fHeight - 1 do begin
+    Pixel := Scanline;
+
+    for i := 0 to Self.fWidth - 1 do begin
+      ColorInd   := 0;
+      PixelValue := Pixel.Value;
+
+      while (ColorInd < NumColors) and (WhatColors[ColorInd].Value <> PixelValue) do begin
+        Inc(ColorInd);
+      end;
+
+      if ColorInd < NumColors then begin
+        Pixel.Value := WithColors[ColorInd].Value;
+      end;
+
+      Inc(Pixel);
+    end;
+
+    Inc(integer(Scanline), Self.fScanlineSize);
+  end;
+end; // .procedure TRawImage32.ReplaceColors
 
 procedure TRawImage32.DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                          const DrawImageSetup: TDrawImageSetup);
@@ -748,6 +881,46 @@ begin
   PremultiplyImageColorChannels(Self.fPixels);
 end;
 
+procedure TPremultipliedRawImage32.ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer);
+var
+  PremultipliedWhatColors: TArrayOfColor32;
+  Scanline:                PColor32;
+  Pixel:                   PColor32;
+  PixelValue:              integer;
+  ColorInd:                integer;
+  i, j:                    integer;
+
+begin
+  SetLength(PremultipliedWhatColors, NumColors);
+
+  for i := 0 to NumColors - 1 do begin
+    PremultipliedWhatColors[i].Value := PremultiplyColorChannelsByAlpha(WhatColors[i].Value);
+  end;
+
+  Scanline := @Self.fPixels[0];
+
+  for j := 0 to Self.fHeight - 1 do begin
+    Pixel := Scanline;
+
+    for i := 0 to Self.fWidth - 1 do begin
+      ColorInd   := 0;
+      PixelValue := Pixel.Value;
+
+      while (ColorInd < NumColors) and (PremultipliedWhatColors[ColorInd].Value <> PixelValue) do begin
+        Inc(ColorInd);
+      end;
+
+      if ColorInd < NumColors then begin
+        Pixel.Value := PremultiplyColorChannelsByAlpha(WithColors[ColorInd].Value);
+      end;
+
+      Inc(Pixel);
+    end;
+
+    Inc(integer(Scanline), Self.fScanlineSize);
+  end;
+end; // .procedure TPremultipliedRawImage32.ReplaceColors
+
 procedure TPremultipliedRawImage32.AutoSetCroppingRect;
 var
   CroppingRect: TRect;
@@ -808,9 +981,8 @@ begin
   // Trim from left
   LeftBorder := CroppingRect.Right;
 
-  j           := CroppingRect.Top;
-  Scanline    := Utils.PtrOfs(@Self.fPixels[0], j, Self.fScanlineSize);
-  ScanlineEnd := Utils.PtrOfs(Scanline, LeftBorder, sizeof(Pixel^));
+  j        := CroppingRect.Top;
+  Scanline := Utils.PtrOfs(@Self.fPixels[0], j, Self.fScanlineSize);
 
   while (j < CroppingRect.Bottom) do begin
     Pixel       := Scanline;
