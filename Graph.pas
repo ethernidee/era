@@ -1042,7 +1042,7 @@ begin
       mov FromAddr, eax
     end;
 
-    VarDump([FileName, FromAddr, Ptr(cardinal(@result.Palette16Colors[0]))]);
+    //VarDump([FileName, FromAddr, Ptr(cardinal(@result.Palette16Colors[0]))]);
   end;
 end; // .function Hook_LoadPcx8
 
@@ -1066,7 +1066,7 @@ begin
   PcxName := '';
 
   try
-    Pcx8 := Utils.PtrOfs(Palette16Colors, -integer(@Heroes.PPcx8Item(0).Palette16Colors));
+    Pcx8 := Utils.PtrOfs(Palette16Colors, -integer(@Heroes.PPcx8Item(0).Palette16.Colors));
 
     if Pcx8.IsPcx8() then begin
       PcxName := pchar(@Pcx8.Name[0]);

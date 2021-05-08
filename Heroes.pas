@@ -689,9 +689,8 @@ type
   PPcx8Item = ^TPcx8Item;
   TPcx8Item = object (TPcxItem)
    public
-    Unk1:            array [1..7] of integer;
-    Palette16Colors: TPalette16Colors;
-    Palette24:       TPalette24; // Of PPalette24
+    Palette16: TPalette16;
+    Palette24: TPalette24;
   end;
   {$ALIGN ON}
 
