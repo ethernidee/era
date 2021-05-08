@@ -53,6 +53,7 @@ type
   TDict      = DataLib.TDict;
   TRect      = Types.TRect;
   TString    = TypeWrappers.TString;
+  TRawImage  = GraphTypes.TRawImage;
 
   TImageType = (IMG_UNKNOWN, IMG_BMP, IMG_JPG, IMG_PNG);
   TResizeAlg = (ALG_NO_RESIZE = 0, ALG_STRETCH = 1, ALG_CONTAIN = 2, ALG_DOWNSCALE = 3, ALG_UPSCALE = 4, ALG_COVER = 5, ALG_FILL = 6);
@@ -95,6 +96,16 @@ procedure DrawRawImageToGameBuf (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, 
 (* Draws any raw image to Pcx16 canvas *)
 procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item;
                                      const DrawImageSetup: GraphTypes.TDrawImageSetup);
+
+
+var
+  DefaultPlayerInterfacePalette: array [0..31] of integer = (
+    integer($FF131F40), integer($FF18264F), integer($FF192855), integer($FF1D2C5A), integer($FF1D2F63), integer($FF1F3269), integer($FF20336D), integer($FF20346D),
+    integer($FF283865), integer($FF20346E), integer($FF213571), integer($FF223671), integer($FF223673), integer($FF223773), integer($FF223774), integer($FF233877),
+    integer($FF233977), integer($FF233979), integer($FF243A79), integer($FF243A7B), integer($FF243B7D), integer($FF253C7F), integer($FF263D82), integer($FF273F83),
+    integer($FF274086), integer($FF324272), integer($FF28418B), integer($FF374A82), integer($FF2A4590), integer($FF2F4B9C), integer($FF495B90), integer($FF6C7AA3)
+  );
+
 
 (***)  implementation  (***)
 
@@ -853,9 +864,6 @@ begin
 end; // .procedure RescanDefFramesPngFiles
 
 procedure RescanDirPcxPngFiles (const DirPath: string);
-var
-  DefName: string;
-
 begin
   PcxPngFileMap.Clear;
 
@@ -873,9 +881,6 @@ begin
 end; // .procedure RescanDirPcxPngFiles
 
 procedure RescanPcxPngFiles;
-var
-  DefName: string;
-
 begin
   PcxPngFileMap.Clear;
   RescanDirPcxPngFiles(GameExt.GameDir + '\' + PCX_PNG_FRAMES_DIR);
@@ -1037,9 +1042,64 @@ begin
       mov FromAddr, eax
     end;
 
-    VarDump([FileName, FromAddr, Ptr(cardinal(@result.DevicePalette[0]))]);
+    VarDump([FileName, FromAddr, Ptr(cardinal(@result.Palette16Colors[0]))]);
   end;
-end; // .procedure Hook_LoadPcx8
+end; // .function Hook_LoadPcx8
+
+function Hook_ColorizePcx8ToPlayerColors (
+  OrigFunc:        pointer;
+  Palette16Colors: Heroes.PPalette16Colors;
+  PlayerId:        integer
+): integer; stdcall;
+
+var
+{On} ImageResource: ResLib.TSharedResource;
+{Un} Image:         GraphTypes.TRawImage;
+     WithColors:    GraphTypes.TArrayOfColor32;
+     Pcx8:          Heroes.PPcx8Item;
+     PcxName:       string;
+     PngPath:       TString;
+     i:             integer;
+
+begin
+  result  := PatchApi.Call(FASTCALL_, OrigFunc, [Palette16Colors, PlayerId]);
+  PcxName := '';
+
+  try
+    Pcx8 := Utils.PtrOfs(Palette16Colors, -integer(@Heroes.PPcx8Item(0).Palette16Colors));
+
+    if Pcx8.IsPcx8() then begin
+      PcxName := pchar(@Pcx8.Name[0]);
+    end;
+  except
+    exit;
+  end;
+
+  if PcxName <> '' then begin
+    PngPath := PcxPngFileMap[PcxName];
+
+    if PngPath <> nil then begin
+      ImageResource := LoadPngResource(PngPath.Value);
+
+      if ImageResource <> nil then begin
+        if ImageResource.Data is GraphTypes.TRawImage then begin
+          SetLength(WithColors, Length(DefaultPlayerInterfacePalette));
+
+          for i := 0 to High(DefaultPlayerInterfacePalette) do begin
+            WithColors[i].Value := GraphTypes.Color16To32(Palette16Colors[Length(Palette16Colors^) - Length(DefaultPlayerInterfacePalette) + i]);
+          end;
+
+          Image := ImageResource.Data as GraphTypes.TRawImage;
+          Image.RestoreFromBackup;
+          Image.MakeBackup;
+          Image.ReplaceColors(@DefaultPlayerInterfacePalette[0], @WithColors[0], Length(DefaultPlayerInterfacePalette));
+        end;
+
+        ImageResource.DecRef;
+      end; // .if
+    end; // .if
+  end; // .if
+end; // .function Hook_ColorizePcx8ToPlayerColors
 
 function GetMicroTime: Int64;
 var
@@ -1053,11 +1113,12 @@ end;
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 var
-  i:              integer;
+  i, j, k:        integer;
   StartTime:      Int64;
   ImgResource:    ResLib.TSharedResource;
   Img:            GraphTypes.TRawImage;
   Pixels:         GraphTypes.TArrayOfColor32;
+  Pixel:          GraphTypes.PColor32;
   Canvas:         GraphTypes.TArrayOfColor32;
   PngImage:       TPngObject;
   FileContents:   string;
@@ -1070,7 +1131,8 @@ begin
   ApiJack.StdSplice(Ptr($47B610), @Hook_DrawInterfaceDefGroupFrame, ApiJack.CONV_THISCALL, 15);
   ApiJack.StdSplice(Ptr($44DF80), @Hook_DrawPcx16ToPcx16, ApiJack.CONV_THISCALL, 12);
   ApiJack.StdSplice(Ptr($44F940), @Hook_DrawPcx8ToPcx16, ApiJack.CONV_THISCALL, 12);
-  ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
+  ApiJack.StdSplice(Ptr($6003E0), @Hook_ColorizePcx8ToPlayerColors, ApiJack.CONV_FASTCALL, 2);
+  //ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
   //LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
   // ***ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
   // StartTime   := GetMicroTime();
