@@ -90,11 +90,11 @@ procedure DrawInterfaceDefFrameEx (Def: Heroes.PDefItem; GroupInd, FrameInd: int
                                    const DrawFlags: TDrawDefFrameFlags = []);
 
 (* Draws any raw image to game draw buffer *)
-procedure DrawRawImageToGameBuf (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer;
+procedure DrawRawImageToGameBuf (Image: TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer;
                                  const DrawImageSetup: GraphTypes.TDrawImageSetup);
 
 (* Draws any raw image to Pcx16 canvas *)
-procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item;
+procedure DrawRawImageToPcx16Canvas (Image: TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item;
                                      const DrawImageSetup: GraphTypes.TDrawImageSetup);
 
 
@@ -652,14 +652,14 @@ end;
 
 function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
 var
-{On} Image:        GraphTypes.TRawImage;
-{On} Image16:      GraphTypes.TRawImage16;
-{On} Image32:      GraphTypes.TRawImage32;
+{On} Image:        TRawImage;
+{On} Image16:      TRawImage16;
+{On} Image32:      TRawImage32;
 {On} Image32Alpha: GraphTypes.TPremultipliedRawImage32;
      FileContents: string;
      ImageSize:    integer;
-     Image16Setup: GraphTypes.TRawImage16Setup;
-     Image32Setup: GraphTypes.TRawImage32Setup;
+     Image16Setup: TRawImage16Setup;
+     Image32Setup: TRawImage32Setup;
 
 begin
   Image        := nil;
@@ -670,7 +670,7 @@ begin
   result := ResLib.ResMan.GetResource(FilePath);
 
   if result <> nil then begin
-    if not (result.Data is GraphTypes.TRawImage) then begin
+    if not (result.Data is TRawImage) then begin
       result.DecRef;
       result := nil;
     end;
@@ -722,7 +722,7 @@ begin
   SysUtils.FreeAndNil(Image32Alpha);
 end; // .function LoadPngResource
 
-procedure DrawRawImageToGameBuf (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer;
+procedure DrawRawImageToGameBuf (Image: TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer;
                                  const DrawImageSetup: GraphTypes.TDrawImageSetup);
 begin
   {!} Assert(Image <> nil);
@@ -735,7 +735,7 @@ begin
   end;
 end;
 
-procedure DrawRawImageToPcx16Canvas (Image: GraphTypes.TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item;
+procedure DrawRawImageToPcx16Canvas (Image: TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; Canvas: Heroes.PPcx16Item;
                                      const DrawImageSetup: GraphTypes.TDrawImageSetup);
 begin
   DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Canvas.Width, Canvas.Height, pointer(Canvas.Buffer), Canvas.ScanlineSize, DrawImageSetup);
@@ -781,7 +781,7 @@ begin
   ImageResource := GetDefPngFrame(Def, GroupInd, FrameInd);
 
   if ImageResource <> nil then begin
-    result := (ImageResource.Data as GraphTypes.TRawImage).CroppingRect;
+    result := (ImageResource.Data as TRawImage).CroppingRect;
     ImageResource.DecRef;
   end else begin
     DefFrame := Def.GetFrame(GroupInd, FrameInd);
@@ -958,10 +958,10 @@ begin
     DrawImageSetup.DoHorizMirror := DoMirror;
 
     if DoMirror then begin
-      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth((ImageResource.Data as GraphTypes.TRawImage).CroppingRect);
+      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth((ImageResource.Data as TRawImage).CroppingRect);
     end;
 
-    DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+    DrawRawImageToGameBuf(ImageResource.Data as TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
 
     ImageResource.DecRef;
   end else begin
@@ -988,7 +988,7 @@ begin
 
   if ImageResource <> nil then begin
     DrawImageSetup.Init;
-    DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+    DrawRawImageToGameBuf(ImageResource.Data as TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
 
     ImageResource.DecRef;
   end else begin
@@ -1013,38 +1013,13 @@ begin
 
   if ImageResource <> nil then begin
     DrawImageSetup.Init;
-    DrawRawImageToGameBuf(ImageResource.Data as GraphTypes.TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+    DrawRawImageToGameBuf(ImageResource.Data as TRawImage, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
 
     ImageResource.DecRef;
   end else begin
     PatchApi.Call(THISCALL_, OrigFunc, [Pcx, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, TransparentColor]);
   end;
 end; // .procedure Hook_DrawPcx8ToPcx16
-
-function Hook_LoadPcx8 (
-  OrigFunc: pointer;
-  FileName: pchar
-): Heroes.PPcx8Item; stdcall;
-
-var
-  FromAddr: pointer;
-
-begin
-  result := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [FileName]));
-
-  //FillChar(result.DevicePalette[0], 512, #0);
-  //FillChar(result.Palette24.Colors[0], 768, #0);
-
-  if FileName = 'heroscr4.pcx' then begin
-    asm
-      mov eax, [ebp]
-      mov eax, [eax + 4]
-      mov FromAddr, eax
-    end;
-
-    //VarDump([FileName, FromAddr, Ptr(cardinal(@result.Palette16Colors[0]))]);
-  end;
-end; // .function Hook_LoadPcx8
 
 function Hook_ColorizePcx8ToPlayerColors (
   OrigFunc:        pointer;
@@ -1054,7 +1029,7 @@ function Hook_ColorizePcx8ToPlayerColors (
 
 var
 {On} ImageResource: ResLib.TSharedResource;
-{Un} Image:         GraphTypes.TRawImage;
+{Un} Image:         TRawImage;
      WithColors:    GraphTypes.TArrayOfColor32;
      Pcx8:          Heroes.PPcx8Item;
      PcxName:       string;
@@ -1082,24 +1057,86 @@ begin
       ImageResource := LoadPngResource(PngPath.Value);
 
       if ImageResource <> nil then begin
-        if ImageResource.Data is GraphTypes.TRawImage then begin
-          SetLength(WithColors, Length(DefaultPlayerInterfacePalette));
+        SetLength(WithColors, Length(DefaultPlayerInterfacePalette));
 
-          for i := 0 to High(DefaultPlayerInterfacePalette) do begin
-            WithColors[i].Value := GraphTypes.Color16To32(Palette16Colors[Length(Palette16Colors^) - Length(DefaultPlayerInterfacePalette) + i]);
-          end;
-
-          Image := ImageResource.Data as GraphTypes.TRawImage;
-          Image.RestoreFromBackup;
-          Image.MakeBackup;
-          Image.ReplaceColors(@DefaultPlayerInterfacePalette[0], @WithColors[0], Length(DefaultPlayerInterfacePalette));
+        for i := 0 to High(DefaultPlayerInterfacePalette) do begin
+          WithColors[i].Value := GraphTypes.Color16To32(Palette16Colors[Length(Palette16Colors^) - Length(DefaultPlayerInterfacePalette) + i]);
         end;
+
+        Image := ImageResource.Data as TRawImage;
+        Image.RestoreFromBackup;
+        Image.MakeBackup;
+        Image.ReplaceColors(@DefaultPlayerInterfacePalette[0], @WithColors[0], Length(DefaultPlayerInterfacePalette));
 
         ImageResource.DecRef;
       end; // .if
     end; // .if
   end; // .if
 end; // .function Hook_ColorizePcx8ToPlayerColors
+
+function Hook_LoadPcx8 (
+  OrigFunc: pointer;
+  FileName: pchar
+): Heroes.PPcx8Item; stdcall;
+
+var
+{Un} PngFilePath:   TString;
+{On} ImageResource: ResLib.TSharedResource;
+{Un} Image:         TRawImage;
+     FileNameStr:   string;
+
+begin
+  FileNameStr := FileName;
+  PngFilePath := PcxPngFileMap[FileNameStr];
+
+  // Create stubs for images, for which there are known png replacements
+  if PngFilePath <> nil then begin
+    ImageResource := LoadPngResource(PngFilePath.Value);
+
+    if ImageResource <> nil then begin
+      Image  := ImageResource.Data as TRawImage;
+      result := TPcx8ItemStatic.Create(FileNameStr, Image.Width, Image.Height);
+
+      ImageResource.DecRef;
+    end else begin
+      result := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [FileName]));
+    end;
+  end else begin
+    result := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [FileName]));
+  end;
+end; // .function Hook_LoadPcx8
+
+function Hook_LoadPcx16 (
+  OrigFunc: pointer;
+  FileName: pchar
+): Heroes.PPcx16Item; stdcall;
+
+var
+{Un} PngFilePath:   TString;
+{On} ImageResource: ResLib.TSharedResource;
+{Un} Image:         TRawImage;
+     FileNameStr:   string;
+
+begin
+  FileNameStr := FileName;
+  PngFilePath := PcxPngFileMap[FileNameStr];
+
+  // Create stubs for images, for which there are known png replacements
+  if PngFilePath <> nil then begin
+    ImageResource := LoadPngResource(PngFilePath.Value);
+
+    if ImageResource <> nil then begin
+      Image  := ImageResource.Data as TRawImage;
+      result := TPcx16ItemStatic.Create(FileNameStr, Image.Width, Image.Height);
+
+      ImageResource.DecRef;
+    end else begin
+      result := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [FileName]));
+    end;
+  end else begin
+    result := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [FileName]));
+  end;
+end; // .function Hook_LoadPcx16
 
 function GetMicroTime: Int64;
 var
@@ -1116,7 +1153,7 @@ var
   i, j, k:        integer;
   StartTime:      Int64;
   ImgResource:    ResLib.TSharedResource;
-  Img:            GraphTypes.TRawImage;
+  Img:            TRawImage;
   Pixels:         GraphTypes.TArrayOfColor32;
   Pixel:          GraphTypes.PColor32;
   Canvas:         GraphTypes.TArrayOfColor32;
@@ -1132,7 +1169,8 @@ begin
   ApiJack.StdSplice(Ptr($44DF80), @Hook_DrawPcx16ToPcx16, ApiJack.CONV_THISCALL, 12);
   ApiJack.StdSplice(Ptr($44F940), @Hook_DrawPcx8ToPcx16, ApiJack.CONV_THISCALL, 12);
   ApiJack.StdSplice(Ptr($6003E0), @Hook_ColorizePcx8ToPlayerColors, ApiJack.CONV_FASTCALL, 2);
-  //ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
+  ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
+  ApiJack.StdSplice(Ptr($55AE50), @Hook_LoadPcx16, ApiJack.CONV_THISCALL, 1);
   //LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
   // ***ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
   // StartTime   := GetMicroTime();
@@ -1143,7 +1181,7 @@ begin
   // VarDump(['decode from memory', GetMicroTime - StartTime]);
   // StartTime   := GetMicroTime();
   // ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
-  // ***Img         := ImgResource.Data as GraphTypes.TRawImage;
+  // ***Img         := ImgResource.Data as TRawImage;
   // VarDump([GetMicroTime - StartTime, Img.ClassType]);
   // StartTime := GetMicroTime();
   // PngImage  := TPngObject.Create;

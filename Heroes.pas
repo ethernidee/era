@@ -716,6 +716,10 @@ type
   end; // .object TPcx24Item
   {$ALIGN ON}
 
+  TPcx8ItemStatic = class
+    class function Create (const aName: string; aWidth, aHeight: integer): {On} PPcx8Item;
+  end;
+
   TPcx16ItemStatic = class
     (* Create new Pcx16 image with RefCount = 0 and not assigned to any binary tree *)
     class function Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item; static;
@@ -1584,6 +1588,39 @@ begin
   ]);
 end;
 
+class function TPcx8ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx8Item;
+begin
+  result := nil;
+
+  if (aWidth <= 0) or (aHeight <= 0) then begin
+    Core.NotifyError(Format('Cannot create pcx16 image of size %dx%d', [aWidth, aHeight]));
+
+    aWidth  := Utils.IfThen(aWidth > 0, aWidth, 1);
+    aHeight := Utils.IfThen(aHeight > 0, aHeight, 1);
+  end;
+
+  if (aWidth > 0) and (aHeight > 0) then begin
+    result := MemAlloc(Alg.IntRoundToBoundary(sizeof(result^), sizeof(integer)));
+
+    FillChar(result^, sizeof(result^), 0);
+    result.VTable          := Ptr($63BA14);
+    result.SetName(aName);
+    result.ItemType        := RES_TYPE_PCX_8;
+    result.Width           := aWidth;
+    result.Height          := aHeight;
+    result.ScanlineSize    := Alg.IntRoundToBoundary(aWidth, sizeof(integer));
+    result.BufSize         := result.ScanlineSize * aHeight;
+    result.PicSize         := result.BufSize;
+    result.Buffer          := MemAlloc(result.BufSize);
+
+    System.FillChar(result.Palette16, sizeof(TBinaryTreeItem), #0);
+    result.Palette16.RefCount := -1;
+
+    System.FillChar(result.Palette24, sizeof(TBinaryTreeItem), #0);
+    result.Palette24.RefCount := -1;
+  end; // .if
+end; // .function TPcx8ItemStatic.Create
+
 class function TPcx16ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;
 begin
   result := MemAlloc(Alg.IntRoundToBoundary(sizeof(result^), sizeof(integer)));
@@ -1611,7 +1648,7 @@ begin
     result.ItemType           := RES_TYPE_PCX_16;
     result.Width              := aWidth;
     result.Height             := aHeight;
-    result.ScanlineSize       := Alg.IntRoundToBoundary(aWidth * 2, sizeof(integer));
+    result.ScanlineSize       := Alg.IntRoundToBoundary(aWidth * BytesPerPixelPtr^, sizeof(integer));
     result.BufSize            := result.ScanlineSize * aHeight;
     result.PicSize            := result.BufSize;
     result.HasDdSurfaceBuffer := false;
