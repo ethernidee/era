@@ -865,8 +865,6 @@ end; // .procedure RescanDefFramesPngFiles
 
 procedure RescanDirPcxPngFiles (const DirPath: string);
 begin
-  PcxPngFileMap.Clear;
-
   with Files.Locate(DirPath + '\*', Files.FILES_AND_DIRS) do begin
     while FindNext do begin
       if (FoundName <> '.') and (FoundName <> '..') then begin
