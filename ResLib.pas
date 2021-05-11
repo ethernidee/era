@@ -44,11 +44,13 @@ type
     procedure PrependItemToResQueue (ResQueueItem: TResQueueItem);
     procedure MoveResQueueItemToStart (ResQueueItem: TResQueueItem);
     procedure OnResourceDestruction (const Source: string);
-    procedure CollectGarbage;
 
    public
     constructor Create (MaxTotalSize: integer);
     destructor Destroy; override;
+
+    (* Frees any cached and unused resources *)
+    procedure CollectGarbage;
 
     (* Returns number of all loaded resources *)
     function CountResources: integer;
