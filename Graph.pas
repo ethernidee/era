@@ -43,6 +43,9 @@ const
   AUTO_WIDTH  = 0;
   AUTO_HEIGHT = 0;
 
+  (* Colors *)
+  ADV_MAP_OBJECT_FLAG_PLACEHOLDER_COLOR = integer($FFFFFF00);
+
   (* Paths *)
   DEF_PNG_FRAMES_DIR = 'Data\Defs';
   PCX_PNG_FRAMES_DIR = 'Data\Pcx';
@@ -1004,6 +1007,7 @@ procedure OnBeforeScriptsReload (Event: GameExt.PEvent); stdcall;
 begin
   RescanDefFramesPngFiles;
   RescanPcxPngFiles;
+  ResLib.ResMan.CollectGarbage;
 end;
 
 function Hook_DrawInterfaceDefFrame (
@@ -1066,6 +1070,86 @@ begin
     ]);
   end;
 end; // .procedure Hook_DrawInterfaceDefGroupFrame
+
+procedure Hook_DrawFlagObjectDefFrame (
+  OrigFunc: pointer;
+  Def: Heroes.PDefItem;
+  FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer;
+  Buf: pointer;
+  DstX, DstY, DstW, DstH, ScanlineSize: integer;
+  FlagColor: word;
+  DoMirror: boolean
+); stdcall;
+
+var
+{On} ImageResource:  ResLib.TSharedResource;
+{Un} Image:          TRawImage;
+     DrawImageSetup: GraphTypes.TDrawImageSetup;
+
+begin
+  ImageResource := GetDefPngFrame(Def, 0, FrameInd);
+
+  if ImageResource <> nil then begin
+    Image := ImageResource.Data as TRawImage;
+
+    DrawImageSetup.Init;
+    DrawImageSetup.EnableFilters       := true;
+    DrawImageSetup.DoHorizMirror       := DoMirror;
+    DrawImageSetup.DoReplaceColor      := true;
+    DrawImageSetup.ReplaceColor1.Value := Image.InternalizeColor32(ADV_MAP_OBJECT_FLAG_PLACEHOLDER_COLOR);
+    DrawImageSetup.ReplaceColor2.Value := GraphTypes.Color16To32(FlagColor);
+
+    if DoMirror then begin
+      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth(Image.CroppingRect);
+    end;
+
+    DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+
+    ImageResource.DecRef;
+  end else begin
+    PatchApi.Call(THISCALL_, OrigFunc, [
+      Def, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, FlagColor, ord(DoMirror)
+    ]);
+  end;
+end; // .procedure Hook_DrawFlagObjectDefFrame
+
+procedure Hook_DrawNotFlagObjectDefFrame (
+  OrigFunc: pointer;
+  Def: Heroes.PDefItem;
+  FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer;
+  Buf: pointer;
+  DstX, DstY, DstW, DstH, ScanlineSize: integer;
+  DoMirror: boolean
+); stdcall;
+
+var
+{On} ImageResource:  ResLib.TSharedResource;
+{Un} Image:          TRawImage;
+     DrawImageSetup: GraphTypes.TDrawImageSetup;
+
+begin
+  ImageResource := GetDefPngFrame(Def, 0, FrameInd);
+
+  if ImageResource <> nil then begin
+    Image := ImageResource.Data as TRawImage;
+
+    DrawImageSetup.Init;
+    DrawImageSetup.EnableFilters := DoMirror;
+    DrawImageSetup.DoHorizMirror := DoMirror;
+
+    if DoMirror then begin
+      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth(Image.CroppingRect);
+    end;
+
+    DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+
+    ImageResource.DecRef;
+  end else begin
+    PatchApi.Call(THISCALL_, OrigFunc, [
+      Def, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror)
+    ]);
+  end;
+end; // .procedure Hook_DrawNotFlagObjectDefFrame
 
 procedure Hook_DrawPcx16ToPcx16 (
   OrigFunc: pointer;
@@ -1240,6 +1324,8 @@ begin
   ApiJack.StdSplice(Ptr($47B820), @Hook_DrawInterfaceDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($47B7D0), @Hook_DrawInterfaceDefButtonFrame, ApiJack.CONV_THISCALL, 9);
   ApiJack.StdSplice(Ptr($47B610), @Hook_DrawInterfaceDefGroupFrame, ApiJack.CONV_THISCALL, 15);
+  ApiJack.StdSplice(Ptr($47B730), @Hook_DrawFlagObjectDefFrame, ApiJack.CONV_THISCALL, 14);
+  ApiJack.StdSplice(Ptr($47B6E0), @Hook_DrawNotFlagObjectDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($44DF80), @Hook_DrawPcx16ToPcx16, ApiJack.CONV_THISCALL, 12);
   ApiJack.StdSplice(Ptr($44F940), @Hook_DrawPcx8ToPcx16, ApiJack.CONV_THISCALL, 12);
   ApiJack.StdSplice(Ptr($6003E0), @Hook_ColorizePcx8ToPlayerColors, ApiJack.CONV_FASTCALL, 2);
