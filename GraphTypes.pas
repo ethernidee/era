@@ -7,11 +7,12 @@ unit GraphTypes;
 (***)  interface  (***)
 
 uses
-  DlgMes,
   Math,
   SysUtils,
   Types,
 
+  DataLib,
+  DlgMes,
   Utils;
 
 
@@ -43,6 +44,7 @@ const
 type
   (* Import *)
   TRect = Types.TRect;
+  TDict = DataLib.TDict;
 
   (* Color encoding in 16 bits: R5G5B5 or R5G6B5*)
   TColor16Mode = (COLOR_16_MODE_565, COLOR_16_MODE_555);
@@ -124,18 +126,21 @@ type
   (* Decoded image without direct pixels access *)
   TRawImage = class
    protected
-    fWidth:           integer;
-    fHeight:          integer;
-    fHasTransparency: boolean;
-    fCroppingRect:    TRect;
+       fWidth:           integer;
+       fHeight:          integer;
+       fHasTransparency: boolean;
+       fCroppingRect:    TRect;
+    {O}fMeta:            {O} TDict {of TObject};
 
    public
     constructor Create (Width, Height: integer; const Setup: TRawImageSetup);
+    destructor Destroy; override;
 
     property Width:           integer read fWidth;
     property Height:          integer read fHeight;
     property HasTransparency: boolean read fHasTransparency;
     property CroppingRect:    TRect   read fCroppingRect write fCroppingRect;
+    property Meta:            TDict   read fMeta;
 
     procedure MakeBackup; virtual;
     procedure RestoreFromBackup; virtual;
@@ -504,6 +509,12 @@ begin
   Self.fHeight          := Height;
   Self.fHasTransparency := Setup.HasTransparency;
   Self.fCroppingRect    := Types.Rect(0, 0, Self.fWidth, Self.fHeight);
+  Self.fMeta            := DataLib.NewDict(Utils.ITEMS_ARE_OBJECTS, DataLib.CASE_SENSITIVE);
+end;
+
+destructor TRawImage.Destroy;
+begin
+  SysUtils.FreeAndNil(Self.fMeta);
 end;
 
 procedure TRawImage.MakeBackup;
