@@ -142,6 +142,7 @@ type
     property CroppingRect:    TRect   read fCroppingRect write fCroppingRect;
     property Meta:            TDict   read fMeta;
 
+    function InternalizeColor32 (Color32: integer): integer; virtual;
     procedure MakeBackup; virtual;
     procedure RestoreFromBackup; virtual;
     procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); virtual;
@@ -161,6 +162,7 @@ type
    public
     constructor Create (Pixels: TArrayOfColor16; Width, Height, ScanlineSize: integer; const Setup: TRawImage16Setup);
 
+    function InternalizeColor32 (Color32: integer): integer; override;
     procedure MakeBackup; override;
     procedure RestoreFromBackup; override;
     procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); override;
@@ -199,6 +201,7 @@ type
    public
     constructor Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer);
 
+    function InternalizeColor32 (Color32: integer): integer; override;
     procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); override;
     procedure AutoSetCroppingRect;
 
@@ -517,6 +520,11 @@ begin
   SysUtils.FreeAndNil(Self.fMeta);
 end;
 
+function TRawImage.InternalizeColor32 (Color32: integer): integer;
+begin
+  result := Color32;
+end;
+
 procedure TRawImage.MakeBackup;
 begin
   // Implement in descendants
@@ -562,6 +570,11 @@ begin
 
   Self.fPixels       := Pixels;
   Self.fScanlineSize := ScanlineSize;
+end;
+
+function TRawImage16.InternalizeColor32 (Color32: integer): integer;
+begin
+  result := Color32To16(Color32);
 end;
 
 procedure TRawImage16.MakeBackup;
@@ -890,6 +903,11 @@ begin
   inherited Create(Pixels, Width, Height, ScanlineSize, Setup);
 
   PremultiplyImageColorChannels(Self.fPixels);
+end;
+
+function TPremultipliedRawImage32.InternalizeColor32 (Color32: integer): integer;
+begin
+  result := PremultiplyColorChannelsByAlpha(Color32);
 end;
 
 procedure TPremultipliedRawImage32.ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer);
