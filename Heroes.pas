@@ -1124,6 +1124,8 @@ const
   (* Variable is protected with two crit sections: pint(SOUND_MANAGER)^ + $a8 and pint(SOUND_MANAGER)^ + $c0 *)
   CurrentMp3Track: PCurrentMp3Track = Ptr($6A32F0);
 
+  PlayerPalettesPtr: ^PPalette16 = Ptr($6AAD10);
+
 
 var
 {O} ResourceNamer: TResourceNamer;
