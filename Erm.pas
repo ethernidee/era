@@ -2897,7 +2897,7 @@ begin
     end;
 
     PreprocessedScript := PreprocessErm(ScriptName, GlobalEvent.Message.ToString);
-    fScripts.Add(TResource.Create(ScriptName, PreprocessedScript, Crypto.Crc32(GlobalEvent.Message.Value, GlobalEvent.Message.Len)));
+    fScripts.Add(TResource.Create(ScriptName, PreprocessedScript, Crypto.FastHash(GlobalEvent.Message.Value, GlobalEvent.Message.Len)));
   end; // .for
   // * * * * * //
   SysUtils.FreeAndNil(EventList);

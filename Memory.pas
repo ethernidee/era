@@ -35,7 +35,7 @@ type
    const
     MIN_CAPACITY                 = 100;
     CRITICAL_SIZE_CAPACITY_RATIO = 0.75;
-    GROWTH_FACTOR                = 1.5;
+    GROWTH_FACTOR                = 2;
     MIN_CAPACITY_GROWTH          = 16;
 
    protected
@@ -97,8 +97,8 @@ begin
   if Str <> nil then begin
     {!} Assert(integer(Str) > 100);
     StrLen  := SysUtils.StrLen(Str);
-    KeyHash := Crypto.Crc32(Str, StrLen);
-    
+    KeyHash := Crypto.FastHash(Str, StrLen);
+
     ItemInd := integer(cardinal(KeyHash) mod cardinal(Self.fCapacity));
     Item    := @Self.fItems[ItemInd];
 
@@ -130,7 +130,7 @@ begin
   result := nil;
 
   if Str <> nil then begin
-    result := Self.Find(Str, StrLen, KeyHash, ItemInd);  
+    result := Self.Find(Str, StrLen, KeyHash, ItemInd);
 
     if result = nil then begin
       GetMem(result, StrLen + 1);
@@ -147,7 +147,7 @@ begin
         SetLength(Item.ValueChain, NumValues + 1);
         Item.ValueChain[NumValues].Str  := result;
         Item.ValueChain[NumValues].Hash := KeyHash;
-      end; // .else     
+      end; // .else
 
       Inc(Self.fSize);
 
