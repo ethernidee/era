@@ -541,6 +541,7 @@ type
     RefCount: integer;
 
     procedure SetName (const aName: string);
+    function  GetName: string;
     procedure IncRef;
     procedure DecRef;
     procedure Destruct (IsHeapObject: boolean = true);
@@ -1468,6 +1469,11 @@ end;
 procedure TBinaryTreeItem.SetName (const aName: string);
 begin
   Utils.SetPcharValue(@Self.Name, aName, sizeof(Self.Name) + 1);
+end;
+
+function TBinaryTreeItem.GetName: string;
+begin
+  result := pchar(@Self.Name[0]);
 end;
 
 procedure TBinaryTreeItem.IncRef;
