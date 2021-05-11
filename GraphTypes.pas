@@ -119,6 +119,7 @@ type
     ReplaceColor1:  TColor32;
     ReplaceColor2:  TColor32;
     DoHorizMirror:  boolean;
+    DoVertMirror:   boolean;
 
     procedure Init;
   end;
@@ -674,6 +675,11 @@ begin
         DstPixelStep := -DstPixelStep;
       end;
 
+      if DrawImageSetup.DoVertMirror then begin
+        Inc(integer(DstScanline), (BoxHeight - 1) * DstScanlineSize);
+        DstScanlineSize := -DstScanlineSize;
+      end;
+
       for j := 0 to BoxHeight - 1 do begin
         SrcPixel := SrcScanline;
         DstPixel := DstScanline;
@@ -812,6 +818,11 @@ begin
         DstPixelStep := -DstPixelStep;
       end;
 
+      if DrawImageSetup.DoVertMirror then begin
+        Inc(integer(DstScanline), (BoxHeight - 1) * DstScanlineSize);
+        DstScanlineSize := -DstScanlineSize;
+      end;
+
       for j := 0 to BoxHeight - 1 do begin
         SrcPixel := SrcScanline;
         DstPixel := DstScanline;
@@ -872,6 +883,11 @@ begin
       if DrawImageSetup.DoHorizMirror then begin
         Inc(integer(DstScanline), (BoxWidth - 1) * sizeof(DstBuf[0]));
         DstPixelStep := -DstPixelStep;
+      end;
+
+      if DrawImageSetup.DoVertMirror then begin
+        Inc(integer(DstScanline), (BoxHeight - 1) * DstScanlineSize);
+        DstScanlineSize := -DstScanlineSize;
       end;
 
       for j := 0 to BoxHeight - 1 do begin
@@ -1118,6 +1134,11 @@ begin
         DstPixelStep := -DstPixelStep;
       end;
 
+      if DrawImageSetup.DoVertMirror then begin
+        Inc(integer(DstScanline), (BoxHeight - 1) * DstScanlineSize);
+        DstScanlineSize := -DstScanlineSize;
+      end;
+
       for j := 0 to BoxHeight - 1 do begin
         SrcPixel := SrcScanline;
         DstPixel := DstScanline;
@@ -1182,6 +1203,11 @@ begin
       if DrawImageSetup.DoHorizMirror then begin
         Inc(integer(DstScanline), (BoxWidth - 1) * sizeof(DstBuf[0]));
         DstPixelStep := -DstPixelStep;
+      end;
+
+      if DrawImageSetup.DoVertMirror then begin
+        Inc(integer(DstScanline), (BoxHeight - 1) * DstScanlineSize);
+        DstScanlineSize := -DstScanlineSize;
       end;
 
       for j := 0 to BoxHeight - 1 do begin
