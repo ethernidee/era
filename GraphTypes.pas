@@ -113,6 +113,7 @@ type
     procedure Init;
   end;
 
+  PDrawImageSetup = ^TDrawImageSetup;
   TDrawImageSetup = record
     EnableFilters:  boolean;
     DoReplaceColor: boolean;
