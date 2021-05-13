@@ -8,9 +8,6 @@ uses
   SysUtils,
   Windows,
 
-  Crypto, // DELETEME
-  Memory, // DELETEME
-
   Alg,
   ApiJack,
   Core,
@@ -75,21 +72,6 @@ type
   PColorizablePlayerPalette = ^TColorizablePlayerPalette;
   TColorizablePlayerPalette = array [0..31] of integer;
 
-  TApplicableRawImageFilter = class
-   public
-    procedure Apply (Image: TRawImage); virtual; abstract;
-  end;
-
-  TPlayerPaletteColorizationFilter = class (TApplicableRawImageFilter)
-   protected
-    fPlayerPalette: TColorizablePlayerPalette;
-
-   public
-    constructor Create (const PlayerPalette: TColorizablePlayerPalette);
-
-    procedure Apply (Image: TRawImage); override;
-  end;
-
 
 function LoadImage (const FilePath: string): {n} TGraphic;
 
@@ -138,7 +120,11 @@ var
 
 
 const
+  // Image is marked with the player color it was colorized with
   META_PLAYER_COLOR = 'player_color';
+
+  DO_VERT_MIRROR  = true;
+  DO_HORIZ_MIRROR = true;
 
 var
 {O} DefFramesPngFileMap: {U} TDict {of Ptr(1)};                 // Caseinsensitive map of "defname.def\frame_index.png" => 1 if frame png file exists.
@@ -148,19 +134,6 @@ var
 
   DefFramePngFilePathPrefix: string; // Like "D:\Games\Heroes 3\Data\Defs\"
 
-
-constructor TPlayerPaletteColorizationFilter.Create (const PlayerPalette: TColorizablePlayerPalette);
-begin
-  Self.fPlayerPalette := PlayerPalette;
-end;
-
-procedure TPlayerPaletteColorizationFilter.Apply (Image: TRawImage);
-begin
-  {!} Assert(Image <> nil);
-  // Image.RestoreFromBackup;
-  // Image.MakeBackup;
-  // Image.ReplaceColors(@DefaultPlayerInterfacePalette[0], @WithColors[0], Length(DefaultPlayerInterfacePalette));
-end;
 
 (* Checks, that image is valid object with non-null dimensions and forces required pixel format. Returns same object instance. *)
 function ValidateBmp24 ({OU} Image: TBitmap): {OU} TBitmap;
@@ -945,7 +918,7 @@ begin
   end;
 
   if DDF_MIRROR in DrawFlags then begin
-    SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth(FrameCroppingRect);
+    SrcX := Def.Width - SrcX - BoxWidth;
   end;
 
   PatchApi.Call(THISCALL_, Ptr($47B610), [
@@ -1052,11 +1025,11 @@ begin
     DrawImageSetup.DoVertMirror  := DoVertMirror;
 
     if DoHorizMirror then begin
-      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth(Image.CroppingRect);
+      SrcX := Def.Width - SrcX - SrcWidth;
     end;
 
     if DoVertMirror then begin
-      SrcY := Def.Height - SrcY - GraphTypes.GetRectHeight(Image.CroppingRect);
+      SrcY := Def.Height - SrcY - SrcHeight;
     end;
 
     DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
@@ -1101,7 +1074,7 @@ procedure Hook_DrawInterfaceDefGroupFrame (
 ); stdcall;
 
 begin
-  if not DrawDefPngFrame(Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, DoMirror, false) then begin
+  if not DrawDefPngFrame(Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, DoMirror, not DO_VERT_MIRROR) then begin
     PatchApi.Call(THISCALL_, OrigFunc, [
       Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror), ord(UsePaletteSpecialColors)
     ]);
@@ -1137,7 +1110,7 @@ begin
     DrawImageSetup.ReplaceColor2.Value := GraphTypes.Color16To32(FlagColor);
 
     if DoMirror then begin
-      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth(Image.CroppingRect);
+      SrcX := Def.Width - SrcX - SrcWidth;
     end;
 
     DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
@@ -1218,7 +1191,7 @@ begin
     end;
 
     if DoHorizMirror then begin
-      SrcX := Def.Width - SrcX - GraphTypes.GetRectWidth(Image.CroppingRect);
+      SrcX := Def.Width - SrcX - SrcWidth;
     end;
 
     DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
@@ -1441,7 +1414,8 @@ begin
   ApiJack.StdSplice(Ptr($47B730), @Hook_DrawFlagObjectDefFrame, ApiJack.CONV_THISCALL, 14);
   ApiJack.StdSplice(Ptr($47B6E0), @Hook_DrawNotFlagObjectDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($47B870), @Hook_DrawDefFrameType0Or2, ApiJack.CONV_THISCALL, 14);
-  ApiJack.StdSplice(Ptr($47B680), @Hook_DrawBattleMonDefFrame, ApiJack.CONV_THISCALL, 15);
+  // Support for creature defs and custom animated defs is limited due to many functions accessing frame dimensions directly
+  // ApiJack.StdSplice(Ptr($47B680), @Hook_DrawBattleMonDefFrame, ApiJack.CONV_THISCALL, 15);
   ApiJack.StdSplice(Ptr($47B8C0), @Hook_DrawDefFrameType0Or2Shadow, ApiJack.CONV_THISCALL, 14);
   ApiJack.StdSplice(Ptr($47B780), @Hook_DrawDefFrameType3Shadow, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($44DF80), @Hook_DrawPcx16ToPcx16, ApiJack.CONV_THISCALL, 12);
