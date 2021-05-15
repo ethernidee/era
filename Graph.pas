@@ -8,6 +8,10 @@ uses
   SysUtils,
   Windows,
 
+  Crypto, // FIXME DELETEME
+  Memory, // FIXME DELETEME
+  ConsoleApi, // FIXME DELETEME
+
   Alg,
   ApiJack,
   Core,
@@ -1392,6 +1396,9 @@ begin
 end;
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
+const
+  IS_ITER = false;
+
 var
   i, j, k:        integer;
   StartTime:      Int64;
@@ -1403,8 +1410,13 @@ var
   PngImage:       TPngObject;
   FileContents:   string;
   DrawImageSetup: GraphTypes.TDrawImageSetup;
-  // Strs:           array of string;
-  // Map:            TDict;
+  Strs:           array of string;
+  Map:            TDict;
+  //AltMap:         AssocArraysAlt.TAssocArray;
+  NumEntries:     integer;
+  ReadIters:      integer;
+  Key:            string;
+  Value:          pointer;
 
 begin
   SetupColorMode;
@@ -1424,25 +1436,93 @@ begin
   ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($55AE50), @Hook_LoadPcx16, ApiJack.CONV_THISCALL, 1);
 
-  // Map := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   // SetLength(Strs, 1000000);
 
-  // for i := 0 to 1000000 - 1 do begin
-  //   Strs[i] := '123456789012394586' + SysUtils.IntToStr(i);
+  // for i := 0 to Length(Strs) - 1 do begin
+  //   Strs[i] := '123456789012394586abcdg' + SysUtils.IntToStr(i);
   // end;
+
+  // NumEntries := 100000;
+  // ReadIters  := 3;
+
+  // AltMap := AssocArraysAlt.NewAssocArr(Crypto.FastAnsiHash, {SysUtils.AnsiLowerCase}nil, not Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, Utils.ALLOW_NIL);
+
+  // //ConsoleApi.GetConsole();
 
   // StartTime := GetMicroTime;
 
-  // for i := 0 to 1000000 - 1 do begin
+  // for i := 0 to NumEntries - 1 do begin
+  //   AltMap[Strs[i]] := Ptr(i);
+  // end;
+
+  // {AltMap.TotalSearchDistance := 0;
+  // AltMap.MaxSearchDistance    := 0;}
+
+  // // i := 0; while i < NumEntries do begin
+  // //   if (i mod 2) = 0 then begin
+  // //     Inc(i);
+  // //   end;
+
+  // //   AltMap.DeleteItem(Strs[i]);
+  // // Inc(i); end;
+
+  // for j := 0 to ReadIters - 1 do begin
+  //   if IS_ITER then begin
+  //     AltMap.BeginIterate;
+
+  //     while AltMap.IterateNext(Key, Value) do begin
+  //       // next
+  //     end;
+
+  //     AltMap.EndIterate;
+  //   end else begin
+  //     for i := 0 to NumEntries - 1 do begin
+  //       AltMap[Strs[i]];
+  //     end;
+  //   end;
+  // end;
+
+  // VarDump(['hash table', GetMicroTime - StartTime]{, AltMap.TotalSearchDistance / (ReadIters * NumEntries), AltMap.MaxSearchDistance]});
+
+  // //SysUtils.FreeAndNil(AltMap);
+
+  // Map := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+
+  // StartTime := GetMicroTime;
+
+  // for i := 0 to NumEntries - 1 do begin
   //   Map[Strs[i]] := Ptr(i);
+  // end;
+
+  // for j := 0 to ReadIters - 1 do begin
+  //   if IS_ITER then begin
+  //     Map.BeginIterate;
+  //     Value := nil;
+
+  //     while Map.IterateNext(Key, Value) do begin
+  //       Value := nil;
+  //     end;
+
+  //     Map.EndIterate;
+  //   end else begin
+  //     for i := 0 to NumEntries - 1 do begin
+  //       Map[Strs[i]];
+  //     end;
+  //   end;
   // end;
 
   // VarDump(['assoc', GetMicroTime - StartTime]);
 
   // StartTime := GetMicroTime;
 
-  // for i := 0 to 1000000 - 1 do begin
+  // for i := 0 to NumEntries - 1 do begin
   //   UniqueStrings[pchar(Strs[i])];
+  // end;
+
+  // for j := 0 to ReadIters - 1 do begin
+  //   for i := 0 to NumEntries - 1 do begin
+  //     UniqueStrings[pchar(Strs[i])];
+  //   end;
   // end;
 
   // VarDump(['hash', GetMicroTime - StartTime]);
