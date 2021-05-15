@@ -7,7 +7,7 @@ unit Memory;
 (***)  interface  (***)
 
 uses
-  SysUtils, Math,
+  SysUtils, Math, Windows,
   Utils, Crypto, AssocArrays, StrLib, DataLib;
 
 
@@ -103,13 +103,13 @@ begin
     Item    := @Self.fItems[ItemInd];
 
     if Item.Value.Str <> nil then begin
-      if StrLib.ComparePchars(Str, Item.Value.Str) = 0 then begin
+      if (KeyHash = Item.Value.Hash) and (StrLib.ComparePchars(Str, Item.Value.Str) = 0) then begin
         result := Item.Value.Str;
         exit;
       end;
 
       for i := 0 to Length(Item.ValueChain) - 1 do begin
-        if StrLib.ComparePchars(Str, Item.ValueChain[i].Str) = 0 then begin
+        if (KeyHash = Item.ValueChain[i].Hash) and (StrLib.ComparePchars(Str, Item.ValueChain[i].Str) = 0) then begin
           result := Item.ValueChain[i].Str;
           exit;
         end;
