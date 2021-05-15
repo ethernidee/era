@@ -274,7 +274,7 @@ end; // .procedure CollectGarbage
 
 function TResourceManager.CountResources: integer;
 begin
-  result := Self.fResourceMap.NodeCount;
+  result := Self.fResourceMap.ItemCount;
 end;
 
 function TResourceManager.AddResource (Data: TObject; Size: integer; const Source: string): {O} TSharedResource;
