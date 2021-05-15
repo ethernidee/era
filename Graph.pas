@@ -8,10 +8,6 @@ uses
   SysUtils,
   Windows,
 
-  Crypto, // FIXME DELETEME
-  Memory, // FIXME DELETEME
-  ConsoleApi, // FIXME DELETEME
-
   Alg,
   ApiJack,
   Core,
@@ -1396,28 +1392,6 @@ begin
 end;
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
-const
-  IS_ITER = false;
-
-var
-  i, j, k:        integer;
-  StartTime:      Int64;
-  ImgResource:    ResLib.TSharedResource;
-  Img:            TRawImage;
-  Pixels:         GraphTypes.TArrayOfColor32;
-  Pixel:          GraphTypes.PColor32;
-  Canvas:         GraphTypes.TArrayOfColor32;
-  PngImage:       TPngObject;
-  FileContents:   string;
-  DrawImageSetup: GraphTypes.TDrawImageSetup;
-  Strs:           array of string;
-  Map:            TDict;
-  //AltMap:         AssocArraysAlt.TAssocArray;
-  NumEntries:     integer;
-  ReadIters:      integer;
-  Key:            string;
-  Value:          pointer;
-
 begin
   SetupColorMode;
   ApiJack.StdSplice(Ptr($47B820), @Hook_DrawInterfaceDefFrame, ApiJack.CONV_THISCALL, 13);
@@ -1426,8 +1400,12 @@ begin
   ApiJack.StdSplice(Ptr($47B730), @Hook_DrawFlagObjectDefFrame, ApiJack.CONV_THISCALL, 14);
   ApiJack.StdSplice(Ptr($47B6E0), @Hook_DrawNotFlagObjectDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($47B870), @Hook_DrawDefFrameType0Or2, ApiJack.CONV_THISCALL, 14);
-  // Support for creature defs and custom animated defs is limited due to many functions accessing frame dimensions directly
-  // ApiJack.StdSplice(Ptr($47B680), @Hook_DrawBattleMonDefFrame, ApiJack.CONV_THISCALL, 15);
+
+  if FALSE then begin
+    // Support for creature defs and custom animated defs is limited due to many functions accessing frame dimensions directly
+    ApiJack.StdSplice(Ptr($47B680), @Hook_DrawBattleMonDefFrame, ApiJack.CONV_THISCALL, 15);
+  end;
+
   ApiJack.StdSplice(Ptr($47B8C0), @Hook_DrawDefFrameType0Or2Shadow, ApiJack.CONV_THISCALL, 14);
   ApiJack.StdSplice(Ptr($47B780), @Hook_DrawDefFrameType3Shadow, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($44DF80), @Hook_DrawPcx16ToPcx16, ApiJack.CONV_THISCALL, 12);
@@ -1435,131 +1413,6 @@ begin
   ApiJack.StdSplice(Ptr($6003E0), @Hook_ColorizePcx8ToPlayerColors, ApiJack.CONV_FASTCALL, 2);
   ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($55AE50), @Hook_LoadPcx16, ApiJack.CONV_THISCALL, 1);
-
-  // SetLength(Strs, 1000000);
-
-  // for i := 0 to Length(Strs) - 1 do begin
-  //   Strs[i] := '123456789012394586abcdg' + SysUtils.IntToStr(i);
-  // end;
-
-  // NumEntries := 100000;
-  // ReadIters  := 3;
-
-  // AltMap := AssocArraysAlt.NewAssocArr(Crypto.FastAnsiHash, {SysUtils.AnsiLowerCase}nil, not Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, Utils.ALLOW_NIL);
-
-  // //ConsoleApi.GetConsole();
-
-  // StartTime := GetMicroTime;
-
-  // for i := 0 to NumEntries - 1 do begin
-  //   AltMap[Strs[i]] := Ptr(i);
-  // end;
-
-  // {AltMap.TotalSearchDistance := 0;
-  // AltMap.MaxSearchDistance    := 0;}
-
-  // // i := 0; while i < NumEntries do begin
-  // //   if (i mod 2) = 0 then begin
-  // //     Inc(i);
-  // //   end;
-
-  // //   AltMap.DeleteItem(Strs[i]);
-  // // Inc(i); end;
-
-  // for j := 0 to ReadIters - 1 do begin
-  //   if IS_ITER then begin
-  //     AltMap.BeginIterate;
-
-  //     while AltMap.IterateNext(Key, Value) do begin
-  //       // next
-  //     end;
-
-  //     AltMap.EndIterate;
-  //   end else begin
-  //     for i := 0 to NumEntries - 1 do begin
-  //       AltMap[Strs[i]];
-  //     end;
-  //   end;
-  // end;
-
-  // VarDump(['hash table', GetMicroTime - StartTime]{, AltMap.TotalSearchDistance / (ReadIters * NumEntries), AltMap.MaxSearchDistance]});
-
-  // //SysUtils.FreeAndNil(AltMap);
-
-  // Map := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-
-  // StartTime := GetMicroTime;
-
-  // for i := 0 to NumEntries - 1 do begin
-  //   Map[Strs[i]] := Ptr(i);
-  // end;
-
-  // for j := 0 to ReadIters - 1 do begin
-  //   if IS_ITER then begin
-  //     Map.BeginIterate;
-  //     Value := nil;
-
-  //     while Map.IterateNext(Key, Value) do begin
-  //       Value := nil;
-  //     end;
-
-  //     Map.EndIterate;
-  //   end else begin
-  //     for i := 0 to NumEntries - 1 do begin
-  //       Map[Strs[i]];
-  //     end;
-  //   end;
-  // end;
-
-  // VarDump(['assoc', GetMicroTime - StartTime]);
-
-  // StartTime := GetMicroTime;
-
-  // for i := 0 to NumEntries - 1 do begin
-  //   UniqueStrings[pchar(Strs[i])];
-  // end;
-
-  // for j := 0 to ReadIters - 1 do begin
-  //   for i := 0 to NumEntries - 1 do begin
-  //     UniqueStrings[pchar(Strs[i])];
-  //   end;
-  // end;
-
-  // VarDump(['hash', GetMicroTime - StartTime]);
-
-  //LoadImageAsPcx16('D:\Leonid Afremov. Zima.png', 'zpic1005.pcx', 800, 600);
-  // ***ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
-  // StartTime   := GetMicroTime();
-  // ReadFileContents('D:\forum_ava_source_alpha2.png', FileContents);
-  // VarDump(['load file', GetMicroTime - StartTime]);
-  // StartTime   := GetMicroTime();
-  // Libspng.DecodePng(pchar(FileContents), Length(FileContents));
-  // VarDump(['decode from memory', GetMicroTime - StartTime]);
-  // StartTime   := GetMicroTime();
-  // ImgResource := LoadPngResource('D:\forum_ava_source_alpha2.png');
-  // ***Img         := ImgResource.Data as TRawImage;
-  // VarDump([GetMicroTime - StartTime, Img.ClassType]);
-  // StartTime := GetMicroTime();
-  // PngImage  := TPngObject.Create;
-  // PngImage.LoadFromFile('D:\forum_ava_source_alpha2.png');
-  // VarDump([GetMicroTime - StartTime]);
-  // ***SetLength(Canvas, Img.Width * Img.Height);
-  // ***StartTime   := GetMicroTime();
-  // ***DrawImageSetup.Init;
-  // ***DrawImageSetup.EnableFilters := true;
-  //DrawImageSetup.DoHorizMirror := true;
-  // ***Img.DrawToOpaque32Buf(0, 0, 0, 0, Img.Width, Img.Height, Img.Width, Img.Height, pointer(Canvas), Img.Width * sizeof(Canvas[0]), DrawImageSetup);
-  // ***DlgMes.Msg('draw time: ' + inttostr(GetMicroTime - StartTime));
-  // ***FileWrite(FileCreate('D:\forum_ava_source.raw'), Canvas[0], Length(Canvas) * sizeof(Canvas[0]));
-  //ImgResource := LoadPngResource('Data\defs\AVMsulf0.def\0.png');
-  //Img := ImgResource.Data as TRawImage32;
-  //VarDump([Ptr(Img.Pixels[0].Value)]);
-
-  // SetLength(Pixels, 10);
-  // //Img := TRawImage32.Create(Pixels, 5, 2, 20, [RIF_HAS_TRANSPARENCY]);
-  // Pixels := nil;
-  // Pixels := Img.Pixels;
-  // Pixels[3].Value := -1;
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
