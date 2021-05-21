@@ -711,7 +711,7 @@ begin
     Image32Setup.Init;
     Image32Setup.HasTransparency := true;
     Image32Alpha                 := TPremultipliedRawImage32.Create(Image32.Pixels, Image32.Width, Image32.Height, Image32.ScanlineSize);
-    Image32Alpha.AutoSetCroppingRect;
+    Image32Alpha.AutoCrop;
     Utils.Exchange(Image, Image32Alpha);
   end else if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
     Utils.Exchange(Image, Image32);

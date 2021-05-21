@@ -128,11 +128,14 @@ type
   (* Decoded image without direct pixels access *)
   TRawImage = class
    protected
-       fWidth:           integer;
-       fHeight:          integer;
+       fWidth:           integer; // Virtual width (may be cropped by transparent pixels)
+       fHeight:          integer; // Virtual height (may be cropped by transparent pixels)
        fHasTransparency: boolean;
-       fCroppingRect:    TRect;
+       fCroppingRect:    TRect;   // Area used for cropping
     {O}fMeta:            {O} TDict {of TObject};
+
+    function GetCroppedWidth: integer; inline;
+    function GetCroppedHeight: integer; inline;
 
    public
     constructor Create (Width, Height: integer; const Setup: TRawImageSetup);
@@ -141,7 +144,7 @@ type
     property Width:           integer read fWidth;
     property Height:          integer read fHeight;
     property HasTransparency: boolean read fHasTransparency;
-    property CroppingRect:    TRect   read fCroppingRect write fCroppingRect;
+    property CroppingRect:    TRect   read fCroppingRect;
     property Meta:            TDict   read fMeta;
 
     function InternalizeColor32 (Color32: integer): integer; virtual;
@@ -205,7 +208,7 @@ type
 
     function InternalizeColor32 (Color32: integer): integer; override;
     procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); override;
-    procedure AutoSetCroppingRect;
+    procedure AutoCrop;
 
     procedure DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                  const DrawImageSetup: TDrawImageSetup); override;
@@ -481,6 +484,11 @@ begin
     SrcY      := SrcBox.Top;
     result    := RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, SrcBox.Right, SrcBox.Bottom, DstWidth, DstHeight);
   end;
+
+  if result then begin
+    Dec(SrcX, SourceCroppingRect.Left);
+    Dec(SrcY, SourceCroppingRect.Top);
+  end;
 end;
 
 procedure DrawPixelWithFilters (SrcPixelValue, DstPixelValue: integer; DstPixelPtr: pointer; DstPixelSize: integer; UseBlending: boolean; const DrawImageSetup: TDrawImageSetup); inline;
@@ -520,6 +528,16 @@ end;
 destructor TRawImage.Destroy;
 begin
   SysUtils.FreeAndNil(Self.fMeta);
+end;
+
+function TRawImage.GetCroppedWidth: integer;
+begin
+  result := Self.fCroppingRect.Right - Self.fCroppingRect.Left;
+end;
+
+function TRawImage.GetCroppedHeight: integer;
+begin
+  result := Self.fCroppingRect.Bottom - Self.fCroppingRect.Top;
 end;
 
 function TRawImage.InternalizeColor32 (Color32: integer): integer;
@@ -945,10 +963,10 @@ begin
 
   Scanline := @Self.fPixels[0];
 
-  for j := 0 to Self.fHeight - 1 do begin
+  for j := 0 to Self.GetCroppedHeight - 1 do begin
     Pixel := Scanline;
 
-    for i := 0 to Self.fWidth - 1 do begin
+    for i := 0 to Self.GetCroppedWidth - 1 do begin
       ColorInd   := 0;
       PixelValue := Pixel.Value;
 
@@ -967,17 +985,25 @@ begin
   end;
 end; // .procedure TPremultipliedRawImage32.ReplaceColors
 
-procedure TPremultipliedRawImage32.AutoSetCroppingRect;
+procedure TPremultipliedRawImage32.AutoCrop;
 var
-  CroppingRect: TRect;
-  Scanline:     PColor32;
-  ScanlineEnd:  PColor32;
-  Pixel:        PColor32;
-  LeftBorder:   integer;
-  RightBorder:  integer;
-  j:            integer;
+  CroppingRect:    TRect;
+  Scanline:        PColor32;
+  ScanlineEnd:     PColor32;
+  Pixel:           PColor32;
+  LeftBorder:      integer;
+  RightBorder:     integer;
+  NewPixels:       TArrayOfColor32;
+  NewScanline:     PColor32;
+  OldScanlineSize: integer;
+  j:               integer;
 
 begin
+  // Already cropped
+  if not Types.EqualRect(Types.Rect(0, 0, Self.fWidth, Self.fHeight), Self.fCroppingRect) then begin
+    exit;
+  end;
+
   CroppingRect := Types.Rect(0, 0, Self.fWidth, Self.fHeight);
 
   // Trim from top
@@ -1085,7 +1111,29 @@ begin
   end;
 
   Self.fCroppingRect := CroppingRect;
-end; // .procedure TPremultipliedRawImage32.AutoSetCroppingRect
+
+  // Perform real image cropping to save memory
+  if not Types.EqualRect(Types.Rect(0, 0, Self.fWidth, Self.fHeight), Self.fCroppingRect) then begin
+    NewPixels          := nil;
+    Self.fScanlineSize := 0;
+
+    if not Types.IsRectEmpty(Self.fCroppingRect) then begin
+      SetLength(NewPixels, Self.GetCroppedWidth * Self.GetCroppedHeight);
+      OldScanlineSize    := Self.fWidth * sizeof(Self.fPixels[0]);
+      Self.fScanlineSize := Self.GetCroppedWidth * sizeof(NewPixels[0]);
+      Scanline           := @Self.fPixels[Self.fCroppingRect.Top * Self.fWidth + Self.fCroppingRect.Left];
+      NewScanline        := @NewPixels[0];
+
+      for j := Self.fCroppingRect.Top to Self.fCroppingRect.Bottom - 1 do begin
+        Utils.CopyMem(Self.fScanlineSize, Scanline, NewScanline);
+        Inc(integer(Scanline),    OldScanlineSize);
+        Inc(integer(NewScanline), Self.fScanlineSize);
+      end;
+    end;
+
+    Self.fPixels := NewPixels;
+  end;
+end; // .procedure TPremultipliedRawImage32.AutoCrop
 
 procedure TPremultipliedRawImage32.DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                                       const DrawImageSetup: TDrawImageSetup);
