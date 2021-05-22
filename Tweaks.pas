@@ -6,9 +6,32 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  SysUtils, Utils, StrLib, WinSock, Windows, Math,
-  CFiles, Files, FilesEx, Ini, DataLib, Concur, DlgMes, WinNative, RandMt, Stores,
-  PatchApi, ApiJack, Core, GameExt, Heroes, Lodman, Erm, EventMan;
+  Math,
+  StrLib,
+  SysUtils,
+  Utils,
+  Windows,
+  WinSock,
+
+  ApiJack,
+  CFiles,
+  Concur,
+  Core,
+  DataLib,
+  DlgMes,
+  Erm,
+  EventMan,
+  Files,
+  FilesEx,
+  GameExt,
+  Heroes,
+  Ini,
+  Lodman,
+  PatchApi,
+  RandMt,
+  Stores,
+  Trans,
+  WinNative;
 
 type
   (* Import *)
@@ -1166,6 +1189,15 @@ begin
   Context.RetAddr := Ptr($7294E8);
 end; // .function Hook_ErmDlgFunction_HandleAnimatedDef
 
+function Hook_ShowMainMenuVideo (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  pinteger(Context.EBP - $0C)^ := Heroes.a2i(pchar(Trans.Tr('era.acredit_pos.x', [])));
+  pinteger(Context.EBP + $8)^  := Heroes.a2i(pchar(Trans.Tr('era.acredit_pos.y', [])));
+
+  result          := false;
+  Context.RetAddr := Ptr($706630);
+end;
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1583,6 +1615,9 @@ begin
   (* Add up to 10 animated DEFs support in DL-dialogs by restoring commented ZVS code *)
   ApiJack.HookCode(Ptr($72A1F6), @Hook_DL_D_ItemCreation);
   ApiJack.HookCode(Ptr($729513), @Hook_ErmDlgFunction_HandleAnimatedDef);
+
+  (* Move acredits.smk video positon to json config *)
+  ApiJack.HookCode(Ptr($706609), @Hook_ShowMainMenuVideo);
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
