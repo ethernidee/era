@@ -114,6 +114,7 @@ type
   end;
 
   TPremultipliedRawImage32Setup = record
+    procedure Init;
   end;
 
   PDrawImageSetup = ^TDrawImageSetup;
@@ -359,11 +360,9 @@ var
   SecondColorTransparency: integer;
 
 begin
-  SecondColorTransparency := (SecondColor32Premultiplied and ALPHA_CHANNEL_MASK_32) shr 24;
-
   // Convert TransparencyMult=255 into TransparencyMult=256 to prevent original pixel changing if the second one is fully transparent
-  // *255 shr 8 (same as div 256) was not ideal solution
-  Inc(SecondColorTransparency, (SecondColorTransparency + 1) shr 8);
+  // *255 shr 8 (same as div 256) is not ideal solution
+  SecondColorTransparency := (SecondColor32Premultiplied and ALPHA_CHANNEL_MASK_32) shr 24 + 1;
 
   result := ((((SecondColorTransparency * (FirstColor32  and RED_BLUE_CHANNELS_MASK_32))   shr 8)  and RED_BLUE_CHANNELS_MASK_32) or
             ((  SecondColorTransparency * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8)) and ALPHA_GREEN_CHANNELS_MASK_32))
@@ -381,13 +380,13 @@ var
   AlphaGreenChannels:      integer;
 
 begin
-  SecondColorOpacity  := (SecondColor32 and ALPHA_CHANNEL_MASK_32) shr 24;
-  SecondColorTransparency:= 255 - SecondColorOpacity;
-  RedBlueChannels        := (SecondColorTransparency * (FirstColor32  and RED_BLUE_CHANNELS_MASK_32) +
-                             SecondColorOpacity      * (SecondColor32 and RED_BLUE_CHANNELS_MASK_32))   shr 8;
-  AlphaGreenChannels     := SecondColorTransparency  * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8) +
-                            SecondColorOpacity       * (ONE_ALPHA_CHANNEL_MASK_32 or ((SecondColor32 and GREEN_CHANNEL_MASK_32) shr 8));
-  result                 := (RedBlueChannels and RED_BLUE_CHANNELS_MASK_32) or (AlphaGreenChannels and ALPHA_GREEN_CHANNELS_MASK_32);
+  SecondColorOpacity      := (SecondColor32 and ALPHA_CHANNEL_MASK_32) shr 24;
+  SecondColorTransparency := 255 - SecondColorOpacity;
+  RedBlueChannels         := (SecondColorTransparency * (FirstColor32  and RED_BLUE_CHANNELS_MASK_32) +
+                              SecondColorOpacity      * (SecondColor32 and RED_BLUE_CHANNELS_MASK_32))   shr 8;
+  AlphaGreenChannels      := SecondColorTransparency  * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8) +
+                             SecondColorOpacity       * (ONE_ALPHA_CHANNEL_MASK_32 or ((SecondColor32 and GREEN_CHANNEL_MASK_32) shr 8));
+  result                  := (RedBlueChannels and RED_BLUE_CHANNELS_MASK_32) or (AlphaGreenChannels and ALPHA_GREEN_CHANNELS_MASK_32);
 end;
 
 procedure PremultiplyImageColorChannels (Pixels: TArrayOfColor32);
@@ -815,7 +814,7 @@ var
   DstPixelStep: integer;
 
 begin
-  {!} Assert(not Self.HasTransparency, 'TRawImage32.DrawToOpaque16Buffer does not support alpha channel yet. Use TPremultipliedRawImage32');
+  {!} Assert(not Self.HasTransparency, 'TRawImage32.DrawToOpaque16Buf does not support alpha channel yet. Use TPremultipliedRawImage32');
 
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
     RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
@@ -887,7 +886,7 @@ var
   j:            integer;
 
 begin
-  {!} Assert(not Self.HasTransparency, 'TRawImage32.DrawToOpaque32Buffer does not support alpha channel yet. Use TPremultipliedRawImage32');
+  {!} Assert(not Self.HasTransparency, 'TRawImage32.DrawToOpaque32Buf does not support alpha channel yet. Use TPremultipliedRawImage32');
 
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
     RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
@@ -938,6 +937,10 @@ begin
     end; // .else
   end; // .if
 end; // .procedure TRawImage32.DrawToOpaque32Buf
+
+procedure TPremultipliedRawImage32Setup.Init;
+begin
+end;
 
 constructor TPremultipliedRawImage32.Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer; const Setup: TPremultipliedRawImage32Setup);
 var
