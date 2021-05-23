@@ -113,6 +113,9 @@ type
     procedure Init;
   end;
 
+  TPremultipliedRawImage32Setup = record
+  end;
+
   PDrawImageSetup = ^TDrawImageSetup;
   TDrawImageSetup = record
     EnableFilters:  boolean;
@@ -202,10 +205,17 @@ type
   end;
 
   (* Premultiplication occurs during construction. Do not use this class for images without transparency. See PremultiplyImageColorChannels *)
-  TPremultipliedRawImage32 = class (TRawImage32)
-   public
-    constructor Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer);
+  TPremultipliedRawImage32 = class (TRawImage)
+   protected
+    fScanlineSize: integer;
+    fPixels:       TArrayOfColor32;
+    fPixelsBackup: TArrayOfColor32;
 
+   public
+    constructor Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer; const Setup: TPremultipliedRawImage32Setup);
+
+    procedure MakeBackup; override;
+    procedure RestoreFromBackup; override;
     function InternalizeColor32 (Color32: integer): integer; override;
     procedure ReplaceColors (const WhatColors, WithColors: PColor32Arr; NumColors: integer); override;
     procedure AutoCrop;
@@ -733,10 +743,12 @@ var
 
 begin
   {!} Assert(Pixels <> nil);
+  {!} Assert(ScanlineSize >= Width * sizeof(Pixels[0]));
+
   RawImageSetup.Init;
   RawImageSetup.HasTransparency := Setup.HasTransparency;
+
   inherited Create(Width, Height, RawImageSetup);
-  {!} Assert(ScanlineSize >= Width * sizeof(Pixels[0]));
 
   Self.fPixels       := Pixels;
   Self.fScanlineSize := ScanlineSize;
@@ -927,17 +939,37 @@ begin
   end; // .if
 end; // .procedure TRawImage32.DrawToOpaque32Buf
 
-constructor TPremultipliedRawImage32.Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer);
+constructor TPremultipliedRawImage32.Create (Pixels: TArrayOfColor32; Width, Height, ScanlineSize: integer; const Setup: TPremultipliedRawImage32Setup);
 var
-  Setup: TRawImage32Setup;
+  RawImageSetup: TRawImageSetup;
 
 begin
-  Setup.Init;
-  Setup.HasTransparency := true;
+  {!} Assert(Pixels <> nil);
+  {!} Assert(ScanlineSize >= Width * sizeof(Pixels[0]));
 
-  inherited Create(Pixels, Width, Height, ScanlineSize, Setup);
+  RawImageSetup.Init;
+  RawImageSetup.HasTransparency := true;
+  inherited Create(Width, Height, RawImageSetup);
+
+  Self.fPixels       := Pixels;
+  Self.fScanlineSize := ScanlineSize;
 
   PremultiplyImageColorChannels(Self.fPixels);
+end;
+
+procedure TPremultipliedRawImage32.MakeBackup;
+begin
+  if (Self.fPixelsBackup = nil) and (Self.fPixels <> nil) then begin
+    SetLength(Self.fPixelsBackup, Length(Self.fPixels));
+    Utils.CopyMem(Length(Self.fPixels) * sizeof(Self.fPixels[0]), @Self.fPixels[0], @Self.fPixelsBackup[0]);
+  end;
+end;
+
+procedure TPremultipliedRawImage32.RestoreFromBackup;
+begin
+  if Self.fPixelsBackup <> nil then begin
+    Utils.CopyMem(Length(Self.fPixels) * sizeof(Self.fPixels[0]), @Self.fPixelsBackup[0], @Self.fPixels[0]);
+  end;
 end;
 
 function TPremultipliedRawImage32.InternalizeColor32 (Color32: integer): integer;
