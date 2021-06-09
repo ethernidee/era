@@ -1142,6 +1142,7 @@ function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
 procedure LoadLod (const LodName: string; Res: PLod);
 function  LoadDef (const DefName: string): {n} PDefItem;
 function  LoadPcx8 (const PcxName: string): {n} PPcxItem;
+function  LoadPcx16 (const PcxName: string): {n} PPcx16Item;
 procedure GetGameState (out GameState: TGameState); stdcall;
 function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
@@ -1790,6 +1791,11 @@ end;
 function LoadPcx8 (const PcxName: string): {n} PPcxItem;
 begin
   result := PPcxItem(PatchApi.Call(THISCALL_, Ptr($55AA10), [pchar(PcxName)]));
+end;
+
+function LoadPcx16 (const PcxName: string): {n} PPcx16Item;
+begin
+  result := PPcx16Item(PatchApi.Call(THISCALL_, Ptr($55AE50), [pchar(PcxName)]));
 end;
 
 procedure GetGameState (out GameState: TGameState);
