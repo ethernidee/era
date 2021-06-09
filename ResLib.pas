@@ -61,6 +61,9 @@ type
     (* Returns existing resource from cache, if it's found. Client must call DecRef when resource is no longer needed *)
     function GetResource (const Source: string): {On} TSharedResource;
 
+    (* Removes resource from cache if Resource Manager is its only owner. Returns true if resource is not in cache anymore or was not there before method call. *)
+    function TryCollectResource (const Source: string): boolean;
+
     property TotalSize:    integer read fTotalSize;
     property MaxTotalSize: integer read fMaxTotalSize;
     property NumResources: integer read CountResources;
@@ -313,6 +316,23 @@ begin
     Self.MoveResQueueItemToStart(ResQueueItem);
     ResQueueItem.Resource.IncRef;
     result := ResQueueItem.Resource;
+  end;
+end;
+
+function TResourceManager.TryCollectResource (const Source: string): boolean;
+var
+{U} ResQueueItem: TResQueueItem;
+
+begin
+  ResQueueItem := Self.fResourceMap[Source];
+  result       := ResQueueItem = nil;
+
+  if not result then begin
+    result := (Self.fMaxTotalSize > 0) and (ResQueueItem.Resource.RefCount = 1);
+
+    if result then begin
+      ResQueueItem.Resource.DecRef;
+    end;
   end;
 end;
 
