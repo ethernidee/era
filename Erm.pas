@@ -5529,7 +5529,7 @@ begin
 
   // Do not recurse for external plugin events
   if (TriggerId <> TRIGGER_BATTLE_REPLAY) and (TriggerId <> TRIGGER_BEFORE_BATTLE_REPLAY) then begin
-    HumanEventName  := GetTriggerReadableName(TriggerId);
+    HumanEventName := GetTriggerReadableName(TriggerId);
   end;
 
   HasEventHandlers := (StartTrigger.Id <> 0) or EventManager.HasEventHandlers(NumericEventName) or EventManager.HasEventHandlers(HumanEventName);
