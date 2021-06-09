@@ -20,10 +20,12 @@ uses
   GraphTypes,
   Heroes,
   Libspng,
+  Lodman,
   PatchApi,
   PngImage,
   ResLib,
   StrLib,
+  Trans,
   Types,
   TypeWrappers,
   WinUtils,
@@ -51,15 +53,17 @@ const
 
 type
   (* Import *)
-  TGraphic   = Graphics.TGraphic;
-  TBitmap    = Graphics.TBitmap;
-  TJpegImage = Jpeg.TJpegImage;
-  TPngObject = PngImage.TPngObject;
-  TDict      = DataLib.TDict;
-  TRect      = Types.TRect;
-  TString    = TypeWrappers.TString;
-  TInt       = TypeWrappers.TInt;
-  TRawImage  = GraphTypes.TRawImage;
+  TGraphic    = Graphics.TGraphic;
+  TBitmap     = Graphics.TBitmap;
+  TJpegImage  = Jpeg.TJpegImage;
+  TPngObject  = PngImage.TPngObject;
+  TDict       = DataLib.TDict;
+  TRect       = Types.TRect;
+  TString     = TypeWrappers.TString;
+  TInt        = TypeWrappers.TInt;
+  TRawImage   = GraphTypes.TRawImage;
+  TRawImage16 = GraphTypes.TRawImage16;
+  TRawImage32 = GraphTypes.TRawImage32;
 
   TImageType = (IMG_UNKNOWN, IMG_BMP, IMG_JPG, IMG_PNG);
   TResizeAlg = (ALG_NO_RESIZE = 0, ALG_STRETCH = 1, ALG_CONTAIN = 2, ALG_DOWNSCALE = 3, ALG_UPSCALE = 4, ALG_COVER = 5, ALG_FILL = 6);
@@ -122,6 +126,12 @@ var
 const
   // Image is marked with the player color it was colorized with
   META_PLAYER_COLOR = 'player_color';
+
+  // Formal background pcx name for composed image
+  META_BACK_PCX_NAME = 'back_pcx_name';
+
+  // Redirected background pcx name for composed image
+  META_REDIRECTED_BACK_PCX_NAME = 'redirected_back_pcx_name';
 
   DO_VERT_MIRROR  = true;
   DO_HORIZ_MIRROR = true;
@@ -630,10 +640,8 @@ begin
 
   if UseAutoNaming then begin
     PcxName := Heroes.ResourceNamer.GenerateUniqueResourceName();
-  end;
-
-  // Search fixed named resource in cache. It must be absent or be pcx16
-  if not UseAutoNaming then begin
+  end else begin
+    // Search fixed named resource in cache. It must be absent or be pcx16
     PcxName := Heroes.ResourceNamer.GetResourceName(PcxName);
 
     if Heroes.ResourceTree.FindItem(PcxName, Heroes.PBinaryTreeItem(CachedItem)) then begin
@@ -667,50 +675,166 @@ begin
   Resource.DecRef;
 end;
 
-function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
+function GetPcxPng (const PcxName: string): {On} ResLib.TSharedResource; forward;
+
+(* Should be moved to virtual storage unit *)
+function ReadVirtualFile (const FilePath: string; {out} var FileContents: string): boolean;
+begin
+  result := Files.ReadFileContents(FilePath, FileContents);
+end;
+
+function LoadRawImage32NoCaching (const FilePath: string): {On} TRawImage32;
 var
-{On} Image:        TRawImage;
-{On} Image16:      TRawImage16;
-{On} Image32:      TRawImage32;
-{On} Image32Alpha: GraphTypes.TPremultipliedRawImage32;
-     FileContents: string;
-     ImageSize:    integer;
-     Image16Setup: TRawImage16Setup;
-     Image32Setup: TRawImage32Setup;
+  FileContents: string;
 
 begin
-  Image        := nil;
-  Image16      := nil;
-  Image32      := nil;
-  Image32Alpha := nil;
+  result := nil;
+
+  if ReadVirtualFile(FilePath, FileContents) then begin
+    result := Libspng.DecodePng(pchar(FileContents), Length(FileContents));
+  end;
+end;
+
+(* Searches, whether there is a setting to apply pcx-png background for specified png image. If such setting is found, composes new opaque TRawImage32,
+   drawing background first and foreground then. Returns new image or nil if nothing to compose *)
+function ApplyImageBackgroundFromConfig (ForegroundImage: TRawImage; const ForegroundPngFilePath: string): {On} TRawImage32;
+var
+     BaseConfigKey:         string;
+     ConfigKey:             string;
+     BackPcxName:           string;
+     RedirectedBackPcxName: string;
+{On} BackPngRes:            ResLib.TSharedResource;
+{Un} BackPngImage:          TRawImage;
+     ComposedImagePixels:   GraphTypes.TArrayOfColor32;
+     ComposedScanlineSize:  integer;
+     ImageSetup:            TRawImage32Setup;
+     DrawImageSetup:        GraphTypes.TDrawImageSetup;
+
+begin
+  {!} Assert(ForegroundImage <> nil);
+  result        := nil;
+  BaseConfigKey := 'era.png_backs.' + ForegroundPngFilePath;
+  ConfigKey     := BaseConfigKey + '.file';
+  BackPcxName   := Trans.Tr(ConfigKey, []);
+
+  if BackPcxName <> ConfigKey then begin
+    RedirectedBackPcxName := Lodman.GetRedirectedName(BackPcxName);
+    BackPngRes            := GetPcxPng(RedirectedBackPcxName);
+
+    if BackPngRes <> nil then begin
+      BackPngImage         := TRawImage(BackPngRes.Data);
+      ComposedImagePixels  := nil;
+      SetLength(ComposedImagePixels, ForegroundImage.Width * ForegroundImage.Height);
+      ComposedScanlineSize := ForegroundImage.Width * sizeof(ComposedImagePixels[0]);
+      DrawImageSetup.Init;
+
+      BackPngImage.DrawToOpaque32Buf(
+        Heroes.a2i(pchar(Trans.Tr(BaseConfigKey + '.x', []))),
+        Heroes.a2i(pchar(Trans.Tr(BaseConfigKey + '.y', []))),
+        0,
+        0,
+        ForegroundImage.Width,
+        ForegroundImage.Height,
+        ForegroundImage.Width,
+        ForegroundImage.Height,
+        @ComposedImagePixels[0],
+        ComposedScanlineSize,
+        DrawImageSetup
+      );
+
+      ForegroundImage.DrawToOpaque32Buf(
+        0,
+        0,
+        0,
+        0,
+        ForegroundImage.Width,
+        ForegroundImage.Height,
+        ForegroundImage.Width,
+        ForegroundImage.Height,
+        @ComposedImagePixels[0],
+        ComposedScanlineSize,
+        DrawImageSetup
+      );
+
+      ImageSetup.Init;
+      ImageSetup.HasTransparency := false;
+
+      result := TRawImage32.Create(ComposedImagePixels, ForegroundImage.Width, ForegroundImage.Height, ComposedScanlineSize, ImageSetup);
+
+      result.Meta[META_BACK_PCX_NAME]            := TString.Create(BackPcxName);
+      result.Meta[META_REDIRECTED_BACK_PCX_NAME] := TString.Create(RedirectedBackPcxName);
+
+      BackPngRes.DecRef;
+    end; // .if
+  end; // .if
+end; // .function ApplyImageBackgroundFromConfig
+
+function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
+var
+{On} Image:             TRawImage;
+{On} Image16:           TRawImage16;
+{On} Image32:           TRawImage32;
+{On} Image32Alpha:      GraphTypes.TPremultipliedRawImage32;
+{On} ComposedImage32:   TRawImage32;
+{Un} CachedImage:       TRawImage;
+     UsedComposition:   boolean;
+     BackPcxName:       TString;
+     FileContents:      string;
+     ImageSize:         integer;
+     Image16Setup:      TRawImage16Setup;
+     Image32AlphaSetup: GraphTypes.TPremultipliedRawImage32Setup;
+
+begin
+  Image           := nil;
+  Image16         := nil;
+  Image32         := nil;
+  Image32Alpha    := nil;
+  ComposedImage32 := nil;
   // * * * * * //
   result := ResLib.ResMan.GetResource(FilePath);
 
+  // Something is found in cache
   if result <> nil then begin
+    // Object in cache is not image, fail
     if not (result.Data is TRawImage) then begin
       result.DecRef;
       result := nil;
+
+      exit;
     end;
 
-    exit;
+    CachedImage := TRawImage(result.Data);
+    BackPcxName := CachedImage.Meta[META_BACK_PCX_NAME];
+
+    // Is it composed image, for which background pcx redirection was changed, try to remove it from cache and recreate
+    if (BackPcxName <> nil) and (TString(CachedImage.Meta[META_REDIRECTED_BACK_PCX_NAME]).Value <> Lodman.GetRedirectedName(BackPcxName.Value)) then begin
+      result.DecRef;
+      result := nil;
+
+      // Failed to free image, return cached variant as is
+      if not ResLib.ResMan.TryCollectResource(FilePath) then begin
+        result := ResLib.ResMan.GetResource(FilePath);
+
+        exit;
+      end;
+    end else begin
+      exit;
+    end;
   end;
 
   if not Files.ReadFileContents(FilePath, FileContents) then begin
     exit;
   end;
 
-  Image32 := Libspng.DecodePng(pchar(FileContents), Length(FileContents));
+  Image32 := LoadRawImage32NoCaching(FilePath);
 
   if Image32 = nil then begin
     exit;
   end;
 
-  ImageSize := Length(Image32.Pixels) * sizeof(Image32.Pixels[0]);
-
   if Image32.HasTransparency then begin
-    Image32Setup.Init;
-    Image32Setup.HasTransparency := true;
-    Image32Alpha                 := TPremultipliedRawImage32.Create(Image32.Pixels, Image32.Width, Image32.Height, Image32.ScanlineSize);
+    Image32AlphaSetup.Init;
+    Image32Alpha := TPremultipliedRawImage32.Create(Image32.Pixels, Image32.Width, Image32.Height, Image32.ScanlineSize, Image32AlphaSetup);
     Image32Alpha.AutoCrop;
     Utils.Exchange(Image, Image32Alpha);
   end else if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
@@ -727,16 +851,24 @@ begin
       Image16Setup
     );
 
-    ImageSize := Length(Image16.Pixels) * sizeof(Image16.Pixels[0]);
     Utils.Exchange(Image, Image16);
   end;
 
-  result := ResLib.ResMan.AddResource(Image, ImageSize, FilePath); Image := nil;
+  ComposedImage32 := ApplyImageBackgroundFromConfig(Image, FilePath);
+  UsedComposition := ComposedImage32 <> nil;
+
+  if UsedComposition then begin
+    Utils.Exchange(Image, ComposedImage32);
+  end;
+
+  ImageSize := Image.Width * Image.Height * Image.GetPixelSize;
+  result    := ResLib.ResMan.AddResource(Image, ImageSize, FilePath); Image := nil;
   // * * * * * //
   SysUtils.FreeAndNil(Image);
   SysUtils.FreeAndNil(Image16);
   SysUtils.FreeAndNil(Image32);
   SysUtils.FreeAndNil(Image32Alpha);
+  SysUtils.FreeAndNil(ComposedImage32);
 end; // .function LoadPngResource
 
 procedure DrawRawImageToGameBuf (Image: TRawImage; SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstW, DstH: integer; Buf: pointer; DstScanlineSize: integer;
@@ -797,9 +929,8 @@ begin
   end;
 end;
 
-function GetPcxPngFrame (Pcx: Heroes.PBinaryTreeItem): {On} ResLib.TSharedResource;
+function GetPcxPng (const PcxName: string): {On} ResLib.TSharedResource; overload;
 var
-     PcxName:                string;
      PcxAltName:             string;
 {Un} PngFilePath:            TString;
 {Un} Image:                  TRawImage;
@@ -814,7 +945,6 @@ begin
   PngFilePath            := nil;
   UsePaletteColorization := false;
 
-  PcxName     := Pcx.GetName;
   PlayerColor := integer(ColorizedPcxPng[PcxName]) - 1;
 
   // Suppoprt for alternative images for each player color
@@ -853,7 +983,7 @@ begin
       end; // .if
     end; // .if
   end; // .if
-end; // .function GetPcxPngFrame
+end; // .function GetPcxPng
 
 function GetDefFrameCroppingRect (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): TRect;
 var
@@ -1251,7 +1381,7 @@ var
      DrawImageSetup: GraphTypes.TDrawImageSetup;
 
 begin
-  ImageResource := GetPcxPngFrame(Pcx);
+  ImageResource := GetPcxPng(Pcx.GetName);
 
   if ImageResource <> nil then begin
     DrawImageSetup.Init;
@@ -1276,7 +1406,7 @@ var
      DrawImageSetup: GraphTypes.TDrawImageSetup;
 
 begin
-  ImageResource := GetPcxPngFrame(Pcx);
+  ImageResource := GetPcxPng(Pcx.GetName);
 
   if ImageResource <> nil then begin
     DrawImageSetup.Init;
