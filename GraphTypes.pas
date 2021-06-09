@@ -148,9 +148,10 @@ type
     property Width:           integer read fWidth;
     property Height:          integer read fHeight;
     property HasTransparency: boolean read fHasTransparency;
-    property CroppingRect:    TRect   read fCroppingRect;
+    property CroppingRect:    TRect   read fCroppingRect; // Area with really existing pixels after cropping
     property Meta:            TDict   read fMeta;
 
+    function GetPixelSize: integer; virtual;
     function InternalizeColor32 (Color32: integer): integer; virtual;
     procedure MakeBackup; virtual;
     procedure RestoreFromBackup; virtual;
@@ -171,6 +172,7 @@ type
    public
     constructor Create (Pixels: TArrayOfColor16; Width, Height, ScanlineSize: integer; const Setup: TRawImage16Setup);
 
+    function GetPixelSize: integer; override;
     function InternalizeColor32 (Color32: integer): integer; override;
     procedure MakeBackup; override;
     procedure RestoreFromBackup; override;
@@ -205,7 +207,8 @@ type
     property Pixels:       TArrayOfColor32 read fPixels;
   end;
 
-  (* Premultiplication occurs during construction. Do not use this class for images without transparency. See PremultiplyImageColorChannels *)
+  (* Premultiplication occurs during construction. Do not use this class for images without transparency. See PremultiplyImageColorChannels.
+     Support cropping. Real pixels array holds only cropped area. *)
   TPremultipliedRawImage32 = class (TRawImage)
    protected
     fScanlineSize: integer;
@@ -241,10 +244,10 @@ type
   function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
 
   (* Efficient Color32 pixels alpha blending *)
-  function AlphaBlend32 (FirstColor32, SecondColor32: integer): integer;
+  function AlphaBlend32OpaqueBack (FirstColor32, SecondColor32: integer): integer;
 
   (* Efficient Color32 pixels alpha blending. RGB channels of the second color must be premultiplied by opacity and opacity will be converted to transparency *)
-  function AlphaBlendWithPremultiplied32 (FirstColor32, SecondColor32Premultiplied: integer): integer; inline;
+  function AlphaBlend32OpaqueBackWithPremultiplied (FirstColor32, SecondColor32Premultiplied: integer): integer; inline;
 
   (* Each pixel color channel is multiplied by opacity value and alpha channel is converted from opacity to transparency *)
   procedure PremultiplyImageColorChannels (Pixels: TArrayOfColor32);
@@ -355,7 +358,7 @@ begin
                      integer(ALPHA_CHANNEL_MASK_32 - AlphaChannel);
 end;
 
-function AlphaBlendWithPremultiplied32 (FirstColor32, SecondColor32Premultiplied: integer): integer; inline;
+function AlphaBlend32OpaqueBackWithPremultiplied (FirstColor32, SecondColor32Premultiplied: integer): integer; inline;
 var
   SecondColorTransparency: integer;
 
@@ -369,7 +372,7 @@ begin
             + SecondColor32Premultiplied;
 end;
 
-function AlphaBlend32 (FirstColor32, SecondColor32: integer): integer;
+function AlphaBlend32OpaqueBack (FirstColor32, SecondColor32: integer): integer;
 const
   ONE_ALPHA_CHANNEL_MASK_32 = $01000000;
 
@@ -505,7 +508,7 @@ begin
   if DrawImageSetup.DoReplaceColor and (SrcPixelValue = DrawImageSetup.ReplaceColor1.Value) then begin
     DstPixelValue := DrawImageSetup.ReplaceColor2.Value;
   end else if UseBlending then begin
-    DstPixelValue := AlphaBlendWithPremultiplied32(DstPixelValue, SrcPixelValue);
+    DstPixelValue := AlphaBlend32OpaqueBackWithPremultiplied(DstPixelValue, SrcPixelValue);
   end else begin
     DstPixelValue := SrcPixelValue;
   end;
@@ -547,6 +550,11 @@ end;
 function TRawImage.GetCroppedHeight: integer;
 begin
   result := Self.fCroppingRect.Bottom - Self.fCroppingRect.Top;
+end;
+
+function TRawImage.GetPixelSize: integer;
+begin
+  result := sizeof(TColor32);
 end;
 
 function TRawImage.InternalizeColor32 (Color32: integer): integer;
@@ -599,6 +607,11 @@ begin
 
   Self.fPixels       := Pixels;
   Self.fScanlineSize := ScanlineSize;
+end;
+
+function TRawImage16.GetPixelSize: integer;
+begin
+  result := sizeof(Self.fPixels[0]);
 end;
 
 function TRawImage16.InternalizeColor32 (Color32: integer): integer;
@@ -1197,7 +1210,7 @@ begin
         DstPixel := DstScanline;
 
         for i := 0 to BoxWidth - 1 do begin
-          DstPixel.Value := Color32To16(AlphaBlendWithPremultiplied32(Color16To32(DstPixel.Value), SrcPixel.Value));
+          DstPixel.Value := Color32To16(AlphaBlend32OpaqueBackWithPremultiplied(Color16To32(DstPixel.Value), SrcPixel.Value));
 
           Inc(SrcPixel);
           Inc(DstPixel);
@@ -1268,7 +1281,7 @@ begin
         DstPixel := DstScanline;
 
         for i := 0 to BoxWidth - 1 do begin
-          DstPixel.Value := AlphaBlendWithPremultiplied32(DstPixel.Value, SrcPixel.Value);
+          DstPixel.Value := AlphaBlend32OpaqueBackWithPremultiplied(DstPixel.Value, SrcPixel.Value);
 
           Inc(SrcPixel);
           Inc(DstPixel);

@@ -1463,9 +1463,9 @@ begin
             end;
 
             if BytesPerPixel = sizeof(GraphTypes.TColor32) then begin
-              pinteger(OutPixelPtr)^ := GraphTypes.AlphaBlendWithPremultiplied32(pinteger(OutPixelPtr)^, Color32);
+              pinteger(OutPixelPtr)^ := GraphTypes.AlphaBlend32OpaqueBackWithPremultiplied(pinteger(OutPixelPtr)^, Color32);
             end else begin
-              pword(OutPixelPtr)^ := GraphTypes.Color32To16(GraphTypes.AlphaBlendWithPremultiplied32(GraphTypes.Color16To32(pword(OutPixelPtr)^), Color32));
+              pword(OutPixelPtr)^ := GraphTypes.Color32To16(GraphTypes.AlphaBlend32OpaqueBackWithPremultiplied(GraphTypes.Color16To32(pword(OutPixelPtr)^), Color32));
             end;
           end; // .if
 
