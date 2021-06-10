@@ -1,0 +1,10 @@
+Backups/
+*.dcu
+*.dll
+*.drc
+*.map
+__history/
+Era.identcache
+*.dproj
+*.local
+Era.res
