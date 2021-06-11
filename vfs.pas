@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 USES
   Windows, SysUtils, Math, MMSystem,
   Utils, Crypto, Lists, DataLib, StrLib,  StrUtils, Files, Log, TypeWrappers, CmdApp,
-  PatchApi, Core, Ini;
+  PatchApi, VfsApiDigger, Core, Ini;
 
 (*
   Redirects calls to:
@@ -945,7 +945,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing GetFullPathNameA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'GetFullPathNameA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'GetFullPathNameA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -957,7 +957,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing CreateFileA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'CreateFileA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'CreateFileA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -969,7 +969,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing GetFileAttributesA hook');
     NativeGetFileAttributes := Ptr(Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'GetFileAttributesA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'GetFileAttributesA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -984,7 +984,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing LoadLibraryA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'LoadLibraryA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'LoadLibraryA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -996,7 +996,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing GetPrivateProfileStringA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'GetPrivateProfileStringA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'GetPrivateProfileStringA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -1008,7 +1008,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing CreateDirectoryA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'CreateDirectoryA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'CreateDirectoryA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -1020,7 +1020,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing RemoveDirectoryA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'RemoveDirectoryA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'RemoveDirectoryA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -1032,7 +1032,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing DeleteFileA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'DeleteFileA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'DeleteFileA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -1044,7 +1044,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing FindFirstFileA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'FindFirstFileA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'FindFirstFileA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -1056,7 +1056,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing FindNextFileA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'FindNextFileA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'FindNextFileA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -1068,7 +1068,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing FindClose hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'FindClose')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'FindClose')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -1104,7 +1104,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing GetCurrentDirectoryA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'GetCurrentDirectoryA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'GetCurrentDirectoryA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
@@ -1116,7 +1116,7 @@ BEGIN
     Log.Write('VFS', 'InstallHook', 'Installing SetCurrentDirectoryA hook');
     Core.p.WriteHiHook
     (
-      INTEGER(Windows.GetProcAddress(Kernel32Handle, 'SetCurrentDirectoryA')),
+      cardinal(VfsApiDigger.GetRealProcAddress(Kernel32Handle, 'SetCurrentDirectoryA')),
       PatchApi.SPLICE_,
       PatchApi.EXTENDED_,
       PatchApi.STDCALL_,
