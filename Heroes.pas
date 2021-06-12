@@ -692,6 +692,12 @@ type
    public
     Palette16: TPalette16;
     Palette24: TPalette24;
+
+    procedure DrawToBuf (
+      SrcX, SrcY, SrcWidth, SrcHeight: integer;
+      Buf: pointer;
+      DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor: integer
+    );
   end;
   {$ALIGN ON}
 
@@ -700,6 +706,12 @@ type
   TPcx16Item = object (TPcxItem)
    public
     HasDdSurfaceBuffer: boolean;
+
+    procedure DrawToBuf (
+      SrcX, SrcY, SrcWidth, SrcHeight: integer;
+      Buf: pointer;
+      DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor: integer
+    );
   end; // .object TPcx16Item
 
   PPcx24Item = ^TPcx24Item;
@@ -1080,7 +1092,7 @@ const
   CurrentPlayerId:  pinteger   = Ptr($69CCF4);
   GameDate:         ^PGameDate = Ptr($840CE0);
 
-  BytesPerPixelPtr:        pbyte = Ptr($5FA228 + 3);
+  BytesPerPixelPtr:           pbyte = Ptr($5FA228 + 3);
   Color16GreenChannelMaskPtr: pword = Ptr($694DB0);
 
   ZvsGzipWrite:   TGzipWrite = Ptr($704062);
@@ -1595,6 +1607,26 @@ begin
   result := PatchApi.Call(THISCALL_, Ptr($47B610), [
     @Self, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror), ord(UsePaletteSpecialColors)
   ]);
+end;
+
+procedure TPcx8Item.DrawToBuf (
+  SrcX, SrcY, SrcWidth, SrcHeight: integer;
+  Buf: pointer;
+  DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor: integer
+);
+
+begin
+  PatchApi.Call(THISCALL_, Ptr($44F940), [@Self, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor]);
+end;
+
+procedure TPcx16Item.DrawToBuf (
+  SrcX, SrcY, SrcWidth, SrcHeight: integer;
+  Buf: pointer;
+  DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor: integer
+);
+
+begin
+  PatchApi.Call(THISCALL_, Ptr($44DF80), [@Self, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor]);
 end;
 
 class function TPcx8ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx8Item;
