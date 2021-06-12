@@ -43,9 +43,6 @@ type
     property NumTimesFired: integer                      read fNumTimesFired write fNumTimesFired;
   end; // .class TEventInfo
 
-  // TODO/FIXME Decide, to use it in Dumping method or not
-  THandlerNameDetector = function (Handler: TEventHandler): string;
-
   TEventManager = class sealed
    private
     {On} class var Instance: TEventManager;
@@ -80,7 +77,7 @@ end;
 procedure TEventInfo.AddHandler (Handler: pointer);
 begin
   {!} Assert(Handler <> nil);
-  
+
   if Self.fHandlers = nil then begin
     Self.fHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
   end;
@@ -119,7 +116,7 @@ end;
 procedure TEventManager.On (const EventName: string; Handler: TEventHandler);
 var
 {U} EventInfo: TEventInfo;
-  
+
 begin
   {!} Assert(@Handler <> nil);
   EventInfo := Self.fEvents[EventName];
@@ -150,7 +147,7 @@ begin
   Event.Name     := EventName;
   Event.Data     := EventData;
   Event.DataSize := DataSize;
-  
+
   EventInfo.NumTimesFired := EventInfo.NumTimesFired + 1;
 
   if EventInfo.Handlers <> nil then begin
@@ -197,14 +194,14 @@ begin
     EmptyLine; EmptyLine;
     Line('> Event handlers');
     EmptyLine;
-    
+
     for i := 0 to EventList.Count - 1 do begin
       EventInfo := TEventInfo(EventList.Values[i]);
-      
+
       if EventInfo.NumHandlers > 0 then begin
         Line(EventList[i] + ':');
       end;
-      
+
       Indent;
 
       for j := 0 to EventInfo.NumHandlers - 1 do begin
