@@ -1606,7 +1606,11 @@ begin
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
 
   (* Replace Heroes 3 PRNG with thread-safe Mersenne Twister, except of multiplayer battles *)
-  ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
+  if FALSE then begin
+    // Disabled, because Mersenne Twister is used in VR:T and it should not react on native PRNG state update
+    ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
+  end;
+
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_Rand, ApiJack.CONV_FASTCALL, 2);
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
