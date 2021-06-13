@@ -3,6 +3,7 @@ unit Graph;
 (***)  interface  (***)
 
 uses
+  Classes,
   Jpeg,
   Math,
   SysUtils,
@@ -76,6 +77,33 @@ type
   PColorizablePlayerPalette = ^TColorizablePlayerPalette;
   TColorizablePlayerPalette = array [0..31] of integer;
 
+  TPcx8ToRawImageAdapter = class (TRawImage)
+   protected
+   {O} fPcxItem: Heroes.PPcx8Item;
+
+   public
+    constructor Create (PcxItem: Heroes.PPcx8Item);
+    destructor Destroy; override;
+
+    procedure DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
+                                 const DrawImageSetup: TDrawImageSetup); override;
+  end;
+
+  TPcx16ToRawImageAdapter = class (TRawImage)
+   protected
+   {O} fPcxItem: Heroes.PPcx16Item;
+
+   public
+    constructor Create (PcxItem: Heroes.PPcx16Item);
+    destructor Destroy; override;
+
+    procedure DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
+                                 const DrawImageSetup: TDrawImageSetup); override;
+  end;
+
+
+(* Wraps Pcx8/16 item into TRawImage adapter on the fly *)
+function AdaptPcxItemToRawImage ({On} PcxItem: Heroes.PPcxItem): {On} TRawImage;
 
 function LoadImage (const FilePath: string): {n} TGraphic;
 
@@ -91,6 +119,10 @@ function LoadImageAsPcx16 (FilePath:  string;      PcxName:   string  = '';
                            ResizeAlg: TResizeAlg = ALG_DOWNSCALE): {OU} Heroes.PPcx16Item;
 
 procedure DecRef (Resource: Heroes.PBinaryTreeItem); stdcall;
+
+(* Loads pcx8 or pcx16 resource, based on file extension: ".pcx16" for pcx16 and ".pcx" for pcx8.
+   This function is necessary because pcx8 and pcx16 formats are indistinguishable in lod/pac-packages *)
+function LoadPcxEx (const PcxName: string): {On} Heroes.PPcxItem;
 
 (* Loads given png file from cache or file system and returns TRawImage in the best format wrapped into shared resource *)
 function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
@@ -144,6 +176,121 @@ var
 
   DefFramePngFilePathPrefix: string; // Like "D:\Games\Heroes 3\Data\Defs\"
 
+
+constructor TPcx8ToRawImageAdapter.Create (PcxItem: Heroes.PPcx8Item);
+var
+  ImageSetup: GraphTypes.TRawImageSetup;
+
+begin
+  ImageSetup.Init;
+  ImageSetup.HasTransparency := false;
+
+  inherited Create(PcxItem.Width, PcxItem.Height, ImageSetup);
+
+  Self.fPcxItem := PcxItem;
+end;
+
+destructor TPcx8ToRawImageAdapter.Destroy;
+begin
+  Self.fPcxItem.DecRef; Self.fPcxItem := nil;
+
+  inherited Destroy;
+end;
+
+procedure TPcx8ToRawImageAdapter.DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
+                                                     const DrawImageSetup: TDrawImageSetup);
+var
+{On} Drawer:       GraphTypes.TRawImage16;
+     Pixels:       GraphTypes.TArrayOfColor16;
+     ScanlineSize: integer;
+     ImageSetup:   GraphTypes.TRawImage16Setup;
+
+begin
+  if (DstBuf <> nil) and (DstScanlineSize > 0) and
+    RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight)
+  then begin
+    if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
+      Self.fPcxItem.DrawToBuf(SrcX, SrcY, BoxWidth, BoxHeight, DstBuf, DstX, DstY, DstWidth, DstHeight, DstScanlineSize, 0);
+    end else begin
+      Pixels := nil;
+      SetLength(Pixels, Self.fWidth * Self.fHeight);
+      ScanlineSize := Self.fWidth * sizeof(Pixels[0]);
+
+      Self.fPcxItem.DrawToBuf(0, 0, Self.fWidth, Self.fHeight, @Pixels[0], 0, 0, Self.fWidth, Self.fHeight, ScanlineSize, 1);
+
+      ImageSetup.Init;
+      Drawer := GraphTypes.TRawImage16.Create(Pixels, Self.fWidth, Self.fHeight, ScanlineSize, ImageSetup);
+
+      Drawer.DrawToOpaque32Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight, DstBuf, DstScanlineSize, DrawImageSetup);
+
+      SysUtils.FreeAndNil(Drawer);
+    end;
+  end; // .if
+end; // .procedure TPcx8ToRawImageAdapter.DrawToOpaque32Buf
+
+constructor TPcx16ToRawImageAdapter.Create (PcxItem: Heroes.PPcx16Item);
+var
+  ImageSetup: GraphTypes.TRawImageSetup;
+
+begin
+  ImageSetup.Init;
+  ImageSetup.HasTransparency := false;
+
+  inherited Create(PcxItem.Width, PcxItem.Height, ImageSetup);
+
+  Self.fPcxItem := PcxItem;
+end;
+
+destructor TPcx16ToRawImageAdapter.Destroy;
+begin
+  Self.fPcxItem.DecRef; Self.fPcxItem := nil;
+
+  inherited Destroy;
+end;
+
+procedure TPcx16ToRawImageAdapter.DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
+                                                     const DrawImageSetup: TDrawImageSetup);
+var
+{On} Drawer:       GraphTypes.TRawImage16;
+     Pixels:       GraphTypes.TArrayOfColor16;
+     ScanlineSize: integer;
+     ImageSetup:   GraphTypes.TRawImage16Setup;
+
+begin
+  if (DstBuf <> nil) and (DstScanlineSize > 0) and
+    RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight)
+  then begin
+    if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
+      Self.fPcxItem.DrawToBuf(SrcX, SrcY, BoxWidth, BoxHeight, DstBuf, DstX, DstY, DstWidth, DstHeight, DstScanlineSize, 0);
+    end else begin
+      Pixels := nil;
+      SetLength(Pixels, Self.fWidth * Self.fHeight);
+      ScanlineSize := Self.fWidth * sizeof(Pixels[0]);
+
+      Self.fPcxItem.DrawToBuf(0, 0, Self.fWidth, Self.fHeight, @Pixels[0], 0, 0, Self.fWidth, Self.fHeight, ScanlineSize, 0);
+
+      ImageSetup.Init;
+      Drawer := GraphTypes.TRawImage16.Create(Pixels, Self.fWidth, Self.fHeight, ScanlineSize, ImageSetup);
+
+      Drawer.DrawToOpaque32Buf(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight, DstBuf, DstScanlineSize, DrawImageSetup);
+
+      SysUtils.FreeAndNil(Drawer);
+    end;
+  end; // .if
+end; // .procedure TPcx16ToRawImageAdapter.DrawToOpaque32Buf
+
+function AdaptPcxItemToRawImage ({On} PcxItem: Heroes.PPcxItem): {On} TRawImage;
+begin
+  result := nil;
+
+  if PcxItem <> nil then begin
+    if PcxItem.IsPcx8 then begin
+      result := TPcx8ToRawImageAdapter.Create(Heroes.PPcx8Item(PcxItem));
+    end else if PcxItem.IsPcx16 then begin
+      result := TPcx16ToRawImageAdapter.Create(Heroes.PPcx16Item(PcxItem));
+    end;
+  end;
+end;
 
 (* Checks, that image is valid object with non-null dimensions and forces required pixel format. Returns same object instance. *)
 function ValidateBmp24 ({OU} Image: TBitmap): {OU} TBitmap;
@@ -675,6 +822,55 @@ begin
   Resource.DecRef;
 end;
 
+function LoadPcxEx (const PcxName: string): {On} Heroes.PPcxItem;
+begin
+  if SysUtils.AnsiLowerCase(SysUtils.ExtractFileExt(PcxName)) = '.pcx16' then begin
+    result := LoadPcx16(SysUtils.ChangeFileExt(PcxName, '.pcx'));
+  end else begin
+    result := LoadPcx8(PcxName);
+  end;
+end;
+
+function RawImageToString (Image: TRawImage): string;
+var
+{O} Stream:         Classes.TStringStream;
+{O} Png:            TPngObject;
+    Pixel:          GraphTypes.PColor32;
+    Canvas:         GraphTypes.TArrayOfColor32;
+    DrawImageSetup: TDrawImageSetup;
+    i, j:           integer;
+
+begin
+  {!} Assert(Image <> nil);
+  Stream := Classes.TStringStream.Create('');
+  Png    := TPngObject.CreateBlank(PngImage.COLOR_RGB, 8, Image.Width, Image.Height);
+  result := '';
+  // * * * * * //
+  Canvas := nil;
+  SetLength(Canvas, Image.Width * Image.Height);
+  DrawImageSetup.Init;
+  Image.DrawToOpaque32Buf(0, 0, 0, 0, Image.Width, Image.Height, Image.Width, Image.Height, @Canvas[0], Image.Width * sizeof(Canvas[0]), DrawImageSetup);
+  Pixel := @Canvas[0];
+
+  for j := 0 to Image.Height - 1 do begin
+    for i := 0 to Image.Width - 1 do begin
+      Png.Pixels[i, j] := (Pixel.Red + Pixel.Green shl 8 + Pixel.Blue shl 16);
+      Inc(Pixel);
+    end;
+  end;
+
+  Png.SaveToStream(Stream);
+  result := Stream.DataString;
+  // * * * * * //
+  SysUtils.FreeAndNil(Stream);
+  SysUtils.FreeAndNil(Png);
+end; // .function RawImageToString
+
+procedure SaveRawImageAsPng (RawImage: TRawImage; const FilePath: string);
+begin
+  Files.WriteFileContents(RawImageToString(RawImage), FilePath);
+end;
+
 function GetPcxPng (const PcxName: string): {On} ResLib.TSharedResource; forward;
 
 (* Should be moved to virtual storage unit *)
@@ -703,8 +899,7 @@ var
      ConfigKey:             string;
      BackPcxName:           string;
      RedirectedBackPcxName: string;
-{On} BackPngRes:            ResLib.TSharedResource;
-{Un} BackPngImage:          TRawImage;
+{Un} BackImage:             TRawImage;
      ComposedImagePixels:   GraphTypes.TArrayOfColor32;
      ComposedScanlineSize:  integer;
      ImageSetup:            TRawImage32Setup;
@@ -713,22 +908,20 @@ var
 begin
   {!} Assert(ForegroundImage <> nil);
   result        := nil;
-  BaseConfigKey := 'era.png_backs.' + ForegroundPngFilePath;
+  BaseConfigKey := 'era.png_backs.' + SysUtils.AnsiLowerCase(Files.ToRelativePathIfPossible(ForegroundPngFilePath, GameExt.GameDir));
   ConfigKey     := BaseConfigKey + '.file';
   BackPcxName   := Trans.Tr(ConfigKey, []);
 
   if BackPcxName <> ConfigKey then begin
-    RedirectedBackPcxName := Lodman.GetRedirectedName(BackPcxName);
-    BackPngRes            := GetPcxPng(RedirectedBackPcxName);
+    BackImage := AdaptPcxItemToRawImage(LoadPcxEx(BackPcxName));
 
-    if BackPngRes <> nil then begin
-      BackPngImage         := TRawImage(BackPngRes.Data);
+    if BackImage <> nil then begin
       ComposedImagePixels  := nil;
       SetLength(ComposedImagePixels, ForegroundImage.Width * ForegroundImage.Height);
       ComposedScanlineSize := ForegroundImage.Width * sizeof(ComposedImagePixels[0]);
       DrawImageSetup.Init;
 
-      BackPngImage.DrawToOpaque32Buf(
+      BackImage.DrawToOpaque32Buf(
         Heroes.a2i(pchar(Trans.Tr(BaseConfigKey + '.x', []))),
         Heroes.a2i(pchar(Trans.Tr(BaseConfigKey + '.y', []))),
         0,
@@ -764,7 +957,7 @@ begin
       result.Meta[META_BACK_PCX_NAME]            := TString.Create(BackPcxName);
       result.Meta[META_REDIRECTED_BACK_PCX_NAME] := TString.Create(RedirectedBackPcxName);
 
-      BackPngRes.DecRef;
+      SysUtils.FreeAndNil(BackImage);
     end; // .if
   end; // .if
 end; // .function ApplyImageBackgroundFromConfig
