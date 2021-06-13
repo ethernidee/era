@@ -180,6 +180,8 @@ type
 
     procedure DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                  const DrawImageSetup: TDrawImageSetup); override;
+    procedure DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
+                                 const DrawImageSetup: TDrawImageSetup); override;
 
     property ScanlineSize: integer         read fScanlineSize;
     property Pixels:       TArrayOfColor16 read fPixels;
@@ -264,6 +266,11 @@ type
 
   (* Returns true if there is intersected area to copy pixels from/to. Updates input parameters with new fixed values *)
   function RefineDrawBox (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer): boolean;
+
+  (* Returns true if there is intersected area to copy pixels from/to. Updates input parameters with new fixed values. All src coordinates and dimensions are virtual
+     and correspond to source image before cropping. They will be adjusted to real coordinates *)
+  function RefineDrawBoxWithSourceCropping (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer;
+                                            const SourceCroppingRect: TRect): boolean;
 
 
 var
@@ -739,6 +746,77 @@ begin
   end;
 end;
 
+procedure TRawImage16.DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
+                                         const DrawImageSetup: TDrawImageSetup);
+var
+  SrcScanlineSize: integer;
+  SrcScanline:     PColor16;
+  SrcPixel:        PColor16;
+  DstScanline:     PColor32;
+  DstPixel:        PColor32;
+  i, j:            integer;
+
+  DstPixelStep: integer;
+
+begin
+  if (DstBuf <> nil) and (DstScanlineSize > 0) and
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+  then begin
+    // Fast default drawing without filters
+    if not DrawImageSetup.EnableFilters then begin
+      SrcScanlineSize := Self.fScanlineSize;
+      SrcScanline     := Ptr(integer(@Self.fPixels[0]) + SrcY * Self.fScanlineSize + SrcX * sizeof(Self.fPixels[0]));
+      DstScanline     := Ptr(integer(DstBuf) + DstY * DstScanlineSize + DstX * sizeof(DstBuf[0]));
+
+      for j := 0 to BoxHeight - 1 do begin
+        SrcPixel := SrcScanline;
+        DstPixel := DstScanline;
+
+        for i := 0 to BoxWidth - 1 do begin
+          DstPixel.Value := Color16To32(SrcPixel.Value);
+
+          Inc(SrcPixel);
+          Inc(DstPixel);
+        end;
+
+        Inc(integer(SrcScanline), SrcScanlineSize);
+        Inc(integer(DstScanline), DstScanlineSize);
+      end;
+    // Slow drawing with filters support
+    end else begin
+      SrcScanlineSize := Self.fScanlineSize;
+      SrcScanline     := Ptr(integer(@Self.fPixels[0]) + SrcY * Self.fScanlineSize + SrcX * sizeof(Self.fPixels[0]));
+      DstScanline     := Ptr(integer(DstBuf) + DstY * DstScanlineSize + DstX * sizeof(DstBuf[0]));
+      DstPixelStep    := sizeof(DstBuf[0]);
+
+      if DrawImageSetup.DoHorizMirror then begin
+        Inc(integer(DstScanline), (BoxWidth - 1) * sizeof(DstBuf[0]));
+        DstPixelStep := -DstPixelStep;
+      end;
+
+      if DrawImageSetup.DoVertMirror then begin
+        Inc(integer(DstScanline), (BoxHeight - 1) * DstScanlineSize);
+        DstScanlineSize := -DstScanlineSize;
+      end;
+
+      for j := 0 to BoxHeight - 1 do begin
+        SrcPixel := SrcScanline;
+        DstPixel := DstScanline;
+
+        for i := 0 to BoxWidth - 1 do begin
+          DrawPixelWithFilters(Color16To32(SrcPixel.Value), DstPixel.Value, DstPixel, sizeof(DstBuf[0]), DRAW_PIXEL_COPY_PIXEL, DrawImageSetup);
+
+          Inc(SrcPixel);
+          Inc(integer(DstPixel), DstPixelStep);
+        end;
+
+        Inc(integer(SrcScanline), SrcScanlineSize);
+        Inc(integer(DstScanline), DstScanlineSize);
+      end;
+    end; // .else
+  end;
+end; // .procedure TRawImage16.DrawToOpaque32Buf
+
 procedure TRawImage32Setup.Init;
 begin
   Self.HasTransparency := false;
@@ -844,6 +922,9 @@ begin
 
         for i := 0 to BoxWidth - 1 do begin
           DstPixel.Value := Color32To16(SrcPixel.Value);
+
+          Inc(SrcPixel);
+          Inc(DstPixel);
         end;
 
         Inc(integer(SrcScanline), SrcScanlineSize);
