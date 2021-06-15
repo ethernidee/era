@@ -16,7 +16,9 @@ uses
   ApiJack,
   CFiles,
   Concur,
+  ConsoleApi,
   Core,
+  Crypto,
   DataLib,
   DlgMes,
   Erm,
@@ -57,8 +59,11 @@ var
 
   FixGetHostByNameOpt:  boolean;
   UseOnlyOneCpuCoreOpt: boolean;
+  CombatId:             integer;
   CombatRound:          integer;
+  CombatActionId:       integer;
   HadTacticsPhase:      boolean;
+  DebugRng:             boolean;
 
 
 (***) implementation (***)
@@ -86,6 +91,9 @@ var
   IsMp3Trigger:           boolean = false;
   WogCurrentMp3TrackPtr:  ppchar = pointer($28AB204);
   WoGMp3Process:          TWogMp3Process = pointer($77495F);
+
+  UseNativePrng:        boolean = false;
+  UseDeterministicPrng: boolean = false;
 
 threadvar
   (* Counter (0..100). When reaches 100, PeekMessageA does not call sleep before returning result *)
@@ -744,31 +752,162 @@ begin
 end;
 
 var
-  UseNativePrng: boolean = false;
+  RngId: integer = 0;
 
-function Hook_SRand (OrigFunc: pointer; Seed: integer): integer; stdcall;
+type
+  PDeterministicPrngState = ^TDeterministicPrngState;
+  TDeterministicPrngState = packed record
+    fCombatRound:    integer;
+    fRangeMin:       integer;
+    fCombatId:       integer;
+    fRangeMax:       integer;
+    fCombatActionId: integer;
+
+    procedure Init (RangeMin, RangeMax: integer);
+  end;
+
+procedure TDeterministicPrngState.Init (RangeMin, RangeMax: integer);
 begin
-  if UseNativePrng then begin
-    result := PatchApi.Call(THISCALL_, OrigFunc, [Seed]);
+  Self.fCombatRound    := Crypto.Tm32Encode(CombatRound);
+  Self.fRangeMin       := RangeMin;
+  Self.fCombatId       := Crypto.Tm32Encode(CombatId);
+  Self.fRangeMax       := RangeMax;
+  Self.fCombatActionId := Crypto.Tm32Encode(CombatActionId + 1147022261);
+end;
+
+function GenerateDeterministicBattleRandomValue (MinValue, MaxValue: integer): integer;
+var
+  GeneratorState: TDeterministicPrngState;
+
+begin
+  if MinValue >= MaxValue then begin
+    result := MinValue;
   end else begin
-    RandMt.InitMt(Seed);
-    result := 0;
+    GeneratorState.Init(MinValue, MaxValue);
+    result := MinValue + integer(cardinal(Crypto.FastHash(@GeneratorState, sizeof(GeneratorState))) mod cardinal(MaxValue - MinValue + 1));
   end;
 end;
 
-function Hook_Rand (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
+procedure OnBeforeBattleAction (Event: GameExt.PEvent); stdcall;
 begin
+  Inc(CombatActionId);
+end;
+
+function Hook_SRand (OrigFunc: pointer; Seed: integer): integer; stdcall;
+var
+  CallerAddr: pointer;
+  Message:    string;
+
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov CallerAddr, eax
+  end;
+
+  if DebugRng then begin
+    Message := SysUtils.Format('SRand %d from %.8x', [Seed, integer(CallerAddr)]);
+    Heroes.PrintChatMsg('{~ffffff}' + Message);
+    Writeln(Message);
+    RngId   := 0;
+  end;
+
+  result := PatchApi.Call(THISCALL_, OrigFunc, [Seed]);
+end;
+
+function Hook_Rand (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
+var
+  CallerAddr: pointer;
+  Message:    string;
+
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov CallerAddr, eax
+  end;
+
   if UseNativePrng then begin
-    result := PatchApi.Call(FASTCALL_, OrigFunc, [MinValue, MaxValue]);
+    if UseDeterministicPrng then begin
+      result := GenerateDeterministicBattleRandomValue(MinValue, MaxValue);
+    end else begin
+      result := PatchApi.Call(FASTCALL_, OrigFunc, [MinValue, MaxValue]);
+    end;
   end else begin
     result := RandMt.RandomRangeMt(MinValue, MaxValue);
   end;
+
+  if DebugRng then begin
+    if UseNativePrng and UseDeterministicPrng then begin
+      Message := SysUtils.Format('rand #%d from %.8x, R%d A%d: %d..%d = %d', [RngId, integer(CallerAddr), CombatRound, CombatActionId, MinValue, MaxValue, result]);
+    end else begin
+      Message := SysUtils.Format('rand #%d from %.8x, %d..%d = %d', [RngId, integer(CallerAddr), MinValue, MaxValue, result]);
+    end;
+
+    PrintChatMsg('{~ffffff}' + Message);
+    Writeln(Message);
+    Inc(RngId);
+  end;
+end; // .function Hook_Rand
+
+function GenerateBattleId: integer;
+begin
+  result := RandMt.RandomMt xor Heroes.TimeGetTime;
+end;
+
+function Hook_ZvsAdd2Send (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  BUF_ADDR    = $2846C60;
+  BUF_POS_VAR = -$0C;
+
+type
+  PWoGBattleSyncBuffer = ^TWoGBattleSyncBuffer;
+  TWoGBattleSyncBuffer = array [0..103816 - 1] of byte;
+
+var
+  BufPosPtr: pinteger;
+
+begin
+  BufPosPtr := Ptr(Context.EBP + BUF_POS_VAR);
+
+  // Write chunk size + chunk bytes, adjust buffer position
+  pinteger(BUF_ADDR + BufPosPtr^)^ := sizeof(integer);
+  Inc(BufPosPtr^, sizeof(integer));
+  CombatId                         := GenerateBattleId;
+  pinteger(BUF_ADDR + BufPosPtr^)^ := CombatId;
+  Inc(BufPosPtr^, sizeof(integer));
+
+  result := true;
+end;
+
+function Hook_ZvsGet4Receive (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  BUF_VAR     = +$8;
+  BUF_POS_VAR = -$4;
+
+var
+  BufAddr:   integer;
+  BufPosPtr: pinteger;
+
+begin
+  BufPosPtr := Ptr(Context.EBP + BUF_POS_VAR);
+  BufAddr   := pinteger(Context.EBP + BUF_VAR)^;
+
+  if pinteger(BufAddr + BufPosPtr^)^ <> sizeof(integer) then begin
+    Heroes.ShowMessage('Hook_ZvsGet4Receive: Invalid data received from remote client');
+  end else begin
+    Inc(BufPosPtr^, sizeof(integer));
+    CombatId := pinteger(BufAddr + BufPosPtr^)^;
+    Inc(BufPosPtr^, sizeof(integer));
+  end;
+
+  result := true;
 end;
 
 procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
 begin
-  UseNativePrng := true;
-  CombatRound   := -1000000000;
+  UseNativePrng        := true;
+  UseDeterministicPrng := false;
+  CombatRound          := -1000000000;
+  CombatActionId       := 0;
 end;
 
 procedure OnBattleReplay (Event: GameExt.PEvent); stdcall;
@@ -784,14 +923,17 @@ end;
 
 procedure OnBattlefieldVisible (Event: GameExt.PEvent); stdcall;
 begin
-  if Heroes.IsLocalGame then begin
+  if not Heroes.IsLocalGame and (Erm.ZvsAttackingHeroPtr^ <> nil) and not Erm.ZvsIsAi(Erm.ZvsAttackingHeroPtr^.Owner) and not Erm.ZvsIsAi(ZvsDefendingPlayerId^) then begin
+    UseDeterministicPrng := true;
+  end else begin
     UseNativePrng := false;
   end;
 end;
 
 procedure OnAfterBattleUniversal (Event: GameExt.PEvent); stdcall;
 begin
-  UseNativePrng := false;
+  UseNativePrng        := false;
+  UseDeterministicPrng := false;
 end;
 
 procedure OnSavegameWrite (Event: PEvent); stdcall;
@@ -1402,6 +1544,10 @@ var
   CurrTimerResol: cardinal;
 
 begin
+  if DebugRng then begin
+    ConsoleApi.GetConsole();
+  end;
+
   (* Ini handling *)
   Core.Hook(@Hook_ReadStrIni, Core.HOOKTYPE_JUMP, 5, ZvsReadStrIni);
   Core.Hook(@Hook_WriteStrIni, Core.HOOKTYPE_JUMP, 5, ZvsWriteStrIni);
@@ -1605,12 +1751,12 @@ begin
   Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
 
-  (* Replace Heroes 3 PRNG with thread-safe Mersenne Twister, except of multiplayer battles *)
-  if FALSE then begin
-    // Disabled, because Mersenne Twister is used in VR:T and it should not react on native PRNG state update
-    ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
-  end;
+  (* Send and receive unique identifier for each battle to use in deterministic PRNG in multiplayer *)
+  ApiJack.HookCode(Ptr($763796), @Hook_ZvsAdd2Send);
+  ApiJack.HookCode(Ptr($763BA4), @Hook_ZvsGet4Receive);
 
+  (* Replace Heroes 3 PRNG with thread-safe Mersenne Twister, except of multiplayer battles *)
+  ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_Rand, ApiJack.CONV_FASTCALL, 2);
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
@@ -1640,13 +1786,14 @@ begin
   IsMainThread              := true;
   Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
 
+  EventMan.GetInstance.On('OnAfterBattleUniversal', OnAfterBattleUniversal);
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
-  EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
-  EventMan.GetInstance.On('OnBattleReplay', OnBattleReplay);
-  EventMan.GetInstance.On('OnBeforeBattleReplay', OnBeforeBattleReplay);
   EventMan.GetInstance.On('OnBattlefieldVisible', OnBattlefieldVisible);
-  EventMan.GetInstance.On('OnAfterBattleUniversal', OnAfterBattleUniversal);
+  EventMan.GetInstance.On('OnBattleReplay', OnBattleReplay);
+  EventMan.GetInstance.On('OnBeforeBattleAction', OnBeforeBattleAction);
+  EventMan.GetInstance.On('OnBeforeBattleReplay', OnBeforeBattleReplay);
+  EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 
   if FALSE then begin
