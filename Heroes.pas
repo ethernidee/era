@@ -380,65 +380,6 @@ type
 
   TGlobalEvents = packed record First, Last, Dummy: PGlobalEvent; end;
 
-  PPGameManager = ^PGameManager;
-  PGameManager  = ^TGameManager;
-  TGameManager  = packed record
-    _0:      array [1..129904] of byte;
-    Align_0: integer;                 _Types_:       array [0..2] of integer;                             // +00
-    Align_1: integer;                 _Position_:    array [0..2] of integer;                             // +10
-    Align_2: array [0..3] of integer; // DEFs                                                             // +20
-    Align_3: integer;                 _ArtRes_:      array [0..2] of integer;                             // +30
-    Align_4: integer;                 _Monster_:     array [0..2] of integer;                             // +40
-    Align_5: integer;                 _Event_:       array [0..2] of integer;                             // +50
-    Align_6: array [0..3] of integer;                                                                     // +60
-    Align_7: array [0..3] of integer;                                                                     // +70
-    Align_8: integer;                 GlobalEvents:  TGlobalEvents;                                       // +80
-    Align_9: integer;                 _CastleEvent_: array [0..2] of integer;                             // +90
-    Align_10: array [0..3] of integer;                                                                    // +A0
-    Align_11: array [0..3] of integer;                                                                    // +B0
-    Align_12: array [0..3] of integer;                                                                    // +C0
-    MapTiles:      PMapTiles;
-    MapSize:       integer;
-    IsTwoLevelMap: boolean;
-  end; // .record TGameManager
-
-  PPCombatManager = ^PCombatManager;
-  PCombatManager  = ^TCombatManager;
-  TCombatManager  = packed record
-    Dummy:     array [1..$13D68] of byte;
-    IsTactics: boolean;
-    Align_1:   array [1..3] of byte;
-    Round:     integer;
-    // _byte_ field_0[452]; // + 0 ?
-    // _BattleHex_ hex[187]; // + 0x1c4 187=17*11
-    // _byte_ field_5394[56]; //?
-
-    // _Hero_* hero[2]; // + 21452 // 0 - attacker, 1 - defender
-    // _byte_ field_53D4[212]; // + 21460d
-    // _int32_ owner_id[2]; // + 21672d // 0 - attacker, 1 - defender
-    // _byte_ field_54B0[12];  // + 21680
-    // _int32_ stacks_count[2];//+0x54BC  // 0 - attacker, 1 - defender
-    // _Army_* army[2]; // + 21700 // 0 - attacker, 1 - defender
-    // //_BattleStack_ stack[42]; //+ 21708
-    // _BattleStack_ stack[2][21]; //+ 21708
-
-    // _byte_ field_1329C[28]; // + 0x1329C
-    // _int32_ unk_side; // +78520 0x132B8
-    // _int32_ current_stack_ix; // +78524 0x132BC
-    // _int32_ current_side; // +78528 0x132C0
-
-    // //_byte_ field_132C4[56]; // + 0x132C4
-    // _byte_ field_132C4[36]; // + 0x132C4
-    // _Def_* current_spell_def; // + 0x132E8
-    // _int_  current_spell_id; // + 0x132EC
-    // _dword_ field_132F0; // + 0x132F0
-    // _int32_ town_fort_type; // + 0x132F4
-    // _dword_ field_132F8; // + 0x132F8
-
-    // _Dlg_* dlg;       // + 0x132FC
-    // _byte_ field_13300[3564];
-  end; // .TCombatManager
-
   PScreenPcx16  = ^TScreenPcx16;
   TScreenPcx16  = packed record
     Dummy:  array [0..35] of byte;
@@ -1079,10 +1020,76 @@ type
   PGeneralPurposeTextBuf = ^TGeneralPurposeTextBuf;
   TGeneralPurposeTextBuf = array [0..767] of char;
 
+  PPGameManager = ^PGameManager;
+  PGameManager  = ^TGameManager;
+  TGameManager  = packed record
+    _0:      array [1..129904] of byte;
+    Align_0: integer;                 _Types_:       array [0..2] of integer;                             // +00
+    Align_1: integer;                 _Position_:    array [0..2] of integer;                             // +10
+    Align_2: array [0..3] of integer; // DEFs                                                             // +20
+    Align_3: integer;                 _ArtRes_:      array [0..2] of integer;                             // +30
+    Align_4: integer;                 _Monster_:     array [0..2] of integer;                             // +40
+    Align_5: integer;                 _Event_:       array [0..2] of integer;                             // +50
+    Align_6: array [0..3] of integer;                                                                     // +60
+    Align_7: array [0..3] of integer;                                                                     // +70
+    Align_8: integer;                 GlobalEvents:  TGlobalEvents;                                       // +80
+    Align_9: integer;                 _CastleEvent_: array [0..2] of integer;                             // +90
+    Align_10: array [0..3] of integer;                                                                    // +A0
+    Align_11: array [0..3] of integer;                                                                    // +B0
+    Align_12: array [0..3] of integer;                                                                    // +C0
+    MapTiles:      PMapTiles;
+    MapSize:       integer;
+    IsTwoLevelMap: boolean;
+  end; // .record TGameManager
+
+  PPCombatManager = ^PCombatManager;
+  PCombatManager  = ^TCombatManager;
+  TCombatManager  = packed record
+    Unk1:      array [0..$3C - 1] of byte;
+    Action:    integer; // +0x3C
+    Spell:     integer; // +0x40
+    TargetPos: integer; // +0x44
+    Unk2:      array [$48..$53CC - 1] of byte;
+    Heroes:    array [0..1] of PHero; // +0x53CC
+    Unk3:      array [$53CC + 4 * 2..$13D68 - 1] of byte;
+    IsTactics: boolean; // 0x13D68
+    Align1:    array [1..3] of byte;
+    Round:     integer;
+    // _byte_ field_0[452]; // + 0 ?
+    // _BattleHex_ hex[187]; // + 0x1c4 187=17*11
+    // _byte_ field_5394[56]; //?
+
+    // _Hero_* hero[2]; // + 21452 // 0 - attacker, 1 - defender
+    // _byte_ field_53D4[212]; // + 21460d
+    // _int32_ owner_id[2]; // + 21672d // 0 - attacker, 1 - defender
+    // _byte_ field_54B0[12];  // + 21680
+    // _int32_ stacks_count[2];//+0x54BC  // 0 - attacker, 1 - defender
+    // _Army_* army[2]; // + 21700 // 0 - attacker, 1 - defender
+    // //_BattleStack_ stack[42]; //+ 21708
+    // _BattleStack_ stack[2][21]; //+ 21708
+
+    // _byte_ field_1329C[28]; // + 0x1329C
+    // _int32_ unk_side; // +78520 0x132B8
+    // _int32_ current_stack_ix; // +78524 0x132BC
+    // _int32_ current_side; // +78528 0x132C0
+
+    // //_byte_ field_132C4[56]; // + 0x132C4
+    // _byte_ field_132C4[36]; // + 0x132C4
+    // _Def_* current_spell_def; // + 0x132E8
+    // _int_  current_spell_id; // + 0x132EC
+    // _dword_ field_132F0; // + 0x132F0
+    // _int32_ town_fort_type; // + 0x132F4
+    // _dword_ field_132F8; // + 0x132F8
+
+    // _Dlg_* dlg;       // + 0x132FC
+    // _byte_ field_13300[3564];
+  end; // .TCombatManager
+
 const
-  MAlloc:    TMAlloc = Ptr($617492);
-  MFree:     TMFree  = Ptr($60B0F0);
-  ZvsRandom: function (MinValue, MaxValue: integer): integer cdecl = Ptr($710509);
+  MAlloc:      TMAlloc = Ptr($617492);
+  MFree:       TMFree  = Ptr($60B0F0);
+  ZvsRandom:   function (MinValue, MaxValue: integer): integer cdecl = Ptr($710509);
+  TimeGetTime: function: integer = Ptr($77114A);
 
   AdvManagerPtr:    PPAdvManager    = Ptr($6992D0);
   WndManagerPtr:    ^PWndManager    = Ptr($6992D0); // CHECKME!
