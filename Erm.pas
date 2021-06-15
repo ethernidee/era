@@ -606,6 +606,9 @@ const
   ZvsChestsEnabled:           ^TZvsCheckEnabled      = Ptr($27F99B0);
   ZvsGmAiFlags:               pinteger               = Ptr($793C80);
   ZvsCurrHeroPtr:             ^Heroes.PHero          = Ptr($27F9970);
+  ZvsDefendingHeroPtr:        ^Heroes.PHero          = Ptr($2860244);
+  ZvsDefendingPlayerId:       pinteger               = Ptr($2846BC0);
+  ZvsAttackingHeroPtr:        ^Heroes.PHero          = Ptr($2860248);
   ZvsAllowDefMouseReaction:   plongbool              = Ptr($A4AAFC);
   ZvsMouseEventInfo:          Heroes.PMouseEventInfo = Ptr($8912A8);
   ZvsEventX:                  pinteger               = Ptr($27F9964);
