@@ -6182,6 +6182,7 @@ var
   NumParams: integer;
   Hero:      Heroes.PHero;
   SubCmd:    PErmSubCmd;
+  IsGetOnly: boolean;
   x:         integer;
   y:         integer;
   z:         integer;
@@ -6197,11 +6198,9 @@ begin
   y := Hero.y;
   z := Hero.l;
 
-  ZvsApply(@x, sizeof(x), SubCmd, 0);
-  ZvsApply(@y, sizeof(y), SubCmd, 1);
-  ZvsApply(@z, sizeof(z), SubCmd, 2);
+  IsGetOnly := (ZvsApply(@x, sizeof(x), SubCmd, 0) and ZvsApply(@y, sizeof(y), SubCmd, 1) and ZvsApply(@z, sizeof(z), SubCmd, 2)) <> 0;
 
-  if (x <> Hero.x) or (y <> Hero.y) or (z <> Hero.l) then begin
+  if not IsGetOnly then begin
     // Flag 4 is set and hero belongs to current player - do teleport with sound and redraw
     // If Flag 4 is not specified, for compatibility reasons apply smart auto behavior
     if (Heroes.CurrentPlayerId^ = Hero.Owner) and ((NumParams <= 3) or ((NumParams > 3) and (SubCmd.Nums[3] <> 0))) then begin
