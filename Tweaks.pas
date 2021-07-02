@@ -48,6 +48,8 @@ const
   ZvsWriteStrIni = Ptr($773B34);
   // f (Value, Key, SectionName, FileName: pchar): integer; cdecl;
   ZvsWriteIntIni = Ptr($773ACB);
+  // f ()
+  ZvsNoMoreTactic1 = Ptr($75D1FF);
 
   ZvsAppliedDamage: pinteger = Ptr($2811888);
   CurrentMp3Track:  pchar = pointer($6A33F4);
@@ -172,13 +174,13 @@ begin
   end;
 end;
 
-function Hook_ZvsGetWindowWidth (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ZvsGetWindowWidth (Context: Core.PHookContext): longbool; stdcall;
 begin
   Context.ECX :=  WndManagerPtr^.ScreenPcx16.Width;
   result      :=  not Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ZvsGetWindowHeight (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ZvsGetWindowHeight (Context: Core.PHookContext): longbool; stdcall;
 begin
   Context.EDX :=  WndManagerPtr^.ScreenPcx16.Height;
   result      :=  not Core.EXEC_DEF_CODE;
@@ -222,7 +224,7 @@ begin
   SysUtils.FreeAndNil(Locator);
 end; // .procedure MarkFreshestSavegame
 
-function Hook_SetHotseatHeroName (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_SetHotseatHeroName (Context: Core.PHookContext): longbool; stdcall;
 var
   PlayerName:     string;
   NewPlayerName:  string;
@@ -254,7 +256,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SetHotseatHeroName
 
-function Hook_PeekMessageA (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_PeekMessageA (Context: Core.PHookContext): longbool; stdcall;
 begin
   Inc(CpuPatchCounter, CpuTargetLevel);
 
@@ -524,63 +526,63 @@ begin
   {!} Windows.LeaveCriticalSection(InetCriticalSection);
 end; // .function Hook_GetHostByName
 
-function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): longbool; stdcall;
 begin
   Context.EBX := ZvsAppliedDamage^;
   result      := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Esi (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Esi (Context: Core.PHookContext): longbool; stdcall;
 begin
   Context.ESI := ZvsAppliedDamage^;
   result      := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookContext): longbool; stdcall;
 begin
   Context.ESI                 := ZvsAppliedDamage^;
   pinteger(Context.EBP + $8)^ := ZvsAppliedDamage^;
   result                      := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Arg1 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Arg1 (Context: Core.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookContext): longbool; stdcall;
 begin
   Context.EBX                    := ZvsAppliedDamage^;
   pinteger(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Local7 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Local7 (Context: Core.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Local4 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Local4 (Context: Core.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Local8 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Local8 (Context: Core.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Local13 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ApplyDamage_Local13 (Context: Core.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
   result                          := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_GetWoGAndErmVersions (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_GetWoGAndErmVersions (Context: Core.PHookContext): longbool; stdcall;
 const
   NEW_WOG_VERSION = 400;
 
@@ -590,7 +592,7 @@ begin
   result                       := not Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): longbool; stdcall;
 const
   MIN_NUM_TOKENS = 2;
   TOKEN_LODNAME  = 0;
@@ -621,7 +623,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsLib_ExtractDef
 
-function Hook_ZvsLib_ExtractDef_GetGamePath (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ZvsLib_ExtractDef_GetGamePath (Context: Core.PHookContext): longbool; stdcall;
 const
   EBP_LOCAL_GAME_PATH = 16;
 
@@ -657,7 +659,7 @@ begin
   end;
 end; // .procedure OnRemoteMapObjectPlace
 
-function Hook_ZvsEnter2Monster (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ZvsEnter2Monster (Context: Core.PHookContext): longbool; stdcall;
 const
   ARG_MAP_ITEM  = 8;
   ARG_MIXED_POS = 16;
@@ -677,7 +679,7 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsEnter2Monster
 
-function Hook_ZvsEnter2Monster2 (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_ZvsEnter2Monster2 (Context: Core.PHookContext): longbool; stdcall;
 const
   ARG_MAP_ITEM  = 8;
   ARG_MIXED_POS = 16;
@@ -697,7 +699,7 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsEnter2Monster2
 
-function Hook_OnBeforeBattlefieldVisible (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_OnBeforeBattlefieldVisible (Context: Core.PHookContext): longbool; stdcall;
 begin
   HadTacticsPhase := false;
   CombatRound     := -1000000000;
@@ -705,7 +707,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OnBattlefieldVisible (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_OnBattlefieldVisible (Context: Core.PHookContext): longbool; stdcall;
 begin
   HadTacticsPhase := Heroes.CombatManagerPtr^.IsTactics;
 
@@ -722,7 +724,7 @@ begin
   result := true;
 end; // .function Hook_OnBattlefieldVisible
 
-function Hook_OnAfterTacticsPhase (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_OnAfterTacticsPhase (Context: Core.PHookContext): longbool; stdcall;
 begin
   Erm.FireErmEvent(Erm.TRIGGER_AFTER_TACTICS_PHASE);
 
@@ -735,7 +737,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OnCombatRound_Start (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_OnCombatRound_Start (Context: Core.PHookContext): longbool; stdcall;
 begin
   if pinteger($79F0B8)^ <> Heroes.CombatManagerPtr^.Round then begin
     Inc(CombatRound);
@@ -744,7 +746,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OnCombatRound_End (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_OnCombatRound_End (Context: Core.PHookContext): longbool; stdcall;
 begin
   Erm.v[997] := CombatRound;
   Erm.FireErmEvent(Erm.TRIGGER_BR);
@@ -1676,6 +1678,8 @@ begin
   Core.ApiHook(@Hook_OnBeforeBattlefieldVisible, Core.HOOKTYPE_BRIDGE, Ptr($75EAEA));
   Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($462E2B));
   Core.ApiHook(@Hook_OnAfterTacticsPhase,        Core.HOOKTYPE_BRIDGE, Ptr($75D137));
+  // Call ZvsNoMoreTactic1 in network game for the opposite side
+  Core.ApiHook(ZvsNoMoreTactic1,                 Core.HOOKTYPE_CALL,   Ptr($473E89));
   Core.ApiHook(@Hook_OnCombatRound_Start,        Core.HOOKTYPE_BRIDGE, Ptr($76065B));
   Core.ApiHook(@Hook_OnCombatRound_End,          Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
 
