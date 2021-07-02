@@ -693,6 +693,7 @@ const
 
 
 var
+{O} UniqueRng:       RandMt.TRngMt;
 {O} LoadedErsFiles:  {O} TList {of Heroes.TTextTable};
 {O} ErtStrings:      {O} AssocArrays.TObjArray {of Index => pchar}; // use H3 Alloc/Free
 {O} ScriptMan:       TScriptMan;
@@ -7477,11 +7478,11 @@ begin
 
     'T': begin
       if NumParams >= 3 then begin
-        result := ord(SetErmParamValue(VarParam, RandMt.RandomRangeMt(SubCmd.Nums[1], SubCmd.Nums[2])));
+        result := ord(SetErmParamValue(VarParam, UniqueRng.Random(SubCmd.Nums[1], SubCmd.Nums[2])));
       end else if NumParams >= 2 then begin
-        RandMt.InitMt(SubCmd.Nums[1]);
+        UniqueRng.Init(SubCmd.Nums[1]);
       end else begin
-        result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + RandMt.RandomRangeMt(0, SubCmd.Nums[0])));
+        result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + UniqueRng.Random(0, SubCmd.Nums[0])));
       end;
     end;
   else
@@ -8668,6 +8669,7 @@ begin
 end; // .procedure OnAfterStructRelocations
 
 begin
+  UniqueRng       := RandMt.TRngMt.Create;
   LoadedErsFiles  := DataLib.NewList(Utils.OWNS_ITEMS);
   ErtStrings      := AssocArrays.NewObjArr(not Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
   ScriptMan       := TScriptMan.Create;

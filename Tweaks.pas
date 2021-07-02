@@ -814,6 +814,7 @@ begin
   end;
 
   result := PatchApi.Call(THISCALL_, OrigFunc, [Seed]);
+  RandMt.GlobalRng.Init(Seed);
 end;
 
 function Hook_Rand (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
@@ -834,7 +835,7 @@ begin
       result := PatchApi.Call(FASTCALL_, OrigFunc, [MinValue, MaxValue]);
     end;
   end else begin
-    result := RandMt.RandomRangeMt(MinValue, MaxValue);
+    result := RandMt.GlobalRng.Random(MinValue, MaxValue);
   end;
 
   if DebugRng then begin
@@ -852,7 +853,7 @@ end; // .function Hook_Rand
 
 function GenerateBattleId: integer;
 begin
-  result := RandMt.RandomMt xor Heroes.TimeGetTime;
+  result := Erm.UniqueRng.Random xor Heroes.TimeGetTime;
 end;
 
 function Hook_ZvsAdd2Send (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -943,14 +944,12 @@ var
   RngState: RandMt.TRngState;
 
 begin
-  RngState := RandMt.GetState;
+  RngState := RandMt.GlobalRng.GetState;
 
   with Stores.NewRider(RNG_SAVE_SECTION) do begin
-    WriteInt(Length(RngState));
-    Write(Length(RngState), @RngState[0]);
+    WriteInt(sizeof(RngState));
+    Write(sizeof(RngState), @RngState);
   end;
-
-  RandMt.SetState(RngState);
 end;
 
 procedure OnSavegameRead (Event: PEvent); stdcall;
@@ -959,11 +958,9 @@ var
 
 begin
   with Stores.NewRider(RNG_SAVE_SECTION) do begin
-    SetLength(RngState, ReadInt);
-
-    if RngState <> nil then begin
-      Read(Length(RngState), @RngState[0]);
-      RandMt.SetState(RngState);
+    if ReadInt = sizeof(RngState) then begin
+      Read(sizeof(RngState), @RngState);
+      RandMt.GlobalRng.SetState(RngState);
     end;
   end;
 end;
