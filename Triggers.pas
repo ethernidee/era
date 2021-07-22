@@ -498,6 +498,12 @@ begin
   result := not DisableRegen;
 end;
 
+function Hook_BattleActionEnd (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  Erm.FireErmEvent(Erm.TRIGGER_BATTLE_ACTION_END);
+  result := true;
+end;
+
 function Hook_BuildTownBuilding (OrigFunc: pointer; Town: Heroes.PTown; BuildingId, Unk1, Unk2: integer): integer; stdcall;
 const
   PARAM_TOWN_ID     = 1;
@@ -748,6 +754,9 @@ begin
   (* OnBattleRegeneratePhase event *)
   ApiJack.HookCode(Ptr($446B50), @Hook_BattleRegeneratePhase);
   ApiJack.HookCode(Ptr($446BD6), @Hook_BattleDoRegenerate);
+
+  (* OnBattleActionEnd event *)
+  ApiJack.HookCode(Ptr($479508), @Hook_BattleActionEnd);
 
   (* OnBuildTownBuilding event *)
   ApiJack.StdSplice(Ptr($5BF1E0), @Hook_BuildTownBuilding, ApiJack.CONV_THISCALL, 4);
