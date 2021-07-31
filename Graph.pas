@@ -1413,8 +1413,19 @@ procedure Hook_DrawInterfaceDefGroupFrameWithOptHalfTransp (
   DoMirror, UsePaletteSpecialColors: boolean
 ); stdcall;
 
+var
+  CurrentDlg: Heroes.PDlg;
+
 begin
-  if not DrawDefPngFrame(Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, DoMirror, not DO_VERT_MIRROR) then begin
+  CurrentDlg := Heroes.AdvManagerPtr^.CurrentDlg;
+
+  if
+    (CurrentDlg = nil) or
+
+    not DrawDefPngFrame(
+      Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX + CurrentDlg.PosX, DstY + CurrentDlg.PosY, DstW, DstH, ScanlineSize, DoMirror, not DO_VERT_MIRROR
+    )
+  then begin
     PatchApi.Call(THISCALL_, OrigFunc, [
       Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror), ord(UsePaletteSpecialColors)
     ]);
