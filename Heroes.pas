@@ -332,8 +332,8 @@ type
     LastDlg:          PDlg;
     Flags:            integer;
     State:            integer;
-    PoxX:             integer;
-    PoxY:             integer;
+    PosX:             integer;
+    PosY:             integer;
     Width:            integer;
     Height:           integer;
     LastDlgItem:      pointer;
