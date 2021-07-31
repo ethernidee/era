@@ -1404,6 +1404,23 @@ begin
   end;
 end;
 
+procedure Hook_DrawInterfaceDefGroupFrameWithOptHalfTransp (
+  OrigFunc: pointer;
+  Def: Heroes.PDefItem;
+  GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer;
+  Buf: pointer;
+  DstX, DstY, DstW, DstH, ScanlineSize: integer;
+  DoMirror, UsePaletteSpecialColors: boolean
+); stdcall;
+
+begin
+  if not DrawDefPngFrame(Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, DoMirror, not DO_VERT_MIRROR) then begin
+    PatchApi.Call(THISCALL_, OrigFunc, [
+      Def, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror), ord(UsePaletteSpecialColors)
+    ]);
+  end;
+end;
+
 procedure Hook_DrawFlagObjectDefFrame (
   OrigFunc: pointer;
   Def: Heroes.PDefItem;
@@ -1720,6 +1737,7 @@ begin
   ApiJack.StdSplice(Ptr($47B820), @Hook_DrawInterfaceDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($47B7D0), @Hook_DrawInterfaceDefButtonFrame, ApiJack.CONV_THISCALL, 9);
   ApiJack.StdSplice(Ptr($47B610), @Hook_DrawInterfaceDefGroupFrame, ApiJack.CONV_THISCALL, 15);
+  ApiJack.StdSplice(Ptr($47BA90), @Hook_DrawInterfaceDefGroupFrameWithOptHalfTransp, ApiJack.CONV_THISCALL, 15);
   ApiJack.StdSplice(Ptr($47B730), @Hook_DrawFlagObjectDefFrame, ApiJack.CONV_THISCALL, 14);
   ApiJack.StdSplice(Ptr($47B6E0), @Hook_DrawNotFlagObjectDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($47B870), @Hook_DrawDefFrameType0Or2, ApiJack.CONV_THISCALL, 14);
