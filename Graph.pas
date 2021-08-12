@@ -871,7 +871,7 @@ begin
   Files.WriteFileContents(RawImageToString(RawImage), FilePath);
 end;
 
-function GetPcxPng (const PcxName: string): {On} ResLib.TSharedResource; forward;
+function GetPcxPng (PcxName: string): {On} ResLib.TSharedResource; forward;
 
 (* Should be moved to virtual storage unit *)
 function ReadVirtualFile (const FilePath: string; {out} var FileContents: string): boolean;
@@ -1089,7 +1089,7 @@ var
 
 begin
   result     := nil;
-  DefRelPath := StrLib.Concat([Def.GetName, '\', SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
+  DefRelPath := StrLib.Concat([Lodman.GetRedirectedName(Def.GetName), '\', SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
 
   if DefFramesPngFileMap[DefRelPath] <> nil then begin
     result := LoadPngResource(DefFramePngFilePathPrefix + DefRelPath);
@@ -1122,7 +1122,7 @@ begin
   end;
 end;
 
-function GetPcxPng (const PcxName: string): {On} ResLib.TSharedResource; overload;
+function GetPcxPng (PcxName: string): {On} ResLib.TSharedResource; overload;
 var
      PcxAltName:             string;
 {Un} PngFilePath:            TString;
@@ -1138,6 +1138,7 @@ begin
   PngFilePath            := nil;
   UsePaletteColorization := false;
 
+  PcxName     := Lodman.GetRedirectedName(PcxName);
   PlayerColor := integer(ColorizedPcxPng[PcxName]) - 1;
 
   // Suppoprt for alternative images for each player color
