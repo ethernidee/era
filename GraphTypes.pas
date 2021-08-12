@@ -684,11 +684,11 @@ end; // .procedure TRawImage16.ReplaceColors
 procedure TRawImage16.DrawToOpaque16Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor16Arr; DstScanlineSize: integer;
                                          const DrawImageSetup: TDrawImageSetup);
 var
-  SrcScanlineSize: integer;
-  MinScanlineSize: integer;
-  SrcScanline:     PColor16;
-  DstScanline:     PColor16;
-  i:               integer;
+  SrcScanlineSize:  integer;
+  DrawLineByteSize: integer;
+  SrcScanline:      PColor16;
+  DstScanline:      PColor16;
+  i:                integer;
 
   DstPixelStep: integer;
   SrcPixel:     PColor16;
@@ -701,13 +701,13 @@ begin
   then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
-      SrcScanlineSize := Self.fScanlineSize;
-      MinScanlineSize := Math.Min(SrcScanlineSize, DstScanlineSize);
-      SrcScanline     := Ptr(integer(@Self.fPixels[0]) + SrcY * Self.fScanlineSize + SrcX * sizeof(Self.fPixels[0]));
-      DstScanline     := Ptr(integer(DstBuf) + DstY * DstScanlineSize + DstX * sizeof(DstBuf[0]));
+      SrcScanlineSize  := Self.fScanlineSize;
+      DrawLineByteSize := BoxWidth * sizeof(DstBuf[0]);
+      SrcScanline      := Ptr(integer(@Self.fPixels[0]) + SrcY * Self.fScanlineSize + SrcX * sizeof(Self.fPixels[0]));
+      DstScanline      := Ptr(integer(DstBuf) + DstY * DstScanlineSize + DstX * sizeof(DstBuf[0]));
 
       for i := 0 to BoxHeight - 1 do begin
-        System.Move(SrcScanline^, DstScanline^, MinScanlineSize);
+        System.Move(SrcScanline^, DstScanline^, DrawLineByteSize);
         Inc(integer(SrcScanline), SrcScanlineSize);
         Inc(integer(DstScanline), DstScanlineSize);
       end;
@@ -968,11 +968,11 @@ end; // .procedure TRawImage32.DrawToOpaque16Buf
 procedure TRawImage32.DrawToOpaque32Buf (SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, DstWidth, DstHeight: integer; DstBuf: PColor32Arr; DstScanlineSize: integer;
                                          const DrawImageSetup: TDrawImageSetup);
 var
-  SrcScanlineSize: integer;
-  MinScanlineSize: integer;
-  SrcScanline:     PColor32;
-  DstScanline:     PColor32;
-  i:               integer;
+  SrcScanlineSize:  integer;
+  DrawLineByteSize: integer;
+  SrcScanline:      PColor32;
+  DstScanline:      PColor32;
+  i:                integer;
 
   DstPixelStep: integer;
   SrcPixel:     PColor32;
@@ -987,13 +987,13 @@ begin
   then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
-      SrcScanlineSize := Self.fScanlineSize;
-      MinScanlineSize := Math.Min(SrcScanlineSize, DstScanlineSize);
-      SrcScanline     := Ptr(integer(@Self.fPixels[0]) + SrcY * Self.fScanlineSize + SrcX * sizeof(Self.fPixels[0]));
-      DstScanline     := Ptr(integer(DstBuf) + DstY * DstScanlineSize + DstX * sizeof(DstBuf[0]));
+      SrcScanlineSize  := Self.fScanlineSize;
+      DrawLineByteSize := BoxWidth * sizeof(DstBuf[0]);
+      SrcScanline      := Ptr(integer(@Self.fPixels[0]) + SrcY * Self.fScanlineSize + SrcX * sizeof(Self.fPixels[0]));
+      DstScanline      := Ptr(integer(DstBuf) + DstY * DstScanlineSize + DstX * sizeof(DstBuf[0]));
 
       for i := 0 to BoxHeight - 1 do begin
-        System.Move(SrcScanline^, DstScanline^, MinScanlineSize);
+        System.Move(SrcScanline^, DstScanline^, DrawLineByteSize);
         Inc(integer(SrcScanline), SrcScanlineSize);
         Inc(integer(DstScanline), DstScanlineSize);
       end;
