@@ -207,7 +207,8 @@ var
 
 begin
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
-    RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight)
+    RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Types.Bounds(0, 0, Self.fWidth, Self.fHeight), Types.Bounds(0, 0, DstWidth, DstHeight),
+                  DrawImageSetup.DoHorizMirror and DrawImageSetup.EnableFilters, DrawImageSetup.DoVertMirror and DrawImageSetup.EnableFilters)
   then begin
     if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
       Self.fPcxItem.DrawToBuf(SrcX, SrcY, BoxWidth, BoxHeight, DstBuf, DstX, DstY, DstWidth, DstHeight, DstScanlineSize, 0);
@@ -258,7 +259,8 @@ var
 
 begin
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
-    RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight)
+    RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Types.Bounds(0, 0, Self.fWidth, Self.fHeight), Types.Bounds(0, 0, DstWidth, DstHeight),
+                  DrawImageSetup.DoHorizMirror and DrawImageSetup.EnableFilters, DrawImageSetup.DoVertMirror and DrawImageSetup.EnableFilters)
   then begin
     if Heroes.BytesPerPixelPtr^ = sizeof(GraphTypes.TColor32) then begin
       Self.fPcxItem.DrawToBuf(SrcX, SrcY, BoxWidth, BoxHeight, DstBuf, DstX, DstY, DstWidth, DstHeight, DstScanlineSize, 0);
@@ -1237,7 +1239,8 @@ begin
     Inc(SrcY, FrameCroppingRect.Top);
   end;
 
-  if not GraphTypes.RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, GraphTypes.MAX_IMAGE_WIDTH, GraphTypes.MAX_IMAGE_HEIGHT, DstWidth, DstHeight) then begin
+  if not GraphTypes.RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Types.Bounds(0, 0, GraphTypes.MAX_IMAGE_WIDTH, GraphTypes.MAX_IMAGE_HEIGHT),
+                                  Types.Bounds(0, 0, DstWidth, DstHeight), DDF_MIRROR in DrawFlags, not DO_VERT_MIRROR) then begin
     exit;
   end;
 
