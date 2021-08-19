@@ -265,12 +265,12 @@ type
   function GetRectHeight (const Rect: TRect): integer;
 
   (* Returns true if there is intersected area to copy pixels from/to. Updates input parameters with new fixed values *)
-  function RefineDrawBox (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer): boolean;
+  function RefineDrawBox (var SrcX, SrcY, DstX, DstY, DrawBoxWidth, DrawBoxHeight: integer; const SrcBox, DstBox: TRect; DoHorizMirror, DoVertMirror: boolean): boolean;
 
   (* Returns true if there is intersected area to copy pixels from/to. Updates input parameters with new fixed values. All src coordinates and dimensions are virtual
      and correspond to source image before cropping. They will be adjusted to real coordinates *)
   function RefineDrawBoxWithSourceCropping (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer;
-                                            const SourceCroppingRect: TRect): boolean;
+                                            const SourceCroppingRect: TRect; DoHorizMirror, DoVertMirror: boolean): boolean;
 
 
 var
@@ -451,58 +451,74 @@ begin
   result := Rect.Bottom - Rect.Top;
 end;
 
-function RefineDrawBox (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer): boolean;
+function RefineDrawBox (var SrcX, SrcY, DstX, DstY, DrawBoxWidth, DrawBoxHeight: integer; const SrcBox, DstBox: TRect; DoHorizMirror, DoVertMirror: boolean): boolean;
 var
-  SrcBox: TRect;
-  DstBox: TRect;
+  SrcDstOffsetX:             integer;
+  SrcDstOffsetY:             integer;
+  SrcDrawBox:                TRect;
+  DstDrawBox:                TRect;
+  MovedSrcBox:               TRect;
+  CorrectedDstDrawBox:       TRect;
+  CorrectedDstDrawBoxOffset: integer;
 
 begin
-  result := (BoxWidth > 0) and (BoxHeight > 0) and (SrcWidth > 0) and (SrcHeight > 0) and (DstWidth > 0) and (DstHeight > 0);
+  SrcDstOffsetX := 0;
+  SrcDstOffsetY := 0;
+  result        := (DrawBoxWidth > 0) and (DrawBoxHeight > 0) and not Types.IsRectEmpty(SrcBox) and not Types.IsRectEmpty(DstBox);
 
   if result then begin
-    // Get source and destination boxes with pixels to read/write
-    result := Types.IntersectRect(SrcBox, Types.Rect(0, 0, SrcWidth, SrcHeight), Types.Rect(SrcX, SrcY, SrcX + BoxWidth, SrcY + BoxHeight)) and
-              Types.IntersectRect(DstBox, Types.Rect(0, 0, DstWidth, DstHeight), Types.Rect(DstX, DstY, DstX + BoxWidth, DstY + BoxHeight));
+    SrcDstOffsetX := DstX - SrcX;
+    SrcDstOffsetY := DstY - SrcY;
+    DstDrawBox    := Types.Rect(DstX, DstY, DstX + DrawBoxWidth, DstY + DrawBoxHeight);
+
+    // Move SrcBox to DstBox so, that top-left draw box border became the same
+    MovedSrcBox := SrcBox;
+    Types.OffsetRect(MovedSrcBox, SrcDstOffsetX, SrcDstOffsetY);
+
+    // Intersect DstDrawBox, DstBox and moved SrcBox as CorrectedDstDrawBox
+    // We get box with pixels to copy, unless mirroring is necessary
+    result := Types.IntersectRect(CorrectedDstDrawBox, DstBox, DstDrawBox) and Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, MovedSrcBox);
   end;
 
   if result then begin
-    // Move source box to destination box and determine intersection. If it exists, then we have pixels to draw for sure
-    Types.OffsetRect(SrcBox, DstX - SrcX, DstY - SrcY);
-    result := Types.IntersectRect(DstBox, DstBox, SrcBox);
+    // Perform horizontal mirroring
+    if DoHorizMirror then begin
+      CorrectedDstDrawBoxOffset := (CorrectedDstDrawBox.Right - DstDrawBox.Right) + (CorrectedDstDrawBox.Left - DstDrawBox.Left);
+      Types.OffsetRect(CorrectedDstDrawBox, -CorrectedDstDrawBoxOffset, 0);
+      result := Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, DstDrawBox) and Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, MovedSrcBox);
+    end;
   end;
 
   if result then begin
-    // Source box is DstBox with origin moved back
-    SrcBox := DstBox;
-    Types.OffsetRect(SrcBox, SrcX - DstX, SrcY - DstY);
+    // Perform vertical mirroring
+    if DoVertMirror then begin
+      CorrectedDstDrawBoxOffset := (CorrectedDstDrawBox.Bottom - DstDrawBox.Bottom) + (CorrectedDstDrawBox.Top - DstDrawBox.Top);
+      Types.OffsetRect(CorrectedDstDrawBox, 0, -CorrectedDstDrawBoxOffset);
+      result := Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, DstDrawBox) and Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, MovedSrcBox);
+    end;
+  end;
+
+  if result then begin
+    // SrcDrawBox is CorrectedDstDrawBox substracting SrcDstOffset
+    SrcDrawBox := CorrectedDstDrawBox;
+    Types.OffsetRect(SrcDrawBox, -SrcDstOffsetX, -SrcDstOffsetY);
 
     // Update all out parameters
-    SrcX      := SrcBox.Left;
-    SrcY      := SrcBox.Top;
-    BoxWidth  := SrcBox.Right  - SrcBox.Left;
-    BoxHeight := SrcBox.Bottom - SrcBox.Top;
-    DstX      := DstBox.Left;
-    DstY      := DstBox.Top;
+    SrcX          := SrcDrawBox.Left;
+    SrcY          := SrcDrawBox.Top;
+    DrawBoxWidth  := SrcDrawBox.Right  - SrcDrawBox.Left;
+    DrawBoxHeight := SrcDrawBox.Bottom - SrcDrawBox.Top;
+    DstX          := CorrectedDstDrawBox.Left;
+    DstY          := CorrectedDstDrawBox.Top;
   end;
 end; // .function RefineDrawBox
 
 function RefineDrawBoxWithSourceCropping (var SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight: integer; SrcWidth, SrcHeight, DstWidth, DstHeight: integer;
-                                          const SourceCroppingRect: TRect): boolean;
-var
-  SrcBox: TRect;
-
+                                          const SourceCroppingRect: TRect; DoHorizMirror, DoVertMirror: boolean): boolean;
 begin
-  result := Types.IntersectRect(SrcBox, Types.Rect(SrcX, SrcY, SrcX + BoxWidth, SrcY + BoxHeight), SourceCroppingRect);
-
-  if result then begin
-    BoxWidth  := SrcBox.Right  - SrcBox.Left;
-    BoxHeight := SrcBox.Bottom - SrcBox.Top;
-    Inc(DstX, SrcBox.Left - SrcX);
-    Inc(DstY, SrcBox.Top  - SrcY);
-    SrcX      := SrcBox.Left;
-    SrcY      := SrcBox.Top;
-    result    := RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, SrcBox.Right, SrcBox.Bottom, DstWidth, DstHeight);
-  end;
+  result := not Types.IsRectEmpty(SourceCroppingRect) and (SourceCroppingRect.Left >= 0) and (SourceCroppingRect.Right  <= SrcWidth)  and
+                                                          (SourceCroppingRect.Top >= 0)  and (SourceCroppingRect.Bottom <= SrcHeight) and
+            RefineDrawBox(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, SourceCroppingRect, Types.Rect(0, 0, DstWidth, DstHeight), DoHorizMirror, DoVertMirror);
 
   if result then begin
     Dec(SrcX, SourceCroppingRect.Left);
@@ -697,7 +713,8 @@ var
 
 begin
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
-     RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+     RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect,
+                                     DrawImageSetup.DoHorizMirror and DrawImageSetup.EnableFilters, DrawImageSetup.DoVertMirror and DrawImageSetup.EnableFilters)
   then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
@@ -760,7 +777,8 @@ var
 
 begin
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
-    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect,
+                                     DrawImageSetup.DoHorizMirror and DrawImageSetup.EnableFilters, DrawImageSetup.DoVertMirror and DrawImageSetup.EnableFilters)
   then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
@@ -908,7 +926,8 @@ begin
   {!} Assert(not Self.HasTransparency, 'TRawImage32.DrawToOpaque16Buf does not support alpha channel yet. Use TPremultipliedRawImage32');
 
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
-    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect,
+                                     DrawImageSetup.DoHorizMirror and DrawImageSetup.EnableFilters, DrawImageSetup.DoVertMirror and DrawImageSetup.EnableFilters)
   then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
@@ -983,7 +1002,8 @@ begin
   {!} Assert(not Self.HasTransparency, 'TRawImage32.DrawToOpaque32Buf does not support alpha channel yet. Use TPremultipliedRawImage32');
 
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
-    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect,
+                                     DrawImageSetup.DoHorizMirror and DrawImageSetup.EnableFilters, DrawImageSetup.DoVertMirror and DrawImageSetup.EnableFilters)
   then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
@@ -1278,7 +1298,8 @@ var
 
 begin
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
-    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect,
+                                     DrawImageSetup.DoHorizMirror and DrawImageSetup.EnableFilters, DrawImageSetup.DoVertMirror and DrawImageSetup.EnableFilters)
   then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
@@ -1349,7 +1370,8 @@ var
 
 begin
   if (DstBuf <> nil) and (DstScanlineSize > 0) and
-    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect)
+    RefineDrawBoxWithSourceCropping(SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Self.fWidth, Self.fHeight, DstWidth, DstHeight, Self.fCroppingRect,
+                                     DrawImageSetup.DoHorizMirror and DrawImageSetup.EnableFilters, DrawImageSetup.DoVertMirror and DrawImageSetup.EnableFilters)
   then begin
     // Fast default drawing without filters
     if not DrawImageSetup.EnableFilters then begin
