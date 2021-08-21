@@ -451,15 +451,32 @@ begin
   result := Rect.Bottom - Rect.Top;
 end;
 
+procedure MirrorBoxHorizontally (var Box: TRect; const EnvironmentBox: TRect);
+var
+  HorizShift: integer;
+
+begin
+  HorizShift := (Box.Right - EnvironmentBox.Right) + (Box.Left - EnvironmentBox.Left);
+  Types.OffsetRect(Box, -HorizShift, 0);
+end;
+
+procedure MirrorBoxVertically (var Box: TRect; const EnvironmentBox: TRect);
+var
+  VertShift: integer;
+
+begin
+  VertShift := (Box.Bottom - EnvironmentBox.Bottom) + (Box.Top - EnvironmentBox.Top);
+  Types.OffsetRect(Box, 0, -VertShift);
+end;
+
 function RefineDrawBox (var SrcX, SrcY, DstX, DstY, DrawBoxWidth, DrawBoxHeight: integer; const SrcBox, DstBox: TRect; DoHorizMirror, DoVertMirror: boolean): boolean;
 var
-  SrcDstOffsetX:             integer;
-  SrcDstOffsetY:             integer;
-  SrcDrawBox:                TRect;
-  DstDrawBox:                TRect;
-  MovedSrcBox:               TRect;
-  CorrectedDstDrawBox:       TRect;
-  CorrectedDstDrawBoxOffset: integer;
+  SrcDstOffsetX:       integer;
+  SrcDstOffsetY:       integer;
+  SrcDrawBox:          TRect;
+  MovedDstBox:         TRect;
+  CorrectedSrcDrawBox: TRect;
+  CorrectedDstDrawBox: TRect;
 
 begin
   SrcDstOffsetX := 0;
@@ -469,45 +486,53 @@ begin
   if result then begin
     SrcDstOffsetX := DstX - SrcX;
     SrcDstOffsetY := DstY - SrcY;
-    DstDrawBox    := Types.Rect(DstX, DstY, DstX + DrawBoxWidth, DstY + DrawBoxHeight);
 
-    // Move SrcBox to DstBox so, that top-left draw box border became the same
-    MovedSrcBox := SrcBox;
-    Types.OffsetRect(MovedSrcBox, SrcDstOffsetX, SrcDstOffsetY);
+    // Align DstBox to SrcBox so, that top-left draw box border became the same
+    MovedDstBox := DstBox;
+    Types.OffsetRect(MovedDstBox, -SrcDstOffsetX, -SrcDstOffsetY);
 
-    // Intersect DstDrawBox, DstBox and moved SrcBox as CorrectedDstDrawBox
-    // We get box with pixels to copy, unless mirroring is necessary
-    result := Types.IntersectRect(CorrectedDstDrawBox, DstBox, DstDrawBox) and Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, MovedSrcBox);
+    // Get SrcDrawBox and check if there are any pixels in it
+    SrcDrawBox := Types.Bounds(SrcX, SrcY, DrawBoxWidth, DrawBoxHeight);
+    result     := Types.IntersectRect(CorrectedSrcDrawBox, SrcBox, SrcDrawBox);
   end;
 
   if result then begin
-    // Perform horizontal mirroring
-    if DoHorizMirror then begin
-      CorrectedDstDrawBoxOffset := (CorrectedDstDrawBox.Right - DstDrawBox.Right) + (CorrectedDstDrawBox.Left - DstDrawBox.Left);
-      Types.OffsetRect(CorrectedDstDrawBox, -CorrectedDstDrawBoxOffset, 0);
-      result := Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, DstDrawBox) and Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, MovedSrcBox);
-    end;
-  end;
+    if DoHorizMirror or DoVertMirror then begin
+      CorrectedDstDrawBox := CorrectedSrcDrawBox;
+
+      if DoHorizMirror then begin
+        MirrorBoxHorizontally(CorrectedDstDrawBox, SrcDrawBox);
+      end;
+
+      if DoVertMirror then begin
+        MirrorBoxVertically(CorrectedDstDrawBox, SrcDrawBox);
+      end;
+
+      result              := Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, MovedDstBox);
+      CorrectedSrcDrawBox := CorrectedDstDrawBox;
+
+      if DoHorizMirror then begin
+        MirrorBoxHorizontally(CorrectedSrcDrawBox, SrcDrawBox);
+      end;
+
+      if DoVertMirror then begin
+        MirrorBoxVertically(CorrectedSrcDrawBox, SrcDrawBox);
+      end;
+    end else begin
+      result              := Types.IntersectRect(CorrectedSrcDrawBox, CorrectedSrcDrawBox, MovedDstBox);
+      CorrectedDstDrawBox := CorrectedSrcDrawBox;
+    end; // .else
+  end; // .if
 
   if result then begin
-    // Perform vertical mirroring
-    if DoVertMirror then begin
-      CorrectedDstDrawBoxOffset := (CorrectedDstDrawBox.Bottom - DstDrawBox.Bottom) + (CorrectedDstDrawBox.Top - DstDrawBox.Top);
-      Types.OffsetRect(CorrectedDstDrawBox, 0, -CorrectedDstDrawBoxOffset);
-      result := Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, DstDrawBox) and Types.IntersectRect(CorrectedDstDrawBox, CorrectedDstDrawBox, MovedSrcBox);
-    end;
-  end;
-
-  if result then begin
-    // SrcDrawBox is CorrectedDstDrawBox substracting SrcDstOffset
-    SrcDrawBox := CorrectedDstDrawBox;
-    Types.OffsetRect(SrcDrawBox, -SrcDstOffsetX, -SrcDstOffsetY);
+    // Move CorrectedDstDrawBox to real DstBox
+    Types.OffsetRect(CorrectedDstDrawBox, SrcDstOffsetX, SrcDstOffsetY);
 
     // Update all out parameters
-    SrcX          := SrcDrawBox.Left;
-    SrcY          := SrcDrawBox.Top;
-    DrawBoxWidth  := SrcDrawBox.Right  - SrcDrawBox.Left;
-    DrawBoxHeight := SrcDrawBox.Bottom - SrcDrawBox.Top;
+    SrcX          := CorrectedSrcDrawBox.Left;
+    SrcY          := CorrectedSrcDrawBox.Top;
+    DrawBoxWidth  := CorrectedSrcDrawBox.Right  - CorrectedSrcDrawBox.Left;
+    DrawBoxHeight := CorrectedSrcDrawBox.Bottom - CorrectedSrcDrawBox.Top;
     DstX          := CorrectedDstDrawBox.Left;
     DstY          := CorrectedDstDrawBox.Top;
   end;
