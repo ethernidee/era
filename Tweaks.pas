@@ -840,9 +840,15 @@ begin
 
   if DebugRng then begin
     if UseNativePrng and UseDeterministicPrng then begin
-      Message := SysUtils.Format('rand #%d from %.8x, R%d A%d: %d..%d = %d', [RngId, integer(CallerAddr), CombatRound, CombatActionId, MinValue, MaxValue, result]);
+      Message := SysUtils.Format('determ rand #%d from %.8x, R%d A%d: %d..%d = %d', [RngId, integer(CallerAddr), CombatRound, CombatActionId, MinValue, MaxValue, result]);
     end else begin
-      Message := SysUtils.Format('rand #%d from %.8x, %d..%d = %d', [RngId, integer(CallerAddr), MinValue, MaxValue, result]);
+      Message := 'mt ';
+
+      if UseNativePrng then begin
+        Message := 'orig ';
+      end;
+
+      Message := Message + SysUtils.Format('rand #%d from %.8x, %d..%d = %d', [RngId, integer(CallerAddr), MinValue, MaxValue, result]);
     end;
 
     PrintChatMsg('{~ffffff}' + Message);
@@ -1769,6 +1775,9 @@ begin
 
   (* Move acredits.smk video positon to json config *)
   ApiJack.HookCode(Ptr($706609), @Hook_ShowMainMenuVideo);
+
+  (* Fix Blood Dragons aging change from 20% to 40% *)
+  Core.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
