@@ -30,7 +30,7 @@ uses
   Types,
   TypeWrappers,
   WinUtils,
-  Utils;
+  Utils, KubaZip, EraZip;
 
 const
   (* ResizeBmp24.FreeOriginal argument *)
@@ -875,12 +875,6 @@ end;
 
 function GetPcxPng (PcxName: string): {On} ResLib.TSharedResource; forward;
 
-(* Should be moved to virtual storage unit *)
-function ReadVirtualFile (const FilePath: string; {out} var FileContents: string): boolean;
-begin
-  result := Files.ReadFileContents(FilePath, FileContents);
-end;
-
 function LoadRawImage32NoCaching (const FilePath: string): {On} TRawImage32;
 var
   FileContents: string;
@@ -888,7 +882,7 @@ var
 begin
   result := nil;
 
-  if ReadVirtualFile(FilePath, FileContents) then begin
+  if EraZip.ReadFileContentsFromZipFs(FilePath, FileContents) then begin
     result := Libspng.DecodePng(pchar(FileContents), Length(FileContents));
   end;
 end;
@@ -974,7 +968,6 @@ var
 {Un} CachedImage:       TRawImage;
      UsedComposition:   boolean;
      BackPcxName:       TString;
-     FileContents:      string;
      ImageSize:         integer;
      Image16Setup:      TRawImage16Setup;
      Image32AlphaSetup: GraphTypes.TPremultipliedRawImage32Setup;
@@ -1015,10 +1008,6 @@ begin
     end else begin
       exit;
     end;
-  end;
-
-  if not Files.ReadFileContents(FilePath, FileContents) then begin
-    exit;
   end;
 
   Image32 := LoadRawImage32NoCaching(FilePath);
@@ -1261,12 +1250,12 @@ var
 begin
   DefFramesPngFileMap.Clear;
 
-  with Files.Locate(GameExt.GameDir + '\' + DEF_PNG_FRAMES_DIR + '\*', Files.ONLY_DIRS) do begin
+  with EraZip.LocateInZipFs(GameExt.GameDir + '\' + DEF_PNG_FRAMES_DIR + '\*', Files.ONLY_DIRS) do begin
     while FindNext do begin
       if (FoundName <> '.') and (FoundName <> '..') then begin
         DefName := FoundName;
 
-        with Files.Locate(FoundPath + '\' + '*.png', Files.ONLY_FILES) do begin
+        with EraZip.LocateInZipFs(FoundPath + '\' + '*.png', Files.ONLY_FILES) do begin
           while FindNext do begin
             if FoundRec.Rec.Size > 0 then begin
               DefFramesPngFileMap[DefName + '\' + FoundName] := Ptr(1);
@@ -1280,7 +1269,7 @@ end; // .procedure RescanDefFramesPngFiles
 
 procedure ScanDirPcxPngFiles (const DirPath: string);
 begin
-  with Files.Locate(DirPath + '\*', Files.FILES_AND_DIRS) do begin
+  with EraZip.LocateInZipFs(DirPath + '\*', Files.FILES_AND_DIRS) do begin
     while FindNext do begin
       if (FoundName <> '.') and (FoundName <> '..') then begin
         if FoundRec.IsDir then begin
