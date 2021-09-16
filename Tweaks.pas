@@ -1789,6 +1789,9 @@ begin
 
   (* Fix adventure map RMB popup coordinates: use tile coordinates, not centering *)
   ApiJack.HookCode(Ptr($7575A3), @Hook_ZvsPlaceCreature_End);
+
+  (* Increase number of quick battle rounds before fast finish from 30 to 100 *)
+  Core.p.WriteDataPatch(Ptr($475C35), ['64']);
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
