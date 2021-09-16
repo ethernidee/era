@@ -1162,6 +1162,13 @@ procedure LoadLod (const LodName: string; Res: PLod);
 function  LoadDef (const DefName: string): {n} PDefItem;
 function  LoadPcx8 (const PcxName: string): {n} PPcxItem;
 function  LoadPcx16 (const PcxName: string): {n} PPcx16Item;
+
+(* All colors should be int31 integer values *)
+procedure Rgb96ToHsb (Red, Green, Blue: integer; out Hue, Saturation, Brightness: single); stdcall;
+
+(* All colors should be int31 integer values *)
+procedure HsbToRgb96 (var Red, Green: integer; Hue, Saturation, Brightness: single; var Blue: integer); stdcall;
+
 procedure GetGameState (out GameState: TGameState); stdcall;
 function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
@@ -1837,19 +1844,43 @@ begin
   result := PPcx16Item(PatchApi.Call(THISCALL_, Ptr($55AE50), [pchar(PcxName)]));
 end;
 
+procedure Rgb96ToHsb (Red, Green, Blue: integer; out Hue, Saturation, Brightness: single); stdcall; assembler; {$STACKFRAMES ON}
+asm
+  POP EBP
+  POP EAX
+
+  POP ECX
+  POP EDX
+  PUSH EAX
+  MOV EAX, $523680
+  JMP EAX
+end;
+
+procedure HsbToRgb96 (var Red, Green: integer; Hue, Saturation, Brightness: single; var Blue: integer); stdcall; assembler; {$STACKFRAMES ON}
+asm
+  POP EBP
+  POP EAX
+
+  POP ECX
+  POP EDX
+  PUSH EAX
+  MOV EAX, $5237E0
+  JMP EAX
+end;
+
 procedure GetGameState (out GameState: TGameState);
 begin
   GameState.RootDlgId    := AdvManagerPtr^.GetRootDlgId;
   GameState.CurrentDlgId := AdvManagerPtr^.GetCurrentDlgId;
 end;
 
-function GetMapSize: integer; ASSEMBLER; {$W+}
+function GetMapSize: integer; assembler; {$W+}
 asm
   MOV EAX, [GAME_MANAGER]
   MOV EAX, [EAX + $1FC44]
 end;
 
-function IsTwoLevelMap: boolean; ASSEMBLER; {$W+}
+function IsTwoLevelMap: boolean; assembler; {$W+}
 asm
   MOV EAX, [GAME_MANAGER]
   MOVZX EAX, byte [EAX + $1FC48]
