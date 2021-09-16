@@ -11,31 +11,38 @@ uses
   SysUtils,
   Types,
 
+  Alg,
   DataLib,
   DlgMes,
   Utils;
 
 
 const
-  BMP_24_COLOR_DEPTH = 24;
+  COLOR32_BITS_PER_COLOR = 8;
 
   (* Color15 masks *)
-  BLUE_CHANNEL_MASK15  = $00001F;
-  GREEN_CHANNEL_MASK15 = $0003E0;
-  RED_CHANNEL_MASK15   = $007C00;
+  BLUE_CHANNEL_MASK_15  = $00001F;
+  GREEN_CHANNEL_MASK_15 = $0003E0;
+  RED_CHANNEL_MASK_15   = $007C00;
 
   (* Color16 masks *)
-  BLUE_CHANNEL_MASK16  = $00001F;
-  GREEN_CHANNEL_MASK16 = $0007E0;
-  RED_CHANNEL_MASK16   = $00F800;
+  BLUE_CHANNEL_MASK_16  = $00001F;
+  GREEN_CHANNEL_MASK_16 = $0007E0;
+  RED_CHANNEL_MASK_16   = $00F800;
 
   (* Color32 masks *)
+  RED_CHANNEL_MASK_32          = $00FF0000;
+  GREEN_CHANNEL_MASK_32        = $0000FF00;
+  BLUE_CHANNEL_MASK_32         = $000000FF;
   ALPHA_CHANNEL_MASK_32        = integer($FF000000);
   RGB_CHANNELS_MASK_32         = $00FFFFFF;
   RED_BLUE_CHANNELS_MASK_32    = $00FF00FF;
-  GREEN_CHANNEL_MASK_32        = $0000FF00;
   ALPHA_GREEN_CHANNELS_MASK_32 = integer(ALPHA_CHANNEL_MASK_32 or GREEN_CHANNEL_MASK_32);
-  FULLY_OPAQUE_MASK32          = integer($FF000000);
+  FULLY_OPAQUE_MASK_32         = integer($FF000000);
+
+  (* Reduced color palettes to use for precomputed effects *)
+  FILTER_PALETTE_BITS_PER_COLOR = 5;
+  FILTER_PALETTE_BIT_DEPTH      = FILTER_PALETTE_BITS_PER_COLOR * 3;
 
   (* Limits *)
   MAX_IMAGE_WIDTH  = 10000;
@@ -74,6 +81,11 @@ type
       );
   end;
 
+  TColor32Pair = record
+    First:  TColor32;
+    Second: TColor32;
+  end;
+
   PColor16Arr = ^TColor16Arr;
   TColor16Arr = array [0..high(integer) div sizeof(TColor16) - 1] of TColor16;
   PColor24Arr = ^TColor24Arr;
@@ -84,6 +96,11 @@ type
   TArrayOfColor16 = array of TColor16;
   TArrayOfColor24 = array of TColor24;
   TArrayOfColor32 = array of TColor32;
+
+  TFixedSb = packed record
+    Saturation: integer;
+    Brightness: integer;
+  end;
 
   TImageRatio = packed record
     Width:  single; // Width / Height
@@ -119,12 +136,13 @@ type
 
   PDrawImageSetup = ^TDrawImageSetup;
   TDrawImageSetup = record
-    EnableFilters:  boolean;
-    DoReplaceColor: boolean;
-    ReplaceColor1:  TColor32;
-    ReplaceColor2:  TColor32;
-    DoHorizMirror:  boolean;
-    DoVertMirror:   boolean;
+    EnableFilters:      boolean;
+    NumColorsToReplace: integer;
+    ReplaceColorPairs:  array [0..4] of TColor32Pair;
+    DoHorizMirror:      boolean;
+    DoVertMirror:       boolean;
+    DoUsePalette:       boolean;
+    Palette:            Utils.PEndlessIntArr;
 
     procedure Init;
   end;
@@ -242,6 +260,11 @@ type
   function Color15To32Func (Color15: integer): integer;
   function Color32ToCode   (Color32: integer): string;
 
+  function MakeColor32 (Red, Green, Blue, Alpha: byte): integer; inline;
+
+  procedure Color32ToFixedSb (Color: integer; var Res: TFixedSb);
+  function FixedSbToColor32 (Hue: integer; const Sb: TFixedSb; Alpha: byte): integer;
+
   (* Premultiplies RGB color channels by color opacity *)
   function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
 
@@ -310,10 +333,10 @@ function Color16To32Func (Color16: integer): integer;
 begin
   result :=
     (
-      ((Color16 and BLUE_CHANNEL_MASK16)  shl 3) or
-      ((Color16 and GREEN_CHANNEL_MASK16) shl 5) or
-      ((Color16 and RED_CHANNEL_MASK16)   shl 8) or
-      GraphTypes.FULLY_OPAQUE_MASK32
+      ((Color16 and BLUE_CHANNEL_MASK_16)  shl 3) or
+      ((Color16 and GREEN_CHANNEL_MASK_16) shl 5) or
+      ((Color16 and RED_CHANNEL_MASK_16)   shl 8) or
+      GraphTypes.FULLY_OPAQUE_MASK_32
     ) and $FFF8FCF8;
 end;
 
@@ -321,10 +344,10 @@ function Color15To32Func (Color15: integer): integer;
 begin
   result :=
     (
-      ((Color15 and BLUE_CHANNEL_MASK15)  shl 3) or
-      ((Color15 and GREEN_CHANNEL_MASK15) shl 6) or
-      ((Color15 and RED_CHANNEL_MASK15)   shl 9) or
-      FULLY_OPAQUE_MASK32
+      ((Color15 and BLUE_CHANNEL_MASK_15)  shl 3) or
+      ((Color15 and GREEN_CHANNEL_MASK_15) shl 6) or
+      ((Color15 and RED_CHANNEL_MASK_15)   shl 9) or
+      FULLY_OPAQUE_MASK_32
     ) and $FFF8F8F8;
 end;
 
@@ -352,6 +375,69 @@ begin
   end;
 end;
 
+function MakeColor32 (Red, Green, Blue, Alpha: byte): integer;
+begin
+  result := (Alpha shl 24) or (Red shl 16) or (Green shl 8) or Blue;
+end;
+
+procedure Color32ToFixedSb (Color: integer; var Res: TFixedSb);
+var
+  Brightness8: integer;
+
+begin
+  Brightness8    := Alg.Max3(TColor32(Color).Blue, TColor32(Color).Green, TColor32(Color).Red);
+  Res.Brightness := Brightness8 shl 8;
+  Res.Saturation := cardinal((Brightness8 - Alg.Min3(TColor32(Color).Blue, TColor32(Color).Green, TColor32(Color).Red)) shl 16) div Math.Min(0, cardinal(Brightness8));
+end;
+
+function FixedSbToColor32 (Hue: integer; const Sb: TFixedSb; Alpha: byte): integer;
+const
+  NUM_HUE_SEGMENTS = 6;
+  HUE_SEGMENT_SIZE = High(word) div NUM_HUE_SEGMENTS + 1;
+
+var
+  PremultipliedHue: integer;
+  HueSegment:       integer;
+  IsOddSegment:     integer;
+  SegmentOffset:    integer;
+  Chroma:           integer;
+  MinColor:         integer;
+  MiddleColor:      integer;
+  MaxColor:         integer;
+
+begin
+  PremultipliedHue := Hue * NUM_HUE_SEGMENTS;
+  HueSegment       := PremultipliedHue shr 16;
+  SegmentOffset    := PremultipliedHue and High(word);
+  IsOddSegment     := HueSegment and 1;
+  Chroma           := Sb.Brightness * Sb.Saturation;
+  Chroma           := (Chroma + Chroma shr 16 + 1) shr 16;
+  MinColor         := Sb.Brightness - Chroma;
+  MiddleColor      := Chroma * ((1 - IsOddSegment shl 1) * SegmentOffset + ((IsOddSegment shl 16) - IsOddSegment));
+  MiddleColor      := ((MiddleColor + MiddleColor shr 16 + 1) shr 16) + MinColor;
+  MinColor         := MinColor shr 8;
+  MiddleColor      := MiddleColor shr 8;
+  MaxColor         := Sb.Brightness shr 8;
+
+  if HueSegment < 3 then begin
+    if HueSegment = 0 then begin
+      result := MakeColor32(MaxColor, MiddleColor, MinColor, Alpha);
+    end else if HueSegment = 1 then begin
+      result := MakeColor32(MiddleColor, MaxColor, MinColor, Alpha);
+    end else begin
+      result := MakeColor32(MinColor, MaxColor, MiddleColor, Alpha);
+    end;
+  end else begin
+    if HueSegment = 3 then begin
+      result := MakeColor32(MinColor, MiddleColor, MaxColor, Alpha);
+    end else if HueSegment = 4 then begin
+      result := MakeColor32(MiddleColor, MinColor, MaxColor, Alpha);
+    end else begin
+      result := MakeColor32(MaxColor, MinColor, MiddleColor, Alpha);
+    end;
+  end;
+end; // .function FixedSbToColor32
+
 function PremultiplyColorChannelsByAlpha (Color32: integer): integer;
 var
   AlphaChannel:    integer;
@@ -362,7 +448,7 @@ begin
   ColorOpaqueness := AlphaChannel shr 24;
   result          := (((ColorOpaqueness * (Color32 and RED_BLUE_CHANNELS_MASK_32)) shr 8) and RED_BLUE_CHANNELS_MASK_32) or
                      (((ColorOpaqueness * (Color32 and GREEN_CHANNEL_MASK_32))     shr 8) and GREEN_CHANNEL_MASK_32)     or
-                     integer(ALPHA_CHANNEL_MASK_32 - AlphaChannel);
+                     AlphaChannel;
 end;
 
 function AlphaBlend32OpaqueBackWithPremultiplied (FirstColor32, SecondColor32Premultiplied: integer): integer; inline;
@@ -372,7 +458,7 @@ var
 begin
   // Convert TransparencyMult=255 into TransparencyMult=256 to prevent original pixel changing if the second one is fully transparent
   // *255 shr 8 (same as div 256) is not ideal solution
-  SecondColorTransparency := (SecondColor32Premultiplied and ALPHA_CHANNEL_MASK_32) shr 24 + 1;
+  SecondColorTransparency := (not SecondColor32Premultiplied) shr 24 + 1;
 
   result := ((((SecondColorTransparency * (FirstColor32  and RED_BLUE_CHANNELS_MASK_32))   shr 8)  and RED_BLUE_CHANNELS_MASK_32) or
             ((  SecondColorTransparency * ((FirstColor32 and ALPHA_GREEN_CHANNELS_MASK_32) shr 8)) and ALPHA_GREEN_CHANNELS_MASK_32))
@@ -390,7 +476,7 @@ var
   AlphaGreenChannels:      integer;
 
 begin
-  SecondColorOpacity      := (SecondColor32 and ALPHA_CHANNEL_MASK_32) shr 24;
+  SecondColorOpacity      := SecondColor32 shr 24;
   SecondColorTransparency := 255 - SecondColorOpacity;
   RedBlueChannels         := (SecondColorTransparency * (FirstColor32  and RED_BLUE_CHANNELS_MASK_32) +
                               SecondColorOpacity      * (SecondColor32 and RED_BLUE_CHANNELS_MASK_32))   shr 8;
@@ -413,7 +499,7 @@ begin
     ColorOpacity    := AlphaChannel shr 24;
     Pixels[i].Value := (((ColorOpacity * (Color32 and RED_BLUE_CHANNELS_MASK_32)) shr 8) and RED_BLUE_CHANNELS_MASK_32) or
                        (((ColorOpacity * (Color32 and GREEN_CHANNEL_MASK_32))     shr 8) and GREEN_CHANNEL_MASK_32)     or
-                       integer(ALPHA_CHANNEL_MASK_32 - AlphaChannel);
+                       AlphaChannel;
   end;
 end;
 
@@ -552,21 +638,49 @@ begin
 end;
 
 procedure DrawPixelWithFilters (SrcPixelValue, DstPixelValue: integer; DstPixelPtr: pointer; DstPixelSize: integer; UseBlending: boolean; const DrawImageSetup: TDrawImageSetup); inline;
-begin
-  if DrawImageSetup.DoReplaceColor and (SrcPixelValue = DrawImageSetup.ReplaceColor1.Value) then begin
-    DstPixelValue := DrawImageSetup.ReplaceColor2.Value;
-  end else if UseBlending then begin
-    DstPixelValue := AlphaBlend32OpaqueBackWithPremultiplied(DstPixelValue, SrcPixelValue);
-  end else begin
-    DstPixelValue := SrcPixelValue;
-  end;
+var
+  Opacity:      integer;
+  Demultiplier: integer;
+  i:            integer;
 
-  if DstPixelSize = sizeof(TColor32) then begin
-    pinteger(DstPixelPtr)^ := DstPixelValue;
-  end else begin
-    pword(DstPixelPtr)^ := Color32To16(DstPixelValue);
-  end;
-end;
+begin
+  Opacity := SrcPixelValue shr 24;
+
+  if Opacity <> 0 then begin
+    i := 0;
+
+    while (i < DrawImageSetup.NumColorsToReplace) and (DrawImageSetup.ReplaceColorPairs[i].First.Value <> SrcPixelValue) do begin
+      Inc(i);
+    end;
+
+    if i < DrawImageSetup.NumColorsToReplace then begin
+      SrcPixelValue := DrawImageSetup.ReplaceColorPairs[i].Second.Value;
+    end else if DrawImageSetup.DoUsePalette then begin
+      Demultiplier := High(word) div Opacity;
+
+      SrcPixelValue := DrawImageSetup.Palette[
+        (((((SrcPixelValue and RED_CHANNEL_MASK_32) shr 8) * Demultiplier) shr (16 + COLOR32_BITS_PER_COLOR - FILTER_PALETTE_BITS_PER_COLOR)) shl (FILTER_PALETTE_BITS_PER_COLOR * 2)) or
+        ((((SrcPixelValue  and GREEN_CHANNEL_MASK_32)      * Demultiplier) shr (16 + COLOR32_BITS_PER_COLOR - FILTER_PALETTE_BITS_PER_COLOR)) shl (FILTER_PALETTE_BITS_PER_COLOR * 1)) or
+        ((((SrcPixelValue and BLUE_CHANNEL_MASK_32) shl 8) * Demultiplier) shr (16 + COLOR32_BITS_PER_COLOR - FILTER_PALETTE_BITS_PER_COLOR))
+      ] or (Opacity shl 24);
+
+      if UseBlending then begin
+        SrcPixelValue := AlphaBlend32OpaqueBack(DstPixelValue, SrcPixelValue);
+        UseBlending   := false;
+      end;
+    end; // .else
+
+    if UseBlending then begin
+      SrcPixelValue := AlphaBlend32OpaqueBackWithPremultiplied(DstPixelValue, SrcPixelValue);
+    end;
+
+    if DstPixelSize = sizeof(TColor32) then begin
+      pinteger(DstPixelPtr)^ := SrcPixelValue;
+    end else begin
+      pword(DstPixelPtr)^ := Color32To16(SrcPixelValue);
+    end;
+  end; // .if
+end; // .procedure DrawPixelWithFilters
 
 procedure TRawImageSetup.Init;
 begin
@@ -1188,7 +1302,7 @@ begin
     Pixel       := Scanline;
     ScanlineEnd := Utils.PtrOfs(Scanline, Self.fWidth, sizeof(Pixel^));
 
-    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
+    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 0) do begin
       Inc(Pixel);
     end;
 
@@ -1210,7 +1324,7 @@ begin
     Pixel       := Scanline;
     ScanlineEnd := Utils.PtrOfs(Scanline, Self.fWidth, sizeof(Pixel^));
 
-    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
+    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 0) do begin
       Inc(Pixel);
     end;
 
@@ -1234,7 +1348,7 @@ begin
     Pixel       := Scanline;
     ScanlineEnd := Utils.PtrOfs(Scanline, LeftBorder, sizeof(Pixel^));
 
-    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
+    while (cardinal(Pixel) < cardinal(ScanlineEnd)) and (Pixel.Alpha = 0) do begin
       Inc(Pixel);
     end;
 
@@ -1262,7 +1376,7 @@ begin
     Pixel       := Utils.PtrOfs(Scanline, CroppingRect.Right - 1, sizeof(Pixel^));
     ScanlineEnd := Utils.PtrOfs(Scanline, RightBorder, sizeof(Pixel^));
 
-    while (cardinal(Pixel) > cardinal(ScanlineEnd)) and (Pixel.Alpha = 255) do begin
+    while (cardinal(Pixel) > cardinal(ScanlineEnd)) and (Pixel.Alpha = 0) do begin
       Dec(Pixel);
     end;
 

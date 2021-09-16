@@ -522,7 +522,7 @@ var
       // Ok
     end else if SysUtils.TryStrToInt('$' + ColorName, CurrColor) then begin
       if Length(ColorName) < RGBA_COLOR_CODE_MIN_LEN then begin
-        CurrColor := CurrColor or GraphTypes.FULLY_OPAQUE_MASK32;
+        CurrColor := CurrColor or GraphTypes.FULLY_OPAQUE_MASK_32;
       end else begin
         CurrColor := ((CurrColor and $FF) shl 24) or ((CurrColor shr 8) and GraphTypes.RGB_CHANNELS_MASK_32);
       end;
