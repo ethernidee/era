@@ -1345,6 +1345,14 @@ begin
   Context.RetAddr := Ptr($706630);
 end;
 
+function Hook_ZvsPlaceCreature_End (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  PatchApi.Call(FASTCALL_, Ptr($4F6C00), [pinteger(Context.EBP - $38)^, 4, pinteger(Context.EBP + 60)^, pinteger(Context.EBP + 64)^, -1, 0, -1, 0, -1, 0, -1, 0]);
+
+  result          := false;
+  Context.RetAddr := Ptr($7575B3);
+end;
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
@@ -1778,6 +1786,9 @@ begin
 
   (* Fix Blood Dragons aging change from 20% to 40% *)
   Core.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
+
+  (* Fix adventure map RMB popup coordinates: use tile coordinates, not centering *)
+  ApiJack.HookCode(Ptr($7575A3), @Hook_ZvsPlaceCreature_End);
 end; // .procedure OnAfterWoG
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
