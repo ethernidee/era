@@ -173,8 +173,13 @@ var
 {O} PcxPngFileMap:       {O} TDict {of png file path: TString};
 {O} PcxPngRedirections:  {O} TDict {of pcx file name: TString}; // Used for runtime pcx alternatives like special variant for each player, cleared on rescan
 {O} ColorizedPcxPng:     {U} TDict {of Ptr(PlayerId + 1)};      // Used to track, which pcx were colorized to which player colors. Is never reset.
+{O} DefBattleEffects:    {U} TDict {of effect palette pointer}; // Used for clone/blood lust/petrification battle effects implementation
 
   DefFramePngFilePathPrefix: string; // Like "D:\Games\Heroes 3\Data\Defs\"
+
+  CloneEffectPalette:         array [0..(1 shl GraphTypes.FILTER_PALETTE_BIT_DEPTH) - 1] of integer;
+  BloodLustEffectPalette:     array [0..9, 0..(1 shl GraphTypes.FILTER_PALETTE_BIT_DEPTH) - 1] of integer;
+  PetrificationEffectPalette: array [0..9, 0..(1 shl GraphTypes.FILTER_PALETTE_BIT_DEPTH) - 1] of integer;
 
 
 constructor TPcx8ToRawImageAdapter.Create (PcxItem: Heroes.PPcx8Item);
@@ -891,15 +896,14 @@ end;
    drawing background first and foreground then. Returns new image or nil if nothing to compose *)
 function ApplyImageBackgroundFromConfig (ForegroundImage: TRawImage; const ForegroundPngFilePath: string): {On} TRawImage32;
 var
-     BaseConfigKey:         string;
-     ConfigKey:             string;
-     BackPcxName:           string;
-     RedirectedBackPcxName: string;
-{Un} BackImage:             TRawImage;
-     ComposedImagePixels:   GraphTypes.TArrayOfColor32;
-     ComposedScanlineSize:  integer;
-     ImageSetup:            TRawImage32Setup;
-     DrawImageSetup:        GraphTypes.TDrawImageSetup;
+     BaseConfigKey:        string;
+     ConfigKey:            string;
+     BackPcxName:          string;
+{Un} BackImage:            TRawImage;
+     ComposedImagePixels:  GraphTypes.TArrayOfColor32;
+     ComposedScanlineSize: integer;
+     ImageSetup:           TRawImage32Setup;
+     DrawImageSetup:       GraphTypes.TDrawImageSetup;
 
 begin
   {!} Assert(ForegroundImage <> nil);
@@ -951,7 +955,7 @@ begin
       result := TRawImage32.Create(ComposedImagePixels, ForegroundImage.Width, ForegroundImage.Height, ComposedScanlineSize, ImageSetup);
 
       result.Meta[META_BACK_PCX_NAME]            := TString.Create(BackPcxName);
-      result.Meta[META_REDIRECTED_BACK_PCX_NAME] := TString.Create(RedirectedBackPcxName);
+      result.Meta[META_REDIRECTED_BACK_PCX_NAME] := TString.Create(Lodman.GetRedirectedName(BackPcxName));
 
       SysUtils.FreeAndNil(BackImage);
     end; // .if
@@ -1296,9 +1300,9 @@ var
 begin
   Color16Mode := GraphTypes.COLOR_16_MODE_565;
 
-  if Heroes.Color16GreenChannelMaskPtr^ = GraphTypes.GREEN_CHANNEL_MASK16 then begin
+  if Heroes.Color16GreenChannelMaskPtr^ = GraphTypes.GREEN_CHANNEL_MASK_16 then begin
     Color16Mode := GraphTypes.COLOR_16_MODE_565;
-  end else if Heroes.Color16GreenChannelMaskPtr^ = GREEN_CHANNEL_MASK15 then begin
+  end else if Heroes.Color16GreenChannelMaskPtr^ = GREEN_CHANNEL_MASK_15 then begin
     Color16Mode := GraphTypes.COLOR_16_MODE_555;
   end else begin
     {!} Assert(false, Format('Invalid color 16 green channel mask: %d', [Heroes.Color16GreenChannelMaskPtr^]));
@@ -1447,11 +1451,20 @@ begin
     Image := ImageResource.Data as TRawImage;
 
     DrawImageSetup.Init;
-    DrawImageSetup.EnableFilters       := true;
-    DrawImageSetup.DoHorizMirror       := DoMirror;
-    DrawImageSetup.DoReplaceColor      := true;
-    DrawImageSetup.ReplaceColor1.Value := Image.InternalizeColor32(COLOR_ADV_MAP_OBJECT_FLAG_PLACEHOLDER);
-    DrawImageSetup.ReplaceColor2.Value := GraphTypes.Color16To32(FlagColor);
+    DrawImageSetup.EnableFilters                     := true;
+    DrawImageSetup.DoHorizMirror                     := DoMirror;
+    DrawImageSetup.NumColorsToReplace                := 5;
+    DrawImageSetup.ReplaceColorPairs[0].First.Value  := Image.InternalizeColor32(COLOR_ADV_MAP_OBJECT_FLAG_PLACEHOLDER);
+    DrawImageSetup.ReplaceColorPairs[0].Second.Value := GraphTypes.Color16To32(FlagColor);
+
+    DrawImageSetup.ReplaceColorPairs[1].First.Value  := Image.InternalizeColor32(integer($FFFF00FF));
+    DrawImageSetup.ReplaceColorPairs[1].Second.Value := integer($80000000);
+    DrawImageSetup.ReplaceColorPairs[2].First.Value  := Image.InternalizeColor32(integer($FFFF96FF));
+    DrawImageSetup.ReplaceColorPairs[2].Second.Value := integer($60000000);
+    DrawImageSetup.ReplaceColorPairs[3].First.Value  := Image.InternalizeColor32(integer($FFFF64FF));
+    DrawImageSetup.ReplaceColorPairs[3].Second.Value := integer($40000000);
+    DrawImageSetup.ReplaceColorPairs[4].First.Value  := Image.InternalizeColor32(integer($FFFF32FF));
+    DrawImageSetup.ReplaceColorPairs[4].Second.Value := integer($20000000);
 
     if DoMirror then begin
       SrcX := Def.Width - SrcX - SrcWidth;
@@ -1523,16 +1536,32 @@ begin
     Image := ImageResource.Data as TRawImage;
 
     DrawImageSetup.Init;
-    DrawImageSetup.DoHorizMirror       := DoHorizMirror;
-    DrawImageSetup.DoReplaceColor      := true;
-    DrawImageSetup.EnableFilters       := true;
-    DrawImageSetup.ReplaceColor1.Value := Image.InternalizeColor32(COLOR_BATTLE_DEF_SELECTION_PLACEHOLDER);
+    DrawImageSetup.DoHorizMirror                    := DoHorizMirror;
+    DrawImageSetup.NumColorsToReplace               := 5;
+    DrawImageSetup.EnableFilters                    := true;
+    DrawImageSetup.ReplaceColorPairs[0].First.Value := Image.InternalizeColor32(COLOR_BATTLE_DEF_SELECTION_PLACEHOLDER);
+    DrawImageSetup.Palette                          := DefBattleEffects[Def.GetName];
+    DrawImageSetup.DoUsePalette                     := DrawImageSetup.Palette <> nil;
+
+    if DrawImageSetup.DoUsePalette then begin
+      DefBattleEffects.DeleteItem(Def.GetName);
+      {!} Assert(DefBattleEffects[Def.GetName] = nil);
+    end;
 
     if SelectionColor = 0 then begin
-      DrawImageSetup.ReplaceColor2.Value := COLOR_TRANSPARENT;
+      DrawImageSetup.ReplaceColorPairs[0].Second.Value := COLOR_TRANSPARENT;
     end else begin
-      DrawImageSetup.ReplaceColor2.Value := GraphTypes.Color16To32(SelectionColor);
+      DrawImageSetup.ReplaceColorPairs[0].Second.Value := GraphTypes.Color16To32(SelectionColor);
     end;
+
+    DrawImageSetup.ReplaceColorPairs[1].First.Value  := Image.InternalizeColor32(integer($FFFF00FF));
+    DrawImageSetup.ReplaceColorPairs[1].Second.Value := integer($80000000);
+    DrawImageSetup.ReplaceColorPairs[2].First.Value  := Image.InternalizeColor32(integer($FFFF96FF));
+    DrawImageSetup.ReplaceColorPairs[2].Second.Value := integer($60000000);
+    DrawImageSetup.ReplaceColorPairs[3].First.Value  := Image.InternalizeColor32(integer($FFFF64FF));
+    DrawImageSetup.ReplaceColorPairs[3].Second.Value := integer($40000000);
+    DrawImageSetup.ReplaceColorPairs[4].First.Value  := Image.InternalizeColor32(integer($FFFF32FF));
+    DrawImageSetup.ReplaceColorPairs[4].Second.Value := integer($20000000);
 
     if DoHorizMirror then begin
       SrcX := Def.Width - SrcX - SrcWidth;
@@ -1547,6 +1576,54 @@ begin
     ]);
   end;
 end; // .procedure Hook_DrawBattleMonDefFrame
+
+function Hook_ApplyBloodLustToDefPalette (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  EffectLevel: integer;
+
+begin
+  EffectLevel := (trunc(Heroes.TValue(Context.EDX).f * 100) + 5) div 10 - 1;
+
+  if EffectLevel >= 0 then begin
+    DefBattleEffects[Heroes.PDefItem(pinteger(Context.EBX + $164)^).GetName] := @BloodLustEffectPalette[Alg.ToRange(EffectLevel, 0, 9)];
+  end;
+
+  result := true;
+end;
+
+function Hook_ApplyPetrificationToDefPalette (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  EffectLevel: integer;
+
+begin
+  EffectLevel := (trunc((1.0 - Heroes.TValue(Context.EDX).f) * 100) + 5) div 10 - 1;
+
+  if EffectLevel >= 0 then begin
+    DefBattleEffects[Heroes.PDefItem(pinteger(Context.EBX + $164)^).GetName] := @PetrificationEffectPalette[Alg.ToRange(EffectLevel, 0, 9)];
+  end;
+
+  result := true;
+end;
+
+function Hook_ApplyGrayscaleToDefPalette (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  DefBattleEffects[Heroes.PDefItem(pinteger(Context.EBX + $164)^).GetName] := @PetrificationEffectPalette[High(PetrificationEffectPalette)];
+
+  result := true;
+end;
+
+function Hook_ApplyCloningToDefPalette (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  DefBattleEffects[Heroes.PDefItem(pinteger(Context.EBX + $164)^).GetName] := @CloneEffectPalette;
+
+  result := true;
+end;
+
+function Hook_AfterBattleDefPaletteEffects (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  DefBattleEffects.DeleteItem(Heroes.PDefItem(pinteger(Context.EBX + $164)^).GetName);
+  result := true;
+end;
 
 procedure Hook_DrawDefFrameType0Or2Shadow (
   OrigFunc: pointer;
@@ -1735,9 +1812,61 @@ begin
   result := result * 1000000 div Freq;
 end;
 
+procedure GenerateBattleStackEffectPalettes;
+const
+  PALETTE_COLOR_TO_31_SCALE   = High(integer) div ((1 shl GraphTypes.FILTER_PALETTE_BITS_PER_COLOR) - 1);
+  COLOR_8_TO_31_SCALE         = High(integer) div ((1 shl 8) - 1);
+  PALETTE_LOW_CHANNEL_BITMASK = (1 shl GraphTypes.FILTER_PALETTE_BITS_PER_COLOR) - 1;
+
+var
+  Hue:              single;
+  Saturation:       single;
+  Brightness:       single;
+  NewHue:           single;
+  EffectPercent: single;
+  Red:              integer;
+  Green:            integer;
+  Blue:             integer;
+  i, j:             integer;
+
+begin
+  for i := 0 to High(CloneEffectPalette) do begin
+    Heroes.Rgb96ToHsb(
+      ((i and (PALETTE_LOW_CHANNEL_BITMASK shl 10)) shr (GraphTypes.FILTER_PALETTE_BITS_PER_COLOR * 2)) * PALETTE_COLOR_TO_31_SCALE,
+      ((i and (PALETTE_LOW_CHANNEL_BITMASK shl 5)) shr (GraphTypes.FILTER_PALETTE_BITS_PER_COLOR * 1)) * PALETTE_COLOR_TO_31_SCALE,
+      (i and PALETTE_LOW_CHANNEL_BITMASK) * PALETTE_COLOR_TO_31_SCALE,
+      Hue, Saturation, Brightness
+    );
+
+    Heroes.HsbToRgb96(Red, Green, 0.67, 1 - ((1 - Saturation) / 2), 1 - ((1 - Brightness) / 2), Blue);
+    CloneEffectPalette[i] := ((cardinal(Red) div COLOR_8_TO_31_SCALE) shl 16) or ((cardinal(Green) div COLOR_8_TO_31_SCALE) shl 8) or (cardinal(Blue) div COLOR_8_TO_31_SCALE);
+
+    for j := Low(BloodLustEffectPalette) to High(BloodLustEffectPalette) do begin
+      EffectPercent := (j + 1) * 0.1;
+
+      if (Hue > 0.5) and (EffectPercent < 1.0) then begin
+        NewHue := Hue + (1.0 - Hue) * EffectPercent;
+      end else begin
+        NewHue := Hue * (1.0 - EffectPercent);
+      end;
+
+      Heroes.HsbToRgb96(Red, Green, NewHue, 1 - ((1 - Saturation) / (1.0 + EffectPercent)), 1 - ((1 - Brightness) / (1.0 + EffectPercent)), Blue);
+      BloodLustEffectPalette[j, i] := ((cardinal(Red) div COLOR_8_TO_31_SCALE) shl 16) or ((cardinal(Green) div COLOR_8_TO_31_SCALE) shl 8) or (cardinal(Blue) div COLOR_8_TO_31_SCALE);
+    end; // .for
+
+    for j := Low(PetrificationEffectPalette) to High(PetrificationEffectPalette) do begin
+      EffectPercent := (j + 1) * 0.1;
+
+      Heroes.HsbToRgb96(Red, Green, Hue, Saturation * (1.0 - EffectPercent), Brightness, Blue);
+      PetrificationEffectPalette[j, i] := ((cardinal(Red) div COLOR_8_TO_31_SCALE) shl 16) or ((cardinal(Green) div COLOR_8_TO_31_SCALE) shl 8) or (cardinal(Blue) div COLOR_8_TO_31_SCALE);
+    end; // .for
+  end; // .for
+end; // .procedure GenerateBattleStackEffectPalettes
+
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 begin
   SetupColorMode;
+  GenerateBattleStackEffectPalettes;
   ApiJack.StdSplice(Ptr($47B820), @Hook_DrawInterfaceDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($47B7D0), @Hook_DrawInterfaceDefButtonFrame, ApiJack.CONV_THISCALL, 9);
   ApiJack.StdSplice(Ptr($47B610), @Hook_DrawInterfaceDefGroupFrame, ApiJack.CONV_THISCALL, 15);
@@ -1745,12 +1874,6 @@ begin
   ApiJack.StdSplice(Ptr($47B730), @Hook_DrawFlagObjectDefFrame, ApiJack.CONV_THISCALL, 14);
   ApiJack.StdSplice(Ptr($47B6E0), @Hook_DrawNotFlagObjectDefFrame, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($47B870), @Hook_DrawDefFrameType0Or2, ApiJack.CONV_THISCALL, 14);
-
-  if FALSE then begin
-    // Support for creature defs and custom animated defs is limited due to many functions accessing frame dimensions directly
-    ApiJack.StdSplice(Ptr($47B680), @Hook_DrawBattleMonDefFrame, ApiJack.CONV_THISCALL, 15);
-  end;
-
   ApiJack.StdSplice(Ptr($47B8C0), @Hook_DrawDefFrameType0Or2Shadow, ApiJack.CONV_THISCALL, 14);
   ApiJack.StdSplice(Ptr($47B780), @Hook_DrawDefFrameType3Shadow, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($44DF80), @Hook_DrawPcx16ToPcx16, ApiJack.CONV_THISCALL, 12);
@@ -1758,6 +1881,13 @@ begin
   ApiJack.StdSplice(Ptr($6003E0), @Hook_ColorizePcx8ToPlayerColors, ApiJack.CONV_FASTCALL, 2);
   ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($55AE50), @Hook_LoadPcx16, ApiJack.CONV_THISCALL, 1);
+
+  ApiJack.StdSplice(Ptr($47B680), @Hook_DrawBattleMonDefFrame, ApiJack.CONV_THISCALL, 15);
+  ApiJack.HookCode(Ptr($43E013),  @Hook_ApplyBloodLustToDefPalette);
+  ApiJack.HookCode(Ptr($43E0B9),  @Hook_ApplyPetrificationToDefPalette);
+  ApiJack.HookCode(Ptr($43E12E),  @Hook_ApplyGrayscaleToDefPalette);
+  ApiJack.HookCode(Ptr($43E1BA),  @Hook_ApplyCloningToDefPalette);
+  ApiJack.HookCode(Ptr($43E288),  @Hook_AfterBattleDefPaletteEffects);
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -1772,6 +1902,7 @@ begin
   PcxPngFileMap       := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   PcxPngRedirections  := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   ColorizedPcxPng     := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  DefBattleEffects    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
 
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeScriptsReload', OnBeforeScriptsReload);
