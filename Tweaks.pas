@@ -9,6 +9,7 @@ uses
   Math,
   StrLib,
   SysUtils,
+  Types,
   Utils,
   Windows,
   WinSock,
@@ -38,6 +39,7 @@ uses
 type
   (* Import *)
   TStrList = DataLib.TStrList;
+  TRect    = Types.TRect;
 
 const
   // f (Value: pchar; MaxResLen: integer; DefValue, Key, SectionName, FileName: pchar): integer; cdecl;
@@ -1347,11 +1349,106 @@ end;
 
 function Hook_ZvsPlaceCreature_End (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
+  // Here we rely on the fact, that ZvsLeaveCreature is simple wrapper with pushad + extra data upon b_MsgBox (4F6C00)
   PatchApi.Call(FASTCALL_, Ptr($4F6C00), [pinteger(Context.EBP - $38)^, 4, pinteger(Context.EBP + 60)^, pinteger(Context.EBP + 64)^, -1, 0, -1, 0, -1, 0, -1, 0]);
 
   result          := false;
   Context.RetAddr := Ptr($7575B3);
 end;
+
+function Hook_Show3PicDlg_PrepareDialogStruct (Context: ApiJack.PHookContext): longbool; stdcall;
+type
+  PDlgStruct = ^TDlgStruct;
+  TDlgStruct = packed record
+    _1: array [1..16] of byte;
+    x:      integer;
+    y:      integer;
+    Width:  integer;
+    Height: integer;
+  end;
+
+const
+  FUNC_PREPARE_DLG_STRUCT = $4F6410;
+  MIN_OFFSET_FROM_BORDERS = 8;
+  STD_GAME_WIDTH          = 800;
+  STD_GAME_HEIGHT         = 600;
+
+var
+  DlgStruct:   PDlgStruct;
+  MessageType: integer;
+  OrigX:       integer;
+  OrigY:       integer;
+  CurrDlgId:   integer;
+  CurrDlg:     Heroes.PDlg;
+  BoxRect:     TRect;
+  ClickX:      integer;
+  ClickY:      integer;
+
+begin
+  DlgStruct := Ptr(Context.ECX);
+  OrigX     := DlgStruct.x;
+  OrigY     := DlgStruct.y;
+
+  PatchApi.Call(THISCALL_, Ptr(FUNC_PREPARE_DLG_STRUCT), [DlgStruct]);
+
+  MessageType := pinteger(Context.EBP - $10)^;
+  CurrDlgId   := Heroes.AdvManagerPtr^.GetCurrentDlgId;
+
+  if
+    //(OrigX = -1) and (OrigY = -1) and
+    (MessageType = ord(Heroes.MES_RMB_HINT)) and
+    (
+      (CurrDlgId = Heroes.ADVMAP_DLGID) or
+      (CurrDlgId = Heroes.BATTLE_DLGID) or
+      (CurrDlgId = Heroes.HERO_SCREEN_DLGID) or
+      (CurrDlgId = Heroes.HERO_MEETING_SCREEN_DLGID) or
+      (CurrDlgId = Heroes.TOWN_SCREEN_DLGID)
+    )
+  then begin
+    CurrDlg := Heroes.AdvManagerPtr^.CurrentDlg;
+    ClickX  := ZvsMouseEventInfo.x;
+    ClickY  := ZvsMouseEventInfo.y;
+    BoxRect := Types.Bounds(0, 0, Heroes.ScreenWidth^, Heroes.ScreenHeight^);
+
+    // Note, HD mod limits CurrDlg.Width/Height by 800x600 and makes coordinates relative to centered 800x600 area for non-advmap
+    if CurrDlgId <> Heroes.ADVMAP_DLGID then begin
+      BoxRect := Types.Bounds((Heroes.ScreenWidth^ - CurrDlg.Width) div 2, (Heroes.ScreenHeight^ - CurrDlg.Height) div 2, CurrDlg.Width, CurrDlg.Height);
+      ClickX  := ClickX + (Heroes.ScreenWidth^ - STD_GAME_WIDTH) div 2;
+      ClickY  := ClickY + (Heroes.ScreenHeight^ - STD_GAME_HEIGHT) div 2;
+    end;
+
+    DlgStruct.x := ClickX - DlgStruct.Width div 2;
+
+    if DlgStruct.x < (BoxRect.Left + MIN_OFFSET_FROM_BORDERS) then begin
+      DlgStruct.x := (BoxRect.Left + MIN_OFFSET_FROM_BORDERS);
+    end;
+
+    if DlgStruct.x + DlgStruct.Width > BoxRect.Right then begin
+      DlgStruct.x := BoxRect.Right - (DlgStruct.Width + MIN_OFFSET_FROM_BORDERS);
+    end;
+
+    if DlgStruct.x < BoxRect.Left then begin
+      DlgStruct.x := (Heroes.ScreenWidth^ - DlgStruct.Width) div 2;
+    end;
+
+    DlgStruct.y := ClickY - DlgStruct.Height div 2;
+
+    if DlgStruct.y < (BoxRect.Top + MIN_OFFSET_FROM_BORDERS) then begin
+      DlgStruct.y := (BoxRect.Top + MIN_OFFSET_FROM_BORDERS);
+    end;
+
+    if DlgStruct.y + DlgStruct.Height > BoxRect.Bottom then begin
+      DlgStruct.y := BoxRect.Bottom - (DlgStruct.Height + MIN_OFFSET_FROM_BORDERS);
+    end;
+
+    if DlgStruct.y < BoxRect.Top then begin
+      DlgStruct.y := (Heroes.ScreenHeight^ - DlgStruct.Height) div 2;
+    end;
+  end;
+
+  result          := false;
+  Context.RetAddr := Ptr($4F6D59);
+end; // .function Hook_Show3PicDlg_PrepareDialogStruct
 
 procedure DumpWinPeModuleList;
 const
@@ -1787,8 +1884,13 @@ begin
   (* Fix Blood Dragons aging change from 20% to 40% *)
   Core.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
 
-  (* Fix adventure map RMB popup coordinates: use tile coordinates, not centering *)
-  ApiJack.HookCode(Ptr($7575A3), @Hook_ZvsPlaceCreature_End);
+  (* Use click coords to show popup dialogs almost everywhere *)
+  if FALSE then begin
+    // Disabled, the patch simply restores SOD behavior on adventure map
+    ApiJack.HookCode(Ptr($7575A3), @Hook_ZvsPlaceCreature_End);
+  end;
+
+  ApiJack.HookCode(Ptr($4F6D54), @Hook_Show3PicDlg_PrepareDialogStruct);
 
   (* Increase number of quick battle rounds before fast finish from 30 to 100 *)
   Core.p.WriteDataPatch(Ptr($475C35), ['64']);
