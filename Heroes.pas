@@ -154,6 +154,8 @@ const
   Mp3Name:        pchar     = Ptr($6A33F4);
   GameType:       PGameType = Ptr($698A40);
   GameVersion:    pinteger  = Ptr($67F554);
+  ScreenWidth:    pinteger  = Ptr($401448);
+  ScreenHeight:   pinteger  = Ptr($40144F);
 
   (* Managers *)
   GAME_MANAGER   = $699538;
