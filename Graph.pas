@@ -1080,14 +1080,20 @@ end;
 
 function GetDefPngFrame (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): {On} ResLib.TSharedResource;
 var
-  DefRelPath: string;
+  DefRelPath:  string;
+  PngFileName: string;
+  PngFilePath: string;
 
 begin
-  result     := nil;
-  DefRelPath := StrLib.Concat([Lodman.GetRedirectedName(Def.GetName), '\', SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
+  result      := nil;
+  PngFileName := StrLib.Concat([SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
+  DefRelPath  := StrLib.Concat([Lodman.GetRedirectedName(Def.GetName), '\', PngFileName]);
 
   if DefFramesPngFileMap[DefRelPath] <> nil then begin
-    result := LoadPngResource(DefFramePngFilePathPrefix + DefRelPath);
+    PngFilePath := DefFramePngFilePathPrefix + DefRelPath;
+    Lodman.FindRedirection(StrLib.Concat([Def.GetName, ':', PngFileName]), PngFilePath);
+
+    result := LoadPngResource(PngFilePath);
   end;
 end;
 
