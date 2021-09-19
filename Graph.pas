@@ -74,8 +74,10 @@ type
   TDrawDefFrameFlag  = (DDF_CROP, DDF_MIRROR, DDF_NO_SPECIAL_PALETTE_COLORS);
   TDrawDefFrameFlags = set of TDrawDefFrameFlag;
 
-  PColorizablePlayerPalette = ^TColorizablePlayerPalette;
-  TColorizablePlayerPalette = array [0..31] of integer;
+  PColorizablePlayerPalette32 = ^TColorizablePlayerPalette32;
+  TColorizablePlayerPalette32 = array [0..31] of integer;
+  PColorizablePlayerPalette16 = ^TColorizablePlayerPalette16;
+  TColorizablePlayerPalette16 = array [0..31] of word;
 
   TPcx8ToRawImageAdapter = class (TRawImage)
    protected
@@ -144,7 +146,7 @@ procedure DrawRawImageToPcx16Canvas (Image: TRawImage; SrcX, SrcY, DstX, DstY, B
 
 
 var
-  DefaultPlayerInterfacePalette: TColorizablePlayerPalette = (
+  DefaultPlayerInterfacePalette: TColorizablePlayerPalette32 = (
     integer($FF131F40), integer($FF18264F), integer($FF192855), integer($FF1D2C5A), integer($FF1D2F63), integer($FF1F3269), integer($FF20336D), integer($FF20346D),
     integer($FF283865), integer($FF20346E), integer($FF213571), integer($FF223671), integer($FF223673), integer($FF223773), integer($FF223774), integer($FF233877),
     integer($FF233977), integer($FF233979), integer($FF243A79), integer($FF243A7B), integer($FF243B7D), integer($FF253C7F), integer($FF263D82), integer($FF273F83),
@@ -1130,7 +1132,7 @@ var
 {Un} Image:                  TRawImage;
      PlayerColor:            integer;
      UsePaletteColorization: boolean;
-     PlayerPalette:          PColorizablePlayerPalette;
+     PlayerPalette:          PColorizablePlayerPalette16;
      WithColors:             TArrayOfColor32;
      i:                      integer;
 
