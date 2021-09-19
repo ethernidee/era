@@ -1097,6 +1097,7 @@ const
   WndManagerPtr:    ^PWndManager    = Ptr($6992D0); // CHECKME!
   GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
+  SwapManagerPtr:   ppointer        = Ptr($6A3D90);
 
   CurrentPlayerId:  pinteger   = Ptr($69CCF4);
   GameDate:         ^PGameDate = Ptr($840CE0);
