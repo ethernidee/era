@@ -84,7 +84,7 @@ begin
   Str := trDef('era.locale.decimal_separator', [], '.');
 
   if Str = '' then begin
-    Str := '.';    
+    Str := '.';
   end;
 
   LocalDecimalSeparator := Str[1];
@@ -94,7 +94,7 @@ begin
   Str := trDef('era.locale.thousand_separator', [], ' ');
 
   if Str = '' then begin
-    Str := ' ';    
+    Str := ' ';
   end;
 
   LocalThousandSeparator := Str[1];
@@ -104,7 +104,7 @@ begin
   Str := trDef('era.locale.non_breaking_space', [], #160);
 
   if Str = '' then begin
-    Str := #160;    
+    Str := #160;
   end;
 
   NonBreakingSpace := Str[1];
@@ -115,7 +115,7 @@ begin
     Str := trDef('era.locale.metric_suffixes.' + SysUtils.IntToStr(i), [], DefMetricSuffixes[i]);
 
     if Str = '' then begin
-      Str := DefMetricSuffixes[i];    
+      Str := DefMetricSuffixes[i];
     end;
 
     MetricSuffixes[i] := Str;
@@ -161,7 +161,7 @@ begin
   // * * * * * //
   IsInvalidFile := false;
   Utils.CastOrFree(TlkJson.ParseText(FileContents), Json.TlkJsonObject, LangData);
-  
+
   if LangData <> nil then begin
     ProcessTree(LangData, '');
   end else begin
@@ -249,7 +249,7 @@ var
 {On} UpdatedMapLangResources: RscLists.TResourceList;
 
 begin
-  UpdatedMapLangResources := LoadMapLangResources;  
+  UpdatedMapLangResources := LoadMapLangResources;
   // * * * * * //
   if not UpdatedMapLangResources.FastCompare(MapLangResources) then begin
     LangDict.Clear;

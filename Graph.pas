@@ -910,7 +910,7 @@ var
 begin
   {!} Assert(ForegroundImage <> nil);
   result        := nil;
-  BaseConfigKey := 'era.png_backs.' + SysUtils.AnsiLowerCase(Files.ToRelativePathIfPossible(ForegroundPngFilePath, GameExt.GameDir));
+  BaseConfigKey := 'era.png_backs.' + SysUtils.AnsiLowerCase(EraZip.ToRelativePathIfPossible(ForegroundPngFilePath, GameExt.GameDir));
   ConfigKey     := BaseConfigKey + '.file';
   BackPcxName   := Trans.Tr(ConfigKey, []);
 

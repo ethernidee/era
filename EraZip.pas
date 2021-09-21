@@ -128,6 +128,13 @@ function LocateInZipFs (const MaskedPath: string; SearchSubj: TSearchSubj): ILoc
 (* Reads either file from real FS or from zip FS. Automatically detects paths in game directory or prefixed with "zip:\". *)
 function ReadFileContentsFromZipFs (const FilePath: string; var FileContents: string): boolean;
 
+(* Convers real FS or zip FS path into relative path or returns empty string. Any path in zip is considered relative *)
+function ToRelativePath (FilePath, BasePath: string): string;
+
+(* Convers real FS or zip FS path into relative path or returns original string. Any path in zip is considered relative *)
+function ToRelativePathIfPossible (FilePath, BasePath: string): string;
+
+
 (***)  implementation  (***)
 
 
@@ -522,6 +529,24 @@ begin
   result := Self.fZipItemsMap[RelPath];
 end;
 
+function ToRelativePath (FilePath, BasePath: string): string;
+begin
+  if Copy(FilePath, 1, 5) = 'zip:\' then begin
+    result := Copy(FilePath, 6);
+  end else begin
+    result := Files.ToRelativePath(FilePath, BasePath);
+  end;
+end;
+
+function ToRelativePathIfPossible (FilePath, BasePath: string): string;
+begin
+  if Copy(FilePath, 1, 5) = 'zip:\' then begin
+    result := Copy(FilePath, 6);
+  end else begin
+    result := Files.ToRelativePathIfPossible(FilePath, BasePath);
+  end;
+end;
+
 function LocateInZipFs (const MaskedPath: string; SearchSubj: TSearchSubj): ILocator;
 var
 {Un} ZipItem: TZipItem;
@@ -529,13 +554,8 @@ var
      Iters:   array [0..1] of Files.ILocator;
 
 begin
-  if Copy(MaskedPath, 1, 5) = 'zip:\' then begin
-    RelPath := Copy(MaskedPath, 6);
-  end else begin
-    RelPath := Files.ToRelativePath(MaskedPath, GameExt.GameDir);
-  end;
-
-  result := Files.Locate(MaskedPath, SearchSubj);
+  RelPath := ToRelativePath(MaskedPath, GameExt.GameDir);
+  result  := Files.Locate(MaskedPath, SearchSubj);
 
   if RelPath <> '' then begin
     ZipItem := ZipFs.FindItem(SysUtils.ExtractFileDir(RelPath));
@@ -560,13 +580,8 @@ begin
   if Files.FileExists(FilePath) then begin
     result := Files.ReadFileContents(FilePath, FileContents);
   end else begin
-    if Copy(FilePath, 1, 5) = 'zip:\' then begin
-      RelPath := Copy(FilePath, 6);
-    end else begin
-      RelPath := Files.ToRelativePath(FilePath, GameExt.GameDir);
-    end;
-
-    result := RelPath <> '';
+    RelPath := ToRelativePath(FilePath, GameExt.GameDir);
+    result  := RelPath <> '';
 
     if result then begin
       ZipItem := ZipFs.FindItem(RelPath);
