@@ -957,7 +957,7 @@ begin
       result := TRawImage32.Create(ComposedImagePixels, ForegroundImage.Width, ForegroundImage.Height, ComposedScanlineSize, ImageSetup);
 
       result.Meta[META_BACK_PCX_NAME]            := TString.Create(BackPcxName);
-      result.Meta[META_REDIRECTED_BACK_PCX_NAME] := TString.Create(Lodman.GetRedirectedName(BackPcxName));
+      result.Meta[META_REDIRECTED_BACK_PCX_NAME] := TString.Create(Lodman.GetRedirectedName(BackPcxName, [Lodman.FRF_EXCLUDE_FALLBACKS]));
 
       SysUtils.FreeAndNil(BackImage);
     end; // .if
@@ -1001,7 +1001,7 @@ begin
     BackPcxName := CachedImage.Meta[META_BACK_PCX_NAME];
 
     // Is it composed image, for which background pcx redirection was changed, try to remove it from cache and recreate
-    if (BackPcxName <> nil) and (TString(CachedImage.Meta[META_REDIRECTED_BACK_PCX_NAME]).Value <> Lodman.GetRedirectedName(BackPcxName.Value)) then begin
+    if (BackPcxName <> nil) and (TString(CachedImage.Meta[META_REDIRECTED_BACK_PCX_NAME]).Value <> Lodman.GetRedirectedName(BackPcxName.Value, [Lodman.FRF_EXCLUDE_FALLBACKS])) then begin
       result.DecRef;
       result := nil;
 
@@ -1089,11 +1089,11 @@ var
 begin
   result      := nil;
   PngFileName := StrLib.Concat([SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
-  DefRelPath  := StrLib.Concat([Lodman.GetRedirectedName(Def.GetName), '\', PngFileName]);
+  DefRelPath  := StrLib.Concat([Lodman.GetRedirectedName(Def.GetName, [Lodman.FRF_EXCLUDE_FALLBACKS]), '\', PngFileName]);
 
   if DefFramesPngFileMap[DefRelPath] <> nil then begin
     PngFilePath := DefFramePngFilePathPrefix + DefRelPath;
-    Lodman.FindRedirection(StrLib.Concat([Def.GetName, ':', PngFileName]), PngFilePath);
+    Lodman.FindRedirection(StrLib.Concat([Def.GetName, ':', PngFileName]), PngFilePath, [Lodman.FRF_EXCLUDE_FALLBACKS]);
 
     result := LoadPngResource(PngFilePath);
   end;
@@ -1141,7 +1141,7 @@ begin
   PngFilePath            := nil;
   UsePaletteColorization := false;
 
-  PcxName     := Lodman.GetRedirectedName(PcxName);
+  PcxName     := Lodman.GetRedirectedName(PcxName, [Lodman.FRF_EXCLUDE_FALLBACKS]);
   PlayerColor := integer(ColorizedPcxPng[PcxName]) - 1;
 
   // Suppoprt for alternative images for each player color
