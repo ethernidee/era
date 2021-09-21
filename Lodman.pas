@@ -43,6 +43,9 @@ type
     Indexes: array [TLodType, TGameVersion] of TIndexes;
   end;
 
+  TFindRedirectionFlag  = (FRF_EXCLUDE_FALLBACKS);
+  TFindRedirectionFlags = set of TFindRedirectionFlag;
+
 
 const
   ZvsAddLodToList: TZvsAddLodToList = Ptr($75605B);
@@ -54,8 +57,8 @@ procedure RedirectFile (const OldFileName, NewFileName: string);
 procedure GlobalRedirectFile (const OldFileName, NewFileName: string);
 function  FindFileLod (const FileName: string; out LodPath: string): boolean;
 function  FileIsInLod (const FileName: string; Lod: Heroes.PLod): boolean;
-function  FindRedirection (const FileName: string; var {out} Redirected: string): boolean;
-function  GetRedirectedName (const FileName: string): string;
+function  FindRedirection (const FileName: string; var {out} Redirected: string; Flags: TFindRedirectionFlags = []): boolean;
+function  GetRedirectedName (const FileName: string; Flags: TFindRedirectionFlags = []): string;
 
 
 (***) implementation (***)
@@ -71,13 +74,14 @@ const
   REDIRECT_MISSING_AND_EXISTING = not REDIRECT_ONLY_MISSING;
 
 var
-{O} GlobalLodRedirs:  {O} AssocArrays.TAssocArray {OF TString};
-{O} LodRedirs:        {O} AssocArrays.TAssocArray {OF TString};
-{O} LodList:          Lists.TStringList;
-    NumLods:          integer = DEF_NUM_LODS;
-    RedirCritSection: Windows.TRTLCriticalSection;
+{O} GlobalLodRedirs:   {O} AssocArrays.TAssocArray {of TString};
+{O} LodRedirs:         {O} AssocArrays.TAssocArray {of TString};
+{O} FallbackLodRedirs: {O} AssocArrays.TAssocArray {of TString};
+{O} LodList:           Lists.TStringList;
+    NumLods:           integer = DEF_NUM_LODS;
+    RedirCritSection:  Windows.TRTLCriticalSection;
 
-{O} PostponedMissingMediaRedirs: {O} Lists.TStringList {OF TString};
+{O} PostponedMissingMediaRedirs: {O} Lists.TStringList {of TString};
 
 
 procedure UnregisterLod (LodInd: integer);
@@ -206,7 +210,7 @@ begin
   result := FindFileLod(FileName, FoundLod);
 end;
 
-function FindRedirection (const FileName: string; var {out} Redirected: string): boolean;
+function FindRedirection (const FileName: string; var {out} Redirected: string; Flags: TFindRedirectionFlags = []): boolean;
 var
 {U} Redirection: TString;
 
@@ -220,6 +224,10 @@ begin
     Redirection := GlobalLodRedirs[FileName];
   end;
 
+  if (Redirection = nil) and not (FRF_EXCLUDE_FALLBACKS in Flags) then begin
+    Redirection := FallbackLodRedirs[FileName];
+  end;
+
   if Redirection <> nil then begin
     Redirected := Redirection.Value;
     result     := true;
@@ -228,9 +236,9 @@ begin
   {!} Windows.LeaveCriticalSection(RedirCritSection);
 end; // .function FindRedirection
 
-function GetRedirectedName (const FileName: string): string;
+function GetRedirectedName (const FileName: string; Flags: TFindRedirectionFlags = []): string;
 begin
-  if not FindRedirection(FileName, result) then begin
+  if not FindRedirection(FileName, result, Flags) then begin
     result := FileName;
   end;
 end;
@@ -270,7 +278,11 @@ begin
               end;
 
               if WillBeRedirected then begin
-                GlobalLodRedirs[ResourceName] := TString.Create(Config.GetString(i));
+                if RedirectOnlyMissing then begin
+                  FallbackLodRedirs[ResourceName] := TString.Create(Config.GetString(i));
+                end else begin
+                  GlobalLodRedirs[ResourceName] := TString.Create(Config.GetString(i));
+                end;
               end;
             end; // .if
           end; // .for
@@ -476,6 +488,7 @@ begin
   Windows.InitializeCriticalSection(RedirCritSection);
   GlobalLodRedirs             := AssocArrays.NewStrictAssocArr(TString);
   LodRedirs                   := AssocArrays.NewStrictAssocArr(TString);
+  FallbackLodRedirs           := AssocArrays.NewStrictAssocArr(TString);
   LodList                     := Lists.NewSimpleStrList;
   PostponedMissingMediaRedirs := DataLib.NewStrList(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
 
