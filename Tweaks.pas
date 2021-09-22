@@ -14,6 +14,7 @@ uses
   Windows,
   WinSock,
 
+  Alg,
   ApiJack,
   CFiles,
   Concur,
@@ -1338,6 +1339,19 @@ begin
   Context.RetAddr := Ptr($7294E8);
 end; // .function Hook_ErmDlgFunction_HandleAnimatedDef
 
+function Hook_OpenMainMenuVideo (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  if not Math.InRange(Heroes.a2i(pchar(Trans.Tr('era.acredit_pos.x', []))), 0, 800 - 1) or
+     not Math.InRange(Heroes.a2i(pchar(Trans.Tr('era.acredit_pos.y', []))), 0, 600 - 1)
+  then begin
+    pinteger($699568)^ := Context.EAX;
+    Context.RetAddr    := Ptr($4EEF07);
+    result := false;
+  end else begin
+    result := true;
+  end;
+end;
+
 function Hook_ShowMainMenuVideo (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - $0C)^ := Heroes.a2i(pchar(Trans.Tr('era.acredit_pos.x', [])));
@@ -1878,8 +1892,9 @@ begin
   ApiJack.HookCode(Ptr($72A1F6), @Hook_DL_D_ItemCreation);
   ApiJack.HookCode(Ptr($729513), @Hook_ErmDlgFunction_HandleAnimatedDef);
 
-  (* Move acredits.smk video positon to json config *)
+  (* Move acredits.smk video positon to json config and treat out-of-bounds coordinates as video switch-off *)
   ApiJack.HookCode(Ptr($706609), @Hook_ShowMainMenuVideo);
+  ApiJack.HookCode(Ptr($4EEEE8), @Hook_OpenMainMenuVideo);
 
   (* Fix Blood Dragons aging change from 20% to 40% *)
   Core.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
@@ -1891,6 +1906,9 @@ begin
   end;
 
   ApiJack.HookCode(Ptr($4F6D54), @Hook_Show3PicDlg_PrepareDialogStruct);
+
+  (* Fix PrepareDialog3Struct inner width calculation: dlgWidth - 50 => dlgWidth - 40, centering the text *)
+  Core.p.WriteDataPatch(Ptr($4F6696), ['D7']);
 
   (* Increase number of quick battle rounds before fast finish from 30 to 100 *)
   Core.p.WriteDataPatch(Ptr($475C35), ['64']);
