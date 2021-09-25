@@ -91,6 +91,7 @@ var
   ZvsLibImageTemplate:   string;
   ZvsLibGamePath:        string;
   IsLocalPlaceObject:    boolean = true;
+  RmbClickEvent:         Heroes.TMouseEventInfo;
 
   Mp3TriggerHandledEvent: THandle;
   IsMp3Trigger:           boolean = false;
@@ -1370,6 +1371,18 @@ begin
   Context.RetAddr := Ptr($7575B3);
 end;
 
+function Hook_Dlg_SendMsg (OrigFunc: pointer; Dlg: Heroes.PDlg; Msg: Heroes.PMouseEventInfo): integer; stdcall;
+const
+  MSG_TYPE_RMB = 32;
+
+begin
+  if Msg.ActionType = MSG_TYPE_RMB then begin
+    RmbClickEvent := Msg^;
+  end;
+
+  result := PatchApi.Call(THISCALL_, OrigFunc, [Dlg, Msg]);
+end;
+
 function Hook_Show3PicDlg_PrepareDialogStruct (Context: ApiJack.PHookContext): longbool; stdcall;
 type
   PDlgStruct = ^TDlgStruct;
@@ -1386,6 +1399,7 @@ const
   MIN_OFFSET_FROM_BORDERS = 8;
   STD_GAME_WIDTH          = 800;
   STD_GAME_HEIGHT         = 600;
+  SMALLEST_DLG_HEIGHT     = 256;
 
 var
   DlgStruct:   PDlgStruct;
@@ -1410,25 +1424,15 @@ begin
 
   if
     //(OrigX = -1) and (OrigY = -1) and
-    (MessageType = ord(Heroes.MES_RMB_HINT)) and
-    (
-      (CurrDlgId = Heroes.ADVMAP_DLGID) or
-      (CurrDlgId = Heroes.BATTLE_DLGID) or
-      (CurrDlgId = Heroes.HERO_SCREEN_DLGID) or
-      (CurrDlgId = Heroes.HERO_MEETING_SCREEN_DLGID) or
-      (CurrDlgId = Heroes.TOWN_SCREEN_DLGID)
-    )
+    (MessageType = ord(Heroes.MES_RMB_HINT))
   then begin
     CurrDlg := Heroes.AdvManagerPtr^.CurrentDlg;
-    ClickX  := ZvsMouseEventInfo.x;
-    ClickY  := ZvsMouseEventInfo.y;
+    ClickX  := RmbClickEvent.x;
+    ClickY  := RmbClickEvent.y;
     BoxRect := Types.Bounds(0, 0, Heroes.ScreenWidth^, Heroes.ScreenHeight^);
 
-    // Note, HD mod limits CurrDlg.Width/Height by 800x600 and makes coordinates relative to centered 800x600 area for non-advmap
     if CurrDlgId <> Heroes.ADVMAP_DLGID then begin
       BoxRect := Types.Bounds((Heroes.ScreenWidth^ - CurrDlg.Width) div 2, (Heroes.ScreenHeight^ - CurrDlg.Height) div 2, CurrDlg.Width, CurrDlg.Height);
-      ClickX  := ClickX + (Heroes.ScreenWidth^ - STD_GAME_WIDTH) div 2;
-      ClickY  := ClickY + (Heroes.ScreenHeight^ - STD_GAME_HEIGHT) div 2;
     end;
 
     DlgStruct.x := ClickX - DlgStruct.Width div 2;
@@ -1445,7 +1449,12 @@ begin
       DlgStruct.x := (Heroes.ScreenWidth^ - DlgStruct.Width) div 2;
     end;
 
-    DlgStruct.y := ClickY - DlgStruct.Height div 2;
+    // Center small dialogs vertically, show taller dialog 65 pixels above the cursor
+    if DlgStruct.Height <= SMALLEST_DLG_HEIGHT then begin
+      DlgStruct.y := ClickY - DlgStruct.Height div 2;
+    end else begin
+      DlgStruct.y := ClickY - 65;
+    end;
 
     if DlgStruct.y < (BoxRect.Top + MIN_OFFSET_FROM_BORDERS) then begin
       DlgStruct.y := (BoxRect.Top + MIN_OFFSET_FROM_BORDERS);
@@ -1900,12 +1909,13 @@ begin
   Core.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
 
   (* Use click coords to show popup dialogs almost everywhere *)
+  ApiJack.HookCode(Ptr($4F6D54), @Hook_Show3PicDlg_PrepareDialogStruct);
+  ApiJack.StdSplice(Ptr($5FF3A0), @Hook_Dlg_SendMsg, ApiJack.CONV_THISCALL, 2);
+
   if FALSE then begin
     // Disabled, the patch simply restores SOD behavior on adventure map
     ApiJack.HookCode(Ptr($7575A3), @Hook_ZvsPlaceCreature_End);
   end;
-
-  ApiJack.HookCode(Ptr($4F6D54), @Hook_Show3PicDlg_PrepareDialogStruct);
 
   (* Fix PrepareDialog3Struct inner width calculation: dlgWidth - 50 => dlgWidth - 40, centering the text *)
   Core.p.WriteDataPatch(Ptr($4F6696), ['D7']);
