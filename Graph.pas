@@ -1497,13 +1497,43 @@ procedure Hook_DrawNotFlagObjectDefFrame (
   DoMirror: boolean
 ); stdcall;
 
+var
+{On} ImageResource:  ResLib.TSharedResource;
+{Un} Image:          TRawImage;
+     DrawImageSetup: GraphTypes.TDrawImageSetup;
+
 begin
-  if not DrawDefPngFrame(Def, 0, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, DoMirror, false) then begin
+  ImageResource := GetDefPngFrame(Def, 0, FrameInd);
+
+  if ImageResource <> nil then begin
+    Image := ImageResource.Data as TRawImage;
+
+    DrawImageSetup.Init;
+    DrawImageSetup.EnableFilters                     := true;
+    DrawImageSetup.DoHorizMirror                     := DoMirror;
+    DrawImageSetup.NumColorsToReplace                := 4;
+    DrawImageSetup.ReplaceColorPairs[0].First.Value  := Image.InternalizeColor32(integer($FFFF00FF));
+    DrawImageSetup.ReplaceColorPairs[0].Second.Value := integer($80000000);
+    DrawImageSetup.ReplaceColorPairs[1].First.Value  := Image.InternalizeColor32(integer($FFFF96FF));
+    DrawImageSetup.ReplaceColorPairs[1].Second.Value := integer($60000000);
+    DrawImageSetup.ReplaceColorPairs[2].First.Value  := Image.InternalizeColor32(integer($FFFF64FF));
+    DrawImageSetup.ReplaceColorPairs[2].Second.Value := integer($40000000);
+    DrawImageSetup.ReplaceColorPairs[3].First.Value  := Image.InternalizeColor32(integer($FFFF32FF));
+    DrawImageSetup.ReplaceColorPairs[3].Second.Value := integer($20000000);
+
+    if DoMirror then begin
+      SrcX := Def.Width - SrcX - SrcWidth;
+    end;
+
+    DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, SrcWidth, SrcHeight, DstW, DstH, Buf, ScanlineSize, DrawImageSetup);
+
+    ImageResource.DecRef;
+  end else begin
     PatchApi.Call(THISCALL_, OrigFunc, [
       Def, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror)
     ]);
-  end;
-end;
+  end; // .else
+end; // .procedure Hook_DrawNotFlagObjectDefFrame
 
 procedure Hook_DrawDefFrameType0Or2 (
   OrigFunc: pointer;
