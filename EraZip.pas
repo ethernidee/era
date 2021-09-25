@@ -532,7 +532,7 @@ end;
 function ToRelativePath (FilePath, BasePath: string): string;
 begin
   if Copy(FilePath, 1, 5) = 'zip:\' then begin
-    result := Copy(FilePath, 6);
+    result := Files.NormalizePathSeparators(Copy(FilePath, 6));
   end else begin
     result := Files.ToRelativePath(FilePath, BasePath);
   end;
@@ -541,7 +541,7 @@ end;
 function ToRelativePathIfPossible (FilePath, BasePath: string): string;
 begin
   if Copy(FilePath, 1, 5) = 'zip:\' then begin
-    result := Copy(FilePath, 6);
+    result := Files.NormalizePathSeparators(Copy(FilePath, 6));
   end else begin
     result := Files.ToRelativePathIfPossible(FilePath, BasePath);
   end;
