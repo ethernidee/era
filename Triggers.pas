@@ -102,7 +102,7 @@ begin
   end;
 
   if (Msg = WM_KEYDOWN) or (Msg = WM_SYSKEYDOWN) then begin
-    RootDlgId := Heroes.AdvManagerPtr^.GetRootDlgId;
+    RootDlgId := Heroes.WndManagerPtr^.GetRootDlgId;
 
     if wParam = KEY_F11 then begin
       GameExt.GenerateDebugInfo;
@@ -117,7 +117,7 @@ begin
       Erm.ArgXVars[2] := ENABLE_DEF_REACTION;
       Erm.ArgXVars[3] := ((lParam shr 30) and 1) xor 1;
 
-      if (RootDlgId = Heroes.ADVMAP_DLGID) and (Heroes.AdvManagerPtr^.CurrentDlg.FocusedItemId = -1) then begin
+      if (RootDlgId = Heroes.ADVMAP_DLGID) and (Heroes.WndManagerPtr^.CurrentDlg.FocusedItemId = -1) then begin
         Utils.CopyMem(sizeof(SavedV), @Erm.v[1], @SavedV);
         Utils.CopyMem(sizeof(SavedZ), @Erm.z[1], @SavedZ);
 
@@ -512,6 +512,7 @@ const
 begin
   Erm.FireErmEventEx(Erm.TRIGGER_BUILD_TOWN_BUILDING, [Town.Id, BuildingId]);
   result := PatchApi.Call(THISCALL_, OrigFunc, [Town, BuildingId, Unk1, Unk2]);
+  Erm.FireErmEventEx(Erm.TRIGGER_AFTER_BUILD_TOWN_BUILDING, [Town.Id, BuildingId]);
 end;
 
 var
