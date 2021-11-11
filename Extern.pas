@@ -506,6 +506,11 @@ begin
   StrRegistry[Key] := TString.Create(NewValue);
 end;
 
+function PcxPngExists (const PcxName: pchar): TDwordBool; stdcall;
+begin
+  result := ord(Graph.PcxPngExists(PcxName));
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -564,6 +569,7 @@ exports
   NameTrigger,
   NotifyError,
   PatchExists,
+  PcxPngExists,
   PluginExists,
   ReadSavegameSection,
   ReadStrFromIni,

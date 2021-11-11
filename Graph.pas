@@ -129,6 +129,9 @@ function LoadPcxEx (const PcxName: string): {On} Heroes.PPcxItem;
 (* Loads given png file from cache or file system and returns TRawImage in the best format wrapped into shared resource *)
 function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
 
+(* Tries to load PNG replacement for pcx file name and returns success flag *)
+function PcxPngExists (const PcxName: string): boolean;
+
 function GetDefFrameWidth (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): integer;
 function GetDefFrameHeight (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): integer;
 
@@ -1144,7 +1147,7 @@ begin
   PcxName     := Lodman.GetRedirectedName(PcxName, [Lodman.FRF_EXCLUDE_FALLBACKS]);
   PlayerColor := integer(ColorizedPcxPng[PcxName]) - 1;
 
-  // Suppoprt for alternative images for each player color
+  // Support for alternative images for each player color
   if PlayerColor in [Heroes.PLAYER_FIRST..Heroes.PLAYER_LAST] then begin
     PcxAltName  := SysUtils.ChangeFileExt(PcxName, '_p' + SysUtils.IntToStr(PlayerColor) + '.pcx');
     PngFilePath := PcxPngFileMap[GetPcxRedirectedName(PcxAltName)];
@@ -1181,6 +1184,19 @@ begin
     end; // .if
   end; // .if
 end; // .function GetPcxPng
+
+function PcxPngExists (const PcxName: string): boolean;
+var
+{On} ImageResource: ResLib.TSharedResource;
+
+begin
+  ImageResource := GetPcxPng(PcxName);
+  result        := ImageResource <> nil;
+
+  if result then begin
+    ImageResource.DecRef;
+  end;
+end;
 
 function GetDefFrameCroppingRect (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): TRect;
 var
@@ -1422,7 +1438,7 @@ var
   CurrentDlg: Heroes.PDlg;
 
 begin
-  CurrentDlg := Heroes.AdvManagerPtr^.CurrentDlg;
+  CurrentDlg := Heroes.WndManagerPtr^.CurrentDlg;
 
   if
     (CurrentDlg = nil) or
