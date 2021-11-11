@@ -91,7 +91,7 @@ var
   ZvsLibImageTemplate:   string;
   ZvsLibGamePath:        string;
   IsLocalPlaceObject:    boolean = true;
-  RmbClickEvent:         Heroes.TMouseEventInfo;
+  DlgLastEvent:          Heroes.TMouseEventInfo;
 
   Mp3TriggerHandledEvent: THandle;
   IsMp3Trigger:           boolean = false;
@@ -1174,27 +1174,18 @@ function Hook_ErmDlgFunctionActionSwitch (Context: ApiJack.PHookContext): longbo
 const
   ARG_DLG_ID = 1;
 
-  DLG_MOUSE_EVENT_INFO_VAR       = $887654;
-  DLG_USER_COMMAND_VAR           = $887658;
-  DLG_BODY_VAR                   = -$5C;
-  DLG_BODY_ID_FIELD              = 200;
-  DLG_COMMAND_CLOSE              = 1;
-  DLG_ACTION_HOVER               = 4;
-  DLG_ACTION_INDLG_CLICK         = 512;
-  DLG_ACTION_SCROLL_WHEEL        = 522;
-  DLG_ACTION_KEY_PRESSED         = 256;
-  DLG_ACTION_OUTDLG_LMB_PRESSED  = 8;
-  DLG_ACTION_OUTDLG_LMB_RELEASED = 16;
-  DLG_ACTION_OUTDLG_RMB_PRESSED  = 32;
-  DLG_ACTION_OUTDLG_RMB_RELEASED = 64;
-  DLG_ACTION_OUTDLG_CLICK        = 8;
-  MOUSE_OK_CLICK                 = 10;
-  MOUSE_LMB_PRESSED              = 12;
-  MOUSE_LMB_RELEASED             = 13;
-  MOUSE_RMB_PRESSED              = 14;
-  ACTION_KEY_PRESSED             = 20;
-  ITEM_INSIDE_DLG                = -1;
-  ITEM_OUTSIDE_DLG               = -2;
+  DLG_MOUSE_EVENT_INFO_VAR = $887654;
+  DLG_USER_COMMAND_VAR     = $887658;
+  DLG_BODY_VAR             = -$5C;
+  DLG_BODY_ID_FIELD        = 200;
+  DLG_COMMAND_CLOSE        = 1;
+  MOUSE_OK_CLICK           = 10;
+  MOUSE_LMB_PRESSED        = 12;
+  MOUSE_LMB_RELEASED       = 13;
+  MOUSE_RMB_PRESSED        = 14;
+  ACTION_KEY_PRESSED       = 20;
+  ITEM_INSIDE_DLG          = -1;
+  ITEM_OUTSIDE_DLG         = -2;
 
 var
   MouseEventInfo: Heroes.PMouseEventInfo;
@@ -1208,24 +1199,24 @@ begin
   result         := false;
 
   case MouseEventInfo.ActionType of
-    DLG_ACTION_INDLG_CLICK:  begin end;
-    DLG_ACTION_SCROLL_WHEEL: begin MouseEventInfo.Item := ITEM_INSIDE_DLG; end;
+    Heroes.DLG_ACTION_INDLG_CLICK:  begin end;
+    Heroes.DLG_ACTION_SCROLL_WHEEL: begin MouseEventInfo.Item := ITEM_INSIDE_DLG; end;
 
-    DLG_ACTION_KEY_PRESSED: begin
+    Heroes.DLG_ACTION_KEY_PRESSED: begin
       MouseEventInfo.Item := ITEM_INSIDE_DLG;
     end;
 
-    DLG_ACTION_OUTDLG_RMB_PRESSED: begin
+    Heroes.DLG_ACTION_OUTDLG_RMB_PRESSED: begin
       MouseEventInfo.Item          := ITEM_OUTSIDE_DLG;
       MouseEventInfo.ActionSubtype := MOUSE_RMB_PRESSED;
     end;
 
-    DLG_ACTION_OUTDLG_LMB_PRESSED: begin
+    Heroes.DLG_ACTION_OUTDLG_LMB_PRESSED: begin
       MouseEventInfo.Item          := ITEM_OUTSIDE_DLG;
       MouseEventInfo.ActionSubtype := MOUSE_LMB_PRESSED;
     end;
 
-    DLG_ACTION_OUTDLG_LMB_RELEASED: begin
+    Heroes.DLG_ACTION_OUTDLG_LMB_RELEASED: begin
       MouseEventInfo.Item          := ITEM_OUTSIDE_DLG;
       MouseEventInfo.ActionSubtype := MOUSE_LMB_RELEASED;
     end;
@@ -1262,7 +1253,7 @@ begin
 
   if pinteger(DLG_USER_COMMAND_VAR)^ = DLG_COMMAND_CLOSE then begin
     Context.EAX                     := 2;
-    MouseEventInfo.ActionType       := DLG_ACTION_INDLG_CLICK;
+    MouseEventInfo.ActionType       := Heroes.DLG_ACTION_INDLG_CLICK;
     MouseEventInfo.ActionSubtype    := MOUSE_OK_CLICK;
 
     // Assign result item
@@ -1372,12 +1363,15 @@ begin
 end;
 
 function Hook_Dlg_SendMsg (OrigFunc: pointer; Dlg: Heroes.PDlg; Msg: Heroes.PMouseEventInfo): integer; stdcall;
-const
-  MSG_TYPE_RMB = 32;
-
 begin
-  if Msg.ActionType = MSG_TYPE_RMB then begin
-    RmbClickEvent := Msg^;
+  if
+    (Msg.ActionType = DLG_ACTION_OUTDLG_LMB_PRESSED) or
+    (Msg.ActionType = DLG_ACTION_OUTDLG_LMB_RELEASED) or
+    (Msg.ActionType = DLG_ACTION_OUTDLG_RMB_PRESSED) or
+    (Msg.ActionType = DLG_ACTION_OUTDLG_RMB_RELEASED) or
+    (Msg.ActionType = DLG_ACTION_INDLG_CLICK)
+  then begin
+    DlgLastEvent := Msg^;
   end;
 
   result := PatchApi.Call(THISCALL_, OrigFunc, [Dlg, Msg]);
@@ -1420,15 +1414,15 @@ begin
   PatchApi.Call(THISCALL_, Ptr(FUNC_PREPARE_DLG_STRUCT), [DlgStruct]);
 
   MessageType := pinteger(Context.EBP - $10)^;
-  CurrDlgId   := Heroes.AdvManagerPtr^.GetCurrentDlgId;
+  CurrDlgId   := Heroes.WndManagerPtr^.GetCurrentDlgId;
 
   if
     //(OrigX = -1) and (OrigY = -1) and
     (MessageType = ord(Heroes.MES_RMB_HINT))
   then begin
-    CurrDlg := Heroes.AdvManagerPtr^.CurrentDlg;
-    ClickX  := RmbClickEvent.x;
-    ClickY  := RmbClickEvent.y;
+    CurrDlg := Heroes.WndManagerPtr^.CurrentDlg;
+    ClickX  := DlgLastEvent.x;
+    ClickY  := DlgLastEvent.y;
     BoxRect := Types.Bounds(0, 0, Heroes.ScreenWidth^, Heroes.ScreenHeight^);
 
     if CurrDlgId <> Heroes.ADVMAP_DLGID then begin
