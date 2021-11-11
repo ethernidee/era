@@ -230,7 +230,8 @@ const
   TRIGGER_TRANSFER_HERO                  = 77049;
   TRIGGER_AFTER_HERO_GAIN_LEVEL          = 77050;
   TRIGGER_BATTLE_ACTION_END              = 77051;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_BATTLE_ACTION_END;
+  TRIGGER_AFTER_BUILD_TOWN_BUILDING      = 77052;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_AFTER_BUILD_TOWN_BUILDING;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1184,6 +1185,7 @@ begin
     {*} TRIGGER_TRANSFER_HERO:                result := 'OnTransferHero';
     {*} TRIGGER_AFTER_HERO_GAIN_LEVEL:        result := 'OnAfterHeroGainLevel';
     {*} TRIGGER_BATTLE_ACTION_END:            result := 'OnBattleActionEnd';
+    {*} TRIGGER_AFTER_BUILD_TOWN_BUILDING:    result := 'OnAfterBuildTownBuilding';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -3738,6 +3740,7 @@ begin
   NameTrigger(TRIGGER_TRANSFER_HERO,                'OnTransferHero');
   NameTrigger(TRIGGER_AFTER_HERO_GAIN_LEVEL,        'OnAfterHeroGainLevel');
   NameTrigger(TRIGGER_BATTLE_ACTION_END,            'OnBattleActionEnd');
+  NameTrigger(TRIGGER_AFTER_BUILD_TOWN_BUILDING,    'OnAfterBuildTownBuilding');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
