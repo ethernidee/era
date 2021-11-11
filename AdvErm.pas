@@ -1905,7 +1905,7 @@ begin
       end; // .case "D"
     'O':
       begin
-        // O?$/?$/?$
+        // SN:O?$/?$/?$
         if NumParams = 3 then begin
           result := CheckCmdParamsEx(Params, NumParams, [ACTION_GET or TYPE_INT, ACTION_GET or TYPE_INT, ACTION_GET or TYPE_INT]);
 
