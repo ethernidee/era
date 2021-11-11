@@ -135,6 +135,16 @@ const
   HERO_MEETING_SCREEN_DLGID = $5AE6E0;
   TOWN_SCREEN_DLGID         = $5C5CB0;
 
+  (* Dialog actions *)
+  DLG_ACTION_HOVER               = 4;
+  DLG_ACTION_OUTDLG_LMB_PRESSED  = 8;
+  DLG_ACTION_OUTDLG_LMB_RELEASED = 16;
+  DLG_ACTION_OUTDLG_RMB_PRESSED  = 32;
+  DLG_ACTION_OUTDLG_RMB_RELEASED = 64;
+  DLG_ACTION_KEY_PRESSED         = 256;
+  DLG_ACTION_INDLG_CLICK         = 512;
+  DLG_ACTION_SCROLL_WHEEL        = 522;
+
   LOAD_TXT_FUNC   = $55C2B0;  // F (Name: pchar); FASTCALL;
   UNLOAD_TXT_FUNC = $55D300;  // F (PTxtFile); FASTCALL;
   { F ( Name: PCHAR; AddExt: LONGBOOL; ShowDialog: LONGBOOL; Compress: INTBOOL; SaveToData: LONGBOOL); THISCALL ([GAME_MANAGER]); }
@@ -355,17 +365,6 @@ type
   end;
   {$ALIGN ON}
 
-  PPAdvManager = ^PAdvManager;
-  PAdvManager  = ^TAdvManager;
-  TAdvManager  = packed record
-    _0:         array [1..80] of byte;
-    RootDlg:    PDlg;
-    CurrentDlg: PDlg;
-
-    function GetRootDlgId:    integer;
-    function GetCurrentDlgId: integer;
-  end;
-
   (* Events are stored in random order, except events for the same day *)
   PGlobalEvent = ^TGlobalEvent;
   TGlobalEvent = packed record
@@ -381,23 +380,6 @@ type
   end;
 
   TGlobalEvents = packed record First, Last, Dummy: PGlobalEvent; end;
-
-  PScreenPcx16  = ^TScreenPcx16;
-  TScreenPcx16  = packed record
-    Dummy:  array [0..35] of byte;
-    Width:  integer;
-    Height: integer;
-    (* Dummy *)
-  end; // .record TScreenPcx16
-
-  PWndManager = ^TWndManager;
-  TWndManager = packed record
-    _1:           array [1..55] of byte;
-    DlgResItemId: integer;
-    _2:           array [60..64] of byte;
-    ScreenPcx16:  PScreenPcx16;
-    (* Dummy *)
-  end; // .record TWndManager
 
   PSecSkillNames = ^TSecSkillNames;
   TSecSkillNames = array [0..MAX_SECONDARY_SKILLS - 1] of pchar;
@@ -1087,14 +1069,28 @@ type
     // _byte_ field_13300[3564];
   end; // .TCombatManager
 
+  PPAdvManager = ^PAdvManager;
+  PAdvManager  = ^TAdvManager;
+  TAdvManager  = packed record
+    _1:           array [1..55] of byte;
+    DlgResItemId: integer;
+    _2:           array [60..64] of byte;
+    ScreenPcx16:  PPcx16Item;
+    _0:           array [69..80] of byte;
+    RootDlg:      PDlg;
+    CurrentDlg:   PDlg;
+
+    function GetRootDlgId:    integer;
+    function GetCurrentDlgId: integer;
+  end;
+
 const
   MAlloc:      TMAlloc = Ptr($617492);
   MFree:       TMFree  = Ptr($60B0F0);
   ZvsRandom:   function (MinValue, MaxValue: integer): integer cdecl = Ptr($710509);
   TimeGetTime: function: integer = Ptr($77114A);
 
-  AdvManagerPtr:    PPAdvManager    = Ptr($6992D0);
-  WndManagerPtr:    ^PWndManager    = Ptr($6992D0); // CHECKME!
+  WndManagerPtr:    PPAdvManager    = Ptr($6992D0);
   GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
   SwapManagerPtr:   ppointer        = Ptr($6A3D90);
@@ -1435,8 +1431,8 @@ function TAdvManager.GetRootDlgId: integer;
 begin
   result := 0;
 
-  if AdvManagerPtr^.RootDlg <> nil then begin
-    result := integer(AdvManagerPtr^.RootDlg.VTable[0]);
+  if WndManagerPtr^.RootDlg <> nil then begin
+    result := integer(WndManagerPtr^.RootDlg.VTable[0]);
   end;
 end;
 
@@ -1444,8 +1440,8 @@ function TAdvManager.GetCurrentDlgId: integer;
 begin
   result := 0;
 
-  if AdvManagerPtr^.CurrentDlg <> nil then begin
-    result := integer(AdvManagerPtr^.CurrentDlg.VTable[0]);
+  if WndManagerPtr^.CurrentDlg <> nil then begin
+    result := integer(WndManagerPtr^.CurrentDlg.VTable[0]);
   end;
 end;
 
@@ -1873,8 +1869,8 @@ end;
 
 procedure GetGameState (out GameState: TGameState);
 begin
-  GameState.RootDlgId    := AdvManagerPtr^.GetRootDlgId;
-  GameState.CurrentDlgId := AdvManagerPtr^.GetCurrentDlgId;
+  GameState.RootDlgId    := WndManagerPtr^.GetRootDlgId;
+  GameState.CurrentDlgId := WndManagerPtr^.GetCurrentDlgId;
 end;
 
 function GetMapSize: integer; assembler; {$W+}
