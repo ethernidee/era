@@ -182,8 +182,6 @@ var
     GlobalBuffer: array [0..1024 * 1024 - 1] of char;
 
 
-
-
 procedure NameStdColors;
 begin
   NamedColors['AliceBlue']            := Ptr($F0F8FF);
