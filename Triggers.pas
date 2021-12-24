@@ -81,7 +81,9 @@ end;
 function MainWndProc (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
 const
   WM_KEYDOWN          = $100;
+  WM_KEYUP            = $101;
   WM_SYSKEYDOWN       = $104;
+  WM_SYSKEYUP         = $105;
   WM_SYSCOMMAND       = $112;
   SC_KEYMENU          = $F100;
   KEY_F11             = 122;
@@ -135,6 +137,30 @@ begin
         PrevWndProc(hWnd, Msg, wParam, lParam);
       end;
     end; // .else
+  end else if (Msg = WM_KEYUP) or (Msg = WM_SYSKEYUP) then begin
+    RootDlgId := Heroes.WndManagerPtr^.GetRootDlgId;
+
+    Erm.ArgXVars[1] := wParam;
+    Erm.ArgXVars[2] := ENABLE_DEF_REACTION;
+    Erm.ArgXVars[3] := ((lParam shr 30) and 1) xor 1;
+
+    if (RootDlgId = Heroes.ADVMAP_DLGID) and (Heroes.WndManagerPtr^.CurrentDlg.FocusedItemId = -1) then begin
+      Utils.CopyMem(sizeof(SavedV), @Erm.v[1], @SavedV);
+      Utils.CopyMem(sizeof(SavedZ), @Erm.z[1], @SavedZ);
+
+      Erm.FireErmEvent(Erm.TRIGGER_KEY_RELEASED);
+
+      Utils.CopyMem(sizeof(SavedV), @SavedV, @Erm.v[1]);
+      Utils.CopyMem(sizeof(SavedZ), @SavedZ, @Erm.z[1]);
+    end else begin
+      Erm.RetXVars[2] := ENABLE_DEF_REACTION;
+    end;
+
+    result := Erm.RetXVars[2] = ENABLE_DEF_REACTION;
+
+    if result then begin
+      PrevWndProc(hWnd, Msg, wParam, lParam);
+    end;
   end else begin
     result := PrevWndProc(hWnd, Msg, wParam, lParam);
   end; // .else
@@ -199,8 +225,8 @@ end; // .function Hook_EndCalcDamage
 
 function Hook_AI_CalcStackAttackEffect_Start (Context: Core.PHookContext): longbool; stdcall;
 begin
-  AIAttackerId := Heroes.GetBattleCellStackId(Heroes.GetBattleCellByPos(pinteger(pinteger(Context.ESP + 8)^ + STACK_POS_OFS)^));
-  AIDefenderId := Heroes.GetBattleCellStackId(Heroes.GetBattleCellByPos(pinteger(pinteger(Context.ESP + 16)^ + STACK_POS_OFS)^));
+  AIAttackerId := Heroes.GetStackIdByPos(pinteger(pinteger(Context.ESP + 8)^ + STACK_POS_OFS)^);
+  AIDefenderId := Heroes.GetStackIdByPos(pinteger(pinteger(Context.ESP + 16)^ + STACK_POS_OFS)^);
   result       := true;
 end;
 

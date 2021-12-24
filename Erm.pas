@@ -231,7 +231,8 @@ const
   TRIGGER_AFTER_HERO_GAIN_LEVEL          = 77050;
   TRIGGER_BATTLE_ACTION_END              = 77051;
   TRIGGER_AFTER_BUILD_TOWN_BUILDING      = 77052;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_AFTER_BUILD_TOWN_BUILDING;
+  TRIGGER_KEY_RELEASED                   = 77053;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_KEY_RELEASED;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1186,6 +1187,7 @@ begin
     {*} TRIGGER_AFTER_HERO_GAIN_LEVEL:        result := 'OnAfterHeroGainLevel';
     {*} TRIGGER_BATTLE_ACTION_END:            result := 'OnBattleActionEnd';
     {*} TRIGGER_AFTER_BUILD_TOWN_BUILDING:    result := 'OnAfterBuildTownBuilding';
+    {*} TRIGGER_KEY_RELEASED:                 result := 'OnKeyReleased';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -3741,6 +3743,7 @@ begin
   NameTrigger(TRIGGER_AFTER_HERO_GAIN_LEVEL,        'OnAfterHeroGainLevel');
   NameTrigger(TRIGGER_BATTLE_ACTION_END,            'OnBattleActionEnd');
   NameTrigger(TRIGGER_AFTER_BUILD_TOWN_BUILDING,    'OnAfterBuildTownBuilding');
+  NameTrigger(TRIGGER_KEY_RELEASED,                 'OnKeyReleased');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
