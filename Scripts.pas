@@ -73,8 +73,13 @@ begin
 
   // Setup package search paths
   lua_getglobal(L, 'package');
-  lua_pushstring(L, SysUtils.GetCurrentDir() + '\' + SCRIPTS_DIR + '\?.lua;' + SysUtils.GetCurrentDir() + '\' + SCRIPTS_DIR + '\lib\?.lua');
+  lua_pushstring(L, GameExt.GameDir + '\' + SCRIPTS_DIR + '\?.lua;' + GameExt.GameDir + '\' + SCRIPTS_DIR + '\lib\?.lua');
   lua_setfield(L, -2, 'path');
+  lua_pop(L, 1);
+
+  lua_getglobal(L, 'package');
+  lua_pushstring(L, '');
+  lua_setfield(L, -2, 'cpath');
   lua_pop(L, 1);
 end; // .procedure InitLua
 
@@ -119,11 +124,11 @@ var
     i:          integer;
 
 begin
-  ScriptList := FilesEx.GetFileList(SCRIPTS_DIR + '\*.sys.lua', Files.ONLY_FILES);
+  ScriptList := FilesEx.GetFileList(GameExt.GameDir + '\' + SCRIPTS_DIR + '\*.sys.lua', Files.ONLY_FILES);
   ScriptList.Sort;
 
   for i := 0 to ScriptList.Count - 1 do begin
-    ExecuteLuaScript(SCRIPTS_DIR + '\' + ScriptList[i]);
+    ExecuteLuaScript(GameExt.GameDir + '\' + SCRIPTS_DIR + '\' + ScriptList[i]);
   end;
 
   // * * * * * //
