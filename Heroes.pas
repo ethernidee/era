@@ -749,6 +749,11 @@ type
   PSpells = ^TSpells;
   TSpells = array [0..high(integer) div sizeof(TSpell) - 1] of TSpell;
 
+  TArtHandle = packed record
+    Id:       integer;
+    Modifier: integer;
+  end;
+
   (* Ported from WoG. Needs refactoring *)
   PHero = ^THero;
   THero = packed record
@@ -836,10 +841,10 @@ type
     DMorale1:     byte;                           // +11A modif morali (oazis)
     DLuck:        byte;                           // +11B modif udachi do sled bitvy
     _u6a:         array [0..16] of byte;
-    IArt:         array [0..18, 0..1] of integer; // +12D dd*2*13h = artifakty dd-nomer,dd-(FF) (kniga 3,FF)
+    EquippedArts: array [0..18] of TArtHandle; // +12D dd*2*13h = artifakty dd-nomer,dd-(FF) (kniga 3,FF)
     FreeAddSlots: byte;                           // +1C5 kolichestvo pustyh dop. slotov sleva
     LockedSlot:   array [0..13] of byte;          // +1C6
-    OArt:         array [0..63, 0..1] of integer; // +1D4 dd*2*40 = art v ryukzake dd-nomer, dd-(FF)
+    BackpackArts: array [0..63] of TArtHandle; // +1D4 dd*2*40 = art v ryukzake dd-nomer, dd-(FF)
     OANum:        byte;                           // +3D4 db   = chislo artifaktov v ryukzake
     Sex:          integer;                        // +3D5 dd    = pol
     fl_B:         byte;                           // +3D9 db    = est' biografiya
@@ -2013,27 +2018,35 @@ type
   PStackField = ^TStackField;
   TStackField = packed record
     v:  integer;
-  end; // .record TStackField
+  end;
 
 const
   NO_STACK  = -1;
   STACK_POS = $38;
 
 var
-  i: integer;
+  BattleCell: pointer;
+  i:          integer;
 
 begin
-  result := NO_STACK;
+  BattleCell := GetBattleCellByPos(StackPos);
+  result     := NO_STACK;
 
-  for i := 0 to NUM_BATTLE_STACKS - 1 do begin
-    if StackProp(i, STACK_POS).v = StackPos then begin
-      result := i;
+  if BattleCell <> nil then begin
+    result := GetBattleCellStackId(BattleCell);
+  end;
 
-      if StackProp(i, STACK_NUM).v > 0 then begin
-        exit;
+  if result = NO_STACK then begin
+    for i := 0 to NUM_BATTLE_STACKS - 1 do begin
+      if StackProp(i, STACK_POS).v = StackPos then begin
+        result := i;
+
+        if StackProp(i, STACK_NUM).v > 0 then begin
+          exit;
+        end;
       end;
     end;
-  end;
+  end; // .if
 end; // .function GetStackIdByPos
 
 procedure RedrawHeroMeetingScreen; ASSEMBLER;
