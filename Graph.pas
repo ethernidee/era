@@ -959,8 +959,8 @@ begin
 
       result := TRawImage32.Create(ComposedImagePixels, ForegroundImage.Width, ForegroundImage.Height, ComposedScanlineSize, ImageSetup);
 
-      result.Meta[META_BACK_PCX_NAME]            := TString.Create(BackPcxName);
-      result.Meta[META_REDIRECTED_BACK_PCX_NAME] := TString.Create(Lodman.GetRedirectedName(BackPcxName, [Lodman.FRF_EXCLUDE_FALLBACKS]));
+      result.Meta[META_BACK_PCX_NAME]            := TString.Create(SysUtils.ChangeFileExt(BackPcxName, '.pcx'));
+      result.Meta[META_REDIRECTED_BACK_PCX_NAME] := TString.Create(Lodman.GetRedirectedName(TString(result.Meta[META_BACK_PCX_NAME]).Value, [Lodman.FRF_EXCLUDE_FALLBACKS]));
 
       SysUtils.FreeAndNil(BackImage);
     end; // .if
