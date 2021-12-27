@@ -74,10 +74,18 @@ type
   TDrawDefFrameFlag  = (DDF_CROP, DDF_MIRROR, DDF_NO_SPECIAL_PALETTE_COLORS);
   TDrawDefFrameFlags = set of TDrawDefFrameFlag;
 
+  TPngColorizationType = (NO_COLORIZATION, COLORIZATION_ALT_IMAGE, COLORIZATION_SPECIAL_COLORS);
+
   PColorizablePlayerPalette32 = ^TColorizablePlayerPalette32;
   TColorizablePlayerPalette32 = array [0..31] of integer;
   PColorizablePlayerPalette16 = ^TColorizablePlayerPalette16;
   TColorizablePlayerPalette16 = array [0..31] of word;
+
+  TPngColorizationInfo = record
+    ColorizationType: TPngColorizationType;
+    PlayerColor:      integer;
+    PngFilePath:      string;
+  end;
 
   TPcx8ToRawImageAdapter = class (TRawImage)
    protected
@@ -176,8 +184,7 @@ const
 var
 {O} DefFramesPngFileMap: {U} TDict {of Ptr(1)};                 // Caseinsensitive map of "defname.def\frame_index.png" => 1 if frame png file exists.
 {O} PcxPngFileMap:       {O} TDict {of png file path: TString};
-{O} PcxPngRedirections:  {O} TDict {of pcx file name: TString}; // Used for runtime pcx alternatives like special variant for each player, cleared on rescan
-{O} ColorizedPcxPng:     {U} TDict {of Ptr(PlayerId + 1)};      // Used to track, which pcx were colorized to which player colors. Is never reset.
+{O} ColorizedPng:        {U} TDict {of Ptr(PlayerId + 1)};      // Used to track, which pcx/def frame (real, final after SN:R resolution) were colorized to which player colors. Is never reset.
 {O} DefBattleEffects:    {U} TDict {of effect palette pointer}; // Used for clone/blood lust/petrification battle effects implementation
 
   DefFramePngFilePathPrefix: string; // Like "D:\Games\Heroes 3\Data\Defs\"
@@ -1083,22 +1090,83 @@ begin
   DrawRawImageToGameBuf(Image, SrcX, SrcY, DstX, DstY, BoxWidth, BoxHeight, Canvas.Width, Canvas.Height, pointer(Canvas.Buffer), Canvas.ScanlineSize, DrawImageSetup);
 end;
 
-function GetDefPngFrame (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): {On} ResLib.TSharedResource;
+procedure ApplyPaletteColorizationToPng (Image: TRawImage; PlayerColor: integer);
 var
-  DefRelPath:  string;
-  PngFileName: string;
-  PngFilePath: string;
+  PlayerPalette: PColorizablePlayerPalette16;
+  WithColors:    TArrayOfColor32;
+  i:             integer;
 
 begin
-  result      := nil;
-  PngFileName := StrLib.Concat([SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
-  DefRelPath  := StrLib.Concat([Lodman.GetRedirectedName(Def.GetName, [Lodman.FRF_EXCLUDE_FALLBACKS]), '\', PngFileName]);
+  {!} Assert(Image <> nil);
+  {!} Assert(PlayerColor in [Heroes.PLAYER_FIRST..Heroes.PLAYER_LAST]);
 
-  if DefFramesPngFileMap[DefRelPath] <> nil then begin
-    PngFilePath := DefFramePngFilePathPrefix + DefRelPath;
+  if TInt.ToInteger(TInt(Image.Meta[META_PLAYER_COLOR]), -1) <> PlayerColor then begin
+    Image.Meta[META_PLAYER_COLOR] := TInt.Create(PlayerColor);
+    PlayerPalette                 := @Heroes.PlayerPalettesPtr^.Colors[Length(DefaultPlayerInterfacePalette) * PlayerColor];
+    SetLength(WithColors, Length(DefaultPlayerInterfacePalette));
+
+    for i := 0 to High(DefaultPlayerInterfacePalette) do begin
+      WithColors[i].Value := GraphTypes.Color16To32(PlayerPalette[i]);
+    end;
+
+    Image.RestoreFromBackup;
+    Image.MakeBackup;
+    Image.ReplaceColors(@DefaultPlayerInterfacePalette[0], @WithColors[0], Length(DefaultPlayerInterfacePalette));
+  end; // .if
+end;
+
+procedure GetDefPngFrameColorizationInfo (const DefName, FrameRelPath: string; var PngColorizationInfo: TPngColorizationInfo);
+var
+  FrameAltPath: string;
+  PlayerColor:  integer;
+
+begin
+  PngColorizationInfo.ColorizationType := NO_COLORIZATION;
+
+  PlayerColor := integer(ColorizedPng[DefName]) - 1;
+
+  if PlayerColor in [Heroes.PLAYER_FIRST..Heroes.PLAYER_LAST] then begin
+    PngColorizationInfo.ColorizationType := COLORIZATION_SPECIAL_COLORS;
+    PngColorizationInfo.PlayerColor      := PlayerColor;
+    FrameAltPath                         := SysUtils.ChangeFileExt(FrameRelPath, '_p' + SysUtils.IntToStr(PlayerColor) + '.png');
+
+    if DefFramesPngFileMap[FrameAltPath] <> nil then begin
+      PngColorizationInfo.ColorizationType := COLORIZATION_ALT_IMAGE;
+      PngColorizationInfo.PngFilePath      := DefFramePngFilePathPrefix + FrameAltPath;
+    end;
+  end;
+end;
+
+function GetDefPngFrame (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): {On} ResLib.TSharedResource;
+var
+  ColorizationInfo: TPngColorizationInfo;
+  DefName:          string;
+  FrameRelPath:     string;
+  PngFileName:      string;
+  PngFilePath:      string;
+
+begin
+  result       := nil;
+  DefName      := Lodman.GetRedirectedName(Def.GetName, [Lodman.FRF_EXCLUDE_FALLBACKS]);
+  PngFileName  := StrLib.Concat([SysUtils.IntToStr(GroupInd), '_', SysUtils.IntToStr(FrameInd), '.png']);
+  FrameRelPath := StrLib.Concat([DefName, '\', PngFileName]);
+  PngFilePath  := '';
+
+  GetDefPngFrameColorizationInfo(DefName, FrameRelPath, ColorizationInfo);
+
+  if ColorizationInfo.ColorizationType = COLORIZATION_ALT_IMAGE then begin
+    PngFilePath := ColorizationInfo.PngFilePath;
+  end else if DefFramesPngFileMap[FrameRelPath] <> nil then begin
+    PngFilePath := DefFramePngFilePathPrefix + FrameRelPath;
+  end;
+
+  if PngFilePath <> '' then begin
     Lodman.FindRedirection(StrLib.Concat([Def.GetName, ':', PngFileName]), PngFilePath, [Lodman.FRF_EXCLUDE_FALLBACKS]);
-
     result := LoadPngResource(PngFilePath);
+
+    if (result <> nil) and (ColorizationInfo.ColorizationType = COLORIZATION_SPECIAL_COLORS) then begin
+      ApplyPaletteColorizationToPng(TRawImage(result.Data), ColorizationInfo.PlayerColor);
+    end;
   end;
 end;
 
@@ -1115,74 +1183,52 @@ begin
   end;
 end;
 
-function GetPcxRedirectedName (const PcxName: string): string;
+procedure GetPcxPngColorizationInfo (const PcxName: string; var PngColorizationInfo: TPngColorizationInfo);
 var
-{Un} PcxRedirectedName: TString;
+  PcxAltName:  string;
+  PlayerColor: integer;
 
 begin
-  result            := PcxName;
-  PcxRedirectedName := PcxPngRedirections[PcxName];
+  PngColorizationInfo.ColorizationType := NO_COLORIZATION;
 
-  if PcxRedirectedName <> nil then begin
-    result := PcxRedirectedName.Value;
+  PlayerColor := integer(ColorizedPng[PcxName]) - 1;
+
+  if PlayerColor in [Heroes.PLAYER_FIRST..Heroes.PLAYER_LAST] then begin
+    PngColorizationInfo.ColorizationType := COLORIZATION_SPECIAL_COLORS;
+    PngColorizationInfo.PlayerColor      := PlayerColor;
+    PcxAltName                           := SysUtils.ChangeFileExt(PcxName, '_p' + SysUtils.IntToStr(PlayerColor) + '.pcx');
+    PngColorizationInfo.PngFilePath      := TString.ToString(PcxPngFileMap[PcxAltName]);
+
+    if PngColorizationInfo.PngFilePath <> '' then begin
+      PngColorizationInfo.ColorizationType := COLORIZATION_ALT_IMAGE;
+    end;
   end;
 end;
 
 function GetPcxPng (PcxName: string): {On} ResLib.TSharedResource; overload;
 var
-     PcxAltName:             string;
-{Un} PngFilePath:            TString;
-{Un} Image:                  TRawImage;
-     PlayerColor:            integer;
-     UsePaletteColorization: boolean;
-     PlayerPalette:          PColorizablePlayerPalette16;
-     WithColors:             TArrayOfColor32;
-     i:                      integer;
+  ColorizationInfo: TPngColorizationInfo;
+  PngFilePath:      string;
 
 begin
-  result                 := nil;
-  PngFilePath            := nil;
-  UsePaletteColorization := false;
+  result := nil;
 
-  PcxName     := Lodman.GetRedirectedName(PcxName, [Lodman.FRF_EXCLUDE_FALLBACKS]);
-  PlayerColor := integer(ColorizedPcxPng[PcxName]) - 1;
+  PcxName := Lodman.GetRedirectedName(PcxName, [Lodman.FRF_EXCLUDE_FALLBACKS]);
+  GetPcxPngColorizationInfo(PcxName, ColorizationInfo);
 
-  // Support for alternative images for each player color
-  if PlayerColor in [Heroes.PLAYER_FIRST..Heroes.PLAYER_LAST] then begin
-    PcxAltName  := SysUtils.ChangeFileExt(PcxName, '_p' + SysUtils.IntToStr(PlayerColor) + '.pcx');
-    PngFilePath := PcxPngFileMap[GetPcxRedirectedName(PcxAltName)];
+  if ColorizationInfo.ColorizationType = COLORIZATION_ALT_IMAGE then begin
+    PngFilePath := ColorizationInfo.PngFilePath;
+  end else begin
+    PngFilePath := TString.ToString(PcxPngFileMap[PcxName]);
+  end;
 
-    if PngFilePath = nil then begin
-      UsePaletteColorization := true;
+  if PngFilePath <> '' then begin
+    result := LoadPngResource(PngFilePath);
+
+    if (result <> nil) and (ColorizationInfo.ColorizationType = COLORIZATION_SPECIAL_COLORS) then begin
+      ApplyPaletteColorizationToPng(TRawImage(result.Data), ColorizationInfo.PlayerColor);
     end;
   end;
-
-  if PngFilePath = nil then begin
-    PngFilePath := PcxPngFileMap[GetPcxRedirectedName(PcxName)];
-  end;
-
-  if PngFilePath <> nil then begin
-    result := LoadPngResource(PngFilePath.Value);
-
-    // Apply native fixed 32-palette to fixed 32-palette colorization if not applied already to cached image
-    if (result <> nil) and UsePaletteColorization then begin
-      Image := TRawImage(result.Data);
-
-      if TInt.ToInteger(TInt(Image.Meta[META_PLAYER_COLOR]), -1) <> PlayerColor then begin
-        Image.Meta[META_PLAYER_COLOR] := TInt.Create(PlayerColor);
-        PlayerPalette                 := @Heroes.PlayerPalettesPtr^.Colors[Length(DefaultPlayerInterfacePalette) * PlayerColor];
-        SetLength(WithColors, Length(DefaultPlayerInterfacePalette));
-
-        for i := 0 to High(DefaultPlayerInterfacePalette) do begin
-          WithColors[i].Value := GraphTypes.Color16To32(PlayerPalette[i]);
-        end;
-
-        Image.RestoreFromBackup;
-        Image.MakeBackup;
-        Image.ReplaceColors(@DefaultPlayerInterfacePalette[0], @WithColors[0], Length(DefaultPlayerInterfacePalette));
-      end; // .if
-    end; // .if
-  end; // .if
 end; // .function GetPcxPng
 
 function PcxPngExists (const PcxName: string): boolean;
@@ -1313,7 +1359,6 @@ end; // .procedure ScanDirPcxPngFiles
 procedure RescanPcxPngFiles;
 begin
   PcxPngFileMap.Clear;
-  PcxPngRedirections.Clear;
   ScanDirPcxPngFiles(GameExt.GameDir + '\' + PCX_PNG_FRAMES_DIR);
 end;
 
@@ -1763,34 +1808,46 @@ begin
   end;
 end; // .procedure Hook_DrawPcx8ToPcx16
 
-function Hook_ColorizePcx8ToPlayerColors (
-  OrigFunc:        pointer;
-  Palette16Colors: Heroes.PPalette16Colors;
-  PlayerId:        integer
-): integer; stdcall;
+var
+  LastPaletteColors:   Heroes.PPalette16Colors;
+  LastPaletteOwnerDef: Heroes.PDefItem;
 
+function Hook_ColorizePcx16PaletteToPlayerColors (OrigFunc: pointer; Palette16Colors: Heroes.PPalette16Colors; PlayerId: integer): integer; stdcall;
 var
   Pcx8:    Heroes.PPcx8Item;
-  PcxName: string;
+  ResName: string;
 
 begin
   result  := PatchApi.Call(FASTCALL_, OrigFunc, [Palette16Colors, PlayerId]);
-  PcxName := '';
+  ResName := '';
 
   try
-    Pcx8 := Utils.PtrOfs(Palette16Colors, -integer(@Heroes.PPcx8Item(0).Palette16.Colors));
+    if LastPaletteColors = Palette16Colors then begin
+      ResName := LastPaletteOwnerDef.GetName;
+    end else begin
+      Pcx8 := Utils.PtrOfs(Palette16Colors, -integer(@Heroes.PPcx8Item(0).Palette16.Colors));
 
-    if Pcx8.IsPcx8() then begin
-      PcxName := Pcx8.GetName;
+      if Pcx8.IsPcx8() then begin
+        ResName := Pcx8.GetName;
+      end;
     end;
+
+    LastPaletteColors := nil;
   except
     exit;
   end;
 
-  if PcxName <> '' then begin
-    ColorizedPcxPng[PcxName] := Ptr(PlayerId + 1);
+  if ResName <> '' then begin
+    ColorizedPng[LodMan.GetRedirectedName(ResName)] := Ptr(PlayerId + 1);
   end;
-end; // .function Hook_ColorizePcx8ToPlayerColors
+end; // .function Hook_ColorizePcx16PaletteToPlayerColors
+
+function Hook_Def_GetPaletteColors (OrigFunc: pointer; Def: Heroes.PDefItem): Heroes.PPalette16Colors; stdcall;
+begin
+  result              := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [Def]));
+  LastPaletteColors   := result;
+  LastPaletteOwnerDef := Def;
+end;
 
 function Hook_LoadPcx8 (
   OrigFunc: pointer;
@@ -1932,7 +1989,8 @@ begin
   ApiJack.StdSplice(Ptr($47B780), @Hook_DrawDefFrameType3Shadow, ApiJack.CONV_THISCALL, 13);
   ApiJack.StdSplice(Ptr($44DF80), @Hook_DrawPcx16ToPcx16, ApiJack.CONV_THISCALL, 12);
   ApiJack.StdSplice(Ptr($44F940), @Hook_DrawPcx8ToPcx16, ApiJack.CONV_THISCALL, 12);
-  ApiJack.StdSplice(Ptr($6003E0), @Hook_ColorizePcx8ToPlayerColors, ApiJack.CONV_FASTCALL, 2);
+  ApiJack.StdSplice(Ptr($6003E0), @Hook_ColorizePcx16PaletteToPlayerColors, ApiJack.CONV_FASTCALL, 2);
+  ApiJack.StdSplice(Ptr($47B5E0), @Hook_Def_GetPaletteColors, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($55AA10), @Hook_LoadPcx8, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($55AE50), @Hook_LoadPcx16, ApiJack.CONV_THISCALL, 1);
 
@@ -1954,8 +2012,7 @@ end;
 begin
   DefFramesPngFileMap := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   PcxPngFileMap       := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
-  PcxPngRedirections  := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
-  ColorizedPcxPng     := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  ColorizedPng        := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   DefBattleEffects    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
 
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
