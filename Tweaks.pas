@@ -799,6 +799,24 @@ begin
   Inc(CombatActionId);
 end;
 
+var
+  NativeSRand: function (seed: integer): integer cdecl = Ptr($61841F);
+  NativeRand:  function (): integer cdecl              = Ptr($61842C);
+
+function NativeRandomRange (MinValue, MaxValue: integer): integer;
+var
+  Range: integer;
+
+begin
+  if MinValue >= MaxValue then begin
+    result := MinValue;
+  end else begin
+    Range  := MaxValue - MinValue + 1;
+    result := NativeRand();
+    result := MinValue + result - (result div Range) * Range;
+  end;
+end;
+
 function Hook_SRand (OrigFunc: pointer; Seed: integer): integer; stdcall;
 var
   CallerAddr: pointer;
@@ -817,26 +835,20 @@ begin
     RngId   := 0;
   end;
 
-  result := PatchApi.Call(THISCALL_, OrigFunc, [Seed]);
+  result := NativeSRand(Seed);
   RandMt.GlobalRng.Init(Seed);
 end;
 
-function Hook_Rand (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
+function RandomRange (CallerAddr: pointer; MinValue, MaxValue: integer): integer; stdcall;
 var
-  CallerAddr: pointer;
-  Message:    string;
+  Message: string;
 
 begin
-  asm
-    mov eax, [ebp + 4]
-    mov CallerAddr, eax
-  end;
-
   if UseNativePrng then begin
     if UseDeterministicPrng then begin
       result := GenerateDeterministicBattleRandomValue(MinValue, MaxValue);
     end else begin
-      result := PatchApi.Call(FASTCALL_, OrigFunc, [MinValue, MaxValue]);
+      result := NativeRandomRange(MinValue, MaxValue);
     end;
   end else begin
     result := RandMt.GlobalRng.Random(MinValue, MaxValue);
@@ -859,7 +871,33 @@ begin
     Writeln(Message);
     Inc(RngId);
   end;
-end; // .function Hook_Rand
+end; // .function RandomRange
+
+function Hook_RandomRange (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
+var
+  CallerAddr: pointer;
+
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov CallerAddr, eax
+  end;
+
+  result := RandomRange(CallerAddr, MinValue, MaxValue);
+end;
+
+function Hook_Rand (OrigFunc: pointer): integer; stdcall;
+var
+  CallerAddr: pointer;
+
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov CallerAddr, eax
+  end;
+
+  result := RandomRange(CallerAddr, 0, 32767);
+end;
 
 function GenerateBattleId: integer;
 begin
@@ -1885,8 +1923,10 @@ begin
   ApiJack.HookCode(Ptr($763BA4), @Hook_ZvsGet4Receive);
 
   (* Replace Heroes 3 PRNG with thread-safe Mersenne Twister, except of multiplayer battles *)
+  NativeSRand := ApiJack.StdSplice(Ptr($61841F), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
+  NativeRand  := ApiJack.StdSplice(Ptr($61842C), @Hook_Rand, ApiJack.CONV_STDCALL, 0);
   ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
-  ApiJack.StdSplice(Ptr($50C7C0), @Hook_Rand, ApiJack.CONV_FASTCALL, 2);
+  ApiJack.StdSplice(Ptr($50C7C0), @Hook_RandomRange, ApiJack.CONV_FASTCALL, 2);
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
   ApiJack.HookCode(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
