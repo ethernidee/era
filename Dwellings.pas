@@ -44,12 +44,6 @@ const
   IS_NON_DISPOSABLE = not IS_DISPOSABLE;
 
 type
-  PRecruitMonsDlgTarget = ^TRecruitMonsDlgTarget;
-  TRecruitMonsDlgTarget = packed record
-    MonTypes: array [0..6] of integer;
-    MonNums:  array [0..6] of integer;
-  end;
-
   PRecruitMonsDlgSetup = ^TRecruitMonsDlgSetup;
   TRecruitMonsDlgSetup = packed record
     VirtTable:       pointer;
@@ -73,7 +67,7 @@ type
     ResourceCost:    integer; // +140
     IsTownScreen:    integer; // +144, 0 for kingdom overview
     _Unk3:           integer; // +148
-    Target:          PRecruitMonsDlgTarget; // +152
+    Target:          Heroes.PArmy; // +152
     _One1:           integer; // +156
     _Unk5:           array [0..2] of integer; // +160
     MaxQuantity:     integer; // +172
@@ -108,8 +102,8 @@ type
     DlgSlotToSlotMap: array [0..3] of integer; // map of dialog slot index => event slot index
     TargetType:       integer; // one of RECRUIT_TARGET_XXX constants
     TargetId:         integer; // id of hero or town, -1 in other cases
-    Target:           PRecruitMonsDlgTarget;
-    CustomTarget:     TRecruitMonsDlgTarget;
+    Target:           Heroes.PArmy;
+    CustomTarget:     Heroes.TArmy;
     ReadOnly:         boolean;
     Inited:           boolean;
     Id:               integer; // unique autoincrementing ID
@@ -555,7 +549,7 @@ var
   PrevEvent: TRecruitMonsDlgOpenEvent;
 
 begin
-  // The same procedure is called at least for Recruid Dialog and Hero Meeting Screen, thus we need to handle them separately
+  // The same procedure is called at least for Recruit Dialog and Hero Meeting Screen, thus we need to handle them separately
   if RecruitMonsDlgSetup.VirtTable <> RECRUIT_DLG_VIRT_TABLE then begin
     PatchApi.Call(PatchApi.THISCALL_, OrigFunc, [Obj, RecruitMonsDlgSetup]);
     exit;
@@ -1062,8 +1056,8 @@ begin
   end; // .else
 
   case TargetType of
-    RECRUIT_TARGET_TOWN:   DlgSetup.Target := @Heroes.ZvsGetTowns()[TargetId].GuardTypes;
-    RECRUIT_TARGET_HERO:   DlgSetup.Target := @Heroes.ZvsGetHero(TargetId).MonTypes;
+    RECRUIT_TARGET_TOWN:   DlgSetup.Target := @Heroes.ZvsGetTowns()[TargetId].Guards;
+    RECRUIT_TARGET_HERO:   DlgSetup.Target := @Heroes.ZvsGetHero(TargetId).Army;
     RECRUIT_TARGET_CUSTOM: DlgSetup.Target := nil;
   end;
 end; // .procedure InitRecruitMonsDlgSetup
