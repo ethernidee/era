@@ -6,9 +6,19 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 
 (***)  interface  (***)
 uses
-  Windows, SysUtils, Math,
-  Utils, PatchApi, DataLib, TypeWrappers, Alg, StrLib, DlgMes,
-  Core;
+  Math,
+  SysUtils,
+  Windows,
+
+  PatchApi,
+
+  Alg,
+  Core,
+  DataLib,
+  DlgMes,
+  StrLib,
+  TypeWrappers,
+  Utils;
 
 type
   (* Import *)
@@ -317,21 +327,24 @@ type
 
   PPlayer = ^TPlayer;
   TPlayer = packed record
-    Id:                byte;
-    NumHeroes:         byte;
-    Unk1:              array [1..2] of byte;
-    ActiveHeroId:      integer;
-    VisibleHeroIds:    array [0..7] of integer;
-    TavernLeftHeroId:  integer;
-    TavernRightHeroId: integer;
-    Unk2:              array [1..13] of byte;
-    DaysLeft:          byte;
-    NumTowns:          byte;
-    ActiveTownInd:     byte;
-    TownIds:           array [0..47] of byte;
-    Unk3:              array [1..113] of byte; // +$70
-    IsThisPcPlayer:    boolean;                // +$E1
-    Unk:               array [1..134] of byte;
+    Id:                  byte;
+    NumHeroes:           byte;
+    Unk1:                array [1..2] of byte;
+    ActiveHeroId:        integer;
+    VisibleHeroIds:      array [0..7] of integer;
+    TavernLeftHeroId:    integer;
+    TavernRightHeroId:   integer;
+    Unk2:                array [1..13] of byte;
+    DaysLeft:            byte;
+    NumTowns:            byte;
+    ActiveTownInd:       byte;
+    TownIds:             array [0..47] of byte;
+    Unk3:                array [1..113] of byte; // +$70
+    IsThisPcHumanPlayer: boolean;                // +$E1
+    IsHuman:             boolean;                // +$E2
+    Unk:                 array [1..133] of byte;
+
+    function IsOnActiveNetworkSide: boolean;
   end;
 
   {$ALIGN OFF}
@@ -754,6 +767,18 @@ type
     Modifier: integer;
   end;
 
+  PArmyMonTypes = ^TArmyMonTypes;
+  TArmyMonTypes = array [0..6] of integer;
+
+  PArmyMonNums = ^TArmyMonNums;
+  TArmyMonNums = array [0..6] of integer;
+
+  PArmy = ^TArmy;
+  TArmy = packed record
+    MonTypes: TArmyMonTypes;
+    MonNums:  TArmyMonNums;
+  end;
+
   (* Ported from WoG. Needs refactoring *)
   PHero = ^THero;
   THero = packed record
@@ -811,8 +836,7 @@ type
                                                   // Dword  VSWar;    // +7B shkola vojny
     Visited:      array [0..9] of integer;
     _u4:          array [0..17] of byte;          // +7F
-    MonTypes:     array [0..6] of integer;        // +91  dd*7  = tip suschestv (-1 - net)
-    MonNums:      array [0..6] of integer;        // +AD  dd*7  = kolichestvo
+    Army:         TArmy;                          // +91  dd*7, +AD  dd*7
     SSkill:       array [0..27] of byte;          // +C9  db*1C = uroven' 2-h skilov (odin bajt - uroven' etogo nomera skila 1,2,3) 0-net
                                                   // C9=Pathfinding CA=Archery CB=Logistics CC=Scouting CD=Diplomacy CE=Navigation CF=Leadership
                                                   // D0=Wisdom D1=Mysticism D2=Luck D3=Ballistics D4=Eagle Eye D5=Necromancy D6=Estates D7=Fire Magic
@@ -943,10 +967,8 @@ type
     _uC5:          array [0..2] of byte;
     Name:          TExtString;                   // +C8 -> Imya goroda
     _u8:           array [0..2] of integer;      // +D4 = 0
-    GuardTypes:    array [0..6] of integer;      // +E0 = ohrana zamka
-    GuardNums:     array [0..6] of integer;      // +FC = kol-vo ohrany
-    GuardsT0:      array [0..6] of integer;      // +118 = ohrana zamka
-    GuardsN0:      array [0..6] of integer;      // +134 = kol-vo ohrany
+    Guards:        TArmy;                        // +E0 = ohrana zamka, +FC = kol-vo ohrany
+    GuardsUnk:     TArmy;                        // +118 = ohrana zamka, +134 = kol-vo ohrany
     Built:         array [0..7] of byte;         // +150h = uzhe postroennye zdaniya (0400)
     Bonus:         array [0..7] of byte;         // +158h = bonus na suschestv, resursy i t.p., vyzvannyj stroeniyami
     BMask:         array [0..1] of integer;      // +160h = maska dostupnyh dlya stroeniya stroenij
@@ -1100,8 +1122,9 @@ const
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
   SwapManagerPtr:   ppointer        = Ptr($6A3D90);
 
-  CurrentPlayerId:  pinteger   = Ptr($69CCF4);
-  GameDate:         ^PGameDate = Ptr($840CE0);
+  ThisPcHumanPlayerId: pinteger   = Ptr($6995A4);
+  CurrentPlayerId:     pinteger   = Ptr($69CCF4);
+  GameDate:            ^PGameDate = Ptr($840CE0);
 
   BytesPerPixelPtr:           pbyte = Ptr($5FA228 + 3);
   Color16GreenChannelMaskPtr: pword = Ptr($694DB0);
@@ -1180,11 +1203,13 @@ function  IsLocalGame: boolean;
 function  IsNetworkGame: boolean;
 function  GetTownManager: PTownManager;
 function  GetPlayer (PlayerId: integer): {n} PPlayer;
+function  IsValidPlayerId (PlayerId: integer): boolean;
 
-(* Returns this PC current human player ID *)
-function GetThisPcPlayerId: integer;
+(* Returns this PC current human player ID or the last human player ID if it's HotSeat and it's AI turn *)
+function GetThisPcHumanPlayerId: integer;
 
-function  IsThisPcTurn: boolean;
+function  IsThisPcHumanTurn: boolean;
+function  IsThisPcNetworkActiveSide: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
 function  PackCoords (x, y, z: integer): integer;
 procedure UnpackCoords (PackedCoords: integer; var x, y, z: integer); overload;
@@ -1905,27 +1930,55 @@ begin
   result := ppointer(TOWN_MANAGER)^;
 end;
 
+function IsValidPlayerId (PlayerId: integer): boolean; inline;
+begin
+  result := Math.InRange(PlayerId, PLAYER_FIRST, PLAYER_LAST)
+end;
+
 function GetPlayer (PlayerId: integer): {n} PPlayer;
 begin
   result := nil;
 
-  if Math.InRange(PlayerId, PLAYER_FIRST, PLAYER_LAST)  then begin
+  if IsValidPlayerId(PlayerId) then begin
     result := Utils.PtrOfs(ppointer(GAME_MANAGER)^, $20AD0 + sizeof(TPlayer) * PlayerId);
   end;
 end;
 
-function GetThisPcPlayerId: integer;
+function TPlayer.IsOnActiveNetworkSide: boolean;
+var
+  i: integer;
+
+begin
+  result := IsLocalGame or Self.IsThisPcHumanPlayer;
+
+  if not result and not Self.IsHuman then begin
+    i := PLAYER_LAST;
+
+    while (i >= PLAYER_FIRST) and (not GetPlayer(i).IsHuman) do begin
+      Dec(i);
+    end;
+
+    result := (i >= PLAYER_FIRST) and GetPlayer(i).IsThisPcHumanPlayer;
+  end;
+end;
+
+function GetThisPcHumanPlayerId: integer;
 begin
   result := PatchApi.Call(THISCALL_, Ptr($4CE6E0), [ppointer(GAME_MANAGER)^]);
 end;
 
-function IsThisPcTurn: boolean;
+function IsThisPcHumanTurn: boolean;
+begin
+  result := IsValidPlayerId(CurrentPlayerId^) and GetPlayer(CurrentPlayerId^).IsThisPcHumanPlayer;
+end;
+
+function IsThisPcNetworkActiveSide: boolean;
 var
-  Player: PPlayer;
+  ThisPcHumanPlayerId: integer;
 
 begin
-  Player := GetPlayer(CurrentPlayerId^);
-  result := (Player <> nil) and (Player.IsThisPcPlayer);
+  ThisPcHumanPlayerId := GetThisPcHumanPlayerId;
+  result              := IsValidPlayerId(ThisPcHumanPlayerId) and GetPlayer(ThisPcHumanPlayerId).IsOnActiveNetworkSide;
 end;
 
 function GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
