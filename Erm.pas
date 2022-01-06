@@ -7495,7 +7495,8 @@ begin
       if NumParams >= 3 then begin
         result := ord(SetErmParamValue(VarParam, UniqueRng.RandomRange(SubCmd.Nums[1], SubCmd.Nums[2])));
       end else if NumParams >= 2 then begin
-        UniqueRng.Seed(SubCmd.Nums[1]);
+        ShowErmError('"!!VR:T" - it''s forbidden to seed the unique generator');
+        result := 0; exit;
       end else begin
         result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + UniqueRng.RandomRange(0, SubCmd.Nums[0])));
       end;
