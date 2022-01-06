@@ -8,7 +8,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 uses
   SysUtils, Math, Windows,
   Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
-  Lists, StrLib, Alg, RandMt, DlgMes,
+  Lists, StrLib, Alg, FastRand, DlgMes,
   Core, Heroes, GameExt, Trans, RscLists, EventMan;
 
 type
@@ -232,7 +232,9 @@ const
   TRIGGER_BATTLE_ACTION_END              = 77051;
   TRIGGER_AFTER_BUILD_TOWN_BUILDING      = 77052;
   TRIGGER_KEY_RELEASED                   = 77053;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_KEY_RELEASED;
+  TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES = 77054;
+  TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES  = 77055;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -696,7 +698,7 @@ const
 
 
 var
-{O} UniqueRng:       RandMt.TRngMt;
+{O} UniqueRng:       FastRand.TXoroshiro128Rng;
 {O} LoadedErsFiles:  {O} TList {of Heroes.TTextTable};
 {O} ErtStrings:      {O} AssocArrays.TObjArray {of Index => pchar}; // use H3 Alloc/Free
 {O} ScriptMan:       TScriptMan;
@@ -1188,6 +1190,8 @@ begin
     {*} TRIGGER_BATTLE_ACTION_END:            result := 'OnBattleActionEnd';
     {*} TRIGGER_AFTER_BUILD_TOWN_BUILDING:    result := 'OnAfterBuildTownBuilding';
     {*} TRIGGER_KEY_RELEASED:                 result := 'OnKeyReleased';
+    {*} TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES: result := 'OnBeforePlaceBattleObstacles';
+    {*} TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES:  result := 'OnAfterPlaceBattleObstacles';
     (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
@@ -3744,6 +3748,8 @@ begin
   NameTrigger(TRIGGER_BATTLE_ACTION_END,            'OnBattleActionEnd');
   NameTrigger(TRIGGER_AFTER_BUILD_TOWN_BUILDING,    'OnAfterBuildTownBuilding');
   NameTrigger(TRIGGER_KEY_RELEASED,                 'OnKeyReleased');
+  NameTrigger(TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES, 'OnBeforePlaceBattleObstacles');
+  NameTrigger(TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES,  'OnAfterPlaceBattleObstacles');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
@@ -5416,7 +5422,7 @@ var
 
   procedure SetTriggerQuickVarsAndFlags;
   begin
-    f[999] := Heroes.IsThisPcTurn();
+    f[999] := Heroes.IsThisPcHumanTurn();
 
     // Really the meaning of ZvsGmAiFlags is overloaded and cannot be trusted without looking at ERM help
     if ZvsGmAiFlags^ >= 0 then begin
@@ -6256,8 +6262,8 @@ begin
   IsCheckOnly     := true;
   result          := false;
 
-  MonType := Hero.MonTypes[Slot];
-  MonNum  := Hero.MonNums[Slot];
+  MonType := Hero.Army.MonTypes[Slot];
+  MonNum  := Hero.Army.MonNums[Slot];
 
   if ZvsApply(@MonType, sizeof(MonType), SubCmd, 2) = 0 then begin
     IsCheckOnly := false;
@@ -6279,11 +6285,11 @@ begin
   end;
 
   // Update hero structure. Get original values to MonType/MonNum
-  Utils.Exchange(Hero.MonTypes[Slot], MonType);
-  Utils.Exchange(Hero.MonNums[Slot],  MonNum);
+  Utils.Exchange(Hero.Army.MonTypes[Slot], MonType);
+  Utils.Exchange(Hero.Army.MonNums[Slot],  MonNum);
 
   // Fast quit for HE:C0/#/$/$ if slot was not really changed and exp was not specified
-  if (NumParams < 5) and (MonType = Hero.MonTypes[Slot]) and (MonNum = Hero.MonNums[Slot]) then begin
+  if (NumParams < 5) and (MonType = Hero.Army.MonTypes[Slot]) and (MonNum = Hero.Army.MonNums[Slot]) then begin
     exit;
   end;
 
@@ -6310,7 +6316,7 @@ begin
     exit;
   end;
 
-  ZvsCrExpoSet_Modify(OPER_SET_TYPE_AND_NUM, ITEM_TYPE_HERO, Hero.Id + Slot * $10000, Exp, ExpMod, Hero.MonTypes[Slot], MonNum, Hero.MonNums[Slot]);
+  ZvsCrExpoSet_Modify(OPER_SET_TYPE_AND_NUM, ITEM_TYPE_HERO, Hero.Id + Slot * $10000, Exp, ExpMod, Hero.Army.MonTypes[Slot], MonNum, Hero.Army.MonNums[Slot]);
 end; // .function Hook_HE_C
 
 function Hook_HE_X (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -7487,11 +7493,11 @@ begin
 
     'T': begin
       if NumParams >= 3 then begin
-        result := ord(SetErmParamValue(VarParam, UniqueRng.Random(SubCmd.Nums[1], SubCmd.Nums[2])));
+        result := ord(SetErmParamValue(VarParam, UniqueRng.RandomRange(SubCmd.Nums[1], SubCmd.Nums[2])));
       end else if NumParams >= 2 then begin
-        UniqueRng.Init(SubCmd.Nums[1]);
+        UniqueRng.Seed(SubCmd.Nums[1]);
       end else begin
-        result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + UniqueRng.Random(0, SubCmd.Nums[0])));
+        result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + UniqueRng.RandomRange(0, SubCmd.Nums[0])));
       end;
     end;
   else
@@ -7972,7 +7978,7 @@ begin
   end;
 end; // .function Hook_FU_EXT
 
-function Hook_OW_O (Context: ApiJack.PHookContext): longbool; stdcall;
+function Hook_OW_C (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   Cmd:       PErmCmd;
   SubCmd:    PErmSubCmd;
@@ -7989,7 +7995,7 @@ begin
   end;
 
   if (Context.EAX = 1) and (NumParams >= 2) and (SubCmd.Params[1].GetCheckType = PARAM_CHECK_GET) then begin
-    Context.EAX := ord(SetErmParamValue(@SubCmd.Params[1], Heroes.GetThisPcPlayerId));
+    Context.EAX := ord(SetErmParamValue(@SubCmd.Params[1], Heroes.GetThisPcHumanPlayerId));
   end;
 
   result := false;
@@ -7999,7 +8005,7 @@ begin
   end else begin
     Context.RetAddr := Ptr($738737);
   end;
-end; // .function Hook_OW_O
+end; // .function Hook_OW_C
 
 function IntCompareFast (a, b: integer): integer; inline;
 begin
@@ -8583,7 +8589,7 @@ begin
   ApiJack.HookCode(Ptr($72D181), @Hook_FU_EXT);
 
   // Add extended OW:C?(currentPlayer)/?(uiPlayer) syntax
-  ApiJack.HookCode(Ptr($737BCE), @Hook_OW_O);
+  ApiJack.HookCode(Ptr($737BCE), @Hook_OW_C);
 
   // Fix HE:V#1/#2/#3 to allow #2 to be any positive object ID, applying mod 32 to it.
   // This fix allows to play XXL maps without scripts fixing.
@@ -8678,7 +8684,7 @@ begin
 end; // .procedure OnAfterStructRelocations
 
 begin
-  UniqueRng       := RandMt.TRngMt.Create;
+  UniqueRng       := FastRand.TXoroshiro128Rng.Create(FastRand.GenerateSecureSeed);
   LoadedErsFiles  := DataLib.NewList(Utils.OWNS_ITEMS);
   ErtStrings      := AssocArrays.NewObjArr(not Utils.OWNS_ITEMS, not Utils.ITEMS_ARE_OBJECTS, Utils.NO_TYPEGUARD, not Utils.ALLOW_NIL);
   ScriptMan       := TScriptMan.Create;

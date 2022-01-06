@@ -122,7 +122,7 @@ begin
   Stores.DumpSavegameSectionsOpt := GetDebugOpt(    'Debug.DumpSavegameSections',  false);
   GameExt.DumpVfsOpt             := GetDebugOpt(    'Debug.DumpVirtualFileSystem', false);
   ResLib.ResManCacheSize         := GetOptIntValue( 'ResourceCacheSize',           200000000);
-  Tweaks.DebugRng                := GetDebugOpt(    'Debug.Rng',                   false);
+  Tweaks.DebugRng                := GetOptIntValue( 'Debug.Rng',                   0);
 
   if GetDebugOpt('Debug.LogVirtualFileSystem', false) then begin
     VfsImport.SetLoggingProc(@VfsLogger);

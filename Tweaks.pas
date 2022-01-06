@@ -1,16 +1,14 @@
 unit Tweaks;
-{
-DESCRIPTION:  Game improvements
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Game fixes, tweaks and improvements
+  Author:      Alexander Shostak (aka Berserker aka EtherniDee)
+*)
 
 (***)  interface  (***)
 uses
   Math,
-  StrLib,
   SysUtils,
   Types,
-  Utils,
   Windows,
   WinSock,
 
@@ -25,6 +23,7 @@ uses
   DlgMes,
   Erm,
   EventMan,
+  FastRand,
   Files,
   FilesEx,
   GameExt,
@@ -32,9 +31,10 @@ uses
   Ini,
   Lodman,
   PatchApi,
-  RandMt,
   Stores,
+  StrLib,
   Trans,
+  Utils,
   WinNative;
 
 type
@@ -57,6 +57,12 @@ const
   ZvsAppliedDamage: pinteger = Ptr($2811888);
   CurrentMp3Track:  pchar = pointer($6A33F4);
 
+  FIRST_TACTICS_ROUND = -1000000000;
+
+  DEBUG_RNG_NONE  = 0; // do not debug
+  DEBUG_RNG_MAJOR = 1; // debug only seeds and range generations
+  DEBUG_RNG_ALL   = 2; // debug all rand/srand/rand_range calls
+
 
 var
   (* Desired level of CPU loading *)
@@ -64,11 +70,7 @@ var
 
   FixGetHostByNameOpt:  boolean;
   UseOnlyOneCpuCoreOpt: boolean;
-  CombatId:             integer;
-  CombatRound:          integer;
-  CombatActionId:       integer;
-  HadTacticsPhase:      boolean;
-  DebugRng:             boolean;
+  DebugRng:             integer;
 
 
 (***) implementation (***)
@@ -82,8 +84,40 @@ const
 type
   TWogMp3Process = procedure; stdcall;
 
+  TBattleDeterministicRngState = packed record
+    fCombatRound:    integer;
+    fRangeMin:       integer;
+    fCombatId:       integer;
+    fRangeMax:       integer;
+    fCombatActionId: integer;
+  end;
+
+  TBattleDeterministicRng = class (FastRand.TRng)
+   protected
+    fState:             TBattleDeterministicRngState;
+    fCombatIdPtr:       pinteger;
+    fCombatRoundPtr:    pinteger;
+    fCombatActionIdPtr: pinteger;
+
+    procedure UpdateState (RangeMin, RangeMax: integer);
+
+   public
+    constructor Create (CombatIdPtr, CombatRoundPtr, CombatActionIdPtr: pinteger);
+
+    procedure Seed (NewSeed: integer); override;
+    function Random: integer; override;
+    function GetStateSize: integer; override;
+    procedure ReadState (Buf: pointer); override;
+    procedure WriteState (Buf: pointer); override;
+    function RandomRange (MinValue, MaxValue: integer): integer; override;
+  end;
+
 var
 {O} TopLevelExceptionHandlers: DataLib.TList {OF Handler: pointer};
+{O} CLangRng:                  FastRand.TClangRng;
+{O} QualitativeRng:            FastRand.TXoroshiro128Rng;
+{O} BattleDeterministicRng:    TBattleDeterministicRng;
+{U} GlobalRng:                 FastRand.TRng;
 
   hTimerEvent:           THandle;
   InetCriticalSection:   Windows.TRTLCriticalSection;
@@ -98,14 +132,74 @@ var
   WogCurrentMp3TrackPtr:  ppchar = pointer($28AB204);
   WoGMp3Process:          TWogMp3Process = pointer($77495F);
 
-  UseNativePrng:        boolean = false;
-  UseDeterministicPrng: boolean = false;
+  CombatId:            integer;
+  CombatRound:         integer;
+  CombatActionId:      integer;
+  HadTacticsPhase:     boolean;
+  NativeBattleRngSeed: integer;
 
 threadvar
   (* Counter (0..100). When reaches 100, PeekMessageA does not call sleep before returning result *)
   CpuPatchCounter: integer;
   IsMainThread:    boolean;
 
+
+constructor TBattleDeterministicRng.Create (CombatIdPtr, CombatRoundPtr, CombatActionIdPtr: pinteger);
+begin
+  Self.fCombatIdPtr       := CombatIdPtr;
+  Self.fCombatRoundPtr    := CombatRoundPtr;
+  Self.fCombatActionIdPtr := CombatActionIdPtr;
+end;
+
+procedure TBattleDeterministicRng.UpdateState (RangeMin, RangeMax: integer);
+begin
+  Self.fState.fCombatRound    := Crypto.Tm32Encode(Self.fCombatRoundPtr^);
+  Self.fState.fRangeMin       := RangeMin;
+  Self.fState.fCombatId       := Crypto.Tm32Encode(Self.fCombatIdPtr^);
+  Self.fState.fRangeMax       := RangeMax;
+  Self.fState.fCombatActionId := Crypto.Tm32Encode(Self.fCombatActionIdPtr^ + 1147022261);
+end;
+
+procedure TBattleDeterministicRng.Seed (NewSeed: integer);
+begin
+  // Ignored
+end;
+
+function TBattleDeterministicRng.Random: integer;
+begin
+  Self.UpdateState(Low(result), High(result));
+  result := Crypto.FastHash(@Self.fState, sizeof(Self.fState));
+end;
+
+function TBattleDeterministicRng.RandomRange (MinValue, MaxValue: integer): integer;
+begin
+  if MinValue >= MaxValue then begin
+    result := MinValue;
+    exit;
+  end;
+
+  Self.UpdateState(MinValue, MaxValue);
+  result := Crypto.FastHash(@Self.fState, sizeof(Self.fState));
+
+  if (MinValue > Low(integer)) or (MaxValue < High(integer)) then begin
+    result := MinValue + integer(cardinal(result) mod cardinal(MaxValue - MinValue + 1));
+  end;
+end;
+
+function TBattleDeterministicRng.GetStateSize: integer;
+begin
+  result := 0;
+end;
+
+procedure TBattleDeterministicRng.ReadState (Buf: pointer);
+begin
+  // Ignored
+end;
+
+procedure TBattleDeterministicRng.WriteState (Buf: pointer);
+begin
+  // Ignored
+end;
 
 function Hook_ReadIntIni
 (
@@ -703,10 +797,49 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsEnter2Monster2
 
-function Hook_OnBeforeBattlefieldVisible (Context: Core.PHookContext): longbool; stdcall;
+function Hook_StartBattle (OrigFunc: pointer; AdvMan: Heroes.PAdvManager; PackedCoords: integer; AttackerHero: Heroes.PHero; AttackerArmy: Heroes.PArmy; DefenderPlayerId: integer;
+                           DefenderTown: Heroes.PTown; DefenderHero: Heroes.PHero; DefenderArmy: Heroes.PArmy; Seed, Unk10: integer; IsBank: boolean): integer; stdcall;
+
+const
+  DEFAULT_COMBAT_ID = -1359960668;
+
+var
+  AttackerPlayerId: integer;
+
 begin
   HadTacticsPhase := false;
-  CombatRound     := -1000000000;
+  CombatRound     := FIRST_TACTICS_ROUND;
+  CombatActionId  := 0;
+  GlobalRng       := QualitativeRng;
+
+  AttackerPlayerId := Heroes.PLAYER_NONE;
+
+  if AttackerHero <> nil then begin
+    AttackerPlayerId := AttackerHero.Owner;
+  end;
+
+  if Heroes.IsNetworkGame and
+     Heroes.IsValidPlayerId(AttackerPlayerId) and
+     Heroes.IsValidPlayerId(DefenderPlayerId) and
+     Heroes.GetPlayer(AttackerPlayerId).IsHuman and
+     Heroes.GetPlayer(DefenderPlayerId).IsHuman
+  then begin
+    GlobalRng := BattleDeterministicRng;
+
+    // If we are network defender, the attacker already sent CombatId to us. Otherwise we should generate it and send later
+    if not Heroes.GetPlayer(DefenderPlayerId).IsThisPcHumanPlayer then begin
+      CombatId := Erm.UniqueRng.Random;
+    end;
+  end else begin
+    CombatId := DEFAULT_COMBAT_ID;
+  end;
+
+  result    := PatchApi.Call(THISCALL_, OrigFunc, [AdvMan, PackedCoords, AttackerHero, AttackerArmy, DefenderPlayerId, DefenderTown, DefenderHero, DefenderArmy, Seed, Unk10, IsBank]);
+  GlobalRng := QualitativeRng;
+end; // .function Hook_StartBattle
+
+function Hook_OnBeforeBattlefieldVisible (Context: Core.PHookContext): longbool; stdcall;
+begin
   Erm.FireErmEvent(Erm.TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE);
   result := Core.EXEC_DEF_CODE;
 end;
@@ -726,7 +859,7 @@ begin
   Erm.FireErmEventEx(Erm.TRIGGER_BR, [CombatRound]);
 
   result := true;
-end; // .function Hook_OnBattlefieldVisible
+end;
 
 function Hook_OnAfterTacticsPhase (Context: Core.PHookContext): longbool; stdcall;
 begin
@@ -758,66 +891,14 @@ begin
 end;
 
 var
-  RngId: integer = 0;
-
-type
-  PDeterministicPrngState = ^TDeterministicPrngState;
-  TDeterministicPrngState = packed record
-    fCombatRound:    integer;
-    fRangeMin:       integer;
-    fCombatId:       integer;
-    fRangeMax:       integer;
-    fCombatActionId: integer;
-
-    procedure Init (RangeMin, RangeMax: integer);
-  end;
-
-procedure TDeterministicPrngState.Init (RangeMin, RangeMax: integer);
-begin
-  Self.fCombatRound    := Crypto.Tm32Encode(CombatRound);
-  Self.fRangeMin       := RangeMin;
-  Self.fCombatId       := Crypto.Tm32Encode(CombatId);
-  Self.fRangeMax       := RangeMax;
-  Self.fCombatActionId := Crypto.Tm32Encode(CombatActionId + 1147022261);
-end;
-
-function GenerateDeterministicBattleRandomValue (MinValue, MaxValue: integer): integer;
-var
-  GeneratorState: TDeterministicPrngState;
-
-begin
-  if MinValue >= MaxValue then begin
-    result := MinValue;
-  end else begin
-    GeneratorState.Init(MinValue, MaxValue);
-    result := MinValue + integer(cardinal(Crypto.FastHash(@GeneratorState, sizeof(GeneratorState))) mod cardinal(MaxValue - MinValue + 1));
-  end;
-end;
+  RngId: integer = 0; // Holds random generation attempt ID, auto resets at each reseeding. Used for debugging purposes
 
 procedure OnBeforeBattleAction (Event: GameExt.PEvent); stdcall;
 begin
   Inc(CombatActionId);
 end;
 
-var
-  NativeSRand: function (seed: integer): integer cdecl = Ptr($61841F);
-  NativeRand:  function (): integer cdecl              = Ptr($61842C);
-
-function NativeRandomRange (MinValue, MaxValue: integer): integer;
-var
-  Range: integer;
-
-begin
-  if MinValue >= MaxValue then begin
-    result := MinValue;
-  end else begin
-    Range  := MaxValue - MinValue + 1;
-    result := NativeRand();
-    result := MinValue + result - (result div Range) * Range;
-  end;
-end;
-
-function Hook_SRand (OrigFunc: pointer; Seed: integer): integer; stdcall;
+procedure Hook_SRand (OrigFunc: pointer; Seed: integer); stdcall;
 var
   CallerAddr: pointer;
   Message:    string;
@@ -828,67 +909,21 @@ begin
     mov CallerAddr, eax
   end;
 
-  if DebugRng then begin
+  GlobalRng.Seed(Seed);
+
+  if (DebugRng <> DEBUG_RNG_NONE) and (Heroes.WndManagerPtr^ <> nil) and (Heroes.WndManagerPtr^.RootDlg <> nil) then begin
     Message := SysUtils.Format('SRand %d from %.8x', [Seed, integer(CallerAddr)]);
+    Writeln(Message);
     Heroes.PrintChatMsg('{~ffffff}' + Message);
-    Writeln(Message);
-    RngId   := 0;
   end;
 
-  result := NativeSRand(Seed);
-  RandMt.GlobalRng.Init(Seed);
-end;
-
-function RandomRange (CallerAddr: pointer; MinValue, MaxValue: integer): integer; stdcall;
-var
-  Message: string;
-
-begin
-  if UseNativePrng then begin
-    if UseDeterministicPrng then begin
-      result := GenerateDeterministicBattleRandomValue(MinValue, MaxValue);
-    end else begin
-      result := NativeRandomRange(MinValue, MaxValue);
-    end;
-  end else begin
-    result := RandMt.GlobalRng.Random(MinValue, MaxValue);
-  end;
-
-  if DebugRng then begin
-    if UseNativePrng and UseDeterministicPrng then begin
-      Message := SysUtils.Format('determ rand #%d from %.8x, R%d A%d: %d..%d = %d', [RngId, integer(CallerAddr), CombatRound, CombatActionId, MinValue, MaxValue, result]);
-    end else begin
-      Message := 'mt ';
-
-      if UseNativePrng then begin
-        Message := 'orig ';
-      end;
-
-      Message := Message + SysUtils.Format('rand #%d from %.8x, %d..%d = %d', [RngId, integer(CallerAddr), MinValue, MaxValue, result]);
-    end;
-
-    PrintChatMsg('{~ffffff}' + Message);
-    Writeln(Message);
-    Inc(RngId);
-  end;
-end; // .function RandomRange
-
-function Hook_RandomRange (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
-var
-  CallerAddr: pointer;
-
-begin
-  asm
-    mov eax, [ebp + 4]
-    mov CallerAddr, eax
-  end;
-
-  result := RandomRange(CallerAddr, MinValue, MaxValue);
+  RngId := 0;
 end;
 
 function Hook_Rand (OrigFunc: pointer): integer; stdcall;
 var
   CallerAddr: pointer;
+  Message:    string;
 
 begin
   asm
@@ -896,12 +931,83 @@ begin
     mov CallerAddr, eax
   end;
 
-  result := RandomRange(CallerAddr, 0, 32767);
+  result := GlobalRng.Random and $7FFF;
+
+  if (DebugRng = DEBUG_RNG_ALL) and (Heroes.WndManagerPtr^ <> nil) and (Heroes.WndManagerPtr^.RootDlg <> nil) then begin
+    if GlobalRng = BattleDeterministicRng then begin
+      Message := SysUtils.Format('brng rand #%d from %.8x, B%d R%d A%d = %d', [RngId, integer(CallerAddr), CombatId, CombatRound, CombatActionId, result]);
+    end else begin
+      Message := 'qrng ';
+
+      if GlobalRng = CLangRng then begin
+        Message := 'crng ';
+      end;
+
+      Message := Message + SysUtils.Format('rand #%d from %.8x = %d', [RngId, integer(CallerAddr), result]);
+    end;
+
+    Writeln(Message);
+    PrintChatMsg('{~ffffff}' + Message);
+  end;
+
+  Inc(RngId);
 end;
 
-function GenerateBattleId: integer;
+function Hook_RandomRange (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
+var
+  CallerAddr: pointer;
+  Message:    string;
+
 begin
-  result := Erm.UniqueRng.Random xor Heroes.TimeGetTime;
+  asm
+    mov eax, [ebp + 4]
+    mov CallerAddr, eax
+  end;
+
+  result := GlobalRng.RandomRange(MinValue, MaxValue);
+
+  if DebugRng <> DEBUG_RNG_NONE then begin
+    if GlobalRng = BattleDeterministicRng then begin
+      Message := SysUtils.Format('brng rand #%d from %.8x, B%d  R%d A%d: %d..%d = %d', [RngId, integer(CallerAddr), CombatId, CombatRound, CombatActionId, MinValue, MaxValue, result]);
+    end else begin
+      Message := 'qrng ';
+
+      if GlobalRng = CLangRng then begin
+        Message := 'crng ';
+      end;
+
+      Message := Message + SysUtils.Format('rand #%d from %.8x: %d..%d = %d', [RngId, integer(CallerAddr), MinValue, MaxValue, result]);
+    end;
+
+    Writeln(Message);
+    PrintChatMsg('{~ffffff}' + Message);
+  end;
+
+  Inc(RngId);
+end;
+
+function Hook_ApplyBattleRngSeed (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  NativeBattleRngSeed := Context.ECX;
+  result              := false;
+  Heroes.SRand(Erm.UniqueRng.Random);
+end;
+
+function Hook_PlaceBattleObstacles (OrigFunc, BattleMgr: pointer): integer; stdcall;
+var
+  PrevRng: FastRand.TRng;
+
+begin
+  PrevRng   := GlobalRng;
+  GlobalRng := CLangRng;
+  Heroes.SRand(NativeBattleRngSeed);
+
+  Erm.FireErmEvent(Erm.TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES);
+  result := PatchApi.Call(THISCALL_, OrigFunc, [BattleMgr]);
+
+  GlobalRng := PrevRng;
+  Heroes.SRand(Erm.UniqueRng.Random);
+  Erm.FireErmEvent(Erm.TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES);
 end;
 
 function Hook_ZvsAdd2Send (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -922,7 +1028,6 @@ begin
   // Write chunk size + chunk bytes, adjust buffer position
   pinteger(BUF_ADDR + BufPosPtr^)^ := sizeof(integer);
   Inc(BufPosPtr^, sizeof(integer));
-  CombatId                         := GenerateBattleId;
   pinteger(BUF_ADDR + BufPosPtr^)^ := CombatId;
   Inc(BufPosPtr^, sizeof(integer));
 
@@ -955,10 +1060,8 @@ end;
 
 procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
 begin
-  UseNativePrng        := true;
-  UseDeterministicPrng := false;
-  CombatRound          := -1000000000;
-  CombatActionId       := 0;
+  CombatRound    := FIRST_TACTICS_ROUND;
+  CombatActionId := 0;
 end;
 
 procedure OnBattleReplay (Event: GameExt.PEvent); stdcall;
@@ -972,43 +1075,31 @@ begin
   Erm.FireErmEvent(TRIGGER_BEFORE_BATTLE_REPLAY);
 end;
 
-procedure OnBattlefieldVisible (Event: GameExt.PEvent); stdcall;
-begin
-  if not Heroes.IsLocalGame and (Erm.ZvsAttackingHeroPtr^ <> nil) and not Erm.ZvsIsAi(Erm.ZvsAttackingHeroPtr^.Owner) and not Erm.ZvsIsAi(ZvsDefendingPlayerId^) then begin
-    UseDeterministicPrng := true;
-  end else begin
-    UseNativePrng := false;
-  end;
-end;
-
-procedure OnAfterBattleUniversal (Event: GameExt.PEvent); stdcall;
-begin
-  UseNativePrng        := false;
-  UseDeterministicPrng := false;
-end;
-
 procedure OnSavegameWrite (Event: PEvent); stdcall;
 var
-  RngState: RandMt.TRngState;
+  RngState: array of byte;
 
 begin
-  RngState := RandMt.GlobalRng.GetState;
+  SetLength(RngState, GlobalRng.GetStateSize);
+  GlobalRng.ReadState(pointer(RngState));
 
   with Stores.NewRider(RNG_SAVE_SECTION) do begin
-    WriteInt(sizeof(RngState));
-    Write(sizeof(RngState), @RngState);
+    WriteInt(Length(RngState));
+    Write(Length(RngState), pointer(RngState));
   end;
 end;
 
 procedure OnSavegameRead (Event: PEvent); stdcall;
 var
-  RngState: RandMt.TRngState;
+  RngState: array of byte;
 
 begin
   with Stores.NewRider(RNG_SAVE_SECTION) do begin
-    if ReadInt = sizeof(RngState) then begin
-      Read(sizeof(RngState), @RngState);
-      RandMt.GlobalRng.SetState(RngState);
+    SetLength(RngState, ReadInt);
+
+    if Length(RngState) = GlobalRng.GetStateSize then begin
+      Read(Length(RngState), pointer(RngState));
+      GlobalRng.WriteState(pointer(RngState));
     end;
   end;
 end;
@@ -1709,7 +1800,7 @@ var
   CurrTimerResol: cardinal;
 
 begin
-  if DebugRng then begin
+  if DebugRng <> DEBUG_RNG_NONE then begin
     ConsoleApi.GetConsole();
   end;
 
@@ -1836,7 +1927,7 @@ begin
   (* Fix WoG bug: double !?OB54 event generation when attacking without moving due to Enter2Object + Enter2Monster2 calling *)
   Core.p.WriteDataPatch(Ptr($757AA0), ['EB2C90909090']);
 
-  (* Fix battle round counting: no !?BR before battlefield is shown, -1000000000 incrementing for the whole tactics phase, the
+  (* Fix battle round counting: no !?BR before battlefield is shown, negative FIRST_TACTICS_ROUND incrementing for the whole tactics phase, the
      first real round always starts from 0 *)
   Core.ApiHook(@Hook_OnBeforeBattlefieldVisible, Core.HOOKTYPE_BRIDGE, Ptr($75EAEA));
   Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($462E2B));
@@ -1854,6 +1945,12 @@ begin
 
   // Use CombatRound instead of combat manager field to summon creatures every nth turn via creature experience system
   Core.p.WriteDataPatch(Ptr($71DFBE), ['8B15 %d', @CombatRound]);
+
+  // Do not apply battle RNG seed before obstacles creation, just remember the seed and apply random seed
+  ApiJack.HookCode(Ptr($463606), @Hook_ApplyBattleRngSeed);
+
+  // Apply battle RNG seed right before placing obstacles
+  ApiJack.StdSplice(Ptr($465E70), @Hook_PlaceBattleObstacles, ApiJack.CONV_THISCALL, 1);
 
   // Restore Nagash and Jeddite specialties
   Core.p.WriteDataPatch(Ptr($753E0B), ['E9990000009090']); // PrepareSpecWoG => ignore new WoG settings
@@ -1918,13 +2015,16 @@ begin
   Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
   Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
 
+  (* Splice WoG Get2Battle function, handling any battle *)
+  ApiJack.StdSplice(Ptr($75ADD9), @Hook_StartBattle, ApiJack.CONV_THISCALL, 11);
+
   (* Send and receive unique identifier for each battle to use in deterministic PRNG in multiplayer *)
   ApiJack.HookCode(Ptr($763796), @Hook_ZvsAdd2Send);
   ApiJack.HookCode(Ptr($763BA4), @Hook_ZvsGet4Receive);
 
-  (* Replace Heroes 3 PRNG with thread-safe Mersenne Twister, except of multiplayer battles *)
-  NativeSRand := ApiJack.StdSplice(Ptr($61841F), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
-  NativeRand  := ApiJack.StdSplice(Ptr($61842C), @Hook_Rand, ApiJack.CONV_STDCALL, 0);
+  (* Replace Heroes PRNG with custom switchable PRNGs *)
+  ApiJack.StdSplice(Ptr($61841F), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
+  ApiJack.StdSplice(Ptr($61842C), @Hook_Rand, ApiJack.CONV_STDCALL, 0);
   ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_RandomRange, ApiJack.CONV_FASTCALL, 2);
 
@@ -1971,13 +2071,15 @@ begin
   Windows.InitializeCriticalSection(InetCriticalSection);
   ExceptionsCritSection.Init;
   TopLevelExceptionHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
+  CLangRng                  := FastRand.TClangRng.Create(FastRand.GenerateSecureSeed);
+  QualitativeRng            := FastRand.TXoroshiro128Rng.Create(FastRand.GenerateSecureSeed);
+  BattleDeterministicRng    := TBattleDeterministicRng.Create(@CombatId, @CombatRound, @CombatActionId);
+  GlobalRng                 := QualitativeRng;
   IsMainThread              := true;
   Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
 
-  EventMan.GetInstance.On('OnAfterBattleUniversal', OnAfterBattleUniversal);
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
-  EventMan.GetInstance.On('OnBattlefieldVisible', OnBattlefieldVisible);
   EventMan.GetInstance.On('OnBattleReplay', OnBattleReplay);
   EventMan.GetInstance.On('OnBeforeBattleAction', OnBeforeBattleAction);
   EventMan.GetInstance.On('OnBeforeBattleReplay', OnBeforeBattleReplay);
@@ -1985,8 +2087,8 @@ begin
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 
   if FALSE then begin
-    (* Save RandMT state in saved games *)
-    (* Makes game predictable. Disabled *)
+    (* Save global generator state in saved games *)
+    (* Makes game predictable. Disabled. *)
     EventMan.GetInstance.On('OnSavegameWrite', OnSavegameWrite);
     EventMan.GetInstance.On('OnSavegameRead',  OnSavegameRead);
   end;
