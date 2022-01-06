@@ -1949,17 +1949,24 @@ var
   i: integer;
 
 begin
-  result := IsLocalGame or Self.IsThisPcHumanPlayer;
+  // For local game any player is on active side.
+  // If tested player is current player, he is always on active side
+  result := IsLocalGame or (Self.Id = CurrentPlayerId^);
 
-  if not result and not Self.IsHuman then begin
-    i := PLAYER_LAST;
-
-    while (i >= PLAYER_FIRST) and (not GetPlayer(i).IsHuman) do begin
-      Dec(i);
-    end;
-
-    result := (i >= PLAYER_FIRST) and GetPlayer(i).IsThisPcHumanPlayer;
+  // Exit if it's current player, invalid player ID or non-current human player
+  if result or not IsValidPlayerId(CurrentPlayerId^) or GetPlayer(CurrentPlayerId^).IsHuman then begin
+    exit;
   end;
+
+  // Check all players, skipping AI and finding the last human player
+  // The AI is treated as resident on the last human player PC, though local human vs AI battles are performed on one PC
+  i := PLAYER_LAST;
+
+  while (i >= PLAYER_FIRST) and (not GetPlayer(i).IsHuman) do begin
+    Dec(i);
+  end;
+
+  result := (i >= PLAYER_FIRST) and GetPlayer(i).IsThisPcHumanPlayer;
 end;
 
 function GetThisPcHumanPlayerId: integer;
