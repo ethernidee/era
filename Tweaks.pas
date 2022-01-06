@@ -1006,7 +1006,6 @@ begin
   result := PatchApi.Call(THISCALL_, OrigFunc, [BattleMgr]);
 
   GlobalRng := PrevRng;
-  Heroes.SRand(Erm.UniqueRng.Random);
   Erm.FireErmEvent(Erm.TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES);
 end;
 
