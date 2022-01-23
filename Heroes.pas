@@ -218,6 +218,8 @@ const
   H3STR_CONST_REF_COUNT = -1;
 
 type
+  TInt32Bool = integer;
+
   TMesType =
   (
     MES_MES         = 1,
@@ -1111,6 +1113,19 @@ type
     function GetCurrentDlgId: integer;
   end;
 
+  PNetData = ^TNetData;
+  TNetData = object
+    PlayerId: integer; // Sender ID if sending, Receiver ID if receiving
+    Zero_1:   integer;
+    MsgId:    integer;
+    DataSize: integer;
+    Zero_2:   integer;
+    RawData:  record end;
+
+    procedure Init;
+    procedure Send (aDestPlayerId: integer);
+  end;
+
 const
   MAlloc:      TMAlloc = Ptr($617492);
   MFree:       TMFree  = Ptr($60B0F0);
@@ -1204,6 +1219,7 @@ function  IsNetworkGame: boolean;
 function  GetTownManager: PTownManager;
 function  GetPlayer (PlayerId: integer): {n} PPlayer;
 function  IsValidPlayerId (PlayerId: integer): boolean;
+procedure SendNetData (DestPlayerId, MsgId: integer; {n} Data: pointer; DataSize: integer);
 
 (* Returns this PC current human player ID or the last human player ID if it's HotSeat and it's AI turn *)
 function GetThisPcHumanPlayerId: integer;
@@ -1323,6 +1339,34 @@ begin
       result := RowItems[Col];
     end;
   end;
+end;
+
+procedure TNetData.Init;
+begin
+  System.FillChar(Self, sizeof(Self), #0);
+end;
+
+procedure TNetData.Send (aDestPlayerId: integer);
+begin
+  Self.PlayerId := -1;
+
+  PatchApi.Call(FASTCALL_, Ptr($5549E0), [@Self, shortint(aDestPlayerId), 0, 1]);
+end;
+
+procedure SendNetData (DestPlayerId, MsgId: integer; {n} Data: pointer; DataSize: integer);
+var
+  NetDataBuf: Utils.TArrayOfByte;
+  NetData:    PNetData;
+
+begin
+  {!} Assert(Utils.IsValidBuf(Data, DataSize));
+  SetLength(NetDataBuf, sizeof(TNetData) + DataSize);
+  NetData := pointer(NetDataBuf);
+  NetData.Init;
+  NetData.MsgId    := MsgId;
+  NetData.DataSize := DataSize;
+  Utils.CopyMem(DataSize, Data, @NetData.RawData);
+  NetData.Send(DestPlayerId);
 end;
 
 procedure PrintChatMsg (const Msg: string);
