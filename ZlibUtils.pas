@@ -41,7 +41,7 @@ const
 
 
 (* Compresses data in memory and returns temporary pointer to result buffer. The pointer may be invalidated after any module function call. *)
-function Compress ({n} Buf: pointer; BufSize, CompressionLevel: integer = COMPRESSION_LEVEL_DEFAULT): Utils.TArrayOfByte;
+function Compress ({n} Buf: pointer; BufSize: integer; CompressionLevel: integer = COMPRESSION_LEVEL_DEFAULT): Utils.TArrayOfByte;
 
 (* Decompresses previously compressed data and returns temporary pointer to result buffer or nil on error. The pointer may be invalidated after any module function call. *)
 function Decompress ({n} Buf: pointer; BufSize: integer): {n} Utils.TArrayOfByte;
