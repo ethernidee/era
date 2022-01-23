@@ -60,8 +60,9 @@ const
   FIRST_TACTICS_ROUND = -1000000000;
 
   DEBUG_RNG_NONE  = 0; // do not debug
-  DEBUG_RNG_MAJOR = 1; // debug only seeds and range generations
-  DEBUG_RNG_ALL   = 2; // debug all rand/srand/rand_range calls
+  DEBUG_RNG_SRAND = 1; // debug only seeds
+  DEBUG_RNG_RANGE = 2; // debug only seeds and range generations
+  DEBUG_RNG_ALL   = 3; // debug all rand/srand/rand_range calls
 
 
 var
@@ -920,6 +921,29 @@ begin
   RngId := 0;
 end;
 
+procedure Hook_Tracking_SRand (OrigFunc: pointer; Seed: integer); stdcall;
+var
+  CallerAddr: pointer;
+  Message:    string;
+
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov CallerAddr, eax
+  end;
+
+  GlobalRng.Seed(Seed);
+  pinteger($67FBE4)^ := Seed;
+
+  if (DebugRng <> DEBUG_RNG_NONE) and (Heroes.WndManagerPtr^ <> nil) and (Heroes.WndManagerPtr^.RootDlg <> nil) then begin
+    Message := SysUtils.Format('SRand %d from %.8x', [Seed, integer(CallerAddr)]);
+    Writeln(Message);
+    Heroes.PrintChatMsg('{~ffffff}' + Message);
+  end;
+
+  RngId := 0;
+end;
+
 function Hook_Rand (OrigFunc: pointer): integer; stdcall;
 var
   CallerAddr: pointer;
@@ -966,7 +990,7 @@ begin
 
   result := GlobalRng.RandomRange(MinValue, MaxValue);
 
-  if DebugRng <> DEBUG_RNG_NONE then begin
+  if DebugRng >= DEBUG_RNG_RANGE then begin
     if GlobalRng = BattleDeterministicRng then begin
       Message := SysUtils.Format('brng rand #%d from %.8x, B%d  R%d A%d: %d..%d = %d', [RngId, integer(CallerAddr), CombatId, CombatRound, CombatActionId, MinValue, MaxValue, result]);
     end else begin
@@ -2022,9 +2046,9 @@ begin
   ApiJack.HookCode(Ptr($763BA4), @Hook_ZvsGet4Receive);
 
   (* Replace Heroes PRNG with custom switchable PRNGs *)
-  ApiJack.StdSplice(Ptr($61841F), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
+  ApiJack.StdSplice(Ptr($61841F), @Hook_SRand, ApiJack.CONV_CDECL, 1);
   ApiJack.StdSplice(Ptr($61842C), @Hook_Rand, ApiJack.CONV_STDCALL, 0);
-  ApiJack.StdSplice(Ptr($50C7B0), @Hook_SRand, ApiJack.CONV_THISCALL, 1);
+  ApiJack.StdSplice(Ptr($50C7B0), @Hook_Tracking_SRand, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_RandomRange, ApiJack.CONV_FASTCALL, 2);
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
