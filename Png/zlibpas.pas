@@ -41,6 +41,7 @@ function inflate(var strm: TZStreamRec; flush: Integer): Integer; forward;
 function inflateEnd(var strm: TZStreamRec): Integer; forward;
 function deflateInit_(var strm: TZStreamRec; level: Integer; version: PChar;
   recsize: Integer): Integer; forward;
+function deflateBound(var strm: TZStreamRec; sourceLen: Integer): Integer; forward;
 function deflate(var strm: TZStreamRec; flush: Integer): Integer; forward;
 function deflateEnd(var strm: TZStreamRec): Integer; forward;
 
@@ -125,6 +126,7 @@ function deflateInit_(var strm: TZStreamRec; level: Integer; version: PChar;
   recsize: Integer): Integer; external;
 function deflate(var strm: TZStreamRec; flush: Integer): Integer; external;
 function deflateEnd(var strm: TZStreamRec): Integer; external;
+function deflateBound(var strm: TZStreamRec; sourceLen: Integer): Integer; external;
 
 // inflate decompresses data
 function inflateInit_(var strm: TZStreamRec; version: PChar;
