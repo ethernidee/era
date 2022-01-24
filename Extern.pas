@@ -8,11 +8,33 @@ unit Extern;
 
 
 uses
-  Windows, SysUtils, Math,
-  Utils, Alg, StrLib, Core, ApiJack, WinUtils, DataLib, TypeWrappers,
-  GameExt, Heroes, Erm, AdvErm, Ini, Rainbow, Stores,
-  EraButtons, Lodman, Graph, Trans, Memory, EraUtils,
-  EventMan;
+  Math,
+  SysUtils,
+  Windows,
+
+  AdvErm,
+  Alg,
+  ApiJack,
+  Core,
+  DataLib,
+  EraButtons,
+  EraUtils,
+  Erm,
+  EventMan,
+  GameExt,
+  Graph,
+  Heroes,
+  Ini,
+  Lodman,
+  Memory,
+  Network,
+  Rainbow,
+  Stores,
+  StrLib,
+  Trans,
+  TypeWrappers,
+  Utils,
+  WinUtils;
 
 type
   (* Import *)
@@ -511,6 +533,12 @@ begin
   result := ord(Graph.PcxPngExists(PcxName));
 end;
 
+function FireRemoteNetworkEvent (DestPlayerId: integer; EventName: pchar; {n} Data: pointer; DataSize: integer; {n} ProgressHandler: Network.TNetworkStreamProgressHandler;
+                                 {n} ProgressHandlerCustomParam: pointer): TDwordBool; stdcall;
+begin
+  result := ord(Network.FireRemoteNetworkEvent(DestPlayerId, EventName, Data, DataSize, ProgressHandler, ProgressHandlerCustomParam));
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -539,6 +567,7 @@ exports
   FindNextObject,
   FireErmEvent,
   FireEvent,
+  FireRemoteNetworkEvent,
   FormatQuantity,
   GameExt.GenerateDebugInfo,
   GameExt.GetRealAddr,
