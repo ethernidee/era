@@ -533,10 +533,10 @@ begin
   result := ord(Graph.PcxPngExists(PcxName));
 end;
 
-function FireRemoteNetworkEvent (DestPlayerId: integer; EventName: pchar; {n} Data: pointer; DataSize: integer; {n} ProgressHandler: Network.TNetworkStreamProgressHandler;
+function FireRemoteEvent (DestPlayerId: integer; EventName: pchar; {n} Data: pointer; DataSize: integer; {n} ProgressHandler: Network.TNetworkStreamProgressHandler;
                                  {n} ProgressHandlerCustomParam: pointer): TDwordBool; stdcall;
 begin
-  result := ord(Network.FireRemoteNetworkEvent(DestPlayerId, EventName, Data, DataSize, ProgressHandler, ProgressHandlerCustomParam));
+  result := ord(Network.FireRemoteEvent(DestPlayerId, EventName, Data, DataSize, ProgressHandler, ProgressHandlerCustomParam));
 end;
 
 exports
@@ -567,7 +567,7 @@ exports
   FindNextObject,
   FireErmEvent,
   FireEvent,
-  FireRemoteNetworkEvent,
+  FireRemoteEvent,
   FormatQuantity,
   GameExt.GenerateDebugInfo,
   GameExt.GetRealAddr,

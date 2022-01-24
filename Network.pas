@@ -42,8 +42,8 @@ type
 
 
 (* Returns true if at least an attempt to call remote event was done. False for invalid event name *)
-function FireRemoteNetworkEvent (DestPlayerId: integer; const EventName: string; {n} Data: pointer = nil; DataSize: integer = 0;
-                                 {n} ProgressHandler: TNetworkStreamProgressHandler = nil; {n} ProgressHandlerCustomParam: pointer = nil): boolean;
+function FireRemoteEvent (DestPlayerId: integer; const EventName: string; {n} Data: pointer = nil; DataSize: integer = 0;
+                          {n} ProgressHandler: TNetworkStreamProgressHandler = nil; {n} ProgressHandlerCustomParam: pointer = nil): boolean;
 
 
 (***)  implementation  (***)
@@ -216,8 +216,8 @@ begin
   SysUtils.FreeAndNil(StaleStreams);
 end;
 
-function FireRemoteNetworkEvent (DestPlayerId: integer; const EventName: string; {n} Data: pointer; DataSize: integer; {n} ProgressHandler: TNetworkStreamProgressHandler;
-                                 {n} ProgressHandlerCustomParam: pointer): boolean;
+function FireRemoteEvent (DestPlayerId: integer; const EventName: string; {n} Data: pointer; DataSize: integer; {n} ProgressHandler: TNetworkStreamProgressHandler;
+                          {n} ProgressHandlerCustomParam: pointer): boolean;
 var
   StreamId:          integer;
   SizeWritten:       integer;
@@ -267,7 +267,7 @@ begin
     Inc(SizeWritten, PacketPayloadSize);
     Heroes.SendNetData(DestPlayerId, NETWORK_MSG_ERA_EVENT_STREAM_CHUNK, PacketBuf.Buf, PacketBuf.Pos);
   end;
-end; // .function FireRemoteNetworkEvent
+end; // .function FireRemoteEvent
 
 function Hook_NetworkProcessOtherData (OrigFunc: pointer; AdvMan: Heroes.PAdvManager; NetData: Heroes.PNetData): integer; stdcall;
 const
@@ -296,7 +296,6 @@ begin
 
     if PayloadSize = TotalSize then begin
       EventMan.GetInstance.Fire(EventName, Utils.PtrOfs(PacketReader.Buf, PacketReader.Pos), PayloadSize);
-      DestroyIncomingStream(NetData.PlayerId, StreamId);
     end else begin
       Stream := CreateIncomingStream(NetData.PlayerId, StreamId, EventName, TotalSize);
       Stream.WriteData(Utils.PtrOfs(PacketReader.Buf, PacketReader.Pos), PayloadSize);
