@@ -16,6 +16,7 @@ uses
   ApiJack,
   Core,
   DataLib,
+  DlgMes,
   EventMan,
   Files,
   GameExt,
@@ -199,17 +200,21 @@ begin
   GcTimestamp := WinUtils.GetUnixTime;
 
   with DataLib.IterateObjDict(IncomingStreams) do begin
-    StaleStreams.Clear;
-    SenderStreams := TObjDict(IterValue);
+    while IterNext do begin
+      StaleStreams.Clear;
+      SenderStreams := TObjDict(IterValue);
 
-    with DataLib.IterateObjDict(SenderStreams) do begin
-      if TIncomingStream(IterValue).IsStale(GcTimestamp) then begin
-        StaleStreams.Add(IterKey);
+      with DataLib.IterateObjDict(SenderStreams) do begin
+        while IterNext do begin
+          if TIncomingStream(IterValue).IsStale(GcTimestamp) then begin
+            StaleStreams.Add(IterKey);
+          end;
+        end;
       end;
-    end;
 
-    for i := 0 to StaleStreams.Count - 1 do begin
-      SenderStreams.DeleteItem(StaleStreams[i]);
+      for i := 0 to StaleStreams.Count - 1 do begin
+        SenderStreams.DeleteItem(StaleStreams[i]);
+      end;
     end;
   end;
   // * * * * * //
@@ -285,7 +290,7 @@ var
 begin
   if NetData.MsgId = NETWORK_MSG_ERA_EVENT_STREAM_START then begin
     GcIncomingStreams;
-    PacketReader.Open(@NetData.RawData, NetData.DataSize, Files.MODE_READ);
+    PacketReader.Open(@NetData.RawData, NetData.StructSize - sizeof(NetData^), Files.MODE_READ);
     PacketReader.ReadInt(StreamId);
     PacketReader.ReadInt(EventNameLen);
     PacketReader.ReadStr(EventNameLen, EventName);
@@ -302,7 +307,7 @@ begin
     end;
   end else if NetData.MsgId = NETWORK_MSG_ERA_EVENT_STREAM_CHUNK then begin
     GcIncomingStreams;
-    PacketReader.Open(@NetData.RawData, NetData.DataSize, Files.MODE_READ);
+    PacketReader.Open(@NetData.RawData, NetData.StructSize - sizeof(NetData^), Files.MODE_READ);
     PacketReader.ReadInt(StreamId);
     PacketReader.ReadInt(PayloadSize);
     Stream := FindIncomingStream(NetData.PlayerId, StreamId);

@@ -1115,12 +1115,12 @@ type
 
   PNetData = ^TNetData;
   TNetData = object
-    PlayerId: integer; // Sender ID if sending, Receiver ID if receiving
-    Zero_1:   integer;
-    MsgId:    integer;
-    DataSize: integer;
-    Zero_2:   integer;
-    RawData:  record end;
+    PlayerId:   integer; // Sender ID if sending, Receiver ID if receiving
+    Zero_1:     integer;
+    MsgId:      integer;
+    StructSize: integer;
+    Zero_2:     integer;
+    RawData:    record end;
 
     procedure Init;
     procedure Send (aDestPlayerId: integer);
@@ -1344,13 +1344,18 @@ end;
 procedure TNetData.Init;
 begin
   System.FillChar(Self, sizeof(Self), #0);
+  Self.StructSize := sizeof(Self);
 end;
 
 procedure TNetData.Send (aDestPlayerId: integer);
 begin
   Self.PlayerId := -1;
 
-  PatchApi.Call(FASTCALL_, Ptr($5549E0), [@Self, shortint(aDestPlayerId), 0, 1]);
+  if aDestPlayerId = -1 then begin
+    aDestPlayerId := 127;
+  end;
+
+  PatchApi.Call(FASTCALL_, Ptr($5549E0), [@Self, aDestPlayerId, 0, 1]);
 end;
 
 procedure SendNetData (DestPlayerId, MsgId: integer; {n} Data: pointer; DataSize: integer);
@@ -1363,8 +1368,8 @@ begin
   SetLength(NetDataBuf, sizeof(TNetData) + DataSize);
   NetData := pointer(NetDataBuf);
   NetData.Init;
-  NetData.MsgId    := MsgId;
-  NetData.DataSize := DataSize;
+  NetData.MsgId      := MsgId;
+  NetData.StructSize := sizeof(TNetData) + DataSize;
   Utils.CopyMem(DataSize, Data, @NetData.RawData);
   NetData.Send(DestPlayerId);
 end;
