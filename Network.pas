@@ -55,9 +55,11 @@ const
   NETWORK_MSG_ERA_EVENT_STREAM_CHUNK = 453470716;
   NETWORK_MSG_WOG                    = 2000;
 
-  MAX_NETWORK_EVENT_NAME_LEN = 1000;
-  MAX_PACKET_SIZE            = 64000;
-  PACKET_CHUNK_TIMEOUT_SEC   = 15;
+  MAX_NETWORK_EVENT_NAME_LEN       = 1000;
+  MAX_PACKET_SIZE                  = 64000;
+  PACKET_CHUNK_TIMEOUT_SEC         = 15;
+  MIN_PAYLOAD_SIZE_FOR_COMPRESSION = 24;
+  MIN_COMPRESSION_RATIO            = 0.9;
 
 
 type
@@ -65,7 +67,8 @@ type
     StreamId:     integer;
     EventNameLen: integer;
     EventName:    Utils.TEmptyRec; // array EventNameLen of char
-    TotalSize:    integer;
+    UnpackedSize: integer;         // Size of unpacked data if data is compressed or negative value
+    TotalSize:    integer;         // Total size of payload to send/receive
     PayloadSize:  integer;
     Payload:      Utils.TEmptyRec; // array PayloadSize of byte
   end;
@@ -76,15 +79,17 @@ type
   end;
 
   TIncomingStream = class
-  {O} Data:       TStrBuilder;
-      TotalSize:  integer;
-      EventName:  string;
-      UpdateTime: integer;
+  {O} Data:             TStrBuilder;
+      TotalSize:        integer;
+      UncompressedSize: integer;
+      EventName:        string;
+      UpdateTime:       integer;
 
-    constructor Create (const EventName: string; TotalSize: integer);
+    constructor Create (const EventName: string; TotalSize, UncompressedSize: integer);
     destructor Destroy; override;
     function WriteData ({n} Buf: pointer; BufSize: integer): boolean;
     function IsStale (CurrTimestamp: integer): boolean;
+    function IsCompressed: boolean;
   end;
 
   TSingleSenderStreams = {O} TObjDict {of StreamId => TIncomingStream};
@@ -110,12 +115,13 @@ begin
   result := OutStreamAutoId;
 end;
 
-constructor TIncomingStream.Create (const EventName: string; TotalSize: integer);
+constructor TIncomingStream.Create (const EventName: string; TotalSize, UncompressedSize: integer);
 begin
-  Self.Data       := TStrBuilder.Create;
-  Self.TotalSize  := TotalSize;
-  Self.EventName  := EventName;
-  Self.UpdateTime := WinUtils.GetUnixTime;
+  Self.Data             := TStrBuilder.Create;
+  Self.TotalSize        := TotalSize;
+  Self.UncompressedSize := UncompressedSize;
+  Self.EventName        := EventName;
+  Self.UpdateTime       := WinUtils.GetUnixTime;
 end;
 
 destructor TIncomingStream.Destroy;
@@ -136,6 +142,11 @@ end;
 function TIncomingStream.IsStale (CurrTimestamp: integer): boolean;
 begin
   result := CurrTimestamp - Self.UpdateTime >= PACKET_CHUNK_TIMEOUT_SEC;
+end;
+
+function TIncomingStream.IsCompressed: boolean;
+begin
+  result := Self.UncompressedSize >= 0;
 end;
 
 function FindIncomingStream (SenderPlayerId, StreamId: integer): {Un} TIncomingStream;
@@ -169,7 +180,7 @@ begin
   end;
 end;
 
-function CreateIncomingStream (SenderPlayerId, StreamId: integer; const EventName: string; TotalSize: integer): {U} TIncomingStream;
+function CreateIncomingStream (SenderPlayerId, StreamId: integer; const EventName: string; TotalSize, UncompressedSize: integer): {U} TIncomingStream;
 var
 {Un} SenderStreams: TSingleSenderStreams;
 
@@ -183,7 +194,7 @@ begin
   end;
 
   {!} Assert(SenderStreams[Ptr(StreamId)] = nil, 'Cannot create incoming stream. It''s already present');
-  result := TIncomingStream.Create(EventName, TotalSize);
+  result := TIncomingStream.Create(EventName, TotalSize, UncompressedSize);
   SenderStreams[Ptr(StreamId)] := result;
 end;
 
@@ -226,6 +237,10 @@ function FireRemoteEvent (DestPlayerId: integer; const EventName: string; {n} Da
 var
   StreamId:          integer;
   SizeWritten:       integer;
+  CompressedPayload: Utils.TArrayOfByte;
+  PayloadBuf:        pointer;
+  PayloadBufSize:    integer;
+  UncompressedSize:  integer;
   PacketPayloadSize: integer;
   Temp:              integer;
 
@@ -236,6 +251,20 @@ begin
     exit;
   end;
 
+  PayloadBuf       := Data;
+  PayloadBufSize   := DataSize;
+  UncompressedSize := -1;
+
+  if DataSize >= MIN_PAYLOAD_SIZE_FOR_COMPRESSION then begin
+    CompressedPayload := ZlibUtils.Compress(Data, DataSize);
+
+    if Length(CompressedPayload) / DataSize <= MIN_COMPRESSION_RATIO then begin
+      PayloadBuf        := pointer(CompressedPayload);
+      PayloadBufSize    := Length(CompressedPayload);
+      UncompressedSize  := DataSize;
+    end;
+  end;
+
   StreamId    := GenerateStreamId;
   SizeWritten := 0;
 
@@ -244,30 +273,31 @@ begin
   PacketBuf.WriteInt(Length(EventName));
   PacketBuf.WriteStr(EventName);
 
-  PacketBuf.WriteInt(DataSize);
-  PacketPayloadSize := Math.Min(PacketBuf.Size - PacketBuf.Pos - sizeof(PacketPayloadSize), DataSize);
+  PacketBuf.WriteInt(PayloadBufSize);
+  PacketBuf.WriteInt(UncompressedSize);
+  PacketPayloadSize := Math.Min(PacketBuf.Size - PacketBuf.Pos - sizeof(PacketPayloadSize), PayloadBufSize);
   PacketBuf.WriteInt(PacketPayloadSize);
 
-  PacketBuf.WriteUpTo(PacketPayloadSize, Data, Temp);
-  Inc(integer(Data), PacketPayloadSize);
+  PacketBuf.WriteUpTo(PacketPayloadSize, PayloadBuf, Temp);
+  Inc(integer(PayloadBuf), PacketPayloadSize);
 
   Inc(SizeWritten, PacketPayloadSize);
   Heroes.SendNetData(DestPlayerId, NETWORK_MSG_ERA_EVENT_STREAM_START, PacketBuf.Buf, PacketBuf.Pos);
 
-  while SizeWritten < DataSize do begin
+  while SizeWritten < PayloadBufSize do begin
     if @ProgressHandler <> nil then begin
-      if ProgressHandler(SizeWritten, DataSize, ProgressHandlerCustomParam) = 0 then begin
+      if ProgressHandler(SizeWritten, PayloadBufSize, ProgressHandlerCustomParam) = 0 then begin
         exit;
       end;
     end;
 
     PacketBuf.Seek(0);
     PacketBuf.WriteInt(StreamId);
-    PacketPayloadSize := Math.Min(PacketBuf.Size - PacketBuf.Pos - sizeof(PacketPayloadSize), DataSize - SizeWritten);
+    PacketPayloadSize := Math.Min(PacketBuf.Size - PacketBuf.Pos - sizeof(PacketPayloadSize), PayloadBufSize - SizeWritten);
     PacketBuf.WriteInt(PacketPayloadSize);
 
-    PacketBuf.WriteUpTo(PacketPayloadSize, Data, Temp);
-    Inc(integer(Data), PacketPayloadSize);
+    PacketBuf.WriteUpTo(PacketPayloadSize, PayloadBuf, Temp);
+    Inc(integer(PayloadBuf), PacketPayloadSize);
 
     Inc(SizeWritten, PacketPayloadSize);
     Heroes.SendNetData(DestPlayerId, NETWORK_MSG_ERA_EVENT_STREAM_CHUNK, PacketBuf.Buf, PacketBuf.Pos);
@@ -279,13 +309,14 @@ const
   WOG_FUNC_RECEIVER_NET_AM_COMMAND = $768841;
 
 var
-{Un} Stream:       TIncomingStream;
-     StreamId:     integer;
-     EventNameLen: integer;
-     EventName:    string;
-     TotalSize:    integer;
-     PayloadSize:  integer;
-     EventData:    Utils.TArrayOfByte;
+{Un} Stream:           TIncomingStream;
+     StreamId:         integer;
+     EventNameLen:     integer;
+     EventName:        string;
+     TotalSize:        integer;
+     UncompressedSize: integer;
+     PayloadSize:      integer;
+     EventData:        Utils.TArrayOfByte;
 
 begin
   if NetData.MsgId = NETWORK_MSG_ERA_EVENT_STREAM_START then begin
@@ -295,14 +326,20 @@ begin
     PacketReader.ReadInt(EventNameLen);
     PacketReader.ReadStr(EventNameLen, EventName);
     PacketReader.ReadInt(TotalSize);
+    PacketReader.ReadInt(UncompressedSize);
     PacketReader.ReadInt(PayloadSize);
     {!} Assert(PayloadSize <= TotalSize, SysUtils.Format('Invalid PayloadSize field for incoming stream. It cannot be greater than TotalSize. Given: %d/%d', [PayloadSize, TotalSize]));
     DestroyIncomingStream(NetData.PlayerId, StreamId);
 
     if PayloadSize = TotalSize then begin
-      EventMan.GetInstance.Fire(EventName, Utils.PtrOfs(PacketReader.Buf, PacketReader.Pos), PayloadSize);
+      if UncompressedSize >= 0 then begin
+        EventData := ZlibUtils.Decompress(Utils.PtrOfs(PacketReader.Buf, PacketReader.Pos), PayloadSize);
+        EventMan.GetInstance.Fire(EventName, pointer(EventData), Length(EventData));
+      end else begin
+        EventMan.GetInstance.Fire(EventName, Utils.PtrOfs(PacketReader.Buf, PacketReader.Pos), PayloadSize);
+      end;
     end else begin
-      Stream := CreateIncomingStream(NetData.PlayerId, StreamId, EventName, TotalSize);
+      Stream := CreateIncomingStream(NetData.PlayerId, StreamId, EventName, TotalSize, UncompressedSize);
       Stream.WriteData(Utils.PtrOfs(PacketReader.Buf, PacketReader.Pos), PayloadSize);
     end;
   end else if NetData.MsgId = NETWORK_MSG_ERA_EVENT_STREAM_CHUNK then begin
@@ -316,9 +353,14 @@ begin
       {!} Assert(Stream.Data.Size + PayloadSize <= Stream.TotalSize, SysUtils.Format('Invalid PayloadSize field for incoming stream chunk. TotalSize is overflowed. Given: %d/%d', [Stream.Data.Size + PayloadSize, Stream.TotalSize]));
       Stream.WriteData(Utils.PtrOfs(PacketReader.Buf, PacketReader.Pos), PayloadSize);
 
-      if Stream.Data.Size = TotalSize then begin
+      if Stream.Data.Size = Stream.TotalSize then begin
         EventName := Stream.EventName;
         EventData := Stream.Data.BuildBuf;
+
+        if Stream.IsCompressed then begin
+          EventData := ZlibUtils.Decompress(pointer(EventData), Length(EventData));
+        end;
+
         DestroyIncomingStream(NetData.PlayerId, StreamId);
         EventMan.GetInstance.Fire(EventName, pointer(EventData), Length(EventData));
       end;
