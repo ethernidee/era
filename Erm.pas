@@ -1,15 +1,37 @@
 unit Erm;
-{
-DESCRIPTION:  Native ERM support
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: ERM scripting language support.
+  Author:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+*)
 
 (***)  interface  (***)
 uses
-  SysUtils, Math, Windows,
-  Utils, Crypto, TextScan, AssocArrays, DataLib, CFiles, Files, Ini, TypeWrappers, ApiJack,
-  Lists, StrLib, Alg, FastRand, DlgMes,
-  Core, Heroes, GameExt, Trans, RscLists, EventMan;
+  Math,
+  SysUtils,
+  Windows,
+
+  Alg,
+  ApiJack,
+  AssocArrays,
+  CFiles,
+  Core,
+  Crypto,
+  DataLib,
+  DlgMes,
+  EventMan,
+  FastRand,
+  Files,
+  GameExt,
+  Heroes,
+  Ini,
+  Lists,
+  Network,
+  RscLists,
+  StrLib,
+  TextScan,
+  Trans,
+  TypeWrappers,
+  Utils;
 
 type
   (* Import *)
@@ -619,6 +641,7 @@ const
   ZvsEventX:                  pinteger               = Ptr($27F9964);
   ZvsEventY:                  pinteger               = Ptr($27F9968);
   ZvsEventZ:                  pinteger               = Ptr($27F996C);
+  ZvsDestPlayer:              pinteger               = Ptr($7A1B24);
   ZvsWHero:                   pinteger               = Ptr($27F9988);
   IsWoG:                      plongbool              = Ptr($803288);
   WoGOptions:                 ^TWoGOptions           = Ptr($2771920);
@@ -703,6 +726,7 @@ var
 {O} ErtStrings:      {O} AssocArrays.TObjArray {of Index => pchar}; // use H3 Alloc/Free
 {O} ScriptMan:       TScriptMan;
 {O} GlobalConsts:    DataLib.TDict {OF Value: integer};
+{O} PacketReader:    {U} Files.TFixedBuf; // Remote event data reader
     ErmTriggerDepth: integer = 0;
 
     FreezedWogOptionWogify: integer = WOGIFY_ALL;
@@ -7816,25 +7840,116 @@ begin
   result          := false;
 end; // .function Hook_FU_P
 
-function OnFuncCalledRemotely (FuncId: integer; Args: Utils.PEndlessIntArr; NumArgs: integer): integer; cdecl;
+function Hook_FU_D (Context: ApiJack.PHookContext): longbool; stdcall;
 var
-  i: integer;
+{O} DataBuilder: TStrBuilder;
+    EventData:   Utils.TArrayOfByte;
+    Cmd:         PErmCmd;
+    SubCmd:      PErmSubCmd;
+    FuncId:      integer;
+    Param:       PErmCmdParam;
+    ParamType:   integer;
+    NumParams:   integer;
+    ValType:     integer;
+    Str:         pchar;
+    StrLen:      integer;
+    i:           integer;
 
 begin
-  for i := 0 to NumArgs - 1 do begin
-    ArgXVars[i + 1] := Args[i];
+  DataBuilder := TStrBuilder.Create;
+  // * * * * * //
+  Cmd       := PErmCmd(ppointer(Context.EBP + $10)^);
+  SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
+  FuncId    := GetErmParamValue(@Cmd.Params[0], ValType);
+  NumParams := pinteger(Context.EBP + $0C)^;
+  // * * * * * //
+  FuncArgsGetSyntaxFlagsPassed := 0;
+
+  DataBuilder.WriteInt(GetErmParamValue(@Cmd.Params[0], ValType));
+  DataBuilder.WriteInt(NumParams);
+
+  for i := 0 to NumParams - 1 do begin
+    Param     := @SubCmd.Params[i];
+    ParamType := Param.GetType();
+
+    if ParamType in PARAM_VARTYPES_STRINGS then begin
+      DataBuilder.WriteByte(VALTYPE_STR);
+      Str    := pchar(GetErmParamValue(Param, ValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX));
+      StrLen := Windows.LStrLen(Str);
+      DataBuilder.WriteInt(StrLen + 1);
+      DataBuilder.AppendBuf(StrLen + 1, Str);
+    end else begin
+      DataBuilder.WriteByte(VALTYPE_INT);
+      DataBuilder.WriteInt(SubCmd.Nums[i]);
+    end;
+
+    // Support d- syntax
+    if SubCmd.Modifiers[i] = PARAM_MODIFIER_SUB then begin
+      ArgXVars[i + 1] := -ArgXVars[i + 1];
+    end;
+
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or ((ord(SubCmd.Modifiers[i] <> PARAM_MODIFIER_NONE) + 1) shl (i shl 1));
+  end; // .for
+
+  for i := NumParams to High(ArgXVars) - 1 do begin
+    FuncArgsGetSyntaxFlagsPassed := FuncArgsGetSyntaxFlagsPassed or (1 shl (i shl 1));
   end;
 
-  for i := NumArgs to High(ArgXVars) - 1 do begin
-    ArgXVars[i + 1] := 0;
+  DataBuilder.WriteInt(FuncArgsGetSyntaxFlagsPassed);
+  EventData := DataBuilder.BuildBuf;
+  Network.FireRemoteEvent(ZvsDestPlayer^, 'OnRemoteErmFuncCall', pointer(EventData), Length(EventData));
+
+  Context.RetAddr := Ptr($72D19E);
+  result          := false;
+  // * * * * * //
+  SysUtils.FreeAndNil(DataBuilder);
+end; // .function Hook_FU_D
+
+procedure OnRemoteErmFuncCall (Event: GameExt.PEvent); stdcall;
+var
+  FuncId:              integer;
+  NumParams:           integer;
+  ValType:             byte;
+  StrLen:              integer;
+  AllocatedErtStrings: TErmXVars;
+  ErtIndex:            integer;
+  i:                   integer;
+
+begin
+  PacketReader.Open(Event.Data, Event.DataSize, Files.MODE_READ);
+  PacketReader.ReadInt(FuncId);
+  PacketReader.ReadInt(NumParams);
+  NumFuncArgsPassed := NumParams;
+
+  for i := Low(ArgXVars) to High(ArgXVars) do begin
+    ArgXVars[i]            := 0;
+    AllocatedErtStrings[i] := -1;
   end;
 
-  FuncArgsGetSyntaxFlagsPassed := $55555555;
-  NumFuncArgsPassed            := NumArgs;
+  for i := 0 to NumParams - 1 do begin
+    PacketReader.ReadByte(ValType);
+
+    if ValType = VALTYPE_STR then begin
+      PacketReader.ReadInt(StrLen);
+      ErtIndex                   := AllocLocalErtIndex;
+      ErtStrings[Ptr(ErtIndex)]  := Utils.PtrOfs(PacketReader.Buf, PacketReader.Pos);
+      AllocatedErtStrings[i + 1] := ErtIndex;
+      ArgXVars[i + 1]            := ErtIndex;
+      PacketReader.Seek(PacketReader.Pos + StrLen);
+    end else begin
+      PacketReader.ReadInt(ArgXVars[i + 1]);
+    end;
+  end;
+
+  PacketReader.ReadInt(FuncArgsGetSyntaxFlagsPassed);
   FireErmEvent(FuncId);
 
-  result := 1;
-end;
+  for i := Low(AllocatedErtStrings) to High(AllocatedErtStrings) do begin
+    if AllocatedErtStrings[i] <> -1 then begin
+      ErtStrings.DeleteItem(Ptr(AllocatedErtStrings[i]));
+    end;
+  end;
+end; // .procedure OnRemoteErmFuncCall
 
 type
   TLoopContext = record
@@ -8586,6 +8701,9 @@ begin
   // Rewrite FU:P implementation
   ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
 
+  // Rewrite FU:D implementation
+  ApiJack.HookCode(Ptr($72D0F7), @Hook_FU_D);
+
   // Add FU:A/G commands
   ApiJack.HookCode(Ptr($72D181), @Hook_FU_EXT);
 
@@ -8595,9 +8713,6 @@ begin
   // Fix HE:V#1/#2/#3 to allow #2 to be any positive object ID, applying mod 32 to it.
   // This fix allows to play XXL maps without scripts fixing.
   Core.p.WriteDataPatch(Ptr($746319), ['8365B01FEB19']);
-
-  (* Rewrite ZVS Call_Function / remote function call handling *)
-  Core.ApiHook(@OnFuncCalledRemotely, Core.HOOKTYPE_JUMP, Ptr($72D1D1));
 
   // Rewrite DO:P implementation
   Core.ApiHook(@Hook_DO_P, Core.HOOKTYPE_JUMP, Ptr($72D79C));
@@ -8692,6 +8807,7 @@ begin
   FuncNames       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   GlobalConsts    := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   FuncIdToNameMap := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  PacketReader    := Files.TFixedBuf.Create;
   RegisterStdGlobalConsts;
 
   ErmScanner  := TextScan.TTextScanner.Create;
@@ -8714,4 +8830,5 @@ begin
   EventMan.GetInstance.On('OnBeforeClearErmScripts',  OnBeforeClearErmScripts);
   EventMan.GetInstance.On('OnGenerateDebugInfo',      OnGenerateDebugInfo);
   EventMan.GetInstance.On('OnAfterStructRelocations', OnAfterStructRelocations);
+  EventMan.GetInstance.On('OnRemoteErmFuncCall',      OnRemoteErmFuncCall);
 end.
