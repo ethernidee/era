@@ -74,6 +74,10 @@ var
   DebugRng:             integer;
 
 
+(* Generates random value in specified range with additional custom parameter used only in deterministic generators to produce different outputs for sequence of generations *)
+function RandomRangeWithFreeParam (MinValue, MaxValue, FreeParam: integer): integer; stdcall;
+
+
 (***) implementation (***)
 
 
@@ -91,6 +95,7 @@ type
     fCombatId:       integer;
     fRangeMax:       integer;
     fCombatActionId: integer;
+    fFreeParam:      integer;
   end;
 
   TBattleDeterministicRng = class (FastRand.TRng)
@@ -99,11 +104,12 @@ type
     fCombatIdPtr:       pinteger;
     fCombatRoundPtr:    pinteger;
     fCombatActionIdPtr: pinteger;
+    fFreeParamPtr:      pinteger;
 
     procedure UpdateState (RangeMin, RangeMax: integer);
 
    public
-    constructor Create (CombatIdPtr, CombatRoundPtr, CombatActionIdPtr: pinteger);
+    constructor Create (CombatIdPtr, CombatRoundPtr, CombatActionIdPtr, FreeParamPtr: pinteger);
 
     procedure Seed (NewSeed: integer); override;
     function Random: integer; override;
@@ -136,6 +142,7 @@ var
   CombatId:            integer;
   CombatRound:         integer;
   CombatActionId:      integer;
+  CombatRngFreeParam:  integer;
   HadTacticsPhase:     boolean;
   NativeBattleRngSeed: integer;
 
@@ -145,11 +152,12 @@ threadvar
   IsMainThread:    boolean;
 
 
-constructor TBattleDeterministicRng.Create (CombatIdPtr, CombatRoundPtr, CombatActionIdPtr: pinteger);
+constructor TBattleDeterministicRng.Create (CombatIdPtr, CombatRoundPtr, CombatActionIdPtr, FreeParamPtr: pinteger);
 begin
   Self.fCombatIdPtr       := CombatIdPtr;
   Self.fCombatRoundPtr    := CombatRoundPtr;
   Self.fCombatActionIdPtr := CombatActionIdPtr;
+  Self.fFreeParamPtr      := FreeParamPtr;
 end;
 
 procedure TBattleDeterministicRng.UpdateState (RangeMin, RangeMax: integer);
@@ -159,6 +167,7 @@ begin
   Self.fState.fCombatId       := Crypto.Tm32Encode(Self.fCombatIdPtr^);
   Self.fState.fRangeMax       := RangeMax;
   Self.fState.fCombatActionId := Crypto.Tm32Encode(Self.fCombatActionIdPtr^ + 1147022261);
+  Self.fState.fFreeParam      := Crypto.Tm32Encode(Self.fFreeParamPtr^ + 641013956);
 end;
 
 procedure TBattleDeterministicRng.Seed (NewSeed: integer);
@@ -977,10 +986,36 @@ begin
   Inc(RngId);
 end;
 
+procedure DebugRandomRange (CallerAddr: pointer; MinValue, MaxValue, ResValue: integer);
+var
+  Message: string;
+
+begin
+  if DebugRng >= DEBUG_RNG_RANGE then begin
+    if GlobalRng = BattleDeterministicRng then begin
+      Message := SysUtils.Format('brng rand #%d from %.8x, B%d  R%d A%d F%d: %d..%d = %d', [
+        RngId, integer(CallerAddr), CombatId, CombatRound, CombatActionId, CombatRngFreeParam, MinValue, MaxValue, ResValue
+      ]);
+    end else begin
+      Message := 'qrng ';
+
+      if GlobalRng = CLangRng then begin
+        Message := 'crng ';
+      end;
+
+      Message := Message + SysUtils.Format('rand #%d from %.8x: %d..%d = %d', [RngId, integer(CallerAddr), MinValue, MaxValue, ResValue]);
+    end;
+
+    Writeln(Message);
+    PrintChatMsg('{~ffffff}' + Message);
+  end;
+
+  Inc(RngId);
+end;
+
 function Hook_RandomRange (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
 var
   CallerAddr: pointer;
-  Message:    string;
 
 begin
   asm
@@ -989,25 +1024,51 @@ begin
   end;
 
   result := GlobalRng.RandomRange(MinValue, MaxValue);
+  DebugRandomRange(CallerAddr, MinValue, MaxValue, result);
+end;
 
-  if DebugRng >= DEBUG_RNG_RANGE then begin
-    if GlobalRng = BattleDeterministicRng then begin
-      Message := SysUtils.Format('brng rand #%d from %.8x, B%d  R%d A%d: %d..%d = %d', [RngId, integer(CallerAddr), CombatId, CombatRound, CombatActionId, MinValue, MaxValue, result]);
-    end else begin
-      Message := 'qrng ';
+function RandomRangeWithFreeParam (MinValue, MaxValue, FreeParam: integer): integer; stdcall;
+var
+  CallerAddr: pointer;
 
-      if GlobalRng = CLangRng then begin
-        Message := 'crng ';
-      end;
-
-      Message := Message + SysUtils.Format('rand #%d from %.8x: %d..%d = %d', [RngId, integer(CallerAddr), MinValue, MaxValue, result]);
-    end;
-
-    Writeln(Message);
-    PrintChatMsg('{~ffffff}' + Message);
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov CallerAddr, eax
   end;
 
-  Inc(RngId);
+  if GlobalRng = BattleDeterministicRng then begin
+    CombatRngFreeParam := FreeParam;
+  end;
+
+  result := GlobalRng.RandomRange(MinValue, MaxValue);
+  DebugRandomRange(CallerAddr, MinValue, MaxValue, result);
+
+  if GlobalRng = BattleDeterministicRng then begin
+    CombatRngFreeParam := 0;
+  end;
+end;
+
+function Hook_CalculateBattleStackDamage_SmallStack (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  VAR_GENERATION_COUNTER = $8;
+
+begin
+  Inc(Context.EDI, RandomRangeWithFreeParam(Context.ESI, Context.EBX, pinteger(Context.EBP + VAR_GENERATION_COUNTER)^));
+
+  Context.RetAddr := Ptr($44302B);
+  result          := false;
+end;
+
+function Hook_CalculateBattleStackDamage_BigStack (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  VAR_GENERATION_COUNTER = $8;
+
+begin
+  Inc(Context.EDI, RandomRangeWithFreeParam(Context.ESI, Context.EBX, pinteger(Context.EBP + VAR_GENERATION_COUNTER)^));
+
+  Context.RetAddr := Ptr($442FF0);
+  result          := false;
 end;
 
 function Hook_ApplyBattleRngSeed (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -2051,6 +2112,10 @@ begin
   ApiJack.StdSplice(Ptr($50C7B0), @Hook_Tracking_SRand, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_RandomRange, ApiJack.CONV_FASTCALL, 2);
 
+  (* Fix damage generation in online PvP battles *)
+  ApiJack.HookCode(Ptr($443020), @Hook_CalculateBattleStackDamage_SmallStack);
+  ApiJack.HookCode(Ptr($442FE5), @Hook_CalculateBattleStackDamage_BigStack);
+
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
   ApiJack.HookCode(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
 
@@ -2096,7 +2161,7 @@ begin
   TopLevelExceptionHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
   CLangRng                  := FastRand.TClangRng.Create(FastRand.GenerateSecureSeed);
   QualitativeRng            := FastRand.TXoroshiro128Rng.Create(FastRand.GenerateSecureSeed);
-  BattleDeterministicRng    := TBattleDeterministicRng.Create(@CombatId, @CombatRound, @CombatActionId);
+  BattleDeterministicRng    := TBattleDeterministicRng.Create(@CombatId, @CombatRound, @CombatActionId, @CombatRngFreeParam);
   GlobalRng                 := QualitativeRng;
   IsMainThread              := true;
   Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);

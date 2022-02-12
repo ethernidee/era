@@ -32,6 +32,7 @@ uses
   Stores,
   StrLib,
   Trans,
+  Tweaks,
   TypeWrappers,
   Utils,
   WinUtils;
@@ -616,6 +617,7 @@ exports
   Splice,
   ToStaticStr,
   tr,
+  Tweaks.RandomRangeWithFreeParam,
   WriteSavegameSection,
   WriteStrToIni;
 
