@@ -61,6 +61,7 @@ const
   NUM_BATTLE_STACKS_PER_SIDE = 21;
 
   (*  BattleMon  *)
+  NO_STACK          = -1;
   STACK_STRUCT_SIZE = 1352;
   STACK_TYPE        = $34;
   STACK_POS         = $38;
@@ -1232,6 +1233,7 @@ procedure UnpackCoords (PackedCoords: integer; var x, y, z: integer); overload;
 procedure UnpackCoords (PackedCoords: integer; var Coords: TMapCoords); overload;
 procedure MapTileToCoords (MapTile: PMapTile; var Coords: TMapCoords);
 function  StackProp (StackId: integer; PropOfs: integer): PValue;
+function  StackPtrToId (StackPtr: pointer): integer;
 function  GetBattleCellStackId (BattleCell: Utils.PEndlessByteArr): integer;
 function  GetStackIdByPos (StackPos: integer): integer;
 procedure RedrawHeroMeetingScreen;
@@ -2119,7 +2121,16 @@ end; // .function GetBattleCellStackId
 
 function StackProp (StackId: integer; PropOfs: integer): PValue; inline;
 begin
-  result := Utils.PtrOfs(ppointer(COMBAT_MANAGER)^, 21708 + 1352 * StackId + PropOfs);
+  result := Utils.PtrOfs(ppointer(COMBAT_MANAGER)^, 21708 + STACK_STRUCT_SIZE * StackId + PropOfs);
+end;
+
+function StackPtrToId (StackPtr: pointer): integer;
+begin
+  result := integer((cardinal(StackPtr) - cardinal(StackProp(0, 0))) div STACK_STRUCT_SIZE);
+
+  if (result < 0) or (result >= NUM_BATTLE_STACKS) then begin
+    result := NO_STACK;
+  end;
 end;
 
 function GetStackIdByPos (StackPos: integer): integer;
@@ -2130,7 +2141,6 @@ type
   end;
 
 const
-  NO_STACK  = -1;
   STACK_POS = $38;
 
 var
