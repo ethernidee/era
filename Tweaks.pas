@@ -1013,18 +1013,12 @@ begin
   Inc(RngId);
 end;
 
-function Hook_RandomRange (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
-var
-  CallerAddr: pointer;
-
+function _RandomRangeWithFreeParam (CallerAddr: pointer; MinValue, MaxValue, FreeParam: integer): integer;
 begin
-  asm
-    mov eax, [ebp + 4]
-    mov CallerAddr, eax
-  end;
-
-  result := GlobalRng.RandomRange(MinValue, MaxValue);
+  CombatRngFreeParam := FreeParam;
+  result             := GlobalRng.RandomRange(MinValue, MaxValue);
   DebugRandomRange(CallerAddr, MinValue, MaxValue, result);
+  CombatRngFreeParam := 0;
 end;
 
 function RandomRangeWithFreeParam (MinValue, MaxValue, FreeParam: integer): integer; stdcall;
@@ -1037,17 +1031,47 @@ begin
     mov CallerAddr, eax
   end;
 
-  if GlobalRng = BattleDeterministicRng then begin
-    CombatRngFreeParam := FreeParam;
-  end;
-
-  result := GlobalRng.RandomRange(MinValue, MaxValue);
-  DebugRandomRange(CallerAddr, MinValue, MaxValue, result);
-
-  if GlobalRng = BattleDeterministicRng then begin
-    CombatRngFreeParam := 0;
-  end;
+  result := _RandomRangeWithFreeParam(CallerAddr, MinValue, MaxValue, FreeParam);
 end;
+
+function Hook_RandomRange (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
+type
+  PCallerContext = ^TCallerContext;
+  TCallerContext = packed record EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX: integer; end;
+
+const
+  CALLER_CONTEXT_SIZE = sizeof(TCallerContext);
+
+var
+  CallerAddr: pointer;
+  Context:    PCallerContext;
+  CallerEbp:  integer;
+  FreeParam:  integer;
+
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov CallerAddr, eax
+    pushad
+    mov [Context], esp
+  end;
+
+  CallerEbp := pinteger(Context.EBP)^;
+  FreeParam := 0;
+
+  case integer(CallerAddr) of
+    // Battle stack damage generation
+    $442FEE, $443029: FreeParam := pinteger(CallerEbp + $8)^;
+    // Bad morale
+    $4647AC, $4647D5: FreeParam := StackPtrToId(Ptr(Context.EDI));
+  end;
+
+  result := _RandomRangeWithFreeParam(CallerAddr, MinValue, MaxValue, FreeParam);
+
+  asm
+    add esp, CALLER_CONTEXT_SIZE
+  end;
+end; // .function Hook_RandomRange
 
 function Hook_CalculateBattleStackDamage_SmallStack (Context: ApiJack.PHookContext): longbool; stdcall;
 const
@@ -2113,8 +2137,8 @@ begin
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_RandomRange, ApiJack.CONV_FASTCALL, 2);
 
   (* Fix damage generation in online PvP battles *)
-  ApiJack.HookCode(Ptr($443020), @Hook_CalculateBattleStackDamage_SmallStack);
-  ApiJack.HookCode(Ptr($442FE5), @Hook_CalculateBattleStackDamage_BigStack);
+  //ApiJack.HookCode(Ptr($443020), @Hook_CalculateBattleStackDamage_SmallStack);
+  //ApiJack.HookCode(Ptr($442FE5), @Hook_CalculateBattleStackDamage_BigStack);
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
   ApiJack.HookCode(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
