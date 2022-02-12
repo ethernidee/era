@@ -2124,15 +2124,6 @@ begin
   result := Utils.PtrOfs(ppointer(COMBAT_MANAGER)^, 21708 + STACK_STRUCT_SIZE * StackId + PropOfs);
 end;
 
-function StackPtrToId (StackPtr: pointer): integer;
-begin
-  result := integer((cardinal(StackPtr) - cardinal(StackProp(0, 0))) div STACK_STRUCT_SIZE);
-
-  if (result < 0) or (result >= NUM_BATTLE_STACKS) then begin
-    result := NO_STACK;
-  end;
-end;
-
 function GetStackIdByPos (StackPos: integer): integer;
 type
   PStackField = ^TStackField;
@@ -2167,6 +2158,15 @@ begin
     end;
   end; // .if
 end; // .function GetStackIdByPos
+
+function StackPtrToId (StackPtr: pointer): integer;
+begin
+  result := integer((cardinal(StackPtr) - cardinal(StackProp(0, 0))) div STACK_STRUCT_SIZE);
+
+  if (result < 0) or (result >= NUM_BATTLE_STACKS) then begin
+    result := GetStackIdByPos(pinteger(integer(StackPtr) + STACK_POS)^);
+  end;
+end;
 
 procedure RedrawHeroMeetingScreen; ASSEMBLER;
 asm
