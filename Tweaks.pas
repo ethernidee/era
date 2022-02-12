@@ -1064,6 +1064,10 @@ begin
     $442FEE, $443029: FreeParam := pinteger(CallerEbp + $8)^;
     // Bad morale
     $4647AC, $4647D5: FreeParam := StackPtrToId(Ptr(Context.EDI));
+    // Magic resistence
+    $5A65A3, $5A4D85, $5A061B, $5A1017, $5A1214: FreeParam := StackPtrToId(Ptr(Context.EDI));
+    $5A4F5F:                                     FreeParam := StackPtrToId(Ptr(Context.ESI));
+    $5A2105:                                     FreeParam := StackPtrToId(ppointer(CallerEbp + $14)^);
   end;
 
   result := _RandomRangeWithFreeParam(CallerAddr, MinValue, MaxValue, FreeParam);
@@ -1072,28 +1076,6 @@ begin
     add esp, CALLER_CONTEXT_SIZE
   end;
 end; // .function Hook_RandomRange
-
-function Hook_CalculateBattleStackDamage_SmallStack (Context: ApiJack.PHookContext): longbool; stdcall;
-const
-  VAR_GENERATION_COUNTER = $8;
-
-begin
-  Inc(Context.EDI, RandomRangeWithFreeParam(Context.ESI, Context.EBX, pinteger(Context.EBP + VAR_GENERATION_COUNTER)^));
-
-  Context.RetAddr := Ptr($44302B);
-  result          := false;
-end;
-
-function Hook_CalculateBattleStackDamage_BigStack (Context: ApiJack.PHookContext): longbool; stdcall;
-const
-  VAR_GENERATION_COUNTER = $8;
-
-begin
-  Inc(Context.EDI, RandomRangeWithFreeParam(Context.ESI, Context.EBX, pinteger(Context.EBP + VAR_GENERATION_COUNTER)^));
-
-  Context.RetAddr := Ptr($442FF0);
-  result          := false;
-end;
 
 function Hook_ApplyBattleRngSeed (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
@@ -2135,10 +2117,6 @@ begin
   ApiJack.StdSplice(Ptr($61842C), @Hook_Rand, ApiJack.CONV_STDCALL, 0);
   ApiJack.StdSplice(Ptr($50C7B0), @Hook_Tracking_SRand, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_RandomRange, ApiJack.CONV_FASTCALL, 2);
-
-  (* Fix damage generation in online PvP battles *)
-  //ApiJack.HookCode(Ptr($443020), @Hook_CalculateBattleStackDamage_SmallStack);
-  //ApiJack.HookCode(Ptr($442FE5), @Hook_CalculateBattleStackDamage_BigStack);
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
   ApiJack.HookCode(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
