@@ -669,21 +669,27 @@ end; // .procedure SmoothResizeBmp24
 (* Loads image without format conversion by specified path. Returns nil on failure. *)
 function LoadImage (const FilePath: string): {n} TGraphic;
 var
-  ImageType: TImageType;
+{On} FileContentsStream: Classes.TStringStream;
+     ImageType:          TImageType;
+     FileContents:       string;
 
 begin
-  result    := nil;
-  ImageType := GetImageTypeByName(FilePath);
+  FileContentsStream := nil;
+  result             := nil;
+  ImageType          := GetImageTypeByName(FilePath);
 
-  if (ImageType <> IMG_UNKNOWN) and SysUtils.FileExists(FilePath) then begin
-    result := CreateImageOfType(ImageType);
+  if (ImageType <> IMG_UNKNOWN) and EraZip.ReadFileContentsFromZipFs(FilePath, FileContents) then begin
+    result             := CreateImageOfType(ImageType);
+    FileContentsStream := Classes.TStringStream.Create(FileContents);
 
     try
-      result.LoadFromFile(FilePath);
+      result.LoadFromStream(FileContentsStream);
     except
       SysUtils.FreeAndNil(result);
     end;
   end;
+  // * * * * * //
+  SysUtils.FreeAndNil(FileContentsStream);
 end; // .function LoadImage
 
 (* Loads image and converts it to 24 bit BMP. Returns new default image on error and notifies user. *)
