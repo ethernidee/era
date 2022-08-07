@@ -1160,14 +1160,24 @@ begin
     PngFilePath := DefFramePngFilePathPrefix + FrameRelPath;
   end;
 
+  Lodman.FindRedirection(StrLib.Concat([Def.GetName, ':', PngFileName]), PngFilePath, [Lodman.FRF_EXCLUDE_FALLBACKS]);
+
   if PngFilePath <> '' then begin
-    Lodman.FindRedirection(StrLib.Concat([Def.GetName, ':', PngFileName]), PngFilePath, [Lodman.FRF_EXCLUDE_FALLBACKS]);
     result := LoadPngResource(PngFilePath);
 
     if (result <> nil) and (ColorizationInfo.ColorizationType = COLORIZATION_SPECIAL_COLORS) then begin
       ApplyPaletteColorizationToPng(TRawImage(result.Data), ColorizationInfo.PlayerColor);
     end;
   end;
+
+  // if PngFilePath <> '' then begin
+  //   Lodman.FindRedirection(StrLib.Concat([Def.GetName, ':', PngFileName]), PngFilePath, [Lodman.FRF_EXCLUDE_FALLBACKS]);
+  //   result := LoadPngResource(PngFilePath);
+
+  //   if (result <> nil) and (ColorizationInfo.ColorizationType = COLORIZATION_SPECIAL_COLORS) then begin
+  //     ApplyPaletteColorizationToPng(TRawImage(result.Data), ColorizationInfo.PlayerColor);
+  //   end;
+  // end;
 end;
 
 function DefPngFrameExists (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): boolean;
