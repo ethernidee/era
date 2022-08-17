@@ -8,7 +8,8 @@ uses
 procedure BeginWork1; stdcall;
 
 const
-  //ÖĞÎÄ»¯Ê¹ÓÃÈ«¾Ö±äÁ¿
+  //ä¸­æ–‡åŒ–ä½¿ç”¨å…¨å±€å˜é‡
+  // Global vars for Chinese localisation
   CutTemp1: integer = $004B5A3A;
   CutTemp2: integer = $004B5A5B;
   WordWarp1: integer = $004B57B4;
@@ -20,7 +21,8 @@ var
 
 implementation
 
-//°Ñºº»¯ĞèÒªÓÃµ½µÄ2ÖÖµãÕó×Ö¿â×°ÈëÄÚ´æ,Õâ2ÖÖ×ÖÌå·Ö±ğÊÇ12*12µÄhzk12ºÍ24*24µÄhzk24
+//æŠŠæ±‰åŒ–éœ€è¦ç”¨åˆ°çš„2ç§ç‚¹é˜µå­—åº“è£…å…¥å†…å­˜,è¿™2ç§å­—ä½“åˆ†åˆ«æ˜¯12*12çš„hzk12å’Œ24*24çš„hzk24
+// Writting the Chinese character library into ram. The two sizes of fonts are 12*12 and 24*24
 procedure InitFont;
 var
   path: array[0..255] of char;
@@ -33,12 +35,12 @@ begin
   GetModuleFileName(HInstance, path, Length(path));
   
   if not fileexists(extractfilepath(strpas(path)) + 'hzk12') then begin
-    ShowMessage('Ã»ÓĞÕÒµ½×ÖÌåÎÄ¼şhzk12');
+    ShowMessage('æ²¡æœ‰æ‰¾åˆ°å­—ä½“æ–‡ä»¶hzk12'); // Show error msg "Failed to find character lib hzk12"
     exit;
   end;
   
   if not fileexists(extractfilepath(strpas(path)) + 'HZK24') then begin
-    ShowMessage('Ã»ÓĞÕÒµ½×ÖÌåÎÄ¼şHZK24H');
+    ShowMessage('æ²¡æœ‰æ‰¾åˆ°å­—ä½“æ–‡ä»¶HZK24H'); // Show error msg "Failed to find character lib hzk24H"
     exit;
   end;
   
@@ -60,24 +62,29 @@ begin
     (Buf[5] = $74) and (Buf[6] = $7c) and (Buf[7] = $83) then
     result := 32;
 end;
-//Ê¹ÓÃÖĞ·¢ÏÖÖ±½ÓĞ´µØÖ·²»ÎÈ¶¨£¬ÔÚWOG°æ±¾¿ÉÒÔ³É¹¦£¬µ«ÔÚ32°æÖĞ»á³ö´í£¬Ô­Òò²»Ã÷
+//ä½¿ç”¨ä¸­å‘ç°ç›´æ¥å†™åœ°å€ä¸ç¨³å®šï¼Œåœ¨WOGç‰ˆæœ¬å¯ä»¥æˆåŠŸï¼Œä½†åœ¨32ç‰ˆä¸­ä¼šå‡ºé”™ï¼ŒåŸå› ä¸æ˜
+// Known issue: Writing in addresses here works for WoG, although for some reason,
+// it doesn't work for SoD 3.2
 procedure BeginWork; stdcall;
 begin
   case GetH3Version of
     32:
     begin
       InitFont;
-      //HOOK $004b5a32,½Ø¶Ï×Ö·û´®º¯Êı
+      //HOOK $004b5a32,æˆªæ–­å­—ç¬¦ä¸²å‡½æ•°
+      // Function for cutting string
       pByte($004b5a32)^      := $e9;
       pInteger($00004b5a33)^ := integer(@MyCutWidth) - $004b5a37;
       pByte($004b5a37)^      := $90;
       pByte($004b5a38)^      := $90;
       pByte($004b5a39)^      := $90;
-      //À¹½ØÓ¢ÎÄÊä³ö-ĞÂ
+      //æ‹¦æˆªè‹±æ–‡è¾“å‡º-æ–°
+      // Disabling English output
       pByte($004b5202)^ := $e9;
       pInteger($00004b5203)^ := integer(@MyTextOut_New) - $004b5207;
       pByte($004b5207)^ := $90;
-      //´ËĞŞÕıºÍÏÂÒ»¸öĞŞÕıÒ»ÆğÊ¹ÓÃ
+      //æ­¤ä¿®æ­£å’Œä¸‹ä¸€ä¸ªä¿®æ­£ä¸€èµ·ä½¿ç”¨
+      // This fix must be used with the following
       pByte($004f6569)^ := $b8;
       pByte($004f656a)^ := $80;
       pByte($004f656b)^ := $01;
@@ -86,8 +93,9 @@ begin
       pByte($004f656e)^ := $90;
       pByte($004f656f)^ := $90;
       pByte($004f6570)^ := $90;
-      //ºÍÉÏÒ»¸öĞŞÕıÒ»Æğ£¬½â¾öÖĞÎÄ»¯ºóÃ°ÏÕ½çÃæÏÂÒ»Ğ©ÓÒ¼üÏÔÊ¾¶Ô»°¿ò³¤¶ÈÌ«³¤ÎÊÌâ£¬
-      //±ÈÈçÓÒ¼üµã»÷µØ²ãÇĞ»»°´Å¥
+      //å’Œä¸Šä¸€ä¸ªä¿®æ­£ä¸€èµ·ï¼Œè§£å†³ä¸­æ–‡åŒ–åå†’é™©ç•Œé¢ä¸‹ä¸€äº›å³é”®æ˜¾ç¤ºå¯¹è¯æ¡†é•¿åº¦å¤ªé•¿é—®é¢˜ï¼Œ
+      //æ¯”å¦‚å³é”®ç‚¹å‡»åœ°å±‚åˆ‡æ¢æŒ‰é’®
+      // This fix must be used with the patch above. It's for fixing the width of dialogues (sometimes getting too wide)
       pByte($004f6599)^ := $b8;
       pByte($004f659a)^ := $80;
       pByte($004f659b)^ := $01;
@@ -103,7 +111,8 @@ begin
       pByte($004b57b1)^ := $90;
       pByte($004b57b2)^ := $90;
       pByte($004b57b3)^ := $90;
-      //·µ»ØÒ»¶ÎÎÄ×ÖµÄ×ÜĞĞÊı
+      //è¿”å›ä¸€æ®µæ–‡å­—çš„æ€»è¡Œæ•°
+      // Return the number of rows of a paragraph
       pByte($004b5580)^ := $e9;
       pInteger($004b5581)^ := integer(@MyDialog) - $004b5585;
       pByte($004b5585)^ := $90;
@@ -124,7 +133,8 @@ begin
     32:
     begin
       InitFont;
-      //HOOK $004b5a32,½Ø¶Ï×Ö·û´®º¯Êı
+      //HOOK $004b5a32,æˆªæ–­å­—ç¬¦ä¸²å‡½æ•°
+      // Function for cutting string
       pMyCutWidth := integer(@MyCutWidth);
       pMyCutWidth := pMyCutWidth - $004b5a37;
       WriteProcessMemory(GetCurrentProcess, pointer($004b5a32), @Data, 1, BytesRead);
@@ -132,19 +142,22 @@ begin
       WriteProcessMemory(GetCurrentProcess, pointer($004b5a37), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004b5a38), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004b5a39), @data1, 1, BytesRead);
-      //À¹½ØÓ¢ÎÄÊä³ö-ĞÂ
+      //æ‹¦æˆªè‹±æ–‡è¾“å‡º-æ–°
+      // Disabling English output
       pMyTextOut := integer(@MyTextOut_New);
       pMyTextOut := pMyTextOut - $004b5207;
       WriteProcessMemory(GetCurrentProcess, pointer($004b5202), @Data, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004b5203), @pMyTextOut, 4, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004b5207), @data1, 1, BytesRead);
-      //ºÍÏÂÒ»¸öĞŞÕıÒ»ÆğÊ¹ÓÃ
+      //å’Œä¸‹ä¸€ä¸ªä¿®æ­£ä¸€èµ·ä½¿ç”¨
+      // This fix must be used with the following
       // Patch GetMaxWordWidth
       WriteProcessMemory(GetCurrentProcess, pointer($004f6569), @data4, 5, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f656e), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f656f), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f6570), @data1, 1, BytesRead);
-      //´ËĞŞÕıÊÇ½â¾öÖĞÎÄ»¯ºóÃ°ÏÕ½çÃæÏÂÒ»Ğ©ÓÒ¼üÏÔÊ¾¶Ô»°¿ò³¤¶ÈÌ«³¤ÎÊÌâ£¬±ÈÈçÓÒ¼üµã»÷µØ²ãÇĞ»»°´Å¥
+      //æ­¤ä¿®æ­£æ˜¯è§£å†³ä¸­æ–‡åŒ–åå†’é™©ç•Œé¢ä¸‹ä¸€äº›å³é”®æ˜¾ç¤ºå¯¹è¯æ¡†é•¿åº¦å¤ªé•¿é—®é¢˜ï¼Œæ¯”å¦‚å³é”®ç‚¹å‡»åœ°å±‚åˆ‡æ¢æŒ‰é’®
+      // This fix must be used with the patch above. It's for fixing the width of dialogues (sometimes getting too wide)
       // Patch GetMaxLineWidth to be 352px
       WriteProcessMemory(GetCurrentProcess, pointer($004f6599), @data4, 5, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004f659e), @data1, 1, BytesRead);
@@ -159,7 +172,8 @@ begin
       WriteProcessMemory(GetCurrentProcess, pointer($004b57b1), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004b57b2), @data1, 1, BytesRead);
       WriteProcessMemory(GetCurrentProcess, pointer($004b57b3), @data1, 1, BytesRead);
-      //DIALOG(·µ»Ø¶Ô»°¿òµÄĞĞÊı)
+      //DIALOG(è¿”å›å¯¹è¯æ¡†çš„è¡Œæ•°)
+      // Return the number of rows of the dialogue
       pMyDialog := integer(@MyDialog);
       pMyDialog := pMyDialog - $004b5585;
       WriteProcessMemory(GetCurrentProcess, pointer($004b5580), @Data, 1, BytesRead);

@@ -154,7 +154,8 @@ begin
             + SecondColor32Premultiplied;
 end;
 
-//·µ»ØÒ»¸öºº×ÖµÄÇøÎ»Âë
+//è¿”å›ä¸€ä¸ªæ±‰å­—çš„åŒºä½ç 
+// Return the qw code of a Chinese character
 procedure GetQWCode(HZ:pAnsiChar;var Q,W:word);stdcall;
 begin
   Q := byte(HZ[0]) - 160;
@@ -361,7 +362,8 @@ begin
   PrevFontHeight := Height;
 end; // .procedure SetFont
 
-//µÃµ½ÎÄ×ÖÒ»¹²ÒªÕ¼¼¸ĞĞ
+//å¾—åˆ°æ–‡å­—ä¸€å…±è¦å å‡ è¡Œ
+// Calculate the total number of rows
 function GetStrRowCount(str:pAnsiChar;hfont,RowWidth:integer):integer;stdcall;
 var
   i,Length,Row,FontWidth,FontHeight:integer;
@@ -416,7 +418,8 @@ begin
   DialogResult:=GetStrRowCount(s,hfont,MaxWidth);
 end;
 
-//Êä³öÒ»ĞĞÎÄ×Ö,ÆäÖĞCharLengthÎª×Ö·û¸öÊı
+//è¾“å‡ºä¸€è¡Œæ–‡å­—,å…¶ä¸­CharLengthä¸ºå­—ç¬¦ä¸ªæ•°
+// Output a row of characters. CharLength is the number of characters
 procedure DrawLineToPcx16 (str: pAnsiChar; StrLen, ColorA, hfont, y, x: integer; Surface: integer); stdcall;
 const
   DEF_COLOR = 0;
@@ -488,7 +491,8 @@ begin
     {!} Assert(false, Format('Invalid text color mode: %d', [TextColorMode^]));
   end;
 
-  //ÏÈ¼ÆËãÒ»ÏÂ×Ü¹²ÒªÓÃµÄĞĞÊı
+  //å…ˆè®¡ç®—ä¸€ä¸‹æ€»å…±è¦ç”¨çš„è¡Œæ•°
+  // Calculate the required rows
   MaxRow := GetStrRowCount(str, hfont, BoxWidth);
   SetFont(PFontItem(hfont), FontWidth, FontHeight);
 
@@ -517,7 +521,8 @@ begin
         i        := i + 2;
 
         if l>BoxWidth then begin
-          //Ä¿Ç°Ã»ÓĞ¶Ô±êµã·ûºÅ½øĞĞ´¦Àí
+          //ç›®å‰æ²¡æœ‰å¯¹æ ‡ç‚¹ç¬¦å·è¿›è¡Œå¤„ç†
+          // Punctuations are not managed for now
           //if byte(str[i])>160 True then
           i:=i-2;
           l:=l-FontWidth;
@@ -534,7 +539,9 @@ begin
         Inc(i);
 
         if l>BoxWidth then begin
-          //Ó¢ÎÄ±ØĞëÒÔµ¥´ÊÎªµ¥Î»£¬Õû¸öµ¥´Ê»»ĞĞ£¬ÒÔSPACE¼ÇÂ¼ÉÏ¸ö¿Õ¸ñ»òºº×ÖÎ»ÖÃ£¬ÒÔSPACEROW¼ÇÂ¼ÉÏ¸ö¿Õ¸ñËùÔÚĞĞ
+          //è‹±æ–‡å¿…é¡»ä»¥å•è¯ä¸ºå•ä½ï¼Œæ•´ä¸ªå•è¯æ¢è¡Œï¼Œä»¥SPACEè®°å½•ä¸Šä¸ªç©ºæ ¼æˆ–æ±‰å­—ä½ç½®ï¼Œä»¥SPACEROWè®°å½•ä¸Šä¸ªç©ºæ ¼æ‰€åœ¨è¡Œ
+          // For English it must treat vacubulary (instead of character) as a whole. 
+          // Use SPACE to store the position of the last Space or Chinse character. Use SPACEROW for the last row of a Space presence
           if (SpaceRow=Row)and (Space>-1) then
           begin
             for j:=Space to i-1 do
@@ -583,7 +590,7 @@ begin
                   else startY:=y+(FontHeight)*Row+BoxHeight - MaxRow*(FontHeight);
                 end;
     end;
-    //Èç¹û³¬³öÏÔÊ¾·¶Î§£¬ÔòÍË³ö
+    //å¦‚æœè¶…å‡ºæ˜¾ç¤ºèŒƒå›´ï¼Œåˆ™é€€å‡º
     //if StartX+l>x+BoxWidth then exit;
 
     if (StartY + FontHeight > y + BoxHeight) and (Row > 0) then begin

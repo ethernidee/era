@@ -1,8 +1,9 @@
 library Wogcn;
 
 {
-  WOG汉化核心
-  2009.01.27 有利制作 QQ:123133263
+  WOG姹夊寲鏍稿績
+  2009.01.27 鏈夊埄鍒朵綔 QQ:123133263
+  WoGCN by gu7979gu
 }
 {$R *.res}
 
