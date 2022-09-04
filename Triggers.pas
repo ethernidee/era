@@ -729,6 +729,7 @@ procedure OnExternalGameLeave (Event: GameExt.PEvent); stdcall;
 begin
   Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
   GameExt.SetMapDir('');
+  MainGameLoopDepth := 0;
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
