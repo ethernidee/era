@@ -1179,7 +1179,7 @@ const
   TextBuf:        PGeneralPurposeTextBuf = Ptr($697428);
   MonInfos:       PMonInfos = Ptr($7D0C90);
   NumMonstersPtr: pinteger  = Ptr($733326);
-  ArtInfos:       PArtInfos = Ptr($660B68);
+  ArtInfos:       PArtInfos = Ptr($7B6DA0);
   NumArtsPtr:     pinteger  = Ptr($7324BD);
   NumHeroes:      pinteger  = Ptr($7116B2);
 
@@ -2361,12 +2361,12 @@ end; // .function DisplayComplexDialog
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
 begin
-  SecSkillNames := GameExt.GetRealAddr(SecSkillNames);
-  SecSkillDescs := GameExt.GetRealAddr(SecSkillDescs);
-  SecSkillTexts := GameExt.GetRealAddr(SecSkillTexts);
-  MonInfos      := GameExt.GetRealAddr(MonInfos);
-  ArtInfos      := ppointer(ArtInfos)^;
-  Spells        := GameExt.GetRealAddr(Spells);
+  SecSkillNames := ppointer($4E6C00)^;
+  SecSkillDescs := ppointer($4E6C10)^;
+  SecSkillTexts := ppointer($4E6C1A)^;
+  MonInfos      := ppointer($6747B0)^;
+  ArtInfos      := ppointer($660B68)^;
+  Spells        := ppointer($687FA8)^;
 end;
 
 begin
