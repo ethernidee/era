@@ -304,10 +304,7 @@ begin
   end;
 end; // .function FireRemoteEvent
 
-function Hook_NetworkProcessOtherData (OrigFunc: pointer; AdvMan: Heroes.PAdvManager; NetData: Heroes.PNetData): integer; stdcall;
-const
-  WOG_FUNC_RECEIVER_NET_AM_COMMAND = $768841;
-
+function ProcessNetworkData (NetData: Heroes.PNetData): boolean;
 var
 {Un} Stream:           TIncomingStream;
      StreamId:         integer;
@@ -319,6 +316,8 @@ var
      EventData:        Utils.TArrayOfByte;
 
 begin
+  result := true;
+
   if NetData.MsgId = NETWORK_MSG_ERA_EVENT_STREAM_START then begin
     GcIncomingStreams;
     PacketReader.Open(@NetData.RawData, NetData.StructSize - sizeof(NetData^), Files.MODE_READ);
@@ -366,11 +365,28 @@ begin
       end;
     end;
   end else if NetData.MsgId = NETWORK_MSG_WOG then begin
-    PatchApi.Call(THISCALL_, Ptr(WOG_FUNC_RECEIVER_NET_AM_COMMAND), [NetData]);
+    result := false;
   end; // .else
+end; // .function ProcessNetworkData
+
+function Hook_NetworkProcessOtherData (OrigFunc: pointer; AdvMan: Heroes.PAdvManager; NetData: Heroes.PNetData): integer; stdcall;
+const
+  WOG_FUNC_RECEIVER_NET_AM_COMMAND = $768841;
+
+begin
+  if not ProcessNetworkData(NetData) and (NetData.MsgId = NETWORK_MSG_WOG) then begin
+    PatchApi.Call(THISCALL_, Ptr(WOG_FUNC_RECEIVER_NET_AM_COMMAND), [NetData]);
+  end;
 
   result := PatchApi.Call(THISCALL_, OrigFunc, [AdvMan, NetData]);
-end; // .function Hook_NetworkProcessOtherData
+end;
+
+function Hook_NetworkProcessBattleData (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  ProcessNetworkData(ppointer($2860290)^);
+
+  result := true;
+end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
@@ -379,6 +395,7 @@ begin
      Additionally new FU:D implementation allows to transfer strings and always compresses the data *)
   // Splice NetworkProcessOtherData
   ApiJack.StdSplice(Ptr($557CC0), @Hook_NetworkProcessOtherData, ApiJack.CONV_THISCALL, 2);
+  ApiJack.HookCode(Ptr($768809), @Hook_NetworkProcessBattleData);
 
   // Remove WoG hook for ReceiveNetAMCommand
   Core.p.WriteDataPatch(Ptr($557E07), ['E5320B00']);
