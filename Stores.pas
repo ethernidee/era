@@ -53,6 +53,25 @@ type
     {O} fDataBuilder: TStrBuilder;
   end; // .class TMemRider
 
+  TMemReader = class (TInterfacedObject, IRider)
+   public
+    constructor Create (BufSize: integer; {Un} Buf: pointer);
+
+    procedure Write (Size: integer; {n} Addr: pbyte);
+    procedure WriteByte (Value: byte);
+    procedure WriteInt (Value: integer);
+    procedure WriteStr (const Str: string);
+    procedure WritePchar ({n} Str: pchar);
+    function  Read (Size: integer; {n} Addr: pbyte): integer;
+    function  ReadByte: byte;
+    function  ReadInt: integer;
+    function  ReadStr: string;
+    procedure Flush;
+
+   private
+    fReader: StrLib.IByteSource;
+  end; // .class TMemRider
+
 
 const
   ZvsErmTriggerBeforeSave: Utils.TProcedure = Ptr($750093);
@@ -410,6 +429,82 @@ function TMemWriter.BuildBuf: Utils.TArrayOfByte;
 begin
   result := Self.fDataBuilder.BuildBuf;
 end;
+
+constructor TMemReader.Create (BufSize: integer; {Un} Buf: pointer);
+begin
+  Self.fReader := StrLib.BufAsByteSource(Buf, BufSize);
+end;
+
+procedure TMemReader.Write (Size: integer; {n} Addr: pbyte);
+begin
+  {!} Assert(false, 'TMemReader.Write is not implemented');
+end;
+
+procedure TMemReader.WriteByte (Value: byte);
+begin
+  {!} Assert(false, 'TMemReader.WriteByte is not implemented');
+end;
+
+procedure TMemReader.WriteInt (Value: integer);
+begin
+  {!} Assert(false, 'TMemReader.WriteInt is not implemented');
+end;
+
+procedure TMemReader.WriteStr (const Str: string);
+begin
+  {!} Assert(false, 'TMemReader.WriteStr is not implemented');
+end;
+
+procedure TMemReader.WritePchar ({n} Str: pchar);
+begin
+  {!} Assert(false, 'TMemReader.WritePchar is not implemented');
+end;
+
+procedure TMemReader.Flush;
+begin
+  // Do nothing
+end;
+
+function TMemReader.Read (Size: integer; {n} Addr: pbyte): integer;
+begin
+  result := Self.fReader.Read(Size, Addr);
+end;
+
+function TMemReader.ReadByte: byte;
+var
+  NumBytesRead: integer;
+
+begin
+  result       := 0;
+  NumBytesRead := Self.fReader.Read(sizeof(result), @result);
+  {!} Assert((NumBytesRead = sizeof(result)) or (NumBytesRead = 0));
+end;
+
+function TMemReader.ReadInt: integer;
+var
+  NumBytesRead: integer;
+
+begin
+  result       := 0;
+  NumBytesRead := Self.fReader.Read(sizeof(result), @result);
+  {!} Assert((NumBytesRead = sizeof(result)) or (NumBytesRead = 0));
+end;
+
+function TMemReader.ReadStr: string;
+var
+  StrLen:       integer;
+  NumBytesRead: integer;
+
+begin
+  StrLen := Self.ReadInt;
+  {!} Assert(StrLen >= 0);
+  SetLength(result, StrLen);
+
+  if StrLen > 0 then begin
+    NumBytesRead := Self.fReader.Read(StrLen, pointer(result));
+    {!} Assert(NumBytesRead = StrLen);
+  end;
+end; // .function TMemReader.ReadStr
 
 function Hook_SaveGame (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
