@@ -2311,7 +2311,7 @@ begin
   end;
 end;
 
-procedure SaveSlots;
+procedure SaveSlots (Rider: Stores.IRider);
 var
 {U} Slot:     TSlot;
     NumItems: integer;
@@ -2320,7 +2320,7 @@ var
 begin
   Slot := nil;
   // * * * * * //
-  with Stores.NewRider(SLOTS_SAVE_SECTION) do begin
+  with Rider do begin
     WriteInt(Slots.ItemCount);
 
     with DataLib.IterateObjDict(Slots) do begin
@@ -2346,7 +2346,7 @@ begin
   end; // .with
 end; // .procedure SaveSlots
 
-procedure SaveAssocMem;
+procedure SaveAssocMem (Rider: Stores.IRider);
 var
 {U} AssocVarValue: TAssocVar;
     AssocVarName:  string;
@@ -2354,7 +2354,7 @@ var
 begin
   AssocVarValue := nil;
   // * * * * * //
-  with Stores.NewRider(ASSOC_SAVE_SECTION) do begin
+  with Rider do begin
     WriteInt(AssocMem.ItemCount);
 
     AssocMem.BeginIterate;
@@ -2370,14 +2370,14 @@ begin
   end; // .with
 end; // .procedure SaveAssocMem
 
-procedure SaveHints;
+procedure SaveHints (Rider: Stores.IRider);
 var
 {U} HintSection: TObjDict;
 
 begin
   HintSection := nil;
   // * * * * * //
-  with Stores.NewRider(HINTS_SAVE_SECTION) do begin
+  with Rider do begin
     // Write number of hint sections
     WriteInt(Hints.ItemCount);
 
@@ -2404,9 +2404,9 @@ end; // .procedure SaveHints
 
 procedure OnSavegameWrite (Event: PEvent); stdcall;
 begin
-  SaveSlots;
-  SaveAssocMem;
-  SaveHints;
+  SaveSlots(Stores.NewRider(SLOTS_SAVE_SECTION));
+  SaveAssocMem(Stores.NewRider(ASSOC_SAVE_SECTION));
+  SaveHints(Stores.NewRider(HINTS_SAVE_SECTION));
 end;
 
 procedure LoadSlots;
