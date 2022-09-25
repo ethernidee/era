@@ -5828,6 +5828,7 @@ begin
         ArgXVars      := x^;
         IsQuitTrigger := true;
         FireErmEvent(OnQuitTriggerId);
+        x^            := RetXVars;
       end;
 
       // Loop handling
