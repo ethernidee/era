@@ -1282,10 +1282,14 @@ end;
 
 function Hook_ScrollTextDlg_CreateLineTextItem: integer; stdcall; assembler;
 const
-  SCROLLBAR_WIDTH = 24;
+  SCROLLBAR_WIDTH        = 24;
+  SCROLLBAR_FIELD_OFFSET = $54;
 
 asm
+  cmp [ebx + SCROLLBAR_FIELD_OFFSET], 0
+  je @finish
   sub dword [esp + $0C], SCROLLBAR_WIDTH
+@finish:
   mov eax, $5BC6A0
   jmp eax
 end;
