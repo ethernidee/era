@@ -844,6 +844,9 @@ begin
     CombatId := DEFAULT_COMBAT_ID;
   end;
 
+  // GlobalRng := BattleDeterministicRng; // FIXME DELETEME
+  // CombatId := Erm.UniqueRng.Random; // FIXME DELETEME
+
   result    := PatchApi.Call(THISCALL_, OrigFunc, [AdvMan, PackedCoords, AttackerHero, AttackerArmy, DefenderPlayerId, DefenderTown, DefenderHero, DefenderArmy, Seed, Unk10, IsBank]);
   GlobalRng := QualitativeRng;
 end; // .function Hook_StartBattle
@@ -1102,8 +1105,9 @@ end;
 
 function Hook_ZvsAdd2Send (Context: ApiJack.PHookContext): longbool; stdcall;
 const
-  BUF_ADDR    = $2846C60;
-  BUF_POS_VAR = -$0C;
+  BUF_ADDR                = $2846C60;
+  DEST_PLAYER_ID_VAR_ADDR = $281187C;
+  BUF_POS_VAR             = -$0C;
 
 type
   PWoGBattleSyncBuffer = ^TWoGBattleSyncBuffer;
