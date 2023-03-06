@@ -1,8 +1,8 @@
 unit GameExt;
-{
-DESCRIPTION:  Game extension support
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Game extension support.
+  Author: Alexander Shostak aka Berserker.
+*)
 
 (***)  interface  (***)
 uses
