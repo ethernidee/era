@@ -5554,6 +5554,7 @@ begin
     exit;
   end;
 
+  ServiceMemAllocator.AllocPage;
   TriggerId := CurrErmEventId^;
 
   Inc(ErmTriggerDepth);
@@ -5870,6 +5871,8 @@ begin
   end else begin
     RetXVars := ArgXVars;
   end;
+
+  ServiceMemAllocator.FreePage;
 end; // .procedure ProcessErm
 
 function Hook_ProcessCmd (Context: Core.PHookContext): longbool; stdcall;
