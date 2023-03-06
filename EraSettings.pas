@@ -103,7 +103,7 @@ begin
   DebugEverythingOpt := GetOptBoolValue('Debug.Everything', false);
 
   if DebugOpt then begin
-    if GetOptValue('Debug.LogDestination', 'File') = 'File' then begin
+    if SysUtils.AnsiLowerCase(GetOptValue('Debug.LogDestination', 'File')) = 'file' then begin
       InstallLogger(EraLog.TFileLogger.Create(GameExt.DEBUG_DIR + '\' + LOG_FILE_NAME));
     end else begin
       InstallLogger(EraLog.TConsoleLogger.Create('Era Log'));
