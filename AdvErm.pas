@@ -7,7 +7,7 @@ AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Math, Crypto, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack, Alg,
-  PatchApi, Core, GameExt, Erm, Stores, Triggers, Heroes, Lodman, Trans, EventMan;
+  PatchApi, Core, GameExt, Erm, Stores, Triggers, Heroes, Lodman, Network, Trans, EventMan, DlgMes;
 
 const
   AUTO_ALLOC_SLOT = -1;
@@ -139,11 +139,12 @@ type
   (* Fast temp memory allocator for ERM inline strings storage during commands execution *)
   TServiceMemAllocator = record
     BufPos:    integer;
-    Buf:       array [0..3000000 - 1] of char;
+    Buf:       array [0..10485760 - 1] of char;
     BufBorder: integer;
 
     procedure Init;
     procedure AllocPage;
+    function  IsLastPage (): boolean;
     function  Alloc (Size: integer): pointer;
     function  AllocStr (StrLen: integer): pchar;
     procedure FreePage;
@@ -182,6 +183,13 @@ function  CheckCmdParamsEx (Params: PServiceParams; NumParams: integer; const Pa
 
 (* Extended lifetime of trigger-local arrays (SN:M slots in Era 2 terms) to parent trigger scope *)
 procedure ExtendArrayLifetime (ArrayId: integer); stdcall;
+
+procedure SaveSlots (Rider: Stores.IRider);
+procedure SaveAssocMem (Rider: Stores.IRider);
+procedure SaveHints (Rider: Stores.IRider);
+procedure LoadSlots (Rider: Stores.IRider);
+procedure LoadAssocMem (Rider: Stores.IRider);
+procedure LoadHints (Rider: Stores.IRider);
 
 
 var
@@ -261,12 +269,18 @@ begin
   pinteger(@Self.Buf[Self.BufPos])^ := 0;
 end;
 
+function TServiceMemAllocator.IsLastPage (): boolean;
+begin
+  result := Self.BufPos = pinteger(@Self.Buf[Self.BufPos])^;
+end;
+
 function TServiceMemAllocator.Alloc (Size: integer): pointer;
 var
   PageSize:    integer;
   AlignedSize: integer;
 
 begin
+  {!} Assert(Self.BufPos > 0, 'TServiceMemAllocator.Alloc failed. No page allocated');
   AlignedSize := (Size + (sizeof(integer) - 1)) and not 3;
   result      := @Self.Buf[Self.BufPos];
   PageSize    := pinteger(@Self.Buf[Self.BufPos])^ + AlignedSize;
@@ -2409,7 +2423,7 @@ begin
   SaveHints(Stores.NewRider(HINTS_SAVE_SECTION));
 end;
 
-procedure LoadSlots;
+procedure LoadSlots (Rider: Stores.IRider);
 var
 {U} Slot:            TSlot;
     SlotN:           integer;
@@ -2424,7 +2438,7 @@ begin
   // * * * * * //
   Slots.Clear;
 
-  with Stores.NewRider(SLOTS_SAVE_SECTION) do begin
+  with Rider do begin
     for i := 0 to ReadInt - 1 do begin
       SlotN             := ReadInt;
       ItemsType         := TVarType(ReadByte);
@@ -2446,7 +2460,7 @@ begin
   end; // .with
 end; // .procedure LoadSlots
 
-procedure LoadAssocMem;
+procedure LoadAssocMem (Rider: Stores.IRider);
 var
 {O} AssocVarValue: TAssocVar;
     AssocVarName:  string;
@@ -2457,7 +2471,7 @@ begin
   // * * * * * //
   AssocMem.Clear;
 
-  with Stores.NewRider(ASSOC_SAVE_SECTION) do begin
+  with Rider do begin
     for i := 0 to ReadInt - 1 do begin
       AssocVarValue          := TAssocVar.Create;
       AssocVarName           := ReadStr;
@@ -2473,7 +2487,7 @@ begin
   end;
 end; // .procedure LoadAssocMem
 
-procedure LoadHints;
+procedure LoadHints (Rider: Stores.IRider);
 var
 {U} HintSection:     TObjDict;
     NumHintSections: integer;
@@ -2494,7 +2508,7 @@ begin
   // * * * * * //
   ResetHints;
 
-  with Stores.NewRider(HINTS_SAVE_SECTION) do begin
+  with Rider do begin
     // Read number of hint sections
     NumHintSections := ReadInt;
 
@@ -2601,9 +2615,9 @@ end; // .procedure LoadHints
 
 procedure OnSavegameRead (Event: PEvent); stdcall;
 begin
-  LoadSlots;
-  LoadAssocMem;
-  LoadHints;
+  LoadSlots(Stores.NewRider(SLOTS_SAVE_SECTION));
+  LoadAssocMem(Stores.NewRider(ASSOC_SAVE_SECTION));
+  LoadHints(Stores.NewRider(HINTS_SAVE_SECTION));
 end;
 
 function Hook_PlaySound (OrigFunc: pointer; SoundName: pchar; Arg2, Arg3: integer): integer; stdcall;
@@ -3408,10 +3422,10 @@ begin
   Hints    := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   InitHints;
 
-  EventMan.GetInstance.On('OnBeforeWoG',             OnBeforeWoG);
   EventMan.GetInstance.On('OnAfterWoG',              OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeErmInstructions', OnBeforeErmInstructions);
-  EventMan.GetInstance.On('OnSavegameWrite',         OnSavegameWrite);
-  EventMan.GetInstance.On('OnSavegameRead',          OnSavegameRead);
+  EventMan.GetInstance.On('OnBeforeWoG',             OnBeforeWoG);
   EventMan.GetInstance.On('OnGenerateDebugInfo',     OnGenerateDebugInfo);
+  EventMan.GetInstance.On('OnSavegameRead',          OnSavegameRead);
+  EventMan.GetInstance.On('OnSavegameWrite',         OnSavegameWrite);
 end.
