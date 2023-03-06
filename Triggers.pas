@@ -349,14 +349,12 @@ begin
   end;
 
   PatchApi.Call(PatchApi.THISCALL_, h.GetDefaultFunc(), [This]);
-
-  if MainGameLoopDepth = 1 then begin
-    Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
-    GameExt.SetMapDir('');
-  end;
-
   Dec(MainGameLoopDepth);
-end; // .procedure Hook_MainGameLoop
+
+  if MainGameLoopDepth = 0 then begin
+    Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+  end;
+end;
 
 function Hook_KingdomOverviewMouseClick (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
@@ -725,9 +723,8 @@ begin
   Erm.SetErmCurrHero(PrevHero);
 end;
 
-procedure OnExternalGameLeave (Event: GameExt.PEvent); stdcall;
+procedure OnGameLeave (Event: GameExt.PEvent); stdcall;
 begin
-  Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
   GameExt.SetMapDir('');
   MainGameLoopDepth := 0;
 end;
@@ -827,5 +824,5 @@ end; // .procedure OnAfterWoG
 
 begin
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
-  EventMan.GetInstance.On('$OnGameLeave', OnExternalGameLeave);
+  EventMan.GetInstance.On('OnGameLeave', OnGameLeave);
 end.
