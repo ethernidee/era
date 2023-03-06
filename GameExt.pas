@@ -41,8 +41,8 @@ const
 
   NO_EVENT_DATA = nil;
 
-  ERA_VERSION_STR = '3.9.2';
-  ERA_VERSION_INT = 3902;
+  ERA_VERSION_STR = '3.9.4';
+  ERA_VERSION_INT = 3904;
 
   FALLBACK_TO_ORIGINAL      = true;
   DONT_FALLBACK_TO_ORIGINAL = false;
@@ -456,6 +456,7 @@ begin
   EventMan.GetInstance.Fire('OnAfterVfsInit', NO_EVENT_DATA, 0);
 
   LoadPlugins('era');
+  EventMan.GetInstance.Fire('$OnAfterLoadEraPlugins', NO_EVENT_DATA, 0);
   EventMan.GetInstance.Fire('OnBeforeWoG', NO_EVENT_DATA, 0);
   BinPatching.ApplyPatches(GameDir + '\' + PATCHES_PATH + '\BeforeWoG');
 

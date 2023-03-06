@@ -12,7 +12,8 @@ uses
 
 
 const
-  SCRIPTS_DIR = 'Data\Scripts';
+  SCRIPTS_DIR  = 'Data\Lua';
+  ENTRY_SCRIPT = 'init.lua';
 
 type
   (* Import *)
@@ -73,12 +74,12 @@ begin
 
   // Setup package search paths
   lua_getglobal(L, 'package');
-  lua_pushstring(L, GameExt.GameDir + '\' + SCRIPTS_DIR + '\?.lua;' + GameExt.GameDir + '\' + SCRIPTS_DIR + '\lib\?.lua');
+  lua_pushstring(L, GameExt.GameDir + '\' + SCRIPTS_DIR + '\lib\?.lua');
   lua_setfield(L, -2, 'path');
   lua_pop(L, 1);
 
   lua_getglobal(L, 'package');
-  lua_pushstring(L, '');
+  lua_pushstring(L, GameExt.GameDir + '\' + SCRIPTS_DIR + '\dll\?.dll');
   lua_setfield(L, -2, 'cpath');
   lua_pop(L, 1);
 end; // .procedure InitLua
@@ -101,7 +102,11 @@ begin
   if ErrCode = TLUA_ERRMEM then begin
     // Leave error message as is
   end else if ErrCode = TLUA_ERRERR then begin
-    Error := 'Error occured during Lua error handler execution';
+    if (lua_isstring(L, -1)) and (lua_tostring(L, -1) = 'error in error handling') then begin
+      Error := 'Stack overflow during Lua handler execution';
+    end else begin
+      Error := 'Error occured during Lua error handler execution';
+    end;
   end else if ErrCode <> 0 then begin
     if lua_isstring(L, -1) then begin
       Error := 'Lua script error occured.'#13#10 + lua_tostring(L, -1);
@@ -118,29 +123,20 @@ begin
   lua_pop(L, 1);
 end; // .procedure ExecuteLuaScript
 
-procedure LoadSystemScripts;
+procedure OnAfterLoadEraPlugins (Event: GameExt.PEvent); stdcall;
 var
-{O} ScriptList: TStrList;
-    i:          integer;
+  EntryScriptPath: string;
 
 begin
-  ScriptList := FilesEx.GetFileList(GameExt.GameDir + '\' + SCRIPTS_DIR + '\*.sys.lua', Files.ONLY_FILES);
-  ScriptList.Sort;
+  EntryScriptPath := GameExt.GameDir + '\' + SCRIPTS_DIR + '\' + ENTRY_SCRIPT;
 
-  for i := 0 to ScriptList.Count - 1 do begin
-    ExecuteLuaScript(GameExt.GameDir + '\' + SCRIPTS_DIR + '\' + ScriptList[i]);
+  if Files.FileExists(EntryScriptPath) then begin
+    InitLua;
+    ExecuteLuaScript(EntryScriptPath);
   end;
 
-  // * * * * * //
-  FreeAndNil(ScriptList);
-end;
-
-procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
-begin
-  InitLua;
-  LoadSystemScripts;
 end;
 
 begin
-  EventMan.GetInstance.On('OnBeforeWoG', OnBeforeWoG);
+  EventMan.GetInstance.On('$OnAfterLoadEraPlugins', OnAfterLoadEraPlugins);
 end.
