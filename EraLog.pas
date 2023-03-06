@@ -29,26 +29,26 @@ type
   TMemoryLogger  = class (TLogger)
     function Write (const EventSource, Operation, Description: string): boolean; override;
   end;
-  
+
   TConsoleLogger  = class (TLogger)
     (***) protected (***)
       {O} fCon: ConsoleAPI.TConsole;
-    
+
     (***) public (***)
       constructor Create (const Title: string);
       destructor  Destroy; override;
-      
+
       function Write (const EventSource, Operation, Description: string): boolean; override;
   end; // .class TConsoleLogger
-  
+
   TFileLogger = class (TLogger)
     (***) protected (***)
       {O} fFile: Windows.THandle;
-      
+
     (***) public (***)
       constructor Create (const FilePath: string);
       destructor  Destroy; override;
-      
+
       function Write (const EventSource, Operation, Description: string): boolean; override;
   end;
 
@@ -134,7 +134,7 @@ end;
 constructor TConsoleLogger.Create (const Title: string);
 begin
   inherited Create;
-  Self.fCon := ConsoleAPI.TConsole.Create(Title, 80, 50, 80, 1000);
+  Self.fCon := ConsoleAPI.GetConsole(Title, 80, 50, 80, 1000);
 end;
 
 destructor TConsoleLogger.Destroy;
@@ -212,10 +212,10 @@ begin
       Windows.WriteFile(Self.fFile, pchar(Buf)^, Length(Buf), BytesWritten, nil);
 
       Self.Unlock;
-    end; // .if    
+    end; // .if
 
     Leave;
-  end; // .with  
+  end; // .with
 end; // .function TFileLogger.Write
 
 end.
