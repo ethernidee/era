@@ -844,9 +844,6 @@ begin
     CombatId := DEFAULT_COMBAT_ID;
   end;
 
-  // GlobalRng := BattleDeterministicRng; // FIXME DELETEME
-  // CombatId := Erm.UniqueRng.Random; // FIXME DELETEME
-
   result    := PatchApi.Call(THISCALL_, OrigFunc, [AdvMan, PackedCoords, AttackerHero, AttackerArmy, DefenderPlayerId, DefenderTown, DefenderHero, DefenderArmy, Seed, Unk10, IsBank]);
   GlobalRng := QualitativeRng;
 end; // .function Hook_StartBattle
@@ -1768,7 +1765,7 @@ begin
 
     Line('EAX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Eax), Core.ANALYZE_DATA));
     Line('ECX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ecx), Core.ANALYZE_DATA));
-    Line('EDC: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edx), Core.ANALYZE_DATA));
+    Line('EDX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edx), Core.ANALYZE_DATA));
     Line('EBX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebx), Core.ANALYZE_DATA));
     Line('ESP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esp), Core.ANALYZE_DATA));
     Line('EBP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebp), Core.ANALYZE_DATA));
