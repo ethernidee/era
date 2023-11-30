@@ -1887,8 +1887,6 @@ begin
     if ImageResource <> nil then begin
       Image  := ImageResource.Data as TRawImage;
       result := TPcx8ItemStatic.Create(FileNameStr, Image.Width, Image.Height);
-
-      ImageResource.DecRef;
     end else begin
       result := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [FileName]));
     end;
@@ -1919,8 +1917,6 @@ begin
     if ImageResource <> nil then begin
       Image  := ImageResource.Data as TRawImage;
       result := TPcx16ItemStatic.Create(FileNameStr, Image.Width, Image.Height);
-
-      ImageResource.DecRef;
     end else begin
       result := Ptr(PatchApi.Call(THISCALL_, OrigFunc, [FileName]));
     end;
