@@ -2672,6 +2672,12 @@ begin
   x           := pinteger(C.EBP - 12)^;
   y           := pinteger(C.EBP - 8)^;
   z           := pinteger(C.EBP - 24)^;
+
+  if ((1 shl GetThisPcHumanPlayerId) and GetAdvMapTileVisibility(x, y, z)) = 0 then begin
+    result := Core.EXEC_DEF_CODE;
+    exit;
+  end;
+
   ObjType     := pword(pinteger(C.EBP + 8)^ + $1E)^;
   ObjSubtype  := pword(pinteger(C.EBP + 8)^ + $22)^;
   Code        := x or (y shl 8) or (z shl 16);

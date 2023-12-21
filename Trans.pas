@@ -25,6 +25,8 @@ const
   DONT_OVERRIDE_KEYS = false;
 
 
+function SetLanguage (NewLanguage: string): boolean;
+procedure ReloadLanguageData; stdcall;
 function  tr (const Key: string; const Params: array of string): string;
 
 
@@ -45,7 +47,34 @@ type
 var
 {O} LangDict:         TLangDict;
 {O} MapLangResources: RscLists.TResourceList;
+    CurrentLanguage:  string = 'en';
 
+
+function SetLanguage (NewLanguage: string): boolean;
+var
+  i: integer;
+
+begin
+  result := true;
+
+  if NewLanguage = CurrentLanguage then begin
+    exit;
+  end;
+
+  if (NewLanguage = '') or (Length(NewLanguage) > 20) then begin
+    result := false;
+    exit;
+  end;
+
+  for i := 1 to Length(NewLanguage) do begin
+    if not (NewLanguage[i] in ['a'..'z', 'A'..'Z', '_']) then begin
+      result := false;
+      exit;
+    end;
+  end;
+
+  CurrentLanguage := NewLanguage;
+end;
 
 function tr (const Key: string; const Params: array of string): string;
 var
@@ -183,6 +212,12 @@ end;
 
 procedure LoadLangFiles (const Dir: string; OverrideKeys: boolean);
 begin
+  with Files.Locate(SysUtils.ExcludeTrailingPathDelimiter(Dir) + '\' + CurrentLanguage + '\*.json', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      LoadLangFile(FoundPath, OverrideKeys);
+    end;
+  end;
+
   with Files.Locate(SysUtils.ExcludeTrailingPathDelimiter(Dir) + '\*.json', Files.ONLY_FILES) do begin
     while FindNext do begin
       LoadLangFile(FoundPath, OverrideKeys);
@@ -207,6 +242,14 @@ begin
   result     := RscLists.TResourceList.Create;
   MapDirName := GameExt.GetMapDirName;
 
+  with Files.Locate(GameExt.GetMapResourcePath(LANG_DIR) + '\' + CurrentLanguage + '\*.json', Files.ONLY_FILES) do begin
+    while FindNext do begin
+      if Files.ReadFileContents(FoundPath, FileContents) then begin
+        result.Add(RscLists.TResource.Create(MapDirName + '\' + FoundName, FileContents));
+      end;
+    end;
+  end;
+
   with Files.Locate(GameExt.GetMapResourcePath(LANG_DIR) + '\*.json', Files.ONLY_FILES) do begin
     while FindNext do begin
       if Files.ReadFileContents(FoundPath, FileContents) then begin
@@ -230,6 +273,15 @@ begin
   end;
 end;
 
+procedure ReloadLanguageData; stdcall;
+begin
+  LangDict.Clear;
+  SysUtils.FreeAndNil(MapLangResources);
+  MapLangResources := LoadMapLangResources;
+  ImportMapLangResources;
+  LoadGlobalLangFiles;
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   LoadGlobalLangFiles;
@@ -237,11 +289,7 @@ end;
 
 procedure OnBeforeScriptsReload (Event: GameExt.PEvent); stdcall;
 begin
-  LangDict.Clear;
-  SysUtils.FreeAndNil(MapLangResources);
-  MapLangResources := LoadMapLangResources;
-  ImportMapLangResources;
-  LoadGlobalLangFiles;
+  ReloadLanguageData;
 end;
 
 procedure OnEraMapStart (Event: GameExt.PEvent); stdcall;

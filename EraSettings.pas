@@ -20,6 +20,7 @@ uses
   ResLib,
   SndVid,
   Stores,
+  Trans,
   Tweaks,
   Utils,
   VfsImport;
@@ -123,6 +124,7 @@ begin
   GameExt.DumpVfsOpt             := GetDebugOpt(    'Debug.DumpVirtualFileSystem', false);
   ResLib.ResManCacheSize         := GetOptIntValue( 'ResourceCacheSize',           200000000);
   Tweaks.DebugRng                := GetOptIntValue( 'Debug.Rng',                   0);
+  Trans.SetLanguage(GetOptValue('Language', 'en'));
 
   if GetDebugOpt('Debug.LogVirtualFileSystem', false) then begin
     VfsImport.SetLoggingProc(@VfsLogger);

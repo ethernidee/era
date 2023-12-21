@@ -445,6 +445,7 @@ type
   TGzipRead   = function (Dest: pointer; DataSize: integer): integer; cdecl;
   TWndProc    = function (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
 
+  TGetAdvMapTileVisibility = function (x, y, z: integer): integer; cdecl;
   TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
   TMemAllocFunc       = function (Size: integer): pointer; cdecl;
   TMemFreeFunc        = procedure (Buf: pointer); cdecl;
@@ -1161,6 +1162,7 @@ const
   a2i:            function (Str: pchar): int cdecl = Ptr($6184D9);
   a2f:            function (Str: pchar): single cdecl = Ptr($619366);
 
+  GetAdvMapTileVisibility: TGetAdvMapTileVisibility = Ptr($715A7E);
   GetBattleCellByPos:  TGetBattleCellByPos = Ptr($715872);
   MemAllocFunc:        TMemAllocFunc       = Ptr($617492);
   MemFree:             TMemFreeFunc        = Ptr($60B0F0);

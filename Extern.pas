@@ -205,6 +205,11 @@ begin
   result      := Externalize(Translation);
 end; // .function tr
 
+function SetLanguage (NewLanguage: pchar): TDwordBool; stdcall;
+begin
+  result := ord(Trans.SetLanguage(NewLanguage));
+end;
+
 function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height, MaxWidth, MaxHeight, ResizeAlg: integer): {OU} Heroes.PPcx16Item; stdcall;
 begin
   if FilePath = nil then begin
@@ -612,11 +617,13 @@ exports
   SetAssocVarStrValue,
   SetEraRegistryIntValue,
   SetEraRegistryStrValue,
+  SetLanguage,
   ShowErmError,
   ShowMessage,
   Splice,
   ToStaticStr,
   tr,
+  Trans.ReloadLanguageData,
   Tweaks.RandomRangeWithFreeParam,
   WriteSavegameSection,
   WriteStrToIni;
