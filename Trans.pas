@@ -50,6 +50,9 @@ var
     CurrentLanguage:  string = 'en';
 
 
+const
+  BoolToStr: array [false..true] of string = ('0', '1');
+
 function SetLanguage (NewLanguage: string): boolean;
 var
   i: integer;
@@ -153,46 +156,53 @@ end; // .procedure UpdateLocaleConfig
 
 procedure LoadLangData (const ItemName, FileContents: string; OverrideExistingKeys: boolean);
 var
-{O} LangData:      TlkJsonObject;
-    IsInvalidFile: boolean;
+{O} LangData: TlkJSONcustomlist;
 
-  procedure ProcessTree (Tree: TlkJsonObject; const KeyPrefix: string);
+  procedure ProcessBox (Box: TlkJSONcustomlist; const KeyPrefix: string);
   var
-    Key:   string;
-    Value: Json.TlkJsonBase;
-    i:     integer;
+    BoxIsObject: boolean;
+    Key:         string;
+    Value:       Json.TlkJsonBase;
+    ValueType:   TlkJSONtypes;
+    i:           integer;
 
   begin
-    for i := 0 to Tree.Count - 1 do begin
-      if KeyPrefix <> '' then begin
-        Key := KeyPrefix + Tree.NameOf[i];
+    BoxIsObject := Box.SelfType = Json.jsObject;
+
+    for i := 0 to Box.Count - 1 do begin
+      Key := KeyPrefix;
+
+      if BoxIsObject then begin
+        Key   := Key + Json.TlkJsonObject(Box).NameOf[i];
+        Value := Json.TlkJsonObject(Box).FieldByIndex[i];
       end else begin
-        Key := Tree.NameOf[i];
+        Key   := Key + SysUtils.IntToStr(i);
+        Value := Box.Child[i];
       end;
 
-      Value := Tree.FieldByIndex[i];
+      ValueType := Value.SelfType;
 
-      if Value is Json.TlkJsonObject then begin
-        ProcessTree(Json.TlkJsonObject(Value), Key + '.');
-      end else if Value is Json.TlkJsonString then begin
-        if OverrideExistingKeys or (LangDict[Key] = nil) then begin
-          LangDict[Key] := TString.Create(Tree.GetString(i));
+      if ValueType in [Json.jsObject, Json.jsList] then begin
+        ProcessBox(Json.TlkJSONcustomlist(Value), Key + '.');
+      end else if (ValueType <> Json.jsNull) and (OverrideExistingKeys or (LangDict[Key] = nil)) then begin
+        if ValueType = Json.jsString then begin
+          LangDict[Key] := TString.Create(Box.GetString(i));
+        end else if ValueType = Json.jsNumber then begin
+          LangDict[Key] := TString.Create(SysUtils.FloatToStr(Box.GetDouble(i)));
+        end else if ValueType = Json.jsBoolean then begin
+          LangDict[Key] := TString.Create(BoolToStr[Box.GetBoolean(i)]);
         end;
-      end else if not IsInvalidFile then begin
-        IsInvalidFile := true;
-        Core.NotifyError('Invalid language json file: "' + ItemName + '". Erroneous key: ' + Key);
       end;
     end; // .for
-  end; // .procedure ProcessTree
+  end; // .procedure ProcessBox
 
 begin
   LangData := nil;
   // * * * * * //
-  IsInvalidFile := false;
-  Utils.CastOrFree(TlkJson.ParseText(FileContents), Json.TlkJsonObject, LangData);
+  Utils.CastOrFree(TlkJson.ParseText(FileContents), Json.TlkJSONcustomlist, LangData);
 
   if LangData <> nil then begin
-    ProcessTree(LangData, '');
+    ProcessBox(LangData, '');
   end else begin
     Core.NotifyError('Invalid language json file: "' + ItemName + '"');
   end;
