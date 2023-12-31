@@ -7515,7 +7515,7 @@ begin
       end else if NumParams >= 2 then begin
         Heroes.SRand(SubCmd.Nums[1]);
       end else begin
-        result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + Heroes.Rand(0, SubCmd.Nums[0])));
+        result := ord(SetErmParamValue(VarParam, GetErmParamValue(VarParam, ValType) + Heroes.RandomRange(0, SubCmd.Nums[0])));
       end;
     end;
 

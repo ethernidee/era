@@ -1198,7 +1198,7 @@ var
 
 function  MemAlloc (Size: integer): {On} pointer;
 procedure MemFreeAndNil (var p);
-function  Rand (Min, Max: integer): integer;
+function  RandomRange (Min, Max: integer): integer;
 procedure SRand (Seed: integer);
 procedure GZipWrite (Count: integer; {n} Addr: pointer);
 function  GzipRead (Count: integer; {n} Addr: pointer): integer;
@@ -1858,7 +1858,7 @@ begin
   end;
 end; // .procedure MemFreeAndNil
 
-function Rand (Min, Max: integer): integer;
+function RandomRange (Min, Max: integer): integer;
 begin
   result := PatchApi.Call(FASTCALL_, Ptr($50C7C0), [Min, Max]);
 end;

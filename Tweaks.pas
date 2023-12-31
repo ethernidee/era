@@ -144,7 +144,7 @@ var
   CombatActionId:      integer;
   CombatRngFreeParam:  integer;
   HadTacticsPhase:     boolean;
-  NativeBattleRngSeed: integer;
+  NativeRngSeed:       pinteger = pointer($67FBE4);
 
 threadvar
   (* Counter (0..100). When reaches 100, PeekMessageA does not call sleep before returning result *)
@@ -942,7 +942,7 @@ begin
   end;
 
   GlobalRng.Seed(Seed);
-  pinteger($67FBE4)^ := Seed;
+  NativeRngSeed^ := Seed;
 
   if (DebugRng <> DEBUG_RNG_NONE) and (Heroes.WndManagerPtr^ <> nil) and (Heroes.WndManagerPtr^.RootDlg <> nil) then begin
     Message := SysUtils.Format('SRand %d from %.8x', [Seed, integer(CallerAddr)]);
@@ -1077,13 +1077,6 @@ begin
   end;
 end; // .function Hook_RandomRange
 
-function Hook_ApplyBattleRngSeed (Context: ApiJack.PHookContext): longbool; stdcall;
-begin
-  NativeBattleRngSeed := Context.ECX;
-  result              := false;
-  Heroes.SRand(Erm.UniqueRng.Random);
-end;
-
 function Hook_PlaceBattleObstacles (OrigFunc, BattleMgr: pointer): integer; stdcall;
 var
   PrevRng: FastRand.TRng;
@@ -1091,9 +1084,13 @@ var
 begin
   PrevRng   := GlobalRng;
   GlobalRng := CLangRng;
-  Heroes.SRand(NativeBattleRngSeed);
 
-  Erm.FireErmEvent(Erm.TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES);
+  Heroes.SRand(NativeRngSeed^);
+
+  // Skip one random generation, because random battle music selection is already performed by this moment
+  Heroes.RandomRange(0, 7);
+
+  //Erm.FireErmEvent(Erm.TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES);
   result := PatchApi.Call(THISCALL_, OrigFunc, [BattleMgr]);
 
   GlobalRng := PrevRng;
@@ -2037,10 +2034,7 @@ begin
   // Use CombatRound instead of combat manager field to summon creatures every nth turn via creature experience system
   Core.p.WriteDataPatch(Ptr($71DFBE), ['8B15 %d', @CombatRound]);
 
-  // Do not apply battle RNG seed before obstacles creation, just remember the seed and apply random seed
-  ApiJack.HookCode(Ptr($463606), @Hook_ApplyBattleRngSeed);
-
-  // Apply battle RNG seed right before placing obstacles
+  // Apply battle RNG seed right before placing obstacles, so that rand() calls in !?BF trigger would not influence battle obstacles
   ApiJack.StdSplice(Ptr($465E70), @Hook_PlaceBattleObstacles, ApiJack.CONV_THISCALL, 1);
 
   // Restore Nagash and Jeddite specialties
