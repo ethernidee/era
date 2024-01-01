@@ -146,6 +146,13 @@ var
   HadTacticsPhase:     boolean;
   NativeRngSeed:       pinteger = pointer($67FBE4);
 
+  CombatOrigStackActionInfo: record
+    Action:       integer;
+    Spell:        integer;
+    TargetPos:    integer;
+    ActionParam2: integer;
+  end;
+
 threadvar
   (* Counter (0..100). When reaches 100, PeekMessageA does not call sleep before returning result *)
   CpuPatchCounter: integer;
@@ -847,6 +854,31 @@ begin
   result    := PatchApi.Call(THISCALL_, OrigFunc, [AdvMan, PackedCoords, AttackerHero, AttackerArmy, DefenderPlayerId, DefenderTown, DefenderHero, DefenderArmy, Seed, Unk10, IsBank]);
   GlobalRng := QualitativeRng;
 end; // .function Hook_StartBattle
+
+function Hook_WoGBeforeBattleAction (Context: Core.PHookContext): longbool; stdcall;
+var
+  BattleMgr: Heroes.PCombatManager;
+
+begin
+  BattleMgr := Heroes.CombatManagerPtr^;
+
+  CombatOrigStackActionInfo.Action       := BattleMgr.Action;
+  CombatOrigStackActionInfo.Spell        := BattleMgr.Spell;
+  CombatOrigStackActionInfo.TargetPos    := BattleMgr.TargetPos;
+  CombatOrigStackActionInfo.ActionParam2 := BattleMgr.ActionParam2;
+
+  result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_SendBattleAction_CopyActionParams (Context: Core.PHookContext): longbool; stdcall;
+begin
+  Context.EAX := CombatOrigStackActionInfo.ActionParam2;
+  Context.ECX := CombatOrigStackActionInfo.TargetPos;
+  Context.EDX := CombatOrigStackActionInfo.Spell;
+  Context.EBX := CombatOrigStackActionInfo.Action;
+
+  result := Core.EXEC_DEF_CODE;
+end;
 
 function Hook_OnBeforeBattlefieldVisible (Context: Core.PHookContext): longbool; stdcall;
 begin
@@ -2102,6 +2134,10 @@ begin
 
   (* Splice WoG Get2Battle function, handling any battle *)
   ApiJack.StdSplice(Ptr($75ADD9), @Hook_StartBattle, ApiJack.CONV_THISCALL, 11);
+
+  (* Always send original (unmodified) battle stack action info to remote side in PvP battles  *)
+  ApiJack.HookCode(Ptr($75C69E), @Hook_WoGBeforeBattleAction);
+  ApiJack.HookCode(Ptr($47883B), @Hook_SendBattleAction_CopyActionParams);
 
   (* Send and receive unique identifier for each battle to use in deterministic PRNG in multiplayer *)
   ApiJack.HookCode(Ptr($763796), @Hook_ZvsAdd2Send);

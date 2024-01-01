@@ -1060,16 +1060,17 @@ type
   PPCombatManager = ^PCombatManager;
   PCombatManager  = ^TCombatManager;
   TCombatManager  = packed record
-    Unk1:      array [0..$3C - 1] of byte;
-    Action:    integer; // +0x3C
-    Spell:     integer; // +0x40
-    TargetPos: integer; // +0x44
-    Unk2:      array [$48..$53CC - 1] of byte;
-    Heroes:    array [0..1] of PHero; // +0x53CC
-    Unk3:      array [$53CC + 4 * 2..$13D68 - 1] of byte;
-    IsTactics: boolean; // 0x13D68
-    Align1:    array [1..3] of byte;
-    Round:     integer;
+    Unk1:         array [0..$3C - 1] of byte;
+    Action:       integer; // +0x3C
+    Spell:        integer; // +0x40
+    TargetPos:    integer; // +0x44
+    ActionParam2: integer; // +0x48
+    Unk2:         array [$4C..$53CC - 1] of byte;
+    Heroes:       array [0..1] of PHero; // +0x53CC
+    Unk3:         array [$53CC + 4 * 2..$13D68 - 1] of byte;
+    IsTactics:    boolean; // 0x13D68
+    Align1:       array [1..3] of byte;
+    Round:        integer;
     // _byte_ field_0[452]; // + 0 ?
     // _BattleHex_ hex[187]; // + 0x1c4 187=17*11
     // _byte_ field_5394[56]; //?
