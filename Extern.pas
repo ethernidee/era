@@ -16,6 +16,7 @@ uses
   Alg,
   ApiJack,
   Core,
+  Crypto,
   DataLib,
   EraButtons,
   EraUtils,
@@ -545,6 +546,52 @@ begin
   result := ord(Network.FireRemoteEvent(DestPlayerId, EventName, Data, DataSize, ProgressHandler, ProgressHandlerCustomParam));
 end;
 
+function Hash32 (Data: pchar; DataSize: integer): integer; stdcall;
+begin
+  result := Crypto.FastHash(Data, DataSize);
+end;
+
+function _SplitMix32 (var Seed: integer): integer;
+begin
+  Inc(Seed, integer($9E3779B9));
+  result := Seed xor (Seed shr 15);
+  result := result * integer($85EBCA6B);
+  result := result xor (result shr 13);
+  result := result * integer($C2B2AE35);
+  result := result xor (result shr 16);
+end;
+
+function SplitMix32 (var Seed: integer; MinValue, MaxValue: integer): integer; stdcall;
+var
+  RangeLen:         cardinal;
+  MaxUnbiasedValue: cardinal;
+  i:                integer;
+
+begin
+  if MinValue >= MaxValue then begin
+    result := MinValue;
+    exit;
+  end;
+
+  if (MinValue = Low(integer)) and (MaxValue = High(integer)) then begin
+    result := _SplitMix32(Seed);
+    exit;
+  end;
+
+  RangeLen         := cardinal(MaxValue - MinValue + 1);
+  MaxUnbiasedValue := High(cardinal) div RangeLen * RangeLen - 1;
+
+  for i := 0 to 100 do begin
+    result := _SplitMix32(Seed);
+
+    if cardinal(result) <= MaxUnbiasedValue then begin
+      break;
+    end;
+  end;
+
+  result := MinValue + integer(cardinal(result) mod RangeLen);
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   Ask,
@@ -593,6 +640,7 @@ exports
   GetVersionNum,
   GlobalRedirectFile,
   Graph.DecRef,
+  Hash32,
   Heroes.GetGameState,
   Heroes.LoadTxt,
   HookCode,
@@ -621,6 +669,7 @@ exports
   ShowErmError,
   ShowMessage,
   Splice,
+  SplitMix32,
   ToStaticStr,
   tr,
   Trans.ReloadLanguageData,
