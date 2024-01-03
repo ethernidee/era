@@ -7,7 +7,7 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 (***)  interface  (***)
 uses
   Windows, SysUtils, Utils,
-  Core, PatchApi, GameExt, Heroes, ApiJack, Erm, EventMan;
+  Core, PatchApi, GameExt, Heroes, ApiJack, Erm, EventMan, DlgMes;
 
 const
   NO_STACK = -1;
@@ -349,7 +349,10 @@ begin
   end;
 
   PatchApi.Call(PatchApi.THISCALL_, h.GetDefaultFunc(), [This]);
-  Dec(MainGameLoopDepth);
+
+  if MainGameLoopDepth > 0 then begin
+    Dec(MainGameLoopDepth);
+  end;
 
   if MainGameLoopDepth = 0 then begin
     Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
@@ -726,7 +729,18 @@ end;
 procedure OnGameLeave (Event: GameExt.PEvent); stdcall;
 begin
   GameExt.SetMapDir('');
+
+  // Fix incompatibilities with older HD mod versions
+  if MainGameLoopDepth <> 0 then begin
+    MainGameLoopDepth := 0;
+    Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+  end;
+end;
+
+procedure OnAbnormalGameLeave (Event: GameExt.PEvent); stdcall;
+begin
   MainGameLoopDepth := 0;
+  Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -825,4 +839,5 @@ end; // .procedure OnAfterWoG
 begin
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnGameLeave', OnGameLeave);
+  EventMan.GetInstance.On('OnAbnormalGameLeave', OnAbnormalGameLeave);
 end.
