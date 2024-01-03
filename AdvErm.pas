@@ -1822,7 +1822,7 @@ begin
           // SN:K#count/#from/#to/#dummy Copy memory
           4:
             begin
-              result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET or TYPE_INT, ACTION_SET, ACTION_SET]) and (Params[0].Value.v >= 0);
+              result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET or TYPE_INT]) and (Params[0].Value.v >= 0);
 
               if result and (Params[0].Value.v > 0) then begin
                 Utils.CopyMem(Params[0].Value.v, Params[1].Value.p, Params[2].Value.p);
