@@ -1057,6 +1057,14 @@ type
     IsTwoLevelMap: boolean;
   end; // .record TGameManager
 
+  PBattleStack = ^TBattleStack;
+  TBattleStack = packed record
+    Unk1:    array [0..$34 - 1] of byte;
+    MonType: integer; // +0x34
+    Pos:     integer; // +0x38
+    Unk2:    array [$3C..$548 - 1] of byte;
+  end; // .record TBattleStack
+
   PPCombatManager = ^PCombatManager;
   PCombatManager  = ^TCombatManager;
   TCombatManager  = packed record
@@ -1099,7 +1107,9 @@ type
 
     // _Dlg_* dlg;       // + 0x132FC
     // _byte_ field_13300[3564];
-  end; // .TCombatManager
+
+    function GetActiveStack: PBattleStack;
+  end; // .record TCombatManager
 
   PPAdvManager = ^PAdvManager;
   PAdvManager  = ^TAdvManager;
@@ -1361,6 +1371,14 @@ begin
   end;
 
   PatchApi.Call(FASTCALL_, Ptr($5549E0), [@Self, aDestPlayerId, 0, 1]);
+end;
+
+function TCombatManager.GetActiveStack: PBattleStack;
+Type
+  TGetActiveStackMethod = function (CombatMgr: PCombatManager): PBattleStack; cdecl;
+
+begin
+  result := TGetActiveStackMethod(Ptr($75AF06))(@Self);
 end;
 
 procedure SendNetData (DestPlayerId, MsgId: integer; {n} Data: pointer; DataSize: integer);
