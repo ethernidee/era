@@ -860,6 +860,8 @@ var
   BattleMgr: Heroes.PCombatManager;
 
 begin
+  Inc(CombatActionId);
+
   BattleMgr := Heroes.CombatManagerPtr^;
 
   CombatOrigStackActionInfo.Action       := BattleMgr.Action;
@@ -868,6 +870,33 @@ begin
   CombatOrigStackActionInfo.ActionParam2 := BattleMgr.ActionParam2;
 
   result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_WoGBeforeBattleAction_HandleEnchantress (Context: Core.PHookContext): longbool; stdcall;
+const
+  LOCAL_ACTING_MON_TYPE = -$2C;
+
+var
+  BattleMgr: Heroes.PCombatManager;
+
+begin
+  BattleMgr  := Heroes.CombatManagerPtr^;
+  Erm.v[997] := CombatRound;
+  Erm.FireErmEvent(TRIGGER_BG0);
+
+  // Monster type could be changed by script, use the one from combat manager
+  pinteger(Context.EBP + LOCAL_ACTING_MON_TYPE)^ := BattleMgr.GetActiveStack().MonType;
+
+  result := Core.EXEC_DEF_CODE;
+end;
+
+function Hook_WoGCallAfterBattleAction (Context: Core.PHookContext): longbool; stdcall;
+begin
+  Erm.v[997] := CombatRound;
+  Erm.FireErmEvent(TRIGGER_BG1);
+
+  Context.RetAddr := Ptr($75D317);
+  result          := not Core.EXEC_DEF_CODE;
 end;
 
 function Hook_SendBattleAction_CopyActionParams (Context: Core.PHookContext): longbool; stdcall;
@@ -934,11 +963,6 @@ end;
 
 var
   RngId: integer = 0; // Holds random generation attempt ID, auto resets at each reseeding. Used for debugging purposes
-
-procedure OnBeforeBattleAction (Event: GameExt.PEvent); stdcall;
-begin
-  Inc(CombatActionId);
-end;
 
 procedure Hook_SRand (OrigFunc: pointer; Seed: integer); stdcall;
 var
@@ -2139,6 +2163,13 @@ begin
   ApiJack.HookCode(Ptr($75C69E), @Hook_WoGBeforeBattleAction);
   ApiJack.HookCode(Ptr($47883B), @Hook_SendBattleAction_CopyActionParams);
 
+  (* Trigger OnBeforeBattleAction before Enchantress, Hell Steed and creature experience mass spell processing *)
+  ApiJack.HookCode(Ptr($75C96C), @Hook_WoGBeforeBattleAction_HandleEnchantress);
+  Core.p.WriteDataPatch(Ptr($75CB26), ['9090909090909090909090']);
+
+  (* Use CombatRound in OnAfterBattleAction trigger for v997 *)
+  ApiJack.HookCode(Ptr($75D306), @Hook_WoGCallAfterBattleAction);
+
   (* Send and receive unique identifier for each battle to use in deterministic PRNG in multiplayer *)
   ApiJack.HookCode(Ptr($763796), @Hook_ZvsAdd2Send);
   ApiJack.HookCode(Ptr($763BA4), @Hook_ZvsGet4Receive);
@@ -2202,7 +2233,6 @@ begin
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBattleReplay', OnBattleReplay);
-  EventMan.GetInstance.On('OnBeforeBattleAction', OnBeforeBattleAction);
   EventMan.GetInstance.On('OnBeforeBattleReplay', OnBeforeBattleReplay);
   EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
