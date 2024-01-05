@@ -96,6 +96,7 @@ type
     fRangeMax:       integer;
     fCombatActionId: integer;
     fFreeParam:      integer;
+    fAttemptParam:   integer;
   end;
 
   TBattleDeterministicRng = class (FastRand.TRng)
@@ -106,7 +107,7 @@ type
     fCombatActionIdPtr: pinteger;
     fFreeParamPtr:      pinteger;
 
-    procedure UpdateState (RangeMin, RangeMax: integer);
+    procedure UpdateState (RangeMin, RangeMax: integer; AttemptIndex: integer = 1);
 
    public
     constructor Create (CombatIdPtr, CombatRoundPtr, CombatActionIdPtr, FreeParamPtr: pinteger);
@@ -167,7 +168,7 @@ begin
   Self.fFreeParamPtr      := FreeParamPtr;
 end;
 
-procedure TBattleDeterministicRng.UpdateState (RangeMin, RangeMax: integer);
+procedure TBattleDeterministicRng.UpdateState (RangeMin, RangeMax: integer; AttemptIndex: integer = 1);
 begin
   Self.fState.fCombatRound    := Crypto.Tm32Encode(Self.fCombatRoundPtr^);
   Self.fState.fRangeMin       := RangeMin;
@@ -175,6 +176,7 @@ begin
   Self.fState.fRangeMax       := RangeMax;
   Self.fState.fCombatActionId := Crypto.Tm32Encode(Self.fCombatActionIdPtr^ + 1147022261);
   Self.fState.fFreeParam      := Crypto.Tm32Encode(Self.fFreeParamPtr^ + 641013956);
+  Self.fState.fAttemptParam   := 1709573561 + AttemptIndex * 39437491;
 end;
 
 procedure TBattleDeterministicRng.Seed (NewSeed: integer);
@@ -189,6 +191,15 @@ begin
 end;
 
 function TBattleDeterministicRng.RandomRange (MinValue, MaxValue: integer): integer;
+const
+  MAX_UNBIAS_ATTEMPTS = 100;
+
+var
+  RangeLen:         cardinal;
+  BiasedRangeLen:   cardinal;
+  MaxUnbiasedValue: cardinal;
+  i:                integer;
+
 begin
   if MinValue >= MaxValue then begin
     result := MinValue;
@@ -199,7 +210,23 @@ begin
   result := Crypto.FastHash(@Self.fState, sizeof(Self.fState));
 
   if (MinValue > Low(integer)) or (MaxValue < High(integer)) then begin
-    result := MinValue + integer(cardinal(result) mod cardinal(MaxValue - MinValue + 1));
+    i                := 2;
+    RangeLen         := cardinal(MaxValue - MinValue) + 1;
+    BiasedRangeLen   := High(cardinal) mod RangeLen + 1;
+
+    if BiasedRangeLen = RangeLen then begin
+      BiasedRangeLen := 0;
+    end;
+
+    MaxUnbiasedValue := High(cardinal) - BiasedRangeLen;
+
+    while (cardinal(result) > MaxUnbiasedValue) and (i <= MAX_UNBIAS_ATTEMPTS) do begin
+      Inc(Self.fState.fAttemptParam, 39437491);
+      result := Crypto.FastHash(@Self.fState, sizeof(Self.fState));
+      Inc(i);
+    end;
+
+    result := MinValue + integer(cardinal(result) mod RangeLen);
   end;
 end;
 
