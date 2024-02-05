@@ -15,9 +15,9 @@ uses
 procedure MyTextOut_New;stdcall;
 asm
   pushad
-  push dword ptr [ebp+$28]  //Í¨³£Îª-1
+  push dword ptr [ebp+$28]  //é€šå¸¸ä¸º-1
   push ecx                  //hfont
-  push dword ptr [ebp+$24]  //¶ÔÆë·½Ê½£¬5Îª¾ÓÖĞ
+  push dword ptr [ebp+$24]  //å¯¹é½æ–¹å¼ï¼Œ5ä¸ºå±…ä¸­
   push dword ptr [ebp+$20]  //ColorA
   push dword ptr [ebp+$1c]  //height
   push dword ptr [ebp+$18]  //width
