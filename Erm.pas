@@ -1499,6 +1499,9 @@ begin
   RegisterErmEventNames;
 
   (* Load scripts *)
+  // Hack to fix HD mods load from battle functionality, using GOTO and leaving dirty memory state
+  ErmTriggerDepth := 0;
+
   ScriptMan.LoadScriptsFromSavedGame;
 end;
 
@@ -5912,6 +5915,9 @@ const
   GLOBAL_EVENT_SIZE = 52;
 
 begin
+  // Hack to fix HD mods load from battle functionality, using GOTO and leaving dirty memory state
+  ErmTriggerDepth := 0;
+
   // Skip internal map events: GEp_ = GEp1 - [sizeof(_GlbEvent_) = 52]
   pinteger(Context.EBP - $3F4)^ := pinteger(pinteger(Context.EBP - $24)^ + $88)^ - GLOBAL_EVENT_SIZE;
   ErmErrReported                := false;
