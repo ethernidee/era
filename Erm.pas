@@ -1668,7 +1668,21 @@ type
     IsNegative: boolean;
     StartIndex: integer;
     Count:      integer;
+
+    // Returns really compiled start index, not logical one
+    function GetRealStartIndex: integer;
+
+    property RealStartIndex: integer read GetRealStartIndex;
   end;
+
+function TErmLocalVar.GetRealStartIndex: integer;
+begin
+  result := Self.StartIndex;
+
+  if Self.IsNegative then begin
+    result := -Self.StartIndex - Self.Count + 1;
+  end;
+end;
 
 function PreprocessErm (const ScriptName, Script: string): string;
 const
@@ -2286,7 +2300,7 @@ var
         end; // .else
       end; // .else
     end; // .if
-  end; // .unction GetLocalVar
+  end; // .function GetLocalVar
 
   procedure HandleLocalVar (const VarName: string; VarStartPos: integer; IsIndirectAddressing: longbool);
   var
@@ -2308,16 +2322,12 @@ var
       VarIndex := Low(integer);
 
       if IndexVar = nil then begin
-        if LocalVar.IsNegative then begin
-          VarIndex := -LocalVar.StartIndex - LocalVar.Count + 1 + ArrIndex;
-        end else begin
-          VarIndex := LocalVar.StartIndex + ArrIndex;
-        end;
+        VarIndex := LocalVar.RealStartIndex + ArrIndex;
 
         // The last condition part is an small hack to make an exception for SIZE constant
         if not Math.InRange(ArrIndex, 0, LocalVar.Count - 1) and (not IsAddr or (VarIndex <> LocalVar.Count)) then begin
           ShowError(VarPos, SysUtils.Format('Array index %d is out of [%d..%d] range', [ArrIndex, 0, LocalVar.Count - 1]));
-          VarIndex := Alg.ToRange(VarIndex, LocalVar.StartIndex, LocalVar.StartIndex + LocalVar.Count - 1);
+          VarIndex := Alg.ToRange(VarIndex, LocalVar.RealStartIndex, LocalVar.RealStartIndex + LocalVar.Count - 1);
         end;
       end else begin
         // Allocate temporary compiler variable to hold var item pointer
@@ -2332,11 +2342,11 @@ var
 
         if IndexVar.VarType in ['f'..'t'] then begin
           Buf.Insert(SysUtils.Format('!!VRy%d:S%d +%s F%d/%d/1; ', [
-            TempVar.StartIndex, LocalVar.StartIndex, IndexVar.VarType, LocalVar.StartIndex, LocalVar.StartIndex + LocalVar.Count - 1
+            TempVar.RealStartIndex, LocalVar.RealStartIndex, IndexVar.VarType, LocalVar.RealStartIndex, LocalVar.RealStartIndex + LocalVar.Count - 1
           ]), CmdStartBufPos);
         end else begin
           Buf.Insert(SysUtils.Format('!!VRy%d:S%d +%s%d F%d/%d/1; ', [
-            TempVar.StartIndex, LocalVar.StartIndex, IndexVar.VarType, IndexVar.StartIndex, LocalVar.StartIndex, LocalVar.StartIndex + LocalVar.Count - 1
+            TempVar.RealStartIndex, LocalVar.RealStartIndex, IndexVar.VarType, IndexVar.RealStartIndex, LocalVar.RealStartIndex, LocalVar.RealStartIndex + LocalVar.Count - 1
           ]), CmdStartBufPos);
         end;
 
