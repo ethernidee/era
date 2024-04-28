@@ -8159,7 +8159,11 @@ begin
         end;
       end;
     end else if CmdChar = 'S' then begin
-      NetSyncMarkedVars;
+      if Heroes.IsNetworkGame then begin
+        AdvErm.NetSyncMarkedVars;
+      end else begin
+        AdvErm.ClearNetSyncCache;
+      end;
     end; // .elseif
   end; // .if
 
