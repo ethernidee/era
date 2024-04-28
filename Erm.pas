@@ -8114,6 +8114,62 @@ begin
   end;
 end; // .function Hook_FU_EXT
 
+function Hook_IP_EXT (Context: ApiJack.PHookContext): longbool; stdcall;
+type
+  TResult = (CMD_HANDLED, UNKNOWN_CMD, CMD_ERROR);
+
+var
+  CmdChar:      char;
+  SubCmd:       PErmSubCmd;
+  NumParams:    integer;
+  Param:        PErmCmdParam;
+  ParamValue:   integer;
+  ParamValType: integer;
+  Res:          TResult;
+  MarkArrays:   boolean;
+  i:            integer;
+
+begin
+  CmdChar := pchar(Context.EBP + $8)^;
+  Res     := UNKNOWN_CMD;
+
+  if CmdChar in ['M', 'S'] then begin
+    Res       := CMD_HANDLED;
+    SubCmd    := PErmSubCmd(ppointer(Context.EBP + $14)^);
+    NumParams := pinteger(Context.EBP + $0C)^;
+    // * * * * * //
+    if CmdChar = 'M' then begin
+      Param      := @SubCmd.Params[0];
+      MarkArrays := (GetErmParamValue(Param, ParamValType) = 0) and (ParamValType = VALTYPE_INT) and (Param.GetCheckType() = PARAM_CHECK_NONE);
+
+      for i := Utils.IfThen(MarkArrays, 1, 0) to NumParams - 1 do begin
+        Param      := @SubCmd.Params[i];
+        ParamValue := GetErmParamValue(Param, ParamValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
+
+        if (Param.GetCheckType() <> PARAM_CHECK_NONE) or (ParamValType <> VALTYPE_STR) then begin
+          ShowErmError('Invalid !!IP:M argument #' + SysUtils.IntToStr(i + 1));
+          Res := CMD_ERROR;
+          break;
+        end;
+
+        if MarkArrays then begin
+          AdvErm.MarkArrayForNetSync(pchar(ParamValue));
+        end else begin
+          AdvErm.MarkVarForNetSync(pchar(ParamValue));
+        end;
+      end;
+    end else if CmdChar = 'S' then begin
+      NetSyncMarkedVars;
+    end; // .elseif
+  end; // .if
+
+  case Res of
+    CMD_HANDLED: begin result := false; Context.RetAddr := Ptr($768B4F); end;
+    CMD_ERROR:   begin result := false; Context.RetAddr := Ptr($7689C4); end;
+    else         begin result := true;                                   end;
+  end;
+end; // .function Hook_IP_EXT
+
 function Hook_OW_C (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   Cmd:       PErmCmd;
@@ -8726,6 +8782,9 @@ begin
 
   // Add FU:A/G commands
   ApiJack.HookCode(Ptr($72D181), @Hook_FU_EXT);
+
+  // Add IP:M/S commands
+  ApiJack.HookCode(Ptr($768B32), @Hook_IP_EXT);
 
   // Add extended OW:C?(currentPlayer)/?(uiPlayer) syntax
   ApiJack.HookCode(Ptr($737BCE), @Hook_OW_C);

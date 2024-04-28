@@ -192,6 +192,13 @@ procedure LoadAssocMem (Rider: Stores.IRider);
 procedure LoadHints (Rider: Stores.IRider);
 
 
+(* Implement support for ERA SN:W/M vars/arrays synchronization in network games *)
+procedure MarkVarForNetSync (const VarName: string);
+procedure MarkArrayForNetSync (const VarNameWithArrayId: string);
+procedure ClearNetSyncCache;
+procedure NetSyncMarkedVars;
+
+
 var
 {O} AssocMem: {O} AssocArrays.TAssocArray {OF TAssocVar};
 
@@ -232,6 +239,9 @@ var
     Mp3TriggerContext:   PMp3TriggerContext = nil;
     CurrentMp3Track:     string;
     CurrentSoundNameBuf: PSoundNameBuffer = nil;
+
+{O} NetSyncVarCache:   {U} DataLib.TDict; {OF Ptr(1)}
+{O} NetSyncArrayCache: {U} DataLib.TDict; {OF Ptr(1)}
 
 
 constructor TSlotReleaser.Create (SlotN: integer);
@@ -2291,6 +2301,7 @@ begin
   Slots.Clear;
   FreeSlotN := AUTO_ALLOC_SLOT - 1;
   AssocMem.Clear;
+  ClearNetSyncCache;
 end;
 
 procedure ResetHints;
@@ -2613,8 +2624,166 @@ begin
   end; // .if
 end; // .procedure LoadHints
 
+procedure MarkVarForNetSync (const VarName: string);
+begin
+  NetSyncVarCache[VarName] := Ptr(1);
+end;
+
+procedure MarkArrayForNetSync (const VarNameWithArrayId: string);
+begin
+  NetSyncArrayCache[VarNameWithArrayId] := Ptr(1);
+end;
+
+procedure ClearNetSyncCache;
+begin
+  NetSyncVarCache.Clear;
+  NetSyncArrayCache.Clear;
+end;
+
+procedure NetSyncMarkedVars;
+var
+{O} DataBuilder: TStrBuilder;
+{U} AssocVar:    TAssocVar;
+{U} Slot:        TSlot;
+    EventData:   Utils.TArrayOfByte;
+    Error:       string;
+    i:           integer;
+
+begin
+  DataBuilder := TStrBuilder.Create;
+  AssocVar    := nil;
+  Slot        := nil;
+  // * * * * * //
+  DataBuilder.WriteInt(NetSyncVarCache.ItemCount);
+
+  with DataLib.IterateDict(NetSyncVarCache) do begin
+    while IterNext do begin
+      DataBuilder.AppendWithLenField(IterKey);
+      AssocVar := AssocMem[IterKey];
+
+      if AssocVar <> nil then begin
+        DataBuilder.WriteInt(AssocVar.IntValue);
+        DataBuilder.AppendWithLenField(AssocVar.StrValue);
+      end else begin
+        DataBuilder.WriteInt(0);
+        DataBuilder.AppendWithLenField('');
+      end;
+    end; // .while
+  end; // .with
+
+  DataBuilder.WriteInt(NetSyncArrayCache.ItemCount);
+
+  with DataLib.IterateDict(NetSyncArrayCache) do begin
+    while IterNext do begin
+      AssocVar := AssocMem[IterKey];
+      Slot     := nil;
+
+      if (AssocVar = nil) or (AssocVar.IntValue = 0) or not GetSlot(AssocVar.IntValue, Slot, Error) then begin
+        Heroes.ShowMessage(SysUtils.Format('Global variable "%s" was marked for network synchronization but it does not hold dynamic array ID', [IterKey]));
+      end else begin
+        DataBuilder.AppendWithLenField(IterKey);
+
+        DataBuilder.WriteInt(Slot.NumItems);
+        DataBuilder.WriteInt(integer(Slot.ItemsType));
+        DataBuilder.WriteInt(integer(Slot.StorageType));
+
+        if Slot.ItemsType = INT_VAR then begin
+          DataBuilder.AppendBuf(sizeof(Slot.IntItems[0]) * Slot.NumItems, pointer(Slot.IntItems));
+        end else begin
+          for i := 0 to Slot.NumItems - 1 do begin
+            DataBuilder.AppendWithLenField(Slot.StrItems[i]);
+          end;
+        end;
+      end; // .else
+    end; // .while
+  end; // .with
+
+  EventData := DataBuilder.BuildBuf;
+  ClearNetSyncCache;
+  Network.FireRemoteEvent(Erm.ZvsDestPlayer^, 'OnSyncAdvErmVars', pointer(EventData), Length(EventData));
+  // * * * * * //
+  SysUtils.FreeAndNil(DataBuilder);
+end; // .procedure NetSyncMarkedVars
+
+procedure OnSyncAdvErmVars (Event: GameExt.PEvent); stdcall;
+var
+{U} AssocVar:       TAssocVar;
+{U} Slot:           TSlot;
+    NumItems:       integer;
+    VarName:        string;
+    ItemsType:      integer;
+    StorageType:    integer;
+    ShouldSyncItem: boolean;
+    i, j:           integer;
+
+begin
+  AssocVar := nil;
+  Slot     := nil;
+  // * * * * * //
+  with StrLib.MapBytes(StrLib.BufAsByteSource(Event.Data, Event.DataSize)) do begin
+    // Read associative variables
+    for i := 0 to ReadInt() - 1 do begin
+      VarName           := ReadStrWithLenField;
+      AssocVar          := GetOrCreateAssocVar(VarName);
+      AssocVar.IntValue := ReadInt;
+      AssocVar.StrValue := ReadStrWithLenField;
+    end;
+
+    // Read dynamic arrays
+    for i := 0 to ReadInt() - 1 do begin
+      VarName  := ReadStrWithLenField;
+      AssocVar := GetOrCreateAssocVar(VarName);
+      Slot     := nil;
+
+      if AssocVar.IntValue <> 0 then begin
+        Slot := Slots[Ptr(AssocVar.IntValue)];
+      end;
+
+      NumItems       := ReadInt;
+      ItemsType      := ReadInt;
+      StorageType    := ReadInt;
+      ShouldSyncItem := true;
+
+      if Slot = nil then begin
+        if AssocVar.IntValue = 0 then begin
+          AssocVar.IntValue := AllocSlot(NumItems, TVarType(ItemsType), TSlotStorageType(StorageType));
+          Slot              := Slots[Ptr(AssocVar.IntValue)];
+        end else begin
+          ShouldSyncItem := false;
+
+          Heroes.ShowMessage(SysUtils.Format(
+            'OnSyncAdvErmVars: failed to synchronize dynamic array. Global variable "%s" has value %d, which is not valid dynamic array ID',
+            [VarName, AssocVar.IntValue]
+          ));
+        end;
+      end else if (ItemsType <> ord(Slot.ItemsType)) or (StorageType <> ord(Slot.StorageType)) then begin
+        ShouldSyncItem := false;
+
+        Heroes.ShowMessage(SysUtils.Format(
+          'OnSyncAdvErmVars: failed to synchronize dynamic array. Global array "%s" (ID: %d) has different items type and/or storage type from remote data.' +
+          ' Remote items type: %d. Remote storage type: %d. Local items type: %d. Local storage type: %d.',
+          [VarName, AssocVar.IntValue, ItemsType, StorageType, ord(Slot.ItemsType), ord(Slot.StorageType)]
+        ));
+      end else if NumItems <> Slot.NumItems then begin
+        SetSlotItemsCount(NumItems, Slot);
+      end;
+
+      if ShouldSyncItem then begin
+        if ItemsType = ord(INT_VAR) then begin
+          ReadToBuf(NumItems * sizeof(Slot.IntItems[0]), pointer(Slot.IntItems));
+        end else begin
+          for j := 0 to NumItems - 1 do begin
+            Slot.StrItems[j] := ReadStrWithLenField;
+          end;
+        end
+      end;
+    end; // .for
+  end; // .with
+end; // .procedure OnSyncAdvErmVars
+
 procedure OnSavegameRead (Event: PEvent); stdcall;
 begin
+  ClearNetSyncCache;
   LoadSlots(Stores.NewRider(SLOTS_SAVE_SECTION));
   LoadAssocMem(Stores.NewRider(ASSOC_SAVE_SECTION));
   LoadHints(Stores.NewRider(HINTS_SAVE_SECTION));
@@ -2939,7 +3108,7 @@ var
 
           while i < NumVars do begin
             RangeStart  := i;
-            StartStrVal := pchar(@StrArr[i]);
+            StartStrVal := Utils.GetPcharValue(pchar(@StrArr[i]), sizeof(StrArr[i]));
             Inc(i);
 
             while (i < NumVars) and (pchar(@StrArr[i]) = StartStrVal) do begin
@@ -3423,9 +3592,11 @@ begin
   ApiCache       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
 
   New(Mp3TriggerContext);
-  Slots    := AssocArrays.NewStrictObjArr(TSlot);
-  AssocMem := AssocArrays.NewStrictAssocArr(TAssocVar);
-  Hints    := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  Slots             := AssocArrays.NewStrictObjArr(TSlot);
+  AssocMem          := AssocArrays.NewStrictAssocArr(TAssocVar);
+  NetSyncVarCache   := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  NetSyncArrayCache := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  Hints             := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   InitHints;
 
   EventMan.GetInstance.On('OnAfterWoG',              OnAfterWoG);
@@ -3434,4 +3605,5 @@ begin
   EventMan.GetInstance.On('OnGenerateDebugInfo',     OnGenerateDebugInfo);
   EventMan.GetInstance.On('OnSavegameRead',          OnSavegameRead);
   EventMan.GetInstance.On('OnSavegameWrite',         OnSavegameWrite);
+  EventMan.GetInstance.On('OnSyncAdvErmVars',        OnSyncAdvErmVars);
 end.
