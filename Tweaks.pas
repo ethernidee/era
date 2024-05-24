@@ -1229,6 +1229,21 @@ begin
   result := true;
 end;
 
+procedure Hook_ZvsTriggerIp (OrigFunc: pointer; TriggerSubtype: integer); stdcall;
+const
+  ATTACKER_BEFORE_DATA_SEND = 0;
+  DEFENDER_BEFORE_DATA_SEND = 2;
+
+begin
+  PatchApi.Call(CDECL_, OrigFunc, [TriggerSubtype]);
+
+  if TriggerSubtype = ATTACKER_BEFORE_DATA_SEND then begin
+    EventMan.GetInstance.Fire('$OnBeforeBattleBeforeDataSend');
+  end else if TriggerSubtype = DEFENDER_BEFORE_DATA_SEND then begin
+    EventMan.GetInstance.Fire('$OnAfterBattleBeforeDataSend');
+  end;
+end;
+
 procedure OnBeforeBattleUniversal (Event: GameExt.PEvent); stdcall;
 begin
   CombatRound    := FIRST_TACTICS_ROUND;
@@ -2200,6 +2215,9 @@ begin
   (* Send and receive unique identifier for each battle to use in deterministic PRNG in multiplayer *)
   ApiJack.HookCode(Ptr($763796), @Hook_ZvsAdd2Send);
   ApiJack.HookCode(Ptr($763BA4), @Hook_ZvsGet4Receive);
+
+  (* Introduce new internal triggers $OnBeforeBattleBeforeDataSend and $OnAfterBattleBeforeDataSend *)
+  ApiJack.StdSplice(Ptr($74D160), @Hook_ZvsTriggerIp, ApiJack.CONV_CDECL, 1);
 
   (* Replace Heroes PRNG with custom switchable PRNGs *)
   ApiJack.StdSplice(Ptr($61841F), @Hook_SRand, ApiJack.CONV_CDECL, 1);
