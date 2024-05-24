@@ -2680,6 +2680,11 @@ begin
 
       if (AssocVar = nil) or (AssocVar.IntValue = 0) or not GetSlot(AssocVar.IntValue, Slot, Error) then begin
         Heroes.ShowMessage(SysUtils.Format('Global variable "%s" was marked for network synchronization but it does not hold dynamic array ID', [IterKey]));
+      end else if Slot.StorageType = SLOT_TRIGGER_LOCAL then begin
+        Heroes.ShowMessage(SysUtils.Format(
+          'Cannot synchronize dynamic array with ID %d (stored in global variable "%s"), because it has thread local storage type',
+          [IterKey, AssocVar.IntValue]
+        ));
       end else begin
         DataBuilder.AppendWithLenField(IterKey);
 
