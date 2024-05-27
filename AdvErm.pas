@@ -2650,6 +2650,10 @@ var
     i:           integer;
 
 begin
+  if (NetSyncVarCache.ItemCount = 0) and (NetSyncArrayCache.ItemCount = 0) then begin
+    exit;
+  end;
+
   DataBuilder := TStrBuilder.Create;
   AssocVar    := nil;
   Slot        := nil;
@@ -2785,6 +2789,18 @@ begin
     end; // .for
   end; // .with
 end; // .procedure OnSyncAdvErmVars
+
+procedure OnBeforeBattleBeforeDataSend (Event: GameExt.PEvent); stdcall;
+begin
+  Erm.ZvsDestPlayer^ := -1;
+  NetSyncMarkedVars;
+end;
+
+procedure OnAfterBattleBeforeDataSend (Event: GameExt.PEvent); stdcall;
+begin
+  Erm.ZvsDestPlayer^ := -1;
+  NetSyncMarkedVars;
+end;
 
 procedure OnSavegameRead (Event: PEvent); stdcall;
 begin
@@ -3611,4 +3627,6 @@ begin
   EventMan.GetInstance.On('OnSavegameRead',          OnSavegameRead);
   EventMan.GetInstance.On('OnSavegameWrite',         OnSavegameWrite);
   EventMan.GetInstance.On('OnSyncAdvErmVars',        OnSyncAdvErmVars);
+  EventMan.GetInstance.On('$OnBeforeBattleBeforeDataSend', OnBeforeBattleBeforeDataSend);
+  EventMan.GetInstance.On('$OnAfterBattleBeforeDataSend',  OnAfterBattleBeforeDataSend);
 end.
