@@ -381,6 +381,13 @@ begin
   result := PatchApi.Call(THISCALL_, OrigFunc, [AdvMan, NetData]);
 end;
 
+function Hook_NetworkProcessHeroesDataFromDefender (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  ProcessNetworkData(pointer(Context.EBX));
+
+  result := true;
+end;
+
 function Hook_NetworkProcessBattleData (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   ProcessNetworkData(ppointer($2860290)^);
@@ -396,6 +403,9 @@ begin
   // Splice NetworkProcessOtherData
   ApiJack.StdSplice(Ptr($557CC0), @Hook_NetworkProcessOtherData, ApiJack.CONV_THISCALL, 2);
   ApiJack.HookCode(Ptr($768809), @Hook_NetworkProcessBattleData);
+
+  // Allow processing Era network events in a dialog, waiting for defender hero updated data after battle
+  ApiJack.HookCode(Ptr($557055), @Hook_NetworkProcessHeroesDataFromDefender);
 
   // Remove WoG hook for ReceiveNetAMCommand
   Core.p.WriteDataPatch(Ptr($557E07), ['E5320B00']);
