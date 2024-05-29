@@ -1971,8 +1971,13 @@ end;
 
 procedure GetGameState (out GameState: TGameState);
 begin
-  GameState.RootDlgId    := WndManagerPtr^.GetRootDlgId;
-  GameState.CurrentDlgId := WndManagerPtr^.GetCurrentDlgId;
+  GameState.RootDlgId    := 0;
+  GameState.CurrentDlgId := 0;
+
+  if WndManagerPtr^ <> nil then begin
+    GameState.RootDlgId    := WndManagerPtr^.GetRootDlgId;
+    GameState.CurrentDlgId := WndManagerPtr^.GetCurrentDlgId;
+  end;
 end;
 
 function GetMapSize: integer; assembler; {$W+}
