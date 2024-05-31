@@ -35,7 +35,9 @@ uses
   StrLib,
   Trans,
   Utils,
-  WinNative;
+  WinNative,
+  WinUtils,
+  WogDialogs;
 
 type
   (* Import *)
@@ -69,9 +71,12 @@ var
   (* Desired level of CPU loading *)
   CpuTargetLevel: integer;
 
-  FixGetHostByNameOpt:  boolean;
-  UseOnlyOneCpuCoreOpt: boolean;
-  DebugRng:             integer;
+  AutoSelectPcIpMaskOpt: string;
+  LastUsedPcIp:          integer = 0;
+  IsSelectingPcIp:       boolean = false;
+
+  UseOnlyOneCpuCoreOpt:  boolean;
+  DebugRng:              integer;
 
 
 (* Generates random value in specified range with additional custom parameter used only in deterministic generators to produce different outputs for sequence of generations *)
@@ -134,6 +139,7 @@ var
   ZvsLibGamePath:        string;
   IsLocalPlaceObject:    boolean = true;
   DlgLastEvent:          Heroes.TMouseEventInfo;
+  ComputerName:          string;
 
   Mp3TriggerHandledEvent: THandle;
   IsMp3Trigger:           boolean = false;
@@ -623,49 +629,72 @@ begin
   Ini.SaveIni(Heroes.GAME_SETTINGS_FILE);
 end; // .procedure WriteGameSettings
 
-function Hook_GetHostByName (Hook: PatchApi.THiHook; Name: pchar): WinSock.PHostEnt; stdcall;
+function Ip4ToStr (ip: integer): string;
+begin
+  result := SysUtils.Format('%d.%d.%d.%d', [ip and $FF, (ip shr 8) and $FF, (ip shr 16) and $FF, (ip shr 24) and $FF]);
+end;
+
+function Hook_GetHostByName (OrigFunc: pointer; Name: pchar): WinSock.PHostEnt; stdcall;
 type
   PEndlessPIntArr = ^TEndlessPIntArr;
   TEndlessPIntArr = array [0..MAXLONGINT div 4 - 1] of pinteger;
+  TInt32          = packed array [0..3] of byte;
 
 var
-{U} HostEnt:  WinSock.PHostEnt;
-{U} Addrs:    PEndlessPIntArr;
-    i:        integer;
-
-  function IsLocalAddr (Addr: integer): boolean;
-  type
-    TInt32 = packed array [0..3] of byte;
-
-  begin
-    result := (TInt32(Addr)[0] = 10) or ((TInt32(Addr)[0] = 172) and Math.InRange(TInt32(Addr)[1],
-                                                                                  16, 31)) or
-                                        ((TInt32(Addr)[0] = 192) and (TInt32(Addr)[1] = 168));
-  end;
+{On} AddrList:        {U} TStrList {of TObject};
+{U}  Addrs:           PEndlessPIntArr;
+     SelectedAddrInd: integer;
+     AddrStr:         string;
+     i:               integer;
 
 begin
+  AddrList := nil;
+  // * * * * * //
+  result := Ptr(PatchApi.Call(PatchApi.STDCALL_, OrigFunc, [Name]));
+
+  if (result = nil) or ((Name <> nil) and (Name <> ComputerName)) or (result.h_length <> sizeof(integer)) then begin
+    exit;
+  end;
+
+  Addrs := pointer(result.h_addr_list);
+
   {!} Windows.EnterCriticalSection(InetCriticalSection);
 
-  result := Ptr(PatchApi.Call(PatchApi.STDCALL_, Hook.GetDefaultFunc(), [Name]));
-  HostEnt := result;
+  if (not IsSelectingPcIp) and (Addrs[0] <> nil) then begin
+    IsSelectingPcIp := true;
+    AddrList        := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+    i               := 0;
+    SelectedAddrInd := -1;
 
-  if HostEnt.h_length = sizeof(integer) then begin
-    Addrs := pointer(HostEnt.h_addr_list);
+    while (SelectedAddrInd = -1) and (Addrs[i] <> nil) do begin
+      if (Addrs[i]^ = LastUsedPcIp) then begin
+        SelectedAddrInd := i;
+      end else begin
+        AddrStr := Ip4ToStr(Addrs[i]^);
 
-    if (Addrs[0] <> nil) and IsLocalAddr(Addrs[0]^) then begin
-      i := 1;
-
-      while (Addrs[i] <> nil) and IsLocalAddr(Addrs[i]^) do begin
-        Inc(i);
+        if (AutoSelectPcIpMaskOpt <> '') and StrLib.Match(AddrStr, AutoSelectPcIpMaskOpt) then begin
+          SelectedAddrInd := i;
+        end else if i < WogDialogs.MAX_OPTIONS_DLG_ITEMS then begin
+          AddrList.Add(AddrStr);
+        end;
       end;
 
-      if Addrs[i] <> nil then begin
-        Utils.Exchange(Addrs[0]^, Addrs[i]^);
-      end;
-    end; // .if
+      Inc(i);
+    end;
+
+    if SelectedAddrInd = -1 then begin
+      SelectedAddrInd := WogDialogs.ShowRadioDlg(Trans.tr('era.select_ip_address', []) + ':', AddrList.GetKeys);
+    end;
+
+    LastUsedPcIp := Addrs[SelectedAddrInd]^;
+    Utils.Exchange(Addrs[0]^, Addrs[SelectedAddrInd]^);
+
+    IsSelectingPcIp := false;
   end; // .if
 
   {!} Windows.LeaveCriticalSection(InetCriticalSection);
+  // * * * * * //
+  SysUtils.FreeAndNil(AddrList);
 end; // .function Hook_GetHostByName
 
 function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): longbool; stdcall;
@@ -2045,17 +2074,8 @@ begin
   (* Fix game version to enable map generator *)
   Heroes.GameVersion^ := Heroes.SOD_AND_AB;
 
-  (* Fix gethostbyname function to return external IP address at first place *)
-  if FixGetHostByNameOpt then begin
-    Core.p.WriteHiHook
-    (
-      Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname'),
-      PatchApi.SPLICE_,
-      PatchApi.EXTENDED_,
-      PatchApi.STDCALL_,
-      @Hook_GetHostByName
-    );
-  end;
+  (* Hook gethostbyname function to implement desired IP address selection *)
+  ApiJack.StdSplice(Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname'), @Hook_GetHostByName, ApiJack.CONV_STDCALL, 1);
 
   (* Fix ApplyDamage calls, so that !?MF1 damage is displayed correctly in log *)
   Core.ApiHook(@Hook_ApplyDamage_Ebx_Local7,  Core.HOOKTYPE_BRIDGE, Ptr($43F95B + 5));
@@ -2274,6 +2294,7 @@ begin
   GlobalRng                 := QualitativeRng;
   IsMainThread              := true;
   Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
+  ComputerName              := WinUtils.GetComputerNameW;
 
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);

@@ -1,8 +1,8 @@
 unit EraSettings;
-{
+(*
 DESCRIPTION:  Settings management
 AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+*)
 
 (***)  interface  (***)
 uses
@@ -28,7 +28,9 @@ uses
 const
   LOG_FILE_NAME = 'log.txt';
 
-implementation
+
+(***)  implementation  (***)
+
 
 var
   DebugOpt:           boolean;
@@ -118,7 +120,7 @@ begin
   Core.AbortOnError              := GetDebugOpt(    'Debug.AbortOnError',          true);
   SndVid.LoadCDOpt               := GetOptBoolValue('LoadCD',                      false);
   Tweaks.CpuTargetLevel          := GetOptIntValue( 'CpuTargetLevel',              33);
-  Tweaks.FixGetHostByNameOpt     := GetOptBoolValue('FixGetHostByName',            true);
+  Tweaks.AutoSelectPcIpMaskOpt   := GetOptValue(    'AutoSelectPcIpMask',          '');
   Tweaks.UseOnlyOneCpuCoreOpt    := GetOptBoolValue('UseOnlyOneCpuCore',           true);
   Stores.DumpSavegameSectionsOpt := GetDebugOpt(    'Debug.DumpSavegameSections',  false);
   GameExt.DumpVfsOpt             := GetDebugOpt(    'Debug.DumpVirtualFileSystem', false);
