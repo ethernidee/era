@@ -399,6 +399,11 @@ begin
   Erm.ZvsErmError(nil, 0, Error);
 end;
 
+function AllocErmFunc (FuncName: pchar; {i} out FuncId: integer): TDwordBool; stdcall;
+begin
+  result := TDwordBool(ord(Erm.AllocErmFunc(FuncName, FuncId)));
+end;
+
 function FindNextObject (ObjType, ObjSubtype: integer; var x, y, z: integer; Direction: integer): integer; stdcall;
 begin
   result := ord(not Heroes.ZvsFindNextObjects(ObjType, ObjSubtype, x, y, z, Direction));
