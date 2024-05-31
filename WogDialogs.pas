@@ -27,6 +27,10 @@ uses
   Utils;
 
 
+const
+  MAX_OPTIONS_DLG_ITEMS = 12;
+
+
 function ShowRadioDlg (const Title: string; const Items: array of string; SelectedItemIndex: integer = 0): integer;
 
 
@@ -35,7 +39,7 @@ function ShowRadioDlg (const Title: string; const Items: array of string; Select
 
 type
   POptionsDlgItems = ^TOptionsDlgItems;
-  TOptionsDlgItems = array [0..11] of pchar;
+  TOptionsDlgItems = array [0..MAX_OPTIONS_DLG_ITEMS - 1] of pchar;
 
 
 var
