@@ -33,6 +33,7 @@ uses
   Stores,
   StrLib,
   Trans,
+  Triggers,
   Tweaks,
   TypeWrappers,
   Utils,
@@ -599,6 +600,7 @@ end;
 
 exports
   AdvErm.ExtendArrayLifetime,
+  AllocErmFunc,
   Ask,
   ClearIniCache,
   Core.ApiHook,
@@ -678,6 +680,7 @@ exports
   ToStaticStr,
   tr,
   Trans.ReloadLanguageData,
+  Triggers.SetRegenerationAbility,
   Tweaks.RandomRangeWithFreeParam,
   WriteSavegameSection,
   WriteStrToIni;
