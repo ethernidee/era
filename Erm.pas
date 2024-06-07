@@ -256,7 +256,8 @@ const
   TRIGGER_KEY_RELEASED                   = 77053;
   TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES = 77054;
   TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES  = 77055;
-  {!} LAST_ERA_TRIGGER                   = TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES;
+  TRIGGER_BATTLE_STACK_REGENERATION      = 77056;
+  {!} LAST_ERA_TRIGGER                   = TRIGGER_BATTLE_STACK_REGENERATION;
 
   INITIAL_FUNC_AUTO_ID = 95000;
 
@@ -1057,19 +1058,18 @@ begin
   AdvErm.GetOrCreateAssocVar(FuncName).IntValue := TriggerId;
 end;
 
+(* Returns true if new ID was allocated, false if existing ID was reused *)
 function AllocErmFunc (const FuncName: string; {i} out FuncId: integer): boolean;
 begin
   FuncId := integer(FuncNames[FuncName]);
   result := FuncId = 0;
 
   if result then begin
-    FuncId                       := FuncAutoId;
-    FuncNames[FuncName]          := Ptr(FuncId);
-    FuncIdToNameMap[Ptr(FuncId)] := TString.Create(FuncName);
-    AdvErm.GetOrCreateAssocVar(FuncName).IntValue := FuncId;
-    inc(FuncAutoId);
+    FuncId := FuncAutoId;
+    Inc(FuncAutoId);
+    NameTrigger(FuncId, FuncName);
   end;
-end; // .function AllocErmFunc
+end;
 
 procedure RegisterStdGlobalConsts;
 var
@@ -1089,16 +1089,18 @@ end;
 function GetTriggerReadableName (EventID: integer): string;
 var
   BaseEventName: string;
-
   x:             integer;
   y:             integer;
   z:             integer;
-
   ObjType:       integer;
   ObjSubtype:    integer;
 
 begin
   result := '';
+
+  if GetErmFuncName(EventID, result) then begin
+    exit;
+  end;
 
   case EventID of
     {*} TRIGGER_FU1..TRIGGER_FU29999:
@@ -1107,116 +1109,10 @@ begin
       result := 'OnErmTimer ' + SysUtils.IntToStr(EventID - TRIGGER_TM1 + 1);
     {*} TRIGGER_HE0..TRIGGER_HE198:
       result := 'OnHeroInteraction ' + SysUtils.IntToStr(EventID - TRIGGER_HE0);
-    {*} TRIGGER_BA0:      result :=  'OnBeforeBattle';
-    {*} TRIGGER_BA1:      result :=  'OnAfterBattle';
-    {*} TRIGGER_BR:       result :=  'OnBattleRound';
-    {*} TRIGGER_BG0:      result :=  'OnBeforeBattleAction';
-    {*} TRIGGER_BG1:      result :=  'OnAfterBattleAction';
-    {*} TRIGGER_MW0:      result :=  'OnWanderingMonsterReach';
-    {*} TRIGGER_MW1:      result :=  'OnWanderingMonsterDeath';
-    {*} TRIGGER_MR0:      result :=  'OnMagicBasicResistance';
-    {*} TRIGGER_MR1:      result :=  'OnMagicCorrectedResistance';
-    {*} TRIGGER_MR2:      result :=  'OnDwarfMagicResistance';
-    {*} TRIGGER_CM0:      result :=  'OnAdventureMapRightMouseClick';
-    {*} TRIGGER_CM1:      result :=  'OnTownMouseClick';
-    {*} TRIGGER_CM2:      result :=  'OnHeroScreenMouseClick';
-    {*} TRIGGER_CM3:      result :=  'OnHeroesMeetScreenMouseClick';
-    {*} TRIGGER_CM4:      result :=  'OnBattleScreenMouseClick';
-    {*} TRIGGER_CM5:      result :=  'OnAdventureMapLeftMouseClick';
-    {*} TRIGGER_AE0:      result :=  'OnUnequipArt';
-    {*} TRIGGER_AE1:      result :=  'OnEquipArt';
-    {*} TRIGGER_MM0:      result :=  'OnBattleMouseHint';
-    {*} TRIGGER_MM1:      result :=  'OnTownMouseHint';
-    {*} TRIGGER_MP:       result :=  'OnMp3MusicChange';
-    {*} TRIGGER_SN:       result :=  'OnSoundPlay';
-    {*} TRIGGER_MG0:      result :=  'OnBeforeAdventureMagic';
-    {*} TRIGGER_MG1:      result :=  'OnAfterAdventureMagic';
-    {*} TRIGGER_TH0:      result :=  'OnEnterTownHall';
-    {*} TRIGGER_TH1:      result :=  'OnLeaveTownHall';
-    {*} TRIGGER_IP0:      result :=  'OnBeforeBattleBeforeDataSend';
-    {*} TRIGGER_IP1:      result :=  'OnBeforeBattleAfterDataReceived';
-    {*} TRIGGER_IP2:      result :=  'OnAfterBattleBeforeDataSend';
-    {*} TRIGGER_IP3:      result :=  'OnAfterBattleAfterDataReceived';
-    {*} TRIGGER_CO0:      result :=  'OnOpenCommanderWindow';
-    {*} TRIGGER_CO1:      result :=  'OnCloseCommanderWindow';
-    {*} TRIGGER_CO2:      result :=  'OnAfterCommanderBuy';
-    {*} TRIGGER_CO3:      result :=  'OnAfterCommanderResurrect';
-    {*} TRIGGER_BA50:     result :=  'OnBeforeBattleForThisPcDefender';
-    {*} TRIGGER_BA51:     result :=  'OnAfterBattleForThisPcDefender';
-    {*} TRIGGER_BA52:     result :=  'OnBeforeBattleUniversal';
-    {*} TRIGGER_BA53:     result :=  'OnAfterBattleUniversal';
-    {*} TRIGGER_GM0:      result :=  'OnAfterLoadGame';
-    {*} TRIGGER_GM1:      result :=  'OnBeforeSaveGame';
-    {*} TRIGGER_PI:       result :=  'OnAfterErmInstructions';
-    {*} TRIGGER_DL:       result :=  'OnCustomDialogEvent';
-    {*} TRIGGER_HM:       result :=  'OnHeroMove';
     {*} TRIGGER_HM0..TRIGGER_HM198:
       result := 'OnHeroMove ' + SysUtils.IntToStr(EventID - TRIGGER_HM0);
-    {*} TRIGGER_HL:   result :=  'OnHeroGainLevel';
     {*} TRIGGER_HL0..TRIGGER_HL198:
       result := 'OnHeroGainLevel ' + SysUtils.IntToStr(EventID - TRIGGER_HL0);
-    {*} TRIGGER_BF:       result :=  'OnSetupBattlefield';
-    {*} TRIGGER_MF1:      result :=  'OnMonsterPhysicalDamage';
-    {*} TRIGGER_TL0:      result :=  'OnEverySecond';
-    {*} TRIGGER_TL1:      result :=  'OnEvery2Seconds';
-    {*} TRIGGER_TL2:      result :=  'OnEvery5Seconds';
-    {*} TRIGGER_TL3:      result :=  'OnEvery10Seconds';
-    {*} TRIGGER_TL4:      result :=  'OnEveryMinute';
-    (* Era Triggers *)
-    {*} TRIGGER_SAVEGAME_WRITE:               result := 'OnSavegameWrite';
-    {*} TRIGGER_SAVEGAME_READ:                result := 'OnSavegameRead';
-    {*} TRIGGER_KEYPRESS:                     result := 'OnKeyPressed';
-    {*} TRIGGER_OPEN_HEROSCREEN:              result := 'OnOpenHeroScreen';
-    {*} TRIGGER_CLOSE_HEROSCREEN:             result := 'OnCloseHeroScreen';
-    {*} TRIGGER_STACK_OBTAINS_TURN:           result := 'OnBattleStackObtainsTurn';
-    {*} TRIGGER_REGENERATE_PHASE:             result := 'OnBattleRegeneratePhase';
-    {*} TRIGGER_AFTER_SAVE_GAME:              result := 'OnAfterSaveGame';
-    {*} TRIGGER_BEFOREHEROINTERACT:           result := 'OnBeforeHeroInteraction';
-    {*} TRIGGER_AFTERHEROINTERACT:            result := 'OnAfterHeroInteraction';
-    {*} TRIGGER_ONSTACKTOSTACKDAMAGE:         result := 'OnStackToStackDamage';
-    {*} TRIGGER_ONAICALCSTACKATTACKEFFECT:    result := 'OnAICalcStackAttackEffect';
-    {*} TRIGGER_ONCHAT:                       result := 'OnChat';
-    {*} TRIGGER_ONGAMEENTER:                  result := 'OnGameEnter';
-    {*} TRIGGER_ONGAMELEAVE:                  result := 'OnGameLeave';
-    {*} TRIGGER_ONREMOTEEVENT:                result := 'OnRemoteEvent';
-    {*} TRIGGER_DAILY_TIMER:                  result := 'OnEveryDay';
-    {*} TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE: result := 'OnBeforeBattlefieldVisible';
-    {*} TRIGGER_BATTLEFIELD_VISIBLE:          result := 'OnBattlefieldVisible';
-    {*} TRIGGER_AFTER_TACTICS_PHASE:          result := 'OnAfterTacticsPhase';
-    {*} TRIGGER_OPEN_RECRUIT_DLG:             result := 'OnOpenRecruitDlg';
-    {*} TRIGGER_CLOSE_RECRUIT_DLG:            result := 'OnCloseRecruitDlg';
-    {*} TRIGGER_RECRUIT_DLG_MOUSE_CLICK:      result := 'OnRecruitDlgMouseClick';
-    {*} TRIGGER_TOWN_FORT_MOUSE_CLICK:        result := 'OnTownFortMouseClick';
-    {*} TRIGGER_KINGDOM_OVERVIEW_MOUSE_CLICK: result := 'OnKingdomOverviewMouseClick';
-    {*} TRIGGER_RECRUIT_DLG_RECALC:           result := 'OnRecruitDlgRecalc';
-    {*} TRIGGER_RECRUIT_DLG_ACTION:           result := 'OnRecruitDlgAction';
-    {*} TRIGGER_LOAD_HERO_SCREEN:             result := 'OnLoadHeroScreen';
-    {*} TRIGGER_BUILD_TOWN_BUILDING:          result := 'OnBuildTownBuilding';
-    {*} TRIGGER_OPEN_TOWN_SCREEN:             result := 'OnOpenTownScreen';
-    {*} TRIGGER_CLOSE_TOWN_SCREEN:            result := 'OnCloseTownScreen';
-    {*} TRIGGER_SWITCH_TOWN_SCREEN:           result := 'OnSwitchTownScreen';
-    {*} TRIGGER_PRE_TOWN_SCREEN:              result := 'OnPreTownScreen';
-    {*} TRIGGER_POST_TOWN_SCREEN:             result := 'OnPostTownScreen';
-    {*} TRIGGER_PRE_HEROSCREEN:               result := 'OnPreHeroScreen';
-    {*} TRIGGER_POST_HEROSCREEN:              result := 'OnPostHeroScreen';
-    {*} TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE: result := 'OnDetermineMonInfoDlgUpgrade';
-    {*} TRIGGER_ADVMAP_TILE_HINT:             result := 'OnAdvMapTileHint';
-    {*} TRIGGER_BEFORE_STACK_TURN:            result := 'OnBeforeBattleStackTurn';
-    {*} TRIGGER_CALC_TOWN_INCOME:             result := 'OnCalculateTownIncome';
-    {*} TRIGGER_BATTLE_REPLAY:                result := 'OnBattleReplay';
-    {*} TRIGGER_BEFORE_BATTLE_REPLAY:         result := 'OnBeforeBattleReplay';
-    {*} TRIGGER_BEFORE_LOCAL_EVENT:           result := 'OnBeforeLocalEvent';
-    {*} TRIGGER_AFTER_LOCAL_EVENT:            result := 'OnAfterLocalEvent';
-    {*} TRIGGER_WIN_GAME:                     result := 'OnWinGame';
-    {*} TRIGGER_LOSE_GAME:                    result := 'OnLoseGame';
-    {*} TRIGGER_TRANSFER_HERO:                result := 'OnTransferHero';
-    {*} TRIGGER_AFTER_HERO_GAIN_LEVEL:        result := 'OnAfterHeroGainLevel';
-    {*} TRIGGER_BATTLE_ACTION_END:            result := 'OnBattleActionEnd';
-    {*} TRIGGER_AFTER_BUILD_TOWN_BUILDING:    result := 'OnAfterBuildTownBuilding';
-    {*} TRIGGER_KEY_RELEASED:                 result := 'OnKeyReleased';
-    {*} TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES: result := 'OnBeforePlaceBattleObstacles';
-    {*} TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES:  result := 'OnAfterPlaceBattleObstacles';
-    (* END Era Triggers *)
   else
     if EventID >= TRIGGER_OB_POS then begin
       if ((EventID and TRIGGER_OB_POS) or (EventID and TRIGGER_LE_POS)) <> 0 then begin
@@ -1234,9 +1130,7 @@ begin
           end;
         end;
 
-        result :=
-          BaseEventName + SysUtils.IntToStr(x) + '/' +
-          SysUtils.IntToStr(y) + '/' + SysUtils.IntToStr(z);
+        result := BaseEventName + SysUtils.IntToStr(x) + '/' + SysUtils.IntToStr(y) + '/' + SysUtils.IntToStr(z);
       end else begin
         ObjType    := (EventID shr 12) and 255;
         ObjSubtype := (EventID and 255) - 1;
@@ -1247,17 +1141,12 @@ begin
           BaseEventName := 'OnBeforeVisitObject ';
         end;
 
-        result :=
-          BaseEventName + SysUtils.IntToStr(ObjType) + '/' + SysUtils.IntToStr(ObjSubtype);
+        result := BaseEventName + SysUtils.IntToStr(ObjType) + '/' + SysUtils.IntToStr(ObjSubtype);
       end; // .else
     end else begin
-      if GetErmFuncName(EventID, result) then begin
-        // Ok
-      end else begin
-        result := 'OnErmFunction ' + SysUtils.IntToStr(EventID);
-      end;
-    end; // .else
-  end; // .switch
+      result := 'OnErmFunction ' + SysUtils.IntToStr(EventID);
+    end;
+  end; // .switch EventID
 end; // .function GetTriggerReadableName
 
 procedure SetZVar (Str: pchar; const Value: string); overload;
@@ -3684,7 +3573,7 @@ procedure RegisterErmEventNames;
 begin
   NameTrigger(TRIGGER_BA0,  'OnBeforeBattle');
   NameTrigger(TRIGGER_BA1,  'OnAfterBattle');
-  NameTrigger(TRIGGER_BR,   'OnCombatRound'); // name alias firsts
+  NameTrigger(TRIGGER_BR,   'OnCombatRound'); // name alias first
   NameTrigger(TRIGGER_BR,   'OnBattleRound');
   NameTrigger(TRIGGER_BG0,  'OnBeforeBattleAction');
   NameTrigger(TRIGGER_BG1,  'OnAfterBattleAction');
@@ -3787,6 +3676,7 @@ begin
   NameTrigger(TRIGGER_KEY_RELEASED,                 'OnKeyReleased');
   NameTrigger(TRIGGER_BEFORE_BATTLE_PLACE_BATTLE_OBSTACLES, 'OnBeforePlaceBattleObstacles');
   NameTrigger(TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES,  'OnAfterPlaceBattleObstacles');
+  NameTrigger(TRIGGER_BATTLE_STACK_REGENERATION,    'OnBattleStackRegeneration');
 end; // .procedure RegisterErmEventNames
 
 procedure AssignEventParams (const Params: array of integer);
