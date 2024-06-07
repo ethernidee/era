@@ -26,25 +26,36 @@ type
   TObjDict = DataLib.TObjDict;
 
 const
-  NO_STACK = -1;
-
-  STACK_POS_OFS = $38;
+  STD_REGENERATION_VALUE = -1;
 
 
 (* Returns true, if current moment is between GameEnter and GameLeave events *)
 function IsGameLoop: boolean;
-procedure SetRegenerationAbility (MonId: integer; Chance: integer); stdcall;
+procedure SetRegenerationAbility (MonId: integer; Chance: integer = 100; HitPoints: integer = STD_REGENERATION_VALUE; HpPercents: integer = 0); stdcall;
 
 
 (***) implementation (***)
 
 
 const
+  NO_STACK = -1;
+  STACK_POS_OFS = $38;
+
   (* extended MM Trigger *)
   ATTACKER_STACK_N_PARAM  = 1;
   DEFENDER_STACK_N_PARAM  = 2;
   MIN_DAMAGE_PARAM        = 3;
   MAX_DAMAGE_PARAM        = 4;
+
+type
+  TRegenerationAbility = class
+   public
+    Chance:     integer;
+    HitPoints:  integer;
+    HpPercents: integer;
+
+    constructor Create (Chance: integer; HitPoints: integer; HpPercents: integer);
+  end;
 
 var
   ZvsCanNpcRegenerate:   function (MonType: integer; Stack: Heroes.PBattleStack): integer cdecl = Ptr($76D844);
@@ -52,7 +63,7 @@ var
 
 var
 (* Normalized regeneration abilities *)
-{O} MonsWithRegeneration: {U} TObjDict {of Ptr(Chance: integer)};
+{O} MonsWithRegeneration: {O} TObjDict {of TRegenerationAbility};
 
   PrevWndProc:  Heroes.TWndProc;
 
@@ -72,6 +83,13 @@ var
   (* Controlling OnGameEnter and OnGameLeave events *)
   MainGameLoopDepth: integer = 0;
 
+
+constructor TRegenerationAbility.Create (Chance: integer; HitPoints: integer; HpPercents: integer);
+begin
+  Self.Chance     := Chance;
+  Self.HitPoints  := HitPoints;
+  Self.HpPercents := HpPercents;
+end;
 
 function IsGameLoop: boolean;
 begin
@@ -543,37 +561,62 @@ begin
   result       := true;
 end;
 
-procedure SetRegenerationAbility (MonId: integer; Chance: integer);
+procedure SetRegenerationAbility (MonId: integer; Chance: integer; HitPoints: integer; HpPercents: integer); stdcall;
 begin
   if Chance <= 0 then begin
     MonsWithRegeneration.DeleteItem(Ptr(MonId));
   end else begin
-    MonsWithRegeneration[Ptr(MonId)] := Ptr(Chance);
+    MonsWithRegeneration[Ptr(MonId)] := TRegenerationAbility.Create(Chance, HitPoints, HpPercents);
   end;
 end;
 
-function GetRegenerationChance (MonId: integer): integer;
+function GetRegenerationAbility (MonId: integer): {Un} TRegenerationAbility;
 begin
-  result := integer(MonsWithRegeneration[Ptr(MonId)]);
+  result := MonsWithRegeneration[Ptr(MonId)];
+end;
+
+(* Returns standard amount of healed HP for Regeneration ability in Era *)
+function GetStdRenerationAmount (Stack: Heroes.PBattleStack): integer;
+var
+  SumHp:          integer;
+  MonType:        integer;
+  FirstRegenAlt:  integer;
+  SecondRegenAlt: integer;
+  i:              integer;
+
+begin
+  SumHp := 0;
+
+  for i := Heroes.TOWN_FIRST to Heroes.TOWN_LAST_WOG do begin
+    MonType := Heroes.MonAssignmentsPerTown[i][1][6];
+    Inc(SumHp, Heroes.MonInfos[MonType].HitPoints);
+  end;
+
+  FirstRegenAlt  := Trunc(SumHp / (Heroes.TOWN_LAST_WOG + 1) * 0.6);
+  SecondRegenAlt := Stack.HitPoints * 2 div 10;
+
+  result := Math.Max(FirstRegenAlt, SecondRegenAlt);
 end;
 
 function Hook_BattleDoRegenerate (Context: ApiJack.PHookContext): longbool; stdcall;
 const
-  EXIT_ADDR               = $446E21;
-  PROCESS_ANIMATION_ADDR  = $446C3F;
-  DEFAULT_ERA_REGEN_VALUE = -1;
+  EXIT_ADDR              = $446E21;
+  PROCESS_ANIMATION_ADDR = $446C3F;
 
 var
+{Un} RegenerationAbility: TRegenerationAbility;
   MonType:            integer;
   Stack:              Heroes.PBattleStack;
   MonHero:            Heroes.PHero;
   RegenerationChance: integer;
   HasElixirOfLife:    boolean;
-  EraHealValue:       integer;
-  DefaultHealValue:   integer;
+  StdHealValue:       integer;
   FinalHealValue:     integer;
+  StackExpHealValue:  integer;
 
 begin
+  RegenerationAbility := nil;
+  // * * * * * //
   result := false;
 
   if DisableRegen then begin
@@ -584,46 +627,54 @@ begin
   MonType            := Context.EAX;
   Stack              := Ptr(Context.ESI);
   MonHero            := Heroes.CombatManagerPtr^.Heroes[Stack.Side];
-  RegenerationChance := GetRegenerationChance(MonType);
+  RegenerationChance := 0;
+  StdHealValue       := GetStdRenerationAmount(Stack);
+  FinalHealValue     := 0;
+
+  RegenerationAbility := GetRegenerationAbility(MonType);
+
+  if RegenerationAbility <> nil then begin
+    RegenerationChance := RegenerationAbility.Chance;
+
+    if ((RegenerationChance > 0) and ((RegenerationChance >= 100) or (Heroes.RandomRange(1, 100) <= RegenerationChance))) then begin
+      FinalHealValue := RegenerationAbility.HitPoints;
+
+      if FinalHealValue < 0 then begin
+        FinalHealValue := StdHealValue;
+      end;
+
+      if RegenerationAbility.HpPercents > 0 then begin
+        FinalHealValue := Math.Max(FinalHealValue, trunc(Stack.HitPoints / 100 * RegenerationAbility.HpPercents));
+      end;
+    end;
+  end;
 
   HasElixirOfLife := ((Heroes.MonInfos[MonType].Flags and Heroes.MON_FLAG_ALIVE) <> 0) and
                      (MonHero <> nil)                                                  and
                      MonHero.HasArtOnDoll(Heroes.ART_ELIXIR_OF_LIFE);
 
+  // Elixir of Life regeneration is used only if it's greater than the native one
   if HasElixirOfLife then begin
-    RegenerationChance := 100;
+    FinalHealValue := Max(FinalHealValue, StdHealValue);
   end;
 
-  DefaultHealValue := 0;
-  FinalHealValue   := 0;
-  EraHealValue     := Math.Max(Heroes.MonInfos[Heroes.MON_ARCHANGEL].HitPoints, Stack.HitPoints div 5);
-
-  if ((RegenerationChance > 0) and ((RegenerationChance >= 100) or (Heroes.RandomRange(1, 100) <= RegenerationChance))) then begin
-    FinalHealValue := DEFAULT_ERA_REGEN_VALUE;
-  end;
-
+  // Commanders regeneration ability is standard one
   if ZvsCanNpcRegenerate(MonType, Stack) = -1 then begin
-    FinalHealValue := DEFAULT_ERA_REGEN_VALUE;
+    FinalHealValue := Max(FinalHealValue, StdHealValue);
   end else begin
-    DefaultHealValue := ZvsCrExpBonRegenerate(Stack, Stack.HpLost);
+    // Stack experience regeneration is considered a cummulative bonus to existing regeneration points
+    // Negative values mean give standard regeneration ability
+    StackExpHealValue := ZvsCrExpBonRegenerate(Stack, Stack.HpLost);
 
-    if (DefaultHealValue > 0) and (not HasElixirOfLife or (DefaultHealValue > EraHealValue)) then begin
-      FinalHealValue := DefaultHealValue;
+    if StackExpHealValue > 0 then begin
+      Inc(FinalHealValue, StackExpHealValue);
+    end else if StackExpHealValue < 0 then begin
+      FinalHealValue := Max(FinalHealValue, StdHealValue);
     end;
   end;
 
-  if FinalHealValue = DEFAULT_ERA_REGEN_VALUE then begin
-    DefaultHealValue := EraHealValue;
-  end;
-
-  Erm.FireErmEventEx(Erm.TRIGGER_BATTLE_STACK_REGENERATION, [Stack.Side * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Stack.Index, DefaultHealValue, FinalHealValue]);
-  FinalHealValue := Erm.RetXVars[3];
-
-  if FinalHealValue < 0 then begin
-    FinalHealValue := EraHealValue;
-  end;
-
-  FinalHealValue := Math.Min(Stack.HpLost, FinalHealValue);
+  Erm.FireErmEventEx(Erm.TRIGGER_BATTLE_STACK_REGENERATION, [Stack.Side * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Stack.Index, FinalHealValue, StdHealValue]);
+  FinalHealValue := Math.Min(Stack.HpLost, Math.Max(0, Erm.RetXVars[2]));
 
   if FinalHealValue > 0 then begin
     Dec(Stack.HpLost, FinalHealValue);
@@ -946,11 +997,11 @@ end; // .procedure OnAfterWoG
 
 procedure InitializeMonsWithRegeneration;
 begin
-  MonsWithRegeneration := DataLib.NewObjDict(not Utils.OWNS_ITEMS);
-  SetRegenerationAbility(Heroes.MON_WIGHT,      100);
-  SetRegenerationAbility(Heroes.MON_WRAITH,     100);
-  SetRegenerationAbility(Heroes.MON_TROLL,      100);
-  SetRegenerationAbility(Heroes.MON_HELL_HYDRA, 40);
+  MonsWithRegeneration := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  SetRegenerationAbility(Heroes.MON_WIGHT);
+  SetRegenerationAbility(Heroes.MON_WRAITH);
+  SetRegenerationAbility(Heroes.MON_TROLL);
+  SetRegenerationAbility(Heroes.MON_HELL_HYDRA);
 end;
 
 begin
