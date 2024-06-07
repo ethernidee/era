@@ -596,6 +596,7 @@ begin
 
   DefaultHealValue := 0;
   FinalHealValue   := 0;
+  EraHealValue     := Math.Max(Heroes.MonInfos[Heroes.MON_ARCHANGEL].HitPoints, Stack.HitPoints div 5);
 
   if ((RegenerationChance > 0) and ((RegenerationChance >= 100) or (Heroes.RandomRange(1, 100) <= RegenerationChance))) then begin
     FinalHealValue := DEFAULT_ERA_REGEN_VALUE;
@@ -606,12 +607,10 @@ begin
   end else begin
     DefaultHealValue := ZvsCrExpBonRegenerate(Stack, Stack.HpLost);
 
-    if DefaultHealValue > 0 then begin
+    if (DefaultHealValue > 0) and (not HasElixirOfLife or (DefaultHealValue > EraHealValue)) then begin
       FinalHealValue := DefaultHealValue;
     end;
   end;
-
-  EraHealValue := Math.Max(Heroes.MonInfos[Heroes.MON_ARCHANGEL].HitPoints, Stack.HitPoints div 5);
 
   if FinalHealValue = DEFAULT_ERA_REGEN_VALUE then begin
     DefaultHealValue := EraHealValue;
