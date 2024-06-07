@@ -418,3 +418,21 @@ ART_BLANK_HORN                      = 170;
 ART_LAST_WOG                        = 170;
 ART_META_SPELLBOOK                  = 1000; // used by HE:A command, not a real ID
 ART_META_SPELL_SCROLL_FIRST         = 1001; // used by HE:A command, not a real ID
+
+(* Towns *)
+NO_TOWN         = -1;
+CURRENT_TOWN    = -1;
+TOWN_FIRST      = 0;
+TOWN_CASTLE     = 0;
+TOWN_RAMPART    = 1;
+TOWN_TOWER      = 2;
+TOWN_INFERNO    = 3;
+TOWN_NECROPOLIS = 4;
+TOWN_DUNGEON    = 5;
+TOWN_STRONGHOLD = 6;
+TOWN_FORTRESS   = 7;
+TOWN_CONFLUX    = 8;
+TOWN_LAST_WOG   = 8;
+
+MAP_TOWN_FIRST = 0;
+MAP_TOWN_LAST  = 47;

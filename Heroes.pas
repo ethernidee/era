@@ -986,6 +986,12 @@ type
   TTowns = packed array [0..999] of TTown;
   PTowns = ^TTowns;
 
+  PTownMonTypes = ^TTownMonTypes;
+  TTownMonTypes = packed array [0..1] of packed array [0..6] of integer;
+
+  PMonAssignmentsPerTown = ^TMonAssignmentsPerTown;
+  TMonAssignmentsPerTown = packed array [0..999] of TTownMonTypes;
+
   PTownManager = ^TTownManager;
   TTownManager = packed record
     Unk1: array [0..$38 - 1] of byte;
@@ -1201,12 +1207,13 @@ const
   Spells:       PSpells  = Ptr($7BD2C0);
   NumSpellsPtr: pinteger = Ptr($7751ED + 3);
 
-  TextBuf:        PGeneralPurposeTextBuf = Ptr($697428);
-  MonInfos:       PMonInfos = Ptr($7D0C90);
-  NumMonstersPtr: pinteger  = Ptr($733326);
-  ArtInfos:       PArtInfos = Ptr($7B6DA0);
-  NumArtsPtr:     pinteger  = Ptr($7324BD);
-  NumHeroes:      pinteger  = Ptr($7116B2);
+  TextBuf:               PGeneralPurposeTextBuf = Ptr($697428);
+  MonInfos:              PMonInfos = Ptr($7D0C90);
+  MonAssignmentsPerTown: PMonAssignmentsPerTown = Ptr($6747B4);
+  NumMonstersPtr:        pinteger  = Ptr($733326);
+  ArtInfos:              PArtInfos = Ptr($7B6DA0);
+  NumArtsPtr:            pinteger  = Ptr($7324BD);
+  NumHeroes:             pinteger  = Ptr($7116B2);
 
   (* Variable is protected with two crit sections: pint(SOUND_MANAGER)^ + $a8 and pint(SOUND_MANAGER)^ + $c0 *)
   CurrentMp3Track: PCurrentMp3Track = Ptr($6A32F0);
@@ -2404,12 +2411,13 @@ end; // .function DisplayComplexDialog
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
 begin
-  SecSkillNames := ppointer($4E6C00)^;
-  SecSkillDescs := ppointer($4E6C10)^;
-  SecSkillTexts := ppointer($4E6C1A)^;
-  MonInfos      := ppointer($6747B0)^;
-  ArtInfos      := ppointer($660B68)^;
-  Spells        := ppointer($687FA8)^;
+  SecSkillNames         := ppointer($4E6C00)^;
+  SecSkillDescs         := ppointer($4E6C10)^;
+  SecSkillTexts         := ppointer($4E6C1A)^;
+  MonInfos              := ppointer($6747B0)^;
+  MonAssignmentsPerTown := ppointer($428605)^;
+  ArtInfos              := ppointer($660B68)^;
+  Spells                := ppointer($687FA8)^;
 end;
 
 begin
