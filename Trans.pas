@@ -290,6 +290,7 @@ begin
   MapLangResources := LoadMapLangResources;
   ImportMapLangResources;
   LoadGlobalLangFiles;
+  EventMan.GetInstance.Fire('OnAfterReloadLanguageData');
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
