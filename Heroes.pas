@@ -60,6 +60,9 @@ const
   NUM_BATTLE_STACKS          = 42;
   NUM_BATTLE_STACKS_PER_SIDE = 21;
 
+  (* Multiple constants *)
+  {$INCLUDE HeroesConsts}
+
   (*  BattleMon  *)
   NO_STACK          = -1;
   STACK_STRUCT_SIZE = 1352;
@@ -884,6 +887,8 @@ type
     LSpell:       array [0..69] of byte;          // +430 db*46 = uroven' zaklinaniya (>=1)
     PSkill:       array [0..3]  of byte;          // +476 db*4  = pervichnye navyki
     _u8:          array [0..23] of byte;
+
+    function HasArtOnDoll (ArtId: integer): boolean;
   end; // .record THero
 
   THeroes = packed array [0..999] of THero;
@@ -1059,10 +1064,17 @@ type
 
   PBattleStack = ^TBattleStack;
   TBattleStack = packed record
-    Unk1:    array [0..$34 - 1] of byte;
-    MonType: integer; // +0x34
-    Pos:     integer; // +0x38
-    Unk2:    array [$3C..$548 - 1] of byte;
+    Unk1:      array [0..$34 - 1] of byte;
+    MonType:   integer; // +0x34
+    Pos:       integer; // +0x38
+    Unk2:      array [$3C..$58 - 1] of byte;
+    HpLost:    integer;
+    Unk3:      array [$5C..$C0 - 1] of byte;
+    HitPoints: integer;
+    Unk4:      array [$C4..$F4 - 1] of byte;
+    Side:      integer;
+    Index:     integer; // 0..21
+    Unk5:      array [$FC..$548 - 1] of byte;
   end; // .record TBattleStack
 
   PPCombatManager = ^PCombatManager;
@@ -2044,6 +2056,11 @@ begin
   end;
 
   result := (i >= PLAYER_FIRST) and GetPlayer(i).IsThisPcHumanPlayer;
+end;
+
+function THero.HasArtOnDoll (ArtId: integer): boolean;
+begin
+  result := PatchApi.Call(THISCALL_, Ptr($4D9460), [@Self, ArtId]) <> 0;
 end;
 
 function GetThisPcHumanPlayerId: integer;
