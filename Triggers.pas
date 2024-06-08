@@ -10,6 +10,7 @@ uses
   SysUtils,
   Windows,
 
+  Alg,
   ApiJack,
   Core,
   DataLib,
@@ -32,6 +33,7 @@ const
 (* Returns true, if current moment is between GameEnter and GameLeave events *)
 function IsGameLoop: boolean;
 procedure SetRegenerationAbility (MonId: integer; Chance: integer = 100; HitPoints: integer = STD_REGENERATION_VALUE; HpPercents: integer = 0); stdcall;
+procedure SetStdRegenerationEffect (Level7Percents: integer; HpPercents: integer); stdcall;
 
 
 (***) implementation (***)
@@ -63,7 +65,9 @@ var
 
 var
 (* Normalized regeneration abilities *)
-{O} MonsWithRegeneration: {O} TObjDict {of TRegenerationAbility};
+{O} MonsWithRegeneration:   {O} TObjDict {of TRegenerationAbility};
+    StdRegenLevel7Percents: integer = 40;
+    StdRegenHpPercents:     integer = 20;
 
   PrevWndProc:  Heroes.TWndProc;
 
@@ -381,7 +385,7 @@ begin
   result := true;
 end;
 
-procedure Hook_MainGameLoop (h: PatchApi.THiHook; This: pointer); stdcall;
+procedure Hook_MainGameLoop (OrigFunc: pointer; This: pointer); stdcall;
 begin
   Inc(MainGameLoopDepth);
 
@@ -389,7 +393,7 @@ begin
     Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);
   end;
 
-  PatchApi.Call(PatchApi.THISCALL_, h.GetDefaultFunc(), [This]);
+  PatchApi.Call(PatchApi.THISCALL_, OrigFunc, [This]);
 
   if MainGameLoopDepth > 0 then begin
     Dec(MainGameLoopDepth);
@@ -575,6 +579,12 @@ begin
   result := MonsWithRegeneration[Ptr(MonId)];
 end;
 
+procedure SetStdRegenerationEffect (Level7Percents: integer; HpPercents: integer); stdcall;
+begin
+  StdRegenLevel7Percents := Alg.ToRange(Level7Percents, 0, 100);
+  StdRegenHpPercents     := Alg.ToRange(Level7Percents, 0, 100);
+end;
+
 (* Returns standard amount of healed HP for Regeneration ability in Era *)
 function GetStdRenerationAmount (Stack: Heroes.PBattleStack): integer;
 var
@@ -592,8 +602,8 @@ begin
     Inc(SumHp, Heroes.MonInfos[MonType].HitPoints);
   end;
 
-  FirstRegenAlt  := Trunc(SumHp / (Heroes.TOWN_LAST_WOG + 1) * 0.6);
-  SecondRegenAlt := Stack.HitPoints * 2 div 10;
+  FirstRegenAlt  := Trunc(SumHp / (Heroes.TOWN_LAST_WOG + 1) * StdRegenLevel7Percents / 100);
+  SecondRegenAlt := Stack.HitPoints * StdRegenHpPercents div 100;
 
   result := Math.Max(FirstRegenAlt, SecondRegenAlt);
 end;
@@ -928,7 +938,7 @@ begin
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
 
   (* MainGameCycle: OnEnterGame, OnLeaveGame and MapFolder settings*)
-  Core.p.WriteHiHook(Ptr($4B0BA0), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.THISCALL_,  @Hook_MainGameLoop);
+  ApiJack.StdSplice(Ptr($4B0BA0), @Hook_MainGameLoop, ApiJack.CONV_THISCALL, 1);
 
   (* Kingdom Overview mouse click *)
   ApiJack.HookCode(Ptr($521E50), @Hook_KingdomOverviewMouseClick);
