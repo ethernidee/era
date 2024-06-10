@@ -82,6 +82,8 @@ var
 (* Generates random value in specified range with additional custom parameter used only in deterministic generators to produce different outputs for sequence of generations *)
 function RandomRangeWithFreeParam (MinValue, MaxValue, FreeParam: integer): integer; stdcall;
 
+procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; Context: Windows.PContext);
+
 
 (***) implementation (***)
 
@@ -140,6 +142,7 @@ var
   IsLocalPlaceObject:    boolean = true;
   DlgLastEvent:          Heroes.TMouseEventInfo;
   ComputerName:          string;
+  IsCrashing:            boolean;
 
   Mp3TriggerHandledEvent: THandle;
   IsMp3Trigger:           boolean = false;
@@ -1834,7 +1837,7 @@ begin
   {!} Core.ModuleContext.Unlock;
 end; // .procedure DumpWinPeModuleList
 
-procedure DumpExceptionContext (ExcRec: PExceptionRecord; Context: Windows.PContext);
+procedure DumpExceptionContext (ExcRec: Windows.PExceptionRecord; Context: Windows.PContext);
 const
   DEBUG_EXCEPTION_CONTEXT_PATH = GameExt.DEBUG_DIR + '\exception context.txt';
 
@@ -1938,61 +1941,32 @@ begin
   {!} Core.ModuleContext.Unlock;
 end; // .procedure DumpExceptionContext
 
-function TopLevelExceptionHandler (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
-const
-  EXCEPTION_CONTINUE_SEARCH = 0;
-
-begin
-  DumpExceptionContext(ExceptionPtrs.ExceptionRecord, ExceptionPtrs.ContextRecord);
-  EventMan.GetInstance.Fire('OnGenerateDebugInfo');
-  DlgMes.Msg('Game crashed. All debug information is inside ' + DEBUG_DIR + ' subfolder');
-
-  result := EXCEPTION_CONTINUE_SEARCH;
-end; // .function TopLevelExceptionHandler
-
-function OnUnhandledException (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
-type
-  THandler = function (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
-
-const
-  EXCEPTION_CONTINUE_SEARCH = 0;
-
-var
-  i: integer;
-
+procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; Context: Windows.PContext);
 begin
   {!} ExceptionsCritSection.Enter;
 
-  for i := 0 to TopLevelExceptionHandlers.Count - 1 do begin
-    THandler(TopLevelExceptionHandlers[i])(ExceptionPtrs);
+  if not IsCrashing then begin
+    IsCrashing               := true;
+    Erm.ErmEnabled^          := false;
+    Erm.TrackingOpts.Enabled := false;
+    DumpExceptionContext(ExceptionRecord, Context);
+    EventMan.GetInstance.Fire('OnGenerateDebugInfo');
+    Windows.MessageBoxA(Heroes.hWnd^, pchar('Game crashed. All debug information is inside ' + DEBUG_DIR + ' subfolder'), '', Windows.MB_OK);
+    Core.KillThisProcess;
   end;
 
   {!} ExceptionsCritSection.Leave;
+end;
 
-  result := EXCEPTION_CONTINUE_SEARCH;
-end; // .function OnUnhandledException
-
-function Hook_SetUnhandledExceptionFilter (Context: Core.PHookContext): longbool; stdcall;
-var
-{Un} NewHandler: pointer;
+function UnhandledExceptionFilter (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
+const
+  EXCEPTION_CONTINUE_SEARCH = 0;
 
 begin
-  NewHandler := ppointer(Context.ESP + 8)^;
-  // * * * * * //
-  if (NewHandler <> nil) and ((cardinal(NewHandler) < $401000) or (cardinal(NewHandler) > $7845FA)) then begin
-    {!} ExceptionsCritSection.Enter;
-    TopLevelExceptionHandlers.Add(NewHandler);
-    {!} ExceptionsCritSection.Leave;
-  end;
+  ProcessUnhandledException(ExceptionPtrs.ExceptionRecord, ExceptionPtrs.ContextRecord);
 
-  (* result = nil *)
-  Context.EAX := 0;
-
-  (* return to calling routine *)
-  Context.RetAddr := Core.Ret(1);
-
-  result := Core.IGNORE_DEF_CODE;
-end; // .function Hook_SetUnhandledExceptionFilter
+  result := EXCEPTION_CONTINUE_SEARCH;
+end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
@@ -2273,15 +2247,22 @@ begin
 
   (* Increase number of quick battle rounds before fast finish from 30 to 100 *)
   Core.p.WriteDataPatch(Ptr($475C35), ['64']);
+
+  (* Remove WoG Service_SetExcFilter call, preventing SetUnhandledExceptionFilter *)
+  Core.p.WriteDataPatch(Ptr($77180E), ['90909090909090909090909090']);
 end; // .procedure OnAfterWoG
+
+procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
+begin
+  (* Repeat top-level handler installation, because other plugins and dlls could interfere *)
+  Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
+  Windows.SetUnhandledExceptionFilter(@UnhandledExceptionFilter);
+end;
 
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
 begin
-  (* Install global top-level exception filter *)
   Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
-  Windows.SetUnhandledExceptionFilter(@OnUnhandledException);
-  Core.ApiHook(@Hook_SetUnhandledExceptionFilter, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(Windows.LoadLibrary('kernel32.dll'), 'SetUnhandledExceptionFilter'));
-  Windows.SetUnhandledExceptionFilter(@TopLevelExceptionHandler);
+  Windows.SetUnhandledExceptionFilter(@UnhandledExceptionFilter);
 end;
 
 begin
@@ -2296,6 +2277,7 @@ begin
   Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
   ComputerName              := WinUtils.GetComputerNameW;
 
+  EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBattleReplay', OnBattleReplay);
