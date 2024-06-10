@@ -614,6 +614,8 @@ type
   {O} Items:           {O} TList {of TObject};
   end;
 
+  TZvsProcessCmd = procedure (Cmd: PErmCmd; Dummy: integer = 0; IsPostInstr: longbool = false) cdecl;
+
 const
   (* WoG vars *)
   QuickVars: PErmQuickVars = Ptr($27718D0);
@@ -669,7 +671,7 @@ const
   SpellSettingsTable:         PSpellSettingsTable    = Ptr($28B1C54);
 
   (* WoG funcs *)
-  ZvsProcessCmd:      procedure (Cmd: PErmCmd; Dummy: integer = 0; IsPostInstr: longbool = false) cdecl = Ptr($741DF0);
+  ZvsProcessCmd:      TZvsProcessCmd = Ptr($741DF0);
   ZvsFindErm:         Utils.TProcedure  = Ptr($749955);
   ZvsClearErtStrings: Utils.TProcedure  = Ptr($7764F2);
   ZvsClearErmScripts: Utils.TProcedure  = Ptr($750191);
@@ -5481,6 +5483,8 @@ begin
 
   HasEventHandlers := (StartTrigger.Id <> 0) or EventManager.HasEventHandlers(NumericEventName) or EventManager.HasEventHandlers(HumanEventName);
 
+  try // begin exception protection block //
+
   if HasEventHandlers then begin
     SaveVars;
     ResetLocalVars;
@@ -5744,6 +5748,8 @@ begin
 
   AfterTriggers:
 
+  finally // begin resources finalization block //
+
   Dec(ErmTriggerDepth);
 
   if HasEventHandlers then begin
@@ -5776,38 +5782,35 @@ begin
   end;
 
   ServiceMemAllocator.FreePage;
+
+  end; // end resources finalization block //
 end; // .procedure ProcessErm
 
-function Hook_ProcessCmd (Context: Core.PHookContext): longbool; stdcall;
-const
-  PREV_CMD_LOCAL_OBJECTS_OFS = -$4;
+procedure Hook_ProcessCmd (OrigFunc: pointer; Cmd: PErmCmd; Dummy: integer; IsPostInstr: longbool); stdcall;
+var
+{Un} PrevCmdLocalObjects: PCmdLocalObject;
 
 begin
   if TrackingOpts.Enabled then begin
-    EventTracker.TrackCmd(PErmCmd(ppointer(Context.EBP + 8)^).CmdHeader.Value);
+    EventTracker.TrackCmd(Cmd.CmdHeader.Value);
   end;
 
   ServiceMemAllocator.AllocPage;
-  ppointer(Context.EBP + PREV_CMD_LOCAL_OBJECTS_OFS)^ := CmdLocalObjects;
-  CmdLocalObjects                                     := nil;
+  PrevCmdLocalObjects := CmdLocalObjects;
+  CmdLocalObjects     := nil;
+  ErmErrReported      := false;
 
-  ErmErrReported := false;
-  result         := Core.EXEC_DEF_CODE;
-end;
+  try
+    TZvsProcessCmd(OrigFunc)(Cmd, Dummy, IsPostInstr);
+  finally
+    while CmdLocalObjects <> nil do begin
+      ErtStrings.DeleteItem(Ptr(CmdLocalObjects.ErtIndex));
+      CmdLocalObjects := CmdLocalObjects.Prev;
+    end;
 
-function Hook_ProcessCmd_End (Context: Core.PHookContext): longbool; stdcall;
-const
-  PREV_CMD_LOCAL_OBJECTS_OFS = -$4;
-
-begin
-  while CmdLocalObjects <> nil do begin
-    ErtStrings.DeleteItem(Ptr(CmdLocalObjects.ErtIndex));
-    CmdLocalObjects := CmdLocalObjects.Prev;
+    CmdLocalObjects := PrevCmdLocalObjects;
+    ServiceMemAllocator.FreePage;
   end;
-
-  CmdLocalObjects := ppointer(Context.EBP + PREV_CMD_LOCAL_OBJECTS_OFS)^;
-  ServiceMemAllocator.FreePage;
-  result := true;
 end;
 
 function Hook_FindErm_BeforeMainLoop (Context: Core.PHookContext): longbool; stdcall;
@@ -8715,9 +8718,10 @@ begin
   (* Ovewrite GetNumAuto call from upper patch with Era filtering method *)
   Core.ApiHook(@CustomGetNumAuto, Core.HOOKTYPE_CALL, Ptr($741EAE));
 
-  (* Set ProcessCmd enter/leave hooks *)
-  Core.ApiHook(@Hook_ProcessCmd, Core.HOOKTYPE_BRIDGE, Ptr($741E3F));
-  ApiJack.HookCode(Ptr($749702), @Hook_ProcessCmd_End);
+  (* Splice ProcessCmd for cmd local memory allocation/deallocation *)
+  ApiJack.StdSplice(@ZvsProcessCmd, @Hook_ProcessCmd, ApiJack.CONV_CDECL, 3);
+  //Core.ApiHook(@Hook_ProcessCmd, Core.HOOKTYPE_BRIDGE, Ptr($741E3F));
+  //ApiJack.HookCode(Ptr($749702), @Hook_ProcessCmd_End);
 
   (* Replace ERM interpolation function *)
   Core.ApiHook(@InterpolateErmStr, Core.HOOKTYPE_JUMP, @ZvsInterpolateStr);
