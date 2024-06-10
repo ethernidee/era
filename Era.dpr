@@ -14,7 +14,7 @@ uses Math,
   Trans, Rainbow, Triggers, Stores, Lodman, Graph,
   AdvErm, Scripts, ErmTracking, PoTweak, SndVid, EraButtons,
   Dwellings,
-  EraSettings, Extern;
+  EraSettings, WogEvo, Extern;
 
 begin
   SysUtils.DecimalSeparator := '.';
