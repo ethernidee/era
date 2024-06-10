@@ -680,7 +680,9 @@ exports
   ToStaticStr,
   tr,
   Trans.ReloadLanguageData,
+  Triggers.FastQuitToGameMenu,
   Triggers.SetRegenerationAbility,
+  Triggers.SetStdRegenerationEffect,
   Tweaks.RandomRangeWithFreeParam,
   WriteSavegameSection,
   WriteStrToIni;

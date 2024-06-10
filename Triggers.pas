@@ -20,7 +20,9 @@ uses
   GameExt,
   Heroes,
   PatchApi,
-  Utils;
+  Tweaks,
+  Utils,
+  WogEvo;
 
 type
 (* Import *)
@@ -32,6 +34,11 @@ const
 
 (* Returns true, if current moment is between GameEnter and GameLeave events *)
 function IsGameLoop: boolean;
+
+(* Exits adventure manager dialogs and/or all subdialogs and immediately returns to game menu screen by raising special exception.
+  TargetScreen: -1 (no screen), 102 - Load Menu, etc *)
+procedure FastQuitToGameMenu (TargetScreen: integer); stdcall;
+
 procedure SetRegenerationAbility (MonId: integer; Chance: integer = 100; HitPoints: integer = STD_REGENERATION_VALUE; HpPercents: integer = 0); stdcall;
 procedure SetStdRegenerationEffect (Level7Percents: integer; HpPercents: integer); stdcall;
 
@@ -61,6 +68,7 @@ type
 
 var
   ZvsCanNpcRegenerate:   function (MonType: integer; Stack: Heroes.PBattleStack): integer cdecl = Ptr($76D844);
+  ZvsIsNpcNotCreature:   function (Stack: HEroes.PBattleStack): boolean cdecl = Ptr($76BA4D);
   ZvsCrExpBonRegenerate: function (Stack: Heroes.PBattleStack; HpLost: integer): integer cdecl = Ptr($71EAA6);
 
 var
@@ -385,24 +393,177 @@ begin
   result := true;
 end;
 
-procedure Hook_MainGameLoop (OrigFunc: pointer; This: pointer); stdcall;
+// ======================================== GAME LOOP AND EXCEPTION HANDLING ======================================== //
+const
+  // Custom Era exception. Parameters (Subtype: integer; ...: integer)
+  EXCEPTION_CODE_ERA                   = $0EEFFFEE;
+  EXCEPTION_ERA_FAST_QUIT_TO_GAME_MENU = 1377;
+
+type
+  PExceptionRegistration = ^TExceptionRegistration;
+  TExceptionRegistration = packed record
+    PrevRegistration: PExceptionRegistration;
+    Handler:          pointer;
+  end;
+
+  PDelphiExceptionRegistration = ^TDelphiExceptionRegistration;
+  TDelphiExceptionRegistration = packed record
+    PrevRegistration: PExceptionRegistration;
+    Handler:          pointer;
+    Custom:           integer;
+  end;
+
+var
+{U} ExceptionContext: Windows.PContext;
+{U} ExceptionRecord:  Windows.PExceptionRecord;
+{U} ExceptionArgs:    Utils.PEndlessIntArr;
+
+{$STACKFRAMES OFF}
+procedure SetFrameExceptionHandler (ExceptionRegistration: PExceptionRegistration); assembler;
+asm
+  mov eax, ExceptionRegistration
+  mov ecx, fs:[0]
+  mov [eax].TExceptionRegistration.PrevRegistration, ecx
+  mov fs:[0], eax
+end;
+
+procedure UnsetFrameExceptionHandler (ExceptionRegistration: PExceptionRegistration); assembler;
+asm
+  mov eax, ExceptionRegistration
+  mov eax, [eax].TExceptionRegistration.PrevRegistration
+  mov dword ptr fs:[0], eax
+end;
+
+function EnhancedExceptionHandler (
+  ExceptionRecordPtr: Windows.PExceptionRecord;
+  EstablisherFrame:   PDelphiExceptionRegistration;
+  Context:            Windows.PContext;
+  DispatcherContext:  pointer
+): integer; cdecl; assembler;
+asm
+  // Save exception context and record pointers in global variable, because Delphi uses only ExceptionRecord and only for EExternalException
+  mov eax, ExceptionRecordPtr
+  mov ExceptionRecord, eax
+  lea eax, [eax].TExceptionRecord.ExceptionInformation
+  mov ExceptionArgs, eax
+  mov eax, Context
+  mov ExceptionContext, eax
+
+  // Restore original Handler and Custom fields of exception registration structure
+  mov eax, EstablisherFrame
+
+  mov ecx, [eax].TDelphiExceptionRegistration.Custom
+  mov edx, [ecx].TDelphiExceptionRegistration.Custom
+  mov [eax].TDelphiExceptionRegistration.Custom, edx
+
+  mov edx, [ecx].TDelphiExceptionRegistration.Handler
+  mov [eax].TDelphiExceptionRegistration.Handler, edx
+
+  // Pass control to original handler
+  jmp edx
+end;
+
+procedure EnhanceExceptionHandler (ExceptionRegistrationBackup: PDelphiExceptionRegistration); assembler;
+asm
+  // Make existing top exception handler backup
+  mov eax, ExceptionRegistrationBackup
+  mov ecx, fs:[0]
+
+  mov edx, [ecx].TDelphiExceptionRegistration.Handler
+  mov [eax].TDelphiExceptionRegistration.Handler, edx
+
+  mov edx, [ecx].TDelphiExceptionRegistration.Custom
+  mov [eax].TDelphiExceptionRegistration.Custom, edx
+
+  // Replace top exception registration fields with enhanced handler and pointer to backup
+  mov [ecx].TDelphiExceptionRegistration.Custom, eax
+  mov [ecx].TDelphiExceptionRegistration.Handler, OFFSET EnhancedExceptionHandler
+end;
+{$STACKFRAMES ON}
+
+function Hook_MainGameLoop (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  ExceptionRegistration: TDelphiExceptionRegistration;
+
+begin
+  try
+    EnhanceExceptionHandler(@ExceptionRegistration);
+    TProcedure(Ptr($4EEA70))();
+  except
+    Tweaks.ProcessUnhandledException(ExceptionRecord, ExceptionContext);
+  end;
+
+  result := false;
+end;
+
+procedure Hook_ExecuteManager (OrigFunc: pointer; This: pointer); stdcall;
+var
+  ExceptionRegistration: TDelphiExceptionRegistration;
+  Left:                  boolean;
+  ShouldFastQuit:        boolean;
+
+  function Leave: boolean;
+  begin
+    if not Left then begin
+      Left := true;
+
+      if MainGameLoopDepth > 0 then begin
+        Dec(MainGameLoopDepth);
+
+        if MainGameLoopDepth = 0 then begin
+          Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+        end;
+      end;
+    end;
+
+    result := MainGameLoopDepth = 0;
+  end;
+
 begin
   Inc(MainGameLoopDepth);
+  Left           := false;
+  ShouldFastQuit := false;
 
-  if MainGameLoopDepth = 1 then begin
-    Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);
+  try
+    EnhanceExceptionHandler(@ExceptionRegistration);
+
+    if MainGameLoopDepth = 1 then begin
+      Erm.FireErmEventEx(Erm.TRIGGER_ONGAMEENTER, []);
+    end;
+
+    PatchApi.Call(PatchApi.THISCALL_, OrigFunc, [This]);
+    Leave;
+  except
+    if (ExceptionRecord.ExceptionCode = EXCEPTION_CODE_ERA) and (ExceptionArgs[0] = EXCEPTION_ERA_FAST_QUIT_TO_GAME_MENU) then begin
+      Heroes.MainMenuTarget^ := ExceptionArgs[1];
+      ShouldFastQuit         := not Leave;
+    end else begin
+      Tweaks.ProcessUnhandledException(ExceptionRecord, ExceptionContext);
+    end;
   end;
 
-  PatchApi.Call(PatchApi.THISCALL_, OrigFunc, [This]);
-
-  if MainGameLoopDepth > 0 then begin
-    Dec(MainGameLoopDepth);
+  if ShouldFastQuit then begin
+    FastQuitToGameMenu(Heroes.MainMenuTarget^);
   end;
+end; // .procedure Hook_ExecuteManager
 
-  if MainGameLoopDepth = 0 then begin
-    Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+procedure RaiseExceptionEx (Code: integer; const Args: array of integer);
+begin
+  Windows.RaiseException(EXCEPTION_CODE_ERA, 0, Length(Args), @Args[0]);
+end;
+
+procedure FastQuitToGameMenu (TargetScreen: integer); stdcall;
+var
+  GameState: Heroes.TGameState;
+
+begin
+  Heroes.GetGameState(GameState);
+
+  if GameState.RootDlgId <> 0 then begin
+    RaiseExceptionEx(EXCEPTION_CODE_ERA, [EXCEPTION_ERA_FAST_QUIT_TO_GAME_MENU, TargetScreen])
   end;
 end;
+// ====================================== END GAME LOOP AND EXCEPTION HANDLING ====================================== //
 
 function Hook_KingdomOverviewMouseClick (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
@@ -585,6 +746,13 @@ begin
   StdRegenHpPercents     := Alg.ToRange(Level7Percents, 0, 100);
 end;
 
+function ImplIsElixirOfLifeStack (Stack: Heroes.PBattleStack): boolean; stdcall;
+begin
+  result :=
+    ((Stack.Flags and Heroes.MON_FLAG_ALIVE) <> 0) or
+    (ZvsIsNpcNotCreature(Stack) and ((Stack.Flags and Heroes.MON_FLAG_UNDEAD) = 0));
+end;
+
 (* Returns standard amount of healed HP for Regeneration ability in Era *)
 function GetStdRenerationAmount (Stack: Heroes.PBattleStack): integer;
 var
@@ -659,9 +827,9 @@ begin
     end;
   end;
 
-  HasElixirOfLife := ((Heroes.MonInfos[MonType].Flags and Heroes.MON_FLAG_ALIVE) <> 0) and
-                     (MonHero <> nil)                                                  and
-                     MonHero.HasArtOnDoll(Heroes.ART_ELIXIR_OF_LIFE);
+  HasElixirOfLife := (MonHero <> nil)                                and
+                     MonHero.HasArtOnDoll(Heroes.ART_ELIXIR_OF_LIFE) and
+                     WogEvo.IsElixirOfLifeStack(Stack);
 
   // Elixir of Life regeneration is used only if it's greater than the native one
   if HasElixirOfLife then begin
@@ -898,18 +1066,11 @@ end;
 procedure OnGameLeave (Event: GameExt.PEvent); stdcall;
 begin
   GameExt.SetMapDir('');
-
-  // Fix incompatibilities with older HD mod versions
-  if MainGameLoopDepth <> 0 then begin
-    MainGameLoopDepth := 0;
-    Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
-  end;
 end;
 
 procedure OnAbnormalGameLeave (Event: GameExt.PEvent); stdcall;
 begin
-  MainGameLoopDepth := 0;
-  Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+  Core.FatalError('Not supported. Use ERA API for fast quit to game menu');
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
@@ -937,8 +1098,11 @@ begin
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402298));
   Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
 
-  (* MainGameCycle: OnEnterGame, OnLeaveGame and MapFolder settings*)
-  ApiJack.StdSplice(Ptr($4B0BA0), @Hook_MainGameLoop, ApiJack.CONV_THISCALL, 1);
+  (* Main game cycle (AdvMgr, CombatMgr): OnEnterGame, OnLeaveGame and MapFolder settings*)
+  ApiJack.StdSplice(Ptr($4B0BA0), @Hook_ExecuteManager, ApiJack.CONV_THISCALL, 1);
+
+  (* Set top level main loop exception handler *)
+  ApiJack.HookCode(Ptr($4F824A), @Hook_MainGameLoop);
 
   (* Kingdom Overview mouse click *)
   ApiJack.HookCode(Ptr($521E50), @Hook_KingdomOverviewMouseClick);
@@ -1015,6 +1179,7 @@ begin
 end;
 
 begin
+  WogEvo.SetIsElixirOfLifeStackFunc(@ImplIsElixirOfLifeStack);
   InitializeMonsWithRegeneration;
 
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
