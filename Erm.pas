@@ -5749,7 +5749,6 @@ begin
   AfterTriggers:
 
   finally // begin resources finalization block //
-
   Dec(ErmTriggerDepth);
 
   if HasEventHandlers then begin

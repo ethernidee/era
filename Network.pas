@@ -369,7 +369,7 @@ begin
   end; // .else
 end; // .function ProcessNetworkData
 
-function Hook_NetworkProcessOtherData (OrigFunc: pointer; AdvMan: Heroes.PAdvManager; NetData: Heroes.PNetData): integer; stdcall;
+function Hook_NetworkProcessOtherData (OrigFunc: pointer; WndMan: Heroes.PWndManager; NetData: Heroes.PNetData): integer; stdcall;
 const
   WOG_FUNC_RECEIVER_NET_AM_COMMAND = $768841;
 
@@ -378,7 +378,7 @@ begin
     PatchApi.Call(THISCALL_, Ptr(WOG_FUNC_RECEIVER_NET_AM_COMMAND), [NetData]);
   end;
 
-  result := PatchApi.Call(THISCALL_, OrigFunc, [AdvMan, NetData]);
+  result := PatchApi.Call(THISCALL_, OrigFunc, [WndMan, NetData]);
 end;
 
 function Hook_NetworkProcessHeroesDataFromDefender (Context: ApiJack.PHookContext): longbool; stdcall;

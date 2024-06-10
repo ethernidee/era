@@ -1131,9 +1131,9 @@ type
     function GetActiveStack: PBattleStack;
   end; // .record TCombatManager
 
-  PPAdvManager = ^PAdvManager;
-  PAdvManager  = ^TAdvManager;
-  TAdvManager  = packed record
+  PPWndManager = ^PWndManager;
+  PWndManager  = ^TWndManager;
+  TWndManager  = packed record
     _1:           array [1..55] of byte;
     DlgResItemId: integer;
     _2:           array [60..64] of byte;
@@ -1165,7 +1165,7 @@ const
   ZvsRandom:   function (MinValue, MaxValue: integer): integer cdecl = Ptr($710509);
   TimeGetTime: function: integer = Ptr($77114A);
 
-  WndManagerPtr:    PPAdvManager    = Ptr($6992D0);
+  WndManagerPtr:    PPWndManager    = Ptr($6992D0);
   GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
   SwapManagerPtr:   ppointer        = Ptr($6A3D90);
@@ -1552,7 +1552,7 @@ begin
   PatchApi.Call(THISCALL_, Ptr($404180), [@Self, Str, StrLen]);
 end;
 
-function TAdvManager.GetRootDlgId: integer;
+function TWndManager.GetRootDlgId: integer;
 begin
   result := 0;
 
@@ -1561,7 +1561,7 @@ begin
   end;
 end;
 
-function TAdvManager.GetCurrentDlgId: integer;
+function TWndManager.GetCurrentDlgId: integer;
 begin
   result := 0;
 

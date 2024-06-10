@@ -873,7 +873,7 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsEnter2Monster2
 
-function Hook_StartBattle (OrigFunc: pointer; AdvMan: Heroes.PAdvManager; PackedCoords: integer; AttackerHero: Heroes.PHero; AttackerArmy: Heroes.PArmy; DefenderPlayerId: integer;
+function Hook_StartBattle (OrigFunc: pointer; WndMan: Heroes.PWndManager; PackedCoords: integer; AttackerHero: Heroes.PHero; AttackerArmy: Heroes.PArmy; DefenderPlayerId: integer;
                            DefenderTown: Heroes.PTown; DefenderHero: Heroes.PHero; DefenderArmy: Heroes.PArmy; Seed, Unk10: integer; IsBank: boolean): integer; stdcall;
 
 const
@@ -910,7 +910,7 @@ begin
     CombatId := DEFAULT_COMBAT_ID;
   end;
 
-  result    := PatchApi.Call(THISCALL_, OrigFunc, [AdvMan, PackedCoords, AttackerHero, AttackerArmy, DefenderPlayerId, DefenderTown, DefenderHero, DefenderArmy, Seed, Unk10, IsBank]);
+  result    := PatchApi.Call(THISCALL_, OrigFunc, [WndMan, PackedCoords, AttackerHero, AttackerArmy, DefenderPlayerId, DefenderTown, DefenderHero, DefenderArmy, Seed, Unk10, IsBank]);
   GlobalRng := QualitativeRng;
 end; // .function Hook_StartBattle
 

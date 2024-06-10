@@ -2839,7 +2839,7 @@ begin
   result            := PatchApi.Call(THISCALL_, OrigFunc, [Self, MapTile, Unk1, Unk2]);
 end;
 
-function Hook_ZvsHintWindow (OrigFunc: pointer; Self: Heroes.PAdvManager; x, y, z: integer): integer; stdcall;
+function Hook_ZvsHintWindow (OrigFunc: pointer; Self: Heroes.PWndManager; x, y, z: integer): integer; stdcall;
 begin
   Heroes.TextBuf[0] := #0;
   TileHintEventType := TILE_POPUP_EVENT;
