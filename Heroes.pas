@@ -1075,12 +1075,14 @@ type
     Pos:       integer; // +0x38
     Unk2:      array [$3C..$58 - 1] of byte;
     HpLost:    integer;
-    Unk3:      array [$5C..$C0 - 1] of byte;
+    Unk3:      array [$5C..$84 - 1] of byte;
+    Flags:     integer;
+    Unk4:      array [$88..$C0 - 1] of byte;
     HitPoints: integer;
-    Unk4:      array [$C4..$F4 - 1] of byte;
+    Unk5:      array [$C4..$F4 - 1] of byte;
     Side:      integer;
     Index:     integer; // 0..21
-    Unk5:      array [$FC..$548 - 1] of byte;
+    Unk6:      array [$FC..$548 - 1] of byte;
   end; // .record TBattleStack
 
   PPCombatManager = ^PCombatManager;
@@ -1167,6 +1169,7 @@ const
   GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
   SwapManagerPtr:   ppointer        = Ptr($6A3D90);
+  MainMenuTarget:   pinteger        = Ptr($697728);
 
   ThisPcHumanPlayerId: pinteger   = Ptr($6995A4);
   CurrentPlayerId:     pinteger   = Ptr($69CCF4);
@@ -1314,6 +1317,7 @@ function DisplayComplexDialog (Text: pchar; PicsConfig: pointer; MsgType: TMesTy
 (***) implementation (***)
 
 uses GameExt, EventMan;
+
 
 function TArtInfo.GetTextField (Ind: integer): PValue;
 begin
