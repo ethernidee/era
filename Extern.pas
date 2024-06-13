@@ -190,6 +190,11 @@ begin
   Lodman.GlobalRedirectFile(OldFileName, NewFileName);
 end;
 
+function TakeScreenshot (FilePath: pchar; Quality: integer; Flags: integer): TDwordBool; stdcall;
+begin
+  result := ord(Graph.TakeScreenshot(FilePath, Quality, Flags));
+end;
+
 function tr (const Key: pchar; const Params: array of pchar): pchar; stdcall;
 var
   ParamList:   Utils.TArrayOfStr;
@@ -678,6 +683,7 @@ exports
   Splice,
   SplitMix32,
   ToStaticStr,
+  TakeScreenshot,
   tr,
   Trans.ReloadLanguageData,
   Triggers.FastQuitToGameMenu,
