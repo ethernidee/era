@@ -52,8 +52,12 @@ const
   DEF_PNG_FRAMES_DIR = 'Data\Defs';
   PCX_PNG_FRAMES_DIR = 'Data\Pcx';
 
+  (* TakeScreenshot flags *)
+  TS_FLAG_HIDE_CURSOR = 1;
+
 type
   (* Import *)
+  TCanvas     = Graphics.TCanvas;
   TGraphic    = Graphics.TGraphic;
   TBitmap     = Graphics.TBitmap;
   TJpegImage  = Jpeg.TJpegImage;
@@ -139,6 +143,9 @@ function LoadPngResource (const FilePath: string): {On} ResLib.TSharedResource;
 
 (* Tries to load PNG replacement for pcx file name and returns success flag *)
 function PcxPngExists (const PcxName: string): boolean;
+
+(* Takes game window screenshot and saves it in specified file *)
+function TakeScreenshot (const FilePath: string; Quality: integer = 80; Flags: integer = 0): boolean;
 
 function GetDefFrameWidth (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): integer;
 function GetDefFrameHeight (Def: Heroes.PDefItem; GroupInd, FrameInd: integer): integer;
@@ -856,46 +863,6 @@ begin
   end;
 end;
 
-function RawImageToString (Image: TRawImage): string;
-var
-{O} Stream:         Classes.TStringStream;
-{O} Png:            TPngObject;
-    Pixel:          GraphTypes.PColor32;
-    Canvas:         GraphTypes.TArrayOfColor32;
-    DrawImageSetup: TDrawImageSetup;
-    i, j:           integer;
-
-begin
-  {!} Assert(Image <> nil);
-  Stream := Classes.TStringStream.Create('');
-  Png    := TPngObject.CreateBlank(PngImage.COLOR_RGB, 8, Image.Width, Image.Height);
-  result := '';
-  // * * * * * //
-  Canvas := nil;
-  SetLength(Canvas, Image.Width * Image.Height);
-  DrawImageSetup.Init;
-  Image.DrawToOpaque32Buf(0, 0, 0, 0, Image.Width, Image.Height, Image.Width, Image.Height, @Canvas[0], Image.Width * sizeof(Canvas[0]), DrawImageSetup);
-  Pixel := @Canvas[0];
-
-  for j := 0 to Image.Height - 1 do begin
-    for i := 0 to Image.Width - 1 do begin
-      Png.Pixels[i, j] := (Pixel.Red + Pixel.Green shl 8 + Pixel.Blue shl 16);
-      Inc(Pixel);
-    end;
-  end;
-
-  Png.SaveToStream(Stream);
-  result := Stream.DataString;
-  // * * * * * //
-  SysUtils.FreeAndNil(Stream);
-  SysUtils.FreeAndNil(Png);
-end; // .function RawImageToString
-
-procedure SaveRawImageAsPng (RawImage: TRawImage; const FilePath: string);
-begin
-  Files.WriteFileContents(RawImageToString(RawImage), FilePath);
-end;
-
 function GetPcxPng (PcxName: string): {On} ResLib.TSharedResource; forward;
 
 function LoadRawImage32NoCaching (const FilePath: string): {On} TRawImage32;
@@ -1394,6 +1361,204 @@ begin
   end;
 
   GraphTypes.SetColor16Mode(Color16Mode);
+end;
+
+function ImageToString (Image: TGraphic): string;
+var
+{O} Stream: Classes.TStringStream;
+
+begin
+  Stream := Classes.TStringStream.Create('');
+  // * * * * * //
+  Image.SaveToStream(Stream);
+  result := Stream.DataString;
+  // * * * * * //
+  SysUtils.FreeAndNil(Stream);
+end;
+
+function ImageToFile (Image: TGraphic; const FilePath: string): boolean;
+begin
+  result := true;
+
+  try
+    Image.SaveToFile(FilePath);
+  except
+    result := false;
+  end;
+end;
+
+function BgraBufToRgbPng (Buf: GraphTypes.PColor32Arr; Width: integer; Height: integer; ScanlineSize: integer; CompressionLevel: integer = 6): {O} TPngObject;
+var
+  SrcPixel:    GraphTypes.PColor32;
+  PngPixel:    GraphTypes.PBgr24Color;
+  ScanlineGap: integer;
+  i, j:        integer;
+
+begin
+  {!} Assert(Buf <> nil);
+  result   := TPngObject.CreateBlank(PngImage.COLOR_RGB, 8, Width, Height);
+  PngPixel := nil;
+  SrcPixel := pointer(Buf);
+  // * * * * * //
+  ScanlineGap := ScanlineSize - Width * sizeof(Buf[0]);
+
+  for j := 0 to Height - 1 do begin
+    PngPixel := result.Scanline[j];
+
+    for i := 0 to Width - 1 do begin
+      PngPixel.Blue  := SrcPixel.Blue;
+      PngPixel.Green := SrcPixel.Green;
+      PngPixel.Red   := SrcPixel.Red;
+
+      Inc(SrcPixel);
+      Inc(PngPixel);
+    end;
+
+    Inc(pbyte(SrcPixel), ScanlineGap);
+  end;
+
+  result.CompressionLevel := CompressionLevel;
+end; // .function BgraBufToRgbPng
+
+function RawImageToRgbPng (Image: TRawImage; CompressionLevel: integer = 6): {O} TPngObject;
+var
+  BgraBuf:        GraphTypes.TArrayOfColor32;
+  DrawImageSetup: TDrawImageSetup;
+  ScanlineSize:   integer;
+
+begin
+  {!} Assert(Image <> nil);
+  result  := nil;
+  BgraBuf := nil;
+  // * * * * * //
+  SetLength(BgraBuf, Image.Width * Image.Height);
+  ScanlineSize := Image.Width * sizeof(BgraBuf[0]);
+
+  DrawImageSetup.Init;
+  Image.DrawToOpaque32Buf(0, 0, 0, 0, Image.Width, Image.Height, Image.Width, Image.Height, @BgraBuf[0], ScanlineSize, DrawImageSetup);
+
+  result := BgraBufToRgbPng(pointer(BgraBuf), Image.Width, Image.Height, ScanlineSize, CompressionLevel);
+end;
+
+procedure SaveRawImageAsPng (RawImage: TRawImage; const FilePath: string; CompressionLevel: integer = 6);
+var
+{O} Png: TPngObject;
+
+begin
+  Png := RawImageToRgbPng(RawImage, CompressionLevel);
+  // * * * * * //
+  ImageToFile(Png, FilePath);
+  // * * * * * //
+  SysUtils.FreeAndNil(Png);
+end;
+
+function BgraBufToJpeg (Buf: GraphTypes.PColor32Arr; Width: integer; Height: integer; ScanlineSize: integer; CompressionQuality: integer = 80): {O} TJpegImage;
+var
+{O} Bitmap:             TBitmap;
+    CommonScanlineSize: integer;
+    j:                  integer;
+
+begin
+  Bitmap := TBitmap.Create;
+  result := TJpegImage.Create;
+  // * * * * * //
+  Bitmap.PixelFormat := Graphics.pf32bit;
+  Bitmap.SetSize(Width, Height);
+  CommonScanlineSize := Math.Min(ScanlineSize, Width * sizeof(Buf[0]));
+
+  for j := 0 to Height - 1 do begin
+    Utils.CopyMem(CommonScanlineSize, Buf, Bitmap.Scanline[j]);
+    Inc(pbyte(Buf), ScanlineSize);
+  end;
+
+  result.Assign(Bitmap);
+  result.CompressionQuality := CompressionQuality;
+  // * * * * * //
+  SysUtils.FreeAndNil(Bitmap);
+end;
+
+(* Currently drawing cursors in 16-bit mode is not implemented *)
+procedure DrawGameCursorToOpaque32Buf (Buf: GraphTypes.PColor32Arr; Width: integer; Height: integer; ScanlineSize: integer);
+var
+{U} MouseManager:     Heroes.PMouseManager;
+{U} DefFrame:         Heroes.PDefFrame;
+    CursorPos:        Windows.TPoint;
+    CursorHotspotInd: integer;
+
+begin
+  MouseManager := Heroes.MouseManagerPtr^;
+  // * * * * * //
+  if (Heroes.hWnd^ = 0)              or
+     (Heroes.hWnd^ = -1)             or
+     (MouseManager = nil)            or
+     // (MouseManager.CursorHidden > 0) or // TODO: disabled due to invalid field value with HD mod, another cursor visiblity detection is necessary
+     (MouseManager.CursorDef = nil)  or
+     (Heroes.BytesPerPixelPtr^ <> sizeof(Buf[0]))
+  then begin
+    exit;
+  end;
+
+  if (MouseManager.CursorDef.NumGroups < 1) or (MouseManager.CursorFrameInd >= MouseManager.CursorDef.Groups[0].NumFrames) then begin
+    exit;
+  end;
+
+  CursorPos        := WinUtils.GetCursorLocalPos(Heroes.hWnd^);
+  DefFrame         := MouseManager.CursorDef.Groups[0].Frames[MouseManager.CursorFrameInd];
+  CursorHotspotInd := 2 * (MouseManager.CursorFrameInd + 144 * MouseManager.CursorType);
+
+  MouseManager.CursorDef.DrawInterfaceDefGroupFrame(
+    0, MouseManager.CursorFrameInd, 0, 0, DefFrame.DefWidth, DefFrame.DefHeight,
+    pointer(Buf), (CursorPos.x and not 1) - Heroes.CursorHotspotsX[CursorHotspotInd], CursorPos.y - Heroes.CursorHotspotsY[CursorHotspotInd],
+    Width, Height, ScanlineSize, false, true
+  );
+end;
+
+function TakeScreenshot (const FilePath: string; Quality: integer; Flags: integer): boolean;
+type
+  TImgFormat = (FORMAT_UNKNOWN, FORMAT_JPEG, FORMAT_PNG);
+
+var
+{O} RawScreenshot: WinUtils.TRawImage;
+{O} Screenshot:    Graphics.TGraphic;
+    ImgFormat:     TImgFormat;
+    FileExt:       string;
+    ScanlineSize:  integer;
+
+begin
+  RawScreenshot := nil;
+  Screenshot    := nil;
+  // * * * * * //
+  result    := false;
+  ImgFormat := FORMAT_UNKNOWN;
+
+  Quality := Alg.ToRange(Quality, 0, 100);
+  FileExt := SysUtils.AnsiLowerCase(StrLib.ExtractExt(FilePath));
+
+  if (FileExt = 'jpg') or (FileExt = 'jpeg') then begin
+    ImgFormat := FORMAT_JPEG;
+  end else if FileExt = 'png' then begin
+    ImgFormat := FORMAT_PNG;
+  end;
+
+  if (Heroes.hWnd^ <> 0) and (Heroes.hWnd^ <> -1) and (ImgFormat in [FORMAT_PNG, FORMAT_JPEG]) and (WinUtils.CaptureClientAreaScreenshot(Heroes.hWnd^, RawScreenshot)) then begin
+    ScanlineSize := RawScreenshot.Width * sizeof(GraphTypes.TColor32);
+
+    if (Flags and TS_FLAG_HIDE_CURSOR) = 0 then begin
+      DrawGameCursorToOpaque32Buf(pointer(RawScreenshot.Buf), RawScreenshot.Width, RawScreenshot.Height, ScanlineSize);
+    end;
+
+    case ImgFormat of
+      FORMAT_PNG:  Screenshot := BgraBufToRgbPng(pointer(RawScreenshot.Buf), RawScreenshot.Width, RawScreenshot.Height, ScanlineSize);
+      FORMAT_JPEG: Screenshot := BgraBufToJpeg(pointer(RawScreenshot.Buf), RawScreenshot.Width, RawScreenshot.Height, ScanlineSize, Quality);
+    end;
+
+    Assert(Screenshot <> nil, 'Unknown image format/extension for screenshot saving: ' + FilePath);
+
+    result := ImageToFile(Screenshot, FilePath);
+  end;
+  // * * * * * //
+  SysUtils.FreeAndNil(RawScreenshot);
+  SysUtils.FreeAndNil(Screenshot);
 end;
 
 procedure OnBeforeScriptsReload (Event: GameExt.PEvent); stdcall;
