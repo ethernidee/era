@@ -1131,6 +1131,44 @@ type
     function GetActiveStack: PBattleStack;
   end; // .record TCombatManager
 
+  PMouseManager = ^TMouseManager;
+  TMouseManager = packed record
+    VMT:                 integer; // 00000000
+    field_4:             integer; // 00000004
+    field_8:             integer; // 00000008
+    field_C:             integer; // 0000000C
+    field_10:            integer; // 00000010
+    ClassName:           array [0..11] of char; // 00000014
+    field_20:            integer; // 00000020
+    field_24:            integer; // 00000024
+    field_28:            integer; // 00000028
+    field_2C:            integer; // 0000002C
+    field_30:            integer; // 00000030
+    field_34:            integer; // 00000034
+    field_38:            integer; // 00000038
+    field_3C:            integer; // 0000003C
+    field_40:            integer; // 00000040 struct offset (_Pcx16_)
+    field_44:            integer; // 00000044
+    field_48:            integer; // 00000048
+    CursorType:          integer; // 0000004C
+    CursorFrameInd:      integer; // 00000050
+    CursorDef:           PDefItem; // 00000054 offset
+    CursorDrawX:         integer; // 00000058
+    CursorDrawY:         integer; // 0000005C
+    field_60:            integer; // 00000060
+    field_64:            integer; // 00000064
+    CursorHidden:        integer; // 00000068
+    _align69:            array [1..3] of byte;
+    MouseX:              integer; // 0000006C
+    MouseY:              integer; // 00000070
+    field_74:            integer; // 00000074
+    field_78:            Windows._RTL_CRITICAL_SECTION; // 00000078
+  end;
+
+  PInputManager = ^TInputManager;
+  TInputManager = packed record
+  end;
+
   PPWndManager = ^PWndManager;
   PWndManager  = ^TWndManager;
   TWndManager  = packed record
@@ -1166,10 +1204,15 @@ const
   TimeGetTime: function: integer = Ptr($77114A);
 
   WndManagerPtr:    PPWndManager    = Ptr($6992D0);
+  MouseManagerPtr:  ^PMouseManager  = Ptr($6992B0);
+  InputManagerPtr:  ^PInputManager  = Ptr($699530);
   GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
   CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
   SwapManagerPtr:   ppointer        = Ptr($6A3D90);
   MainMenuTarget:   pinteger        = Ptr($697728);
+
+  CursorHotspotsX:  Utils.PEndlessIntArr = Ptr($67FFA0);
+  CursorHotspotsY:  Utils.PEndlessIntArr = Ptr($67FFA4);
 
   ThisPcHumanPlayerId: pinteger   = Ptr($6995A4);
   CurrentPlayerId:     pinteger   = Ptr($69CCF4);
@@ -2422,6 +2465,8 @@ begin
   MonAssignmentsPerTown := ppointer($428605)^;
   ArtInfos              := ppointer($660B68)^;
   Spells                := ppointer($687FA8)^;
+  CursorHotspotsX       := ppointer($50D09D)^;
+  CursorHotspotsY       := ppointer($50D0AF)^;
 end;
 
 begin
