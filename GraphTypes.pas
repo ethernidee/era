@@ -1,6 +1,7 @@
 unit GraphTypes;
 (*
   Common types and constants for graphics units.
+  Default 32bit color format is BGRA.
 *)
 
 
@@ -96,6 +97,20 @@ type
   TArrayOfColor16 = array of TColor16;
   TArrayOfColor24 = array of TColor24;
   TArrayOfColor32 = array of TColor32;
+
+  PRgb24Color = ^TRgb24Color;
+  TRgb24Color = packed record
+    Red:   byte;
+    Blue:  byte;
+    Green: byte;
+  end;
+
+  PBgr24Color = ^TBgr24Color;
+  TBgr24Color = packed record
+    Blue:  byte;
+    Green: byte;
+    Red:   byte;
+  end;
 
   TFixedSb = packed record
     Saturation: integer;
