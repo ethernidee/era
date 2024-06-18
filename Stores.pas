@@ -1,16 +1,31 @@
 unit Stores;
-{
-DESCRIPTION: Provides ability to store safely data in savegames using named sections.
-AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Provides ability to store safely data in savegames using named sections
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
+
 uses
-  Windows, SysUtils, Math, Utils, Crypto, Files, AssocArrays, DataLib, StrLib,
-  Core, GameExt, Heroes, EventMan;
+  Math,
+  SysUtils,
+  Windows,
+
+  AssocArrays,
+  Core,
+  Crypto,
+  DataLib,
+  Files,
+  StrLib,
+  Utils,
+
+  EraSettings,
+  EventMan,
+  GameExt,
+  Heroes;
 
 const
-  DUMP_SAVEGAME_SECTIONS_DIR = GameExt.DEBUG_DIR + '\Savegame Sections';
+  DUMP_SAVEGAME_SECTIONS_DIR = EraSettings.DEBUG_DIR + '\Savegame Sections';
 
 type
   (* Import *)
@@ -156,7 +171,7 @@ begin
 
     Section.AppendBuf(DataSize, Data);
 
-    if false and DumpSavegameSectionsOpt then begin
+    if DumpSavegameSectionsOpt then begin
       Files.AppendFileContents(StrLib.BufToStr(Data, DataSize), GameExt.GameDir + '\' + DUMP_SAVEGAME_SECTIONS_DIR + '\' + SectionName + '.chunks.txt');
     end;
   end; // .if
@@ -646,6 +661,11 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SaveGameRead
 
+procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
+begin
+  DumpSavegameSectionsOpt := EraSettings.GetDebugBoolOpt('Debug.DumpSavegameSections', false);
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   Core.Hook(@Hook_SaveGame, Core.HOOKTYPE_BRIDGE, 5, Ptr($4BEB65));
@@ -659,5 +679,6 @@ end;
 begin
   WritingStorage := AssocArrays.NewStrictAssocArr(StrLib.TStrBuilder);
   ReadingStorage := AssocArrays.NewStrictAssocArr(TStoredData);
+  EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

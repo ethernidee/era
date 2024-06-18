@@ -18,20 +18,22 @@ uses
   Crypto,
   DataLib,
   DlgMes,
-  EventMan,
   FastRand,
   Files,
-  GameExt,
-  Heroes,
   Ini,
   Lists,
-  Network,
-  RscLists,
   StrLib,
   TextScan,
-  Trans,
   TypeWrappers,
-  Utils;
+  Utils,
+
+  EraSettings,
+  EventMan,
+  GameExt,
+  Heroes,
+  Network,
+  RscLists,
+  Trans;
 
 type
   (* Import *)
@@ -49,7 +51,7 @@ const
   FUNC_NAMES_SECTION       = 'Era.FuncNames';
   ERM_SCRIPTS_PATH         = 'Data\s';
   ERS_FILES_PATH           = 'Data\s';
-  EXTRACTED_SCRIPTS_PATH   = GameExt.DEBUG_DIR + '\Scripts';
+  EXTRACTED_SCRIPTS_PATH   = EraSettings.DEBUG_DIR + '\Scripts';
   ERM_TRACKING_REPORT_PATH = DEBUG_DIR + '\erm tracking.erm';
 
   (* Erm command conditions *)
@@ -1376,6 +1378,21 @@ begin
 end;
 
 procedure RegisterErmEventNames; forward;
+
+procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
+begin
+  ErmLegacySupport := EraSettings.GetOpt('ErmLegacySupport').Bool(false);
+
+  with TrackingOpts do begin
+    Enabled := EraSettings.GetDebugBoolOpt('Debug.TrackErm');
+
+    if Enabled then begin
+      MaxRecords          := Math.Max(1, EraSettings.GetOpt('Debug.TrackErm.MaxRecords').Int(10000));
+      DumpCommands        := EraSettings.GetOpt('Debug.TrackErm.DumpCommands')       .Bool(true);
+      IgnoreEmptyTriggers := EraSettings.GetOpt('Debug.TrackErm.IgnoreEmptyTriggers').Bool(true);
+    end;
+  end;
+end;
 
 procedure OnEraLoadScripts (Event: GameExt.PEvent); stdcall;
 begin
@@ -8797,14 +8814,15 @@ begin
 
   InitFastIntOptimizationStructs;
 
-  EventMan.GetInstance.On('OnSavegameWrite',          OnSavegameWrite);
-  EventMan.GetInstance.On('OnSavegameRead',           OnSavegameRead);
-  EventMan.GetInstance.On('OnBeforeWoG',              OnBeforeWoG);
-  EventMan.GetInstance.On('OnAfterWoG',               OnAfterWoG);
-  EventMan.GetInstance.On('$OnEraSaveScripts',        OnEraSaveScripts);
   EventMan.GetInstance.On('$OnEraLoadScripts',        OnEraLoadScripts);
-  EventMan.GetInstance.On('OnBeforeClearErmScripts',  OnBeforeClearErmScripts);
-  EventMan.GetInstance.On('OnGenerateDebugInfo',      OnGenerateDebugInfo);
+  EventMan.GetInstance.On('$OnEraSaveScripts',        OnEraSaveScripts);
+  EventMan.GetInstance.On('$OnLoadEraSettings',       OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterStructRelocations', OnAfterStructRelocations);
+  EventMan.GetInstance.On('OnAfterWoG',               OnAfterWoG);
+  EventMan.GetInstance.On('OnBeforeClearErmScripts',  OnBeforeClearErmScripts);
+  EventMan.GetInstance.On('OnBeforeWoG',              OnBeforeWoG);
+  EventMan.GetInstance.On('OnGenerateDebugInfo',      OnGenerateDebugInfo);
   EventMan.GetInstance.On('OnRemoteErmFuncCall',      OnRemoteErmFuncCall);
+  EventMan.GetInstance.On('OnSavegameRead',           OnSavegameRead);
+  EventMan.GetInstance.On('OnSavegameWrite',          OnSavegameWrite);
 end.

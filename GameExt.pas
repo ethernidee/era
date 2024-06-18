@@ -1,15 +1,34 @@
 unit GameExt;
 (*
-  Game extension support.
-  Author: Alexander Shostak aka Berserker.
+  Description: Game extension support. Era entry point.
+  Author:      Alexander Shostak aka Berserker.
 *)
 
 (***)  interface  (***)
 uses
-  Windows, Math, SysUtils, PatchApi,
-  Utils, DataLib, CFiles, Files, FilesEx, Crypto, StrLib, Core,
-  Lists, CmdApp, Log, WinUtils,
-  VfsImport, BinPatching, EventMan, DlgMes;
+  Math,
+  SysUtils,
+  Windows,
+
+  BinPatching,
+  CmdApp,
+  Core,
+  Crypto,
+  DataLib,
+  DlgMes,
+  Files,
+  FilesEx,
+  Lists,
+  Log,
+  StrLib,
+  Utils,
+  WinUtils,
+
+  EraLog,
+  EraSettings,
+  EventMan,
+  PatchApi,
+  VfsImport;
 
 type
   (* Import *)
@@ -27,15 +46,14 @@ const
   DEFAULT_MOD_LIST_FILE     = MODS_DIR + '\list.txt';
   PLUGINS_PATH              = 'EraPlugins';
   PATCHES_PATH              = 'EraPlugins';
-  DEBUG_DIR                 = 'Debug\Era';
   DEBUG_MAPS_DIR            = 'DebugMaps';
   RUNTIME_DIR               = 'Runtime';
   RANDOM_MAPS_DIR           = 'Random_Maps';
   SAVED_GAMES_DIR           = 'Games';
-  DEBUG_EVENT_LIST_PATH     = DEBUG_DIR + '\event list.txt';
-  DEBUG_PATCH_LIST_PATH     = DEBUG_DIR + '\patch list.txt';
-  DEBUG_MOD_LIST_PATH       = DEBUG_DIR + '\mod list.txt';
-  DEBUG_X86_PATCH_LIST_PATH = DEBUG_DIR + '\x86 patches.txt';
+  DEBUG_EVENT_LIST_PATH     = EraSettings.DEBUG_DIR + '\event list.txt';
+  DEBUG_PATCH_LIST_PATH     = EraSettings.DEBUG_DIR + '\patch list.txt';
+  DEBUG_MOD_LIST_PATH       = EraSettings.DEBUG_DIR + '\mod list.txt';
+  DEBUG_X86_PATCH_LIST_PATH = EraSettings.DEBUG_DIR + '\x86 patches.txt';
 
   CONST_STR = -1;
 
@@ -433,8 +451,12 @@ begin
   Files.ForcePath(GameDir + '\' + RANDOM_MAPS_DIR);
   Files.ForcePath(GameDir + '\' + SAVED_GAMES_DIR);
 
-  // Era started, load settings, initialize logging subsystem
-  EventMan.GetInstance.Fire('OnEraStart', NO_EVENT_DATA, 0);
+  EraSettings.LoadSettings(GameDir);
+  EraLog.InstallLoggers(GameDir);
+  Log.Write('Core', 'CheckVersion', 'Result: ' + ERA_VERSION_STR);
+
+  // Allow other units to load necessary settings
+  EventMan.GetInstance.Fire('$OnLoadEraSettings', NO_EVENT_DATA, 0);
 
   // Run VFS
   ModListFilePath := CmdApp.GetArg(CMDLINE_ARG_MODLIST);
@@ -446,7 +468,7 @@ begin
   VfsImport.MapModsFromListA(pchar(GameDir), pchar(ModsDir), pchar(ModListFilePath));
   Log.Write('Core', 'ReportModList', #13#10 + VfsImport.GetMappingsReportA);
 
-  if DumpVfsOpt then begin
+  if EraSettings.GetDebugBoolOpt('Debug.DumpVirtualFileSystem', false) then begin
     Log.Write('Core', 'DumpVFS', #13#10 + VfsImport.GetDetailedMappingsReportA);
   end;
 

@@ -1,7 +1,7 @@
 unit ResLib;
 (*
-  Library for game resources management, particulary storing them in shared memory, reference counting,
-  caching support.
+  Description: Library for game resources management, particulary storing them in shared memory, reference counting and caching support.
+  Author:      Alexander Shostak aka Berserker
 *)
 
 
@@ -12,9 +12,11 @@ uses
   Utils,
 
   DataLib,
+  StrLib,
+
+  EraSettings,
   EventMan,
-  GameExt,
-  StrLib;
+  GameExt;
 
 type
   (* Import *)
@@ -336,11 +338,20 @@ begin
   end;
 end;
 
+procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
+const
+  V_200_MB = 200000000;
+
+begin
+  ResManCacheSize := EraSettings.GetOpt('ResourceCacheSize').Int(V_200_MB);
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   ResMan := TResourceManager.Create(ResManCacheSize);
 end;
 
 begin
+  EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

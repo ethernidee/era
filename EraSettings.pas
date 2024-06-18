@@ -10,70 +10,91 @@ uses
   SysUtils,
 
   Core,
-  EraLog,
-  Erm,
-  EventMan,
-  GameExt,
-  Heroes,
   Ini,
-  Log,
-  ResLib,
-  SndVid,
-  Stores,
-  Trans,
-  Tweaks,
-  Utils,
-  VfsImport;
+  Log;
 
 const
-  LOG_FILE_NAME = 'log.txt';
+  (* Globally used common directories *)
+  DEBUG_DIR = 'Debug\Era';
+
+  (* Game settings *)
+  DEFAULT_GAME_SETTINGS_FILE = 'default heroes3.ini';
+  GAME_SETTINGS_FILE         = 'heroes3.ini';
+  ERA_SETTINGS_SECTION       = 'Era';
+  GAME_SETTINGS_SECTION      = 'Settings';
+
+type
+  TOption = record
+    Value: string;
+
+    function Str (const Default: string = ''): string;
+    function Int (Default: integer = 0): integer;
+    function Bool (Default: boolean = false): boolean;
+  end;
+
+(* Load Era settings *)
+procedure LoadSettings (const GameDir: string);
+
+(* Returns Era settings option by name *)
+function GetOpt (const OptionName: string): TOption;
+
+function IsDebug: boolean;
+
+(* Returns Era debug option by name. The result is influenced by 'Debug' and 'Debug.Evenything' options *)
+function GetDebugBoolOpt (const OptionName: string; Default: boolean = false): boolean;
 
 
 (***)  implementation  (***)
 
 
 var
-  DebugOpt:           boolean;
-  DebugEverythingOpt: boolean;
+  DebugOpt:             boolean;
+  DebugEverythingOpt:   boolean;
+  GameSettingsFilePath: string;
 
-function GetOptValue (const OptionName: string; const DefVal: string = ''): string;
-const
-  ERA_SECTION = 'Era';
 
+function TOption.Str (const Default: string = ''): string;
 begin
-  if Ini.ReadStrFromIni(OptionName, ERA_SECTION, GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE, result) then begin
-    result := SysUtils.Trim(result);
-  end else begin
-    result := DefVal;
+  result := Self.Value;
+
+  if Self.Value = '' then begin
+    result := Default;
   end;
 end;
 
-function GetOptBoolValue (const OptionName: string; DefValue: boolean = false): boolean;
-var
-  OptVal: string;
-
+function TOption.Int (Default: integer = 0): integer;
 begin
-  OptVal := GetOptValue(OptionName, IfThen(DefValue, '1', '0'));
-  result := OptVal = '1';
-end;
-
-function GetDebugOpt (const OptionName: string; DefValue: boolean = false): boolean;
-begin
-  result := DebugOpt and (DebugEverythingOpt or GetOptBoolValue(OptionName, DefValue));
-end;
-
-function GetOptIntValue (const OptionName: string; DefValue: integer = 0): integer;
-var
-  OptVal: string;
-
-begin
-  OptVal := GetOptValue(OptionName, IntToStr(DefValue));
-
-  if not TryStrToInt(OptVal, result) then begin
-    Log.Write('Settings', 'GetOptIntValue', 'Error. Invalid option "' + OptionName
-                                            + '" value: "' + OptVal + '". Assumed ' + IntToStr(DefValue));
-    result := DefValue;
+  if (Self.Value = '') or not SysUtils.TryStrToInt(Self.Value, result) then begin
+    result := Default;
   end;
+end;
+
+function TOption.Bool (Default: boolean = false): boolean;
+begin
+  result := Default;
+
+  if Self.Value <> '' then begin
+    result := Self.Value <> '0';
+  end;
+end;
+
+function GetOpt (const OptionName: string): TOption;
+begin
+  result.Value := '';
+
+  if Ini.ReadStrFromIni(OptionName, ERA_SETTINGS_SECTION, GameSettingsFilePath, result.Value) then begin
+    result.Value := SysUtils.Trim(result.Value);
+  end;
+end;
+
+function IsDebug: boolean;
+begin
+  result := DebugOpt;
+end;
+
+function GetDebugBoolOpt (const OptionName: string; Default: boolean = false): boolean;
+begin
+  result := DebugOpt and (DebugEverythingOpt or GetOpt(OptionName).Bool(Default));
 end;
 
 procedure InstallLogger (Logger: Log.TLogger);
@@ -91,60 +112,21 @@ begin
   Log.InstallLogger(Logger, Log.FREE_OLD_LOGGER);
 end; // .procedure InstallLogger
 
-procedure VfsLogger (Operation, Message: pchar); stdcall;
+procedure LoadSettings (const GameDir: string);
+var
+  DefaultGameSettingsPath: string;
+
 begin
-  Log.Write('VFS', Operation, Message);
+  GameSettingsFilePath    := GameDir + '\' + GAME_SETTINGS_FILE;
+  DefaultGameSettingsPath := GameDir + '\' + DEFAULT_GAME_SETTINGS_FILE;
+
+  Ini.LoadIni(GameSettingsFilePath);
+  Ini.LoadIni(DefaultGameSettingsPath);
+  Ini.MergeIniWithDefault(GameSettingsFilePath, DefaultGameSettingsPath);
+
+  DebugOpt           := GetOpt('Debug').Bool(true);
+  DebugEverythingOpt := GetOpt('Debug.Everything').Bool(false);
+  Core.AbortOnError  := GetDebugBoolOpt('Debug.AbortOnError', false);
 end;
 
-procedure OnEraStart (Event: GameExt.PEvent); stdcall;
-begin
-  Ini.LoadIni(Heroes.GAME_SETTINGS_FILE);
-  Ini.LoadIni(Heroes.DEFAULT_GAME_SETTINGS_FILE);
-  Ini.MergeIniWithDefault(Heroes.GAME_SETTINGS_FILE, Heroes.DEFAULT_GAME_SETTINGS_FILE);
-
-  DebugOpt           := GetOptBoolValue('Debug', true);
-  DebugEverythingOpt := GetOptBoolValue('Debug.Everything', false);
-
-  if DebugOpt then begin
-    if SysUtils.AnsiLowerCase(GetOptValue('Debug.LogDestination', 'File')) = 'file' then begin
-      InstallLogger(EraLog.TFileLogger.Create(GameExt.DEBUG_DIR + '\' + LOG_FILE_NAME));
-    end else begin
-      InstallLogger(EraLog.TConsoleLogger.Create('Era Log'));
-    end;
-  end else begin
-    InstallLogger(EraLog.TMemoryLogger.Create);
-  end;
-
-  Log.Write('Core', 'CheckVersion', 'Result: ' + GameExt.ERA_VERSION_STR);
-
-  Core.AbortOnError              := GetDebugOpt(    'Debug.AbortOnError',          true);
-  SndVid.LoadCDOpt               := GetOptBoolValue('LoadCD',                      false);
-  Tweaks.CpuTargetLevel          := GetOptIntValue( 'CpuTargetLevel',              33);
-  Tweaks.AutoSelectPcIpMaskOpt   := GetOptValue(    'AutoSelectPcIpMask',          '');
-  Tweaks.UseOnlyOneCpuCoreOpt    := GetOptBoolValue('UseOnlyOneCpuCore',           true);
-  Stores.DumpSavegameSectionsOpt := GetDebugOpt(    'Debug.DumpSavegameSections',  false);
-  GameExt.DumpVfsOpt             := GetDebugOpt(    'Debug.DumpVirtualFileSystem', false);
-  ResLib.ResManCacheSize         := GetOptIntValue( 'ResourceCacheSize',           200000000);
-  Tweaks.DebugRng                := GetOptIntValue( 'Debug.Rng',                   0);
-  Trans.SetLanguage(GetOptValue('Language', 'en'));
-
-  if GetDebugOpt('Debug.LogVirtualFileSystem', false) then begin
-    VfsImport.SetLoggingProc(@VfsLogger);
-  end;
-
-  Erm.ErmLegacySupport := GetOptBoolValue('ErmLegacySupport', false);
-
-  with Erm.TrackingOpts do begin
-    Enabled := GetDebugOpt('Debug.TrackErm');
-
-    if Enabled then begin
-      MaxRecords          := Max(1, GetOptIntValue('Debug.TrackErm.MaxRecords',     10000));
-      DumpCommands        := GetOptBoolValue('Debug.TrackErm.DumpCommands',         true);
-      IgnoreEmptyTriggers := GetOptBoolValue('Debug.TrackErm.IgnoreEmptyTriggers',  true);
-    end;
-  end;
-end; // .procedure OnEraStart
-
-begin
-  EventMan.GetInstance.On('OnEraStart', OnEraStart);
 end.

@@ -1,14 +1,28 @@
 unit Trans;
-{
-DESCRIPTION:  Game localization support.
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Game localization support
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
+
 uses
-  Windows, SysUtils, Utils, DataLib, TypeWrappers,
-  Files, StrLib, Json, Core,
-  GameExt, RscLists, Heroes, EventMan;
+  Windows,
+  SysUtils,
+
+  Core,
+  DataLib,
+  Files,
+  Json,
+  StrLib,
+  TypeWrappers,
+  Utils,
+
+  EraSettings,
+  EventMan,
+  GameExt,
+  Heroes,
+  RscLists;
 
 
 type
@@ -293,6 +307,11 @@ begin
   EventMan.GetInstance.Fire('OnAfterReloadLanguageData');
 end;
 
+procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
+begin
+  SetLanguage(EraSettings.GetOpt('Language').Str('en'));
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   LoadGlobalLangFiles;
@@ -349,7 +368,7 @@ var
   Error: string;
 
 begin
-  Error := MapLangResources.Export(GameExt.GameDir + '\' + GameExt.DEBUG_DIR);
+  Error := MapLangResources.Export(GameExt.GameDir + '\' + EraSettings.DEBUG_DIR);
 
   if Error <> '' then begin
     Heroes.PrintChatMsg('{~r}' + Error + '{~r}');
@@ -359,6 +378,7 @@ end;
 begin
   LangDict         := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   MapLangResources := RscLists.TResourceList.Create;
+  EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeScriptsReload', OnBeforeScriptsReload);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);

@@ -1,20 +1,34 @@
 unit SndVid;
-{
-DESCRIPTION:  Adds snd/vid archives autoloading support
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Adds snd/vid archives autoloading support
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
-uses
-  Windows, SysUtils, Utils, WinWrappers, Files, StrLib, Crypto, AssocArrays,
-  Core, GameExt, Heroes, EventMan;
 
-const  
+uses
+  SysUtils,
+  Windows,
+
+  AssocArrays,
+  Core,
+  Crypto,
+  Files,
+  StrLib,
+  Utils,
+  WinWrappers,
+
+  EraSettings,
+  EventMan,
+  GameExt,
+  Heroes;
+
+const
   CD_GAME_FOLDER = 'Heroes3';
   CD_VIDEO_PATH  = CD_GAME_FOLDER + '\Data\Heroes3.vid';
   CD_AUDIO_PATH  = CD_GAME_FOLDER + '\Data\Heroes3.snd';
-  
-  
+
+
 type
   TArcType  = (ARC_SND, ARC_VID);
 
@@ -23,23 +37,23 @@ type
     Name:   array[0..39] of char; // for ARC_SND name is separated from extension with #0
     Offset: integer;
   end; // .record TArcItem
-  
+
   PVidArcItem = PArcItem;
   TVidArcItem = TArcItem;
-  
+
   PSndArcItem = ^TSndArcItem;
   TSndArcItem = packed record
     Item: TArcItem;
     Size: integer;
   end; // .record TSndArcItem
-  
+
   PItemInfo = ^TItemInfo;
   TItemInfo = record
     hFile:  integer;
     Offset: integer;
     Size:   integer;
   end; // .record TItemInfo
-  
+
   PResourceBuf  = ^TResourceBuf;
   TResourceBuf  = packed record
     IsLoaded: boolean;
@@ -50,7 +64,7 @@ type
 
 var
   LoadCDOpt: boolean;
-  
+
   GameCDFound:  boolean;
   GameCDPath:   string;
 
@@ -61,7 +75,7 @@ function HasSoundReal (const FileName: string): boolean;
 (* Returns true if non-redirected video resource exists *)
 function HasVideoReal (const FileName: string): boolean;
 
-  
+
 (***) implementation (***)
 uses Lodman;
 
@@ -96,7 +110,7 @@ begin
   GameCDPath  :=  'A:\';
   GameCDFound :=  false;
   {!} Assert(Drives <> 0);
-  
+
   i :=  0;
 
   while (i < MAX_NUM_DRIVES) and not GameCDFound do begin
@@ -105,13 +119,13 @@ begin
         GameCDFound := SysUtils.DirectoryExists(GameCDPath + CD_GAME_FOLDER);
       end;
     end;
-    
+
     if not GameCDFound then begin
       GameCDPath[1] :=  CHR(ORD(GameCDPath[1]) + 1);
     end;
     Inc(i);
   end; // .while
-  
+
   Windows.SetErrorMode(OldErrMode);
 end; // .procedure FindGameCD
 
@@ -121,21 +135,21 @@ var
 {U} ArcFiles: AssocArrays.TAssocArray {OF PItemInfo};
 {U} CurrItem: PArcItem;
     hFile:    integer;
-    
+
     NumItems: integer;
     ItemSize: integer;
     ItemName: string;
-    
+
     BufSize:  integer;
     BufStr:   string;
-    
+
     i:        integer;
 
 begin
   ItemInfo  :=  nil;
   ArcFiles  :=  nil;
   CurrItem  :=  nil;
-  // * * * * * // 
+  // * * * * * //
   if
     WinWrappers.FileOpen(ArcPath, SysUtils.fmOpenRead or SysUtils.fmShareDenyWrite, hFile)
   then begin
@@ -152,13 +166,13 @@ begin
       ItemSize := 0;
       {!} Assert(false);
     end; // .case ArcType
-    
+
     if (WinWrappers.FileRead(hFile, NumItems, sizeof(NumItems))) and (NumItems > 0) then begin
       BufSize := NumItems * ItemSize;
       SetLength(BufStr, BufSize);
       {!} Assert(WinWrappers.FileRead(hFile, BufStr[1], BufSize));
       CurrItem := pointer(BufStr);
-      
+
       for i := 0 to NumItems - 1 do begin
         ItemName := pchar(@CurrItem.Name);
 
@@ -166,14 +180,14 @@ begin
           New(ItemInfo);
           ItemInfo.hFile  := hFile;
           ItemInfo.Offset := CurrItem.Offset;
-          
+
           if ArcType = ARC_SND then begin
             ItemInfo.Size := PSndArcItem(CurrItem).Size;
           end;
-          
+
           ArcFiles[ItemName] := ItemInfo; ItemInfo :=  nil;
         end; // .if
-        
+
         CurrItem := Utils.PtrOfs(CurrItem, ItemSize);
       end; // .for
     end; // .if
@@ -190,7 +204,7 @@ begin
       (FileName = 'video.vid')    or
       (FileName = 'heroes3.vid');
   end;
-end; // .function IsOrigArc
+end;
 
 procedure LoadArcs (ArcType: TArcType);
 var
@@ -198,7 +212,7 @@ var
 {O} FileInfo: Files.TFileItemInfo;
     ArcExt:   string;
     FileName: string;
-  
+
 begin
   Locator   :=  Files.TFileLocator.Create;
   FileInfo  :=  nil;
@@ -211,13 +225,13 @@ begin
     ArcExt  :=  '';
     {!} Assert(false);
   end;
-  
+
   Locator.DirPath :=  'Data';
   Locator.InitSearch('*' + ArcExt);
-  
+
   while Locator.NotEnd do begin
     FileName := SysUtils.AnsiLowerCase(Locator.GetNextItem(Files.TItemInfo(FileInfo)));
-    
+
     if
       (SysUtils.ExtractFileExt(FileName) = ArcExt)  and
       not FileInfo.IsDir                            and
@@ -228,10 +242,10 @@ begin
         LoadArc('Data\' + FileName, ArcType);
       end;
     end;
-    
+
     SysUtils.FreeAndNil(FileInfo);
   end; // .while
-  
+
   Locator.FinitSearch;
   // * * * * * //
   SysUtils.FreeAndNil(Locator);
@@ -244,18 +258,18 @@ const
 begin
   (* Load New resources *)
   LoadArcs(ARC_VID);
-  
+
   (* Load CD resources *)
   if SysUtils.FileExists(CD_VIDEO_PATH) then begin
     LoadArc(CD_VIDEO_PATH, ARC_VID);
   end else if LoadCDOpt and GameCDFound then begin
     LoadArc(GameCDPath + CD_VIDEO_PATH, ARC_VID);
   end;
-  
+
   (* Load original rsources *)
   LoadArc('Data\video.vid', ARC_VID);
   LoadArc('Data\h3ab_ahd.vid', ARC_VID);
-  
+
   Context.EAX     := byte(true);
   Context.RetAddr := Core.Ret(NUM_ARGS);
   result          := not Core.EXEC_DEF_CODE;
@@ -263,18 +277,18 @@ end; // .function Hook_LoadVideoHeaders
 
 function Hook_OpenSmack (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
-  NUM_ARGS          = 1;
-  ARG_BUFSIZE_MASK  = 1;
-  
-  SET_POSITION  = 0;
+  NUM_ARGS         = 1;
+  ARG_BUFSIZE_MASK = 1;
+
+  SET_POSITION = 0;
 
 var
 {U} ItemInfo: PItemInfo;
-    
+
     FileName:    string;
     BufSize:     integer;
     BufSizeMask: integer;
-    
+
     hFile:  integer;
     Res:    integer;
 
@@ -289,11 +303,11 @@ begin
 
   Lodman.FindRedirection(FileName, FileName);
   ItemInfo := VidFiles[FileName];
-  
+
   if ItemInfo <> nil then begin
     hFile := ItemInfo.hFile;
     SysUtils.FileSeek(hFile, ItemInfo.Offset, SET_POSITION);
-    
+
     asm
       PUSH -1
       PUSH BufSize
@@ -306,7 +320,7 @@ begin
   end else begin
     Context.EAX := 0;
   end; // .else
-  
+
   Context.RetAddr := Core.Ret(NUM_ARGS);
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_OpenSmack
@@ -315,14 +329,14 @@ function Hook_OpenBik (Context: Core.PHookContext): LONGBOOL; stdcall;
 const
   NUM_ARGS = 0;
 
-  SET_POSITION  = 0;
+  SET_POSITION = 0;
 
 var
 {U} ItemInfo: PItemInfo;
-    
+
     FileName:    string;
     BufSizeMask: integer;
-    
+
     hFile: integer;
     Res:   integer;
 
@@ -335,11 +349,11 @@ begin
 
   Lodman.FindRedirection(FileName, FileName);
   ItemInfo := VidFiles[FileName];
-  
+
   if ItemInfo <> nil then begin
     hFile := ItemInfo.hFile;
     SysUtils.FileSeek(hFile, ItemInfo.Offset, SET_POSITION);
-    
+
     asm
       PUSH BufSizeMask
       PUSH hFile
@@ -350,8 +364,8 @@ begin
     Context.EAX := Res;
   end else begin
     Context.EAX := 0;
-  end; // .else
-  
+  end;
+
   Context.RetAddr := Core.Ret(NUM_ARGS);
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_OpenBik
@@ -370,11 +384,11 @@ begin
   end else if LoadCDOpt and GameCDFound then begin
     LoadArc(GameCDPath + CD_AUDIO_PATH, ARC_SND);
   end;
-  
+
   (* Load original rsources *)
   LoadArc('Data\heroes3.snd', ARC_SND);
   LoadArc('Data\h3ab_ahd.snd', ARC_SND);
-  
+
   Context.EAX     := byte(true);
   Context.RetAddr := Core.Ret(NUM_ARGS);
   result          := not Core.EXEC_DEF_CODE;
@@ -400,21 +414,21 @@ begin
 
   if Lodman.FindRedirection(BaseFileName + '.wav', BaseFileName) then begin
     BaseFileName := SysUtils.ChangeFileExt(BaseFileName, '');
-  end;  
-  
+  end;
+
   ItemInfo := SndFiles[BaseFileName];
-  
+
   if (ItemInfo <> nil) and (ItemInfo.Size > 0) then begin
     ResourceBuf := pointer(Context.EDX);
     FileSizePtr := pointer(Core.GetStdcallArg(Context, ARG_FILESIZE_PTR)^);
-  
+
     if ResourceBuf.IsLoaded then begin
       Heroes.MFree(ResourceBuf.Addr);
     end;
-    
+
     ResourceBuf.Addr := Heroes.MAlloc(ItemInfo.Size);
     FileSizePtr^     := ItemInfo.Size;
-  
+
     SysUtils.FileSeek(ItemInfo.hFile, ItemInfo.Offset, SET_POSITION);
     SysUtils.FileRead(ItemInfo.hFile, ResourceBuf.Addr^, ItemInfo.Size);
 
@@ -422,10 +436,15 @@ begin
   end else begin
     Context.EAX := byte(false);
   end; // .else
-  
+
   Context.RetAddr := Core.Ret(NUM_ARGS);
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadSnd
+
+procedure OnLoadEraSettings (Event: PEvent); stdcall;
+begin
+  LoadCDOpt := EraSettings.GetOpt('LoadCD').Bool(false);
+end;
 
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
@@ -435,19 +454,19 @@ begin
   Core.Hook(@Hook_OpenBik, Core.HOOKTYPE_BRIDGE, 6, Ptr($44D270));
   Core.Hook(@Hook_LoadSndHeaders, Core.HOOKTYPE_BRIDGE, 6, Ptr($5987A0));
   Core.Hook(@Hook_LoadSnd, Core.HOOKTYPE_BRIDGE, 5, Ptr($55C340));
-  
+
   (* Disable CloseSndHandles function *)
   PBYTE($4F3DFD)^    := $90;
   pinteger($4F3DFE)^ := integer($90909090);
-  
+
   (* Disable SavePointersToSndHandles function *)
   Core.Hook(Core.Ret(0), Core.HOOKTYPE_JUMP, 5, Ptr($5594F0));
-  
+
   (* Find game CD *)
   if LoadCDOpt then begin
     FindGameCD;
   end;
-  
+
   (* Disable default CD scanning *)
   pinteger($50C409)^ := $0000B4E9;
   pword($50C40D)^    := $9000;
@@ -463,7 +482,7 @@ begin
     Utils.NO_TYPEGUARD,
     Utils.ALLOW_NIL
   );
-  
+
   VidFiles := AssocArrays.NewAssocArr
   (
     Crypto.AnsiCRC32,
@@ -474,5 +493,6 @@ begin
     Utils.ALLOW_NIL
   );
 
+  EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
 end.

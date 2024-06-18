@@ -51,11 +51,6 @@ const
   HORIZ_TEXT_ALIGNMENT_MASK = TEXT_ALIGN_CENTER or TEXT_ALIGN_RIGHT;
   VERT_TEXT_ALIGNMENT_MASK  = TEXT_ALIGN_MIDDLE or TEXT_ALIGN_BOTTOM;
 
-  (* Game settings *)
-  DEFAULT_GAME_SETTINGS_FILE = 'default heroes3.ini';
-  GAME_SETTINGS_FILE         = 'heroes3.ini';
-  GAME_SETTINGS_SECTION      = 'Settings';
-
   (* Stacks on battlefield *)
   NUM_BATTLE_STACKS          = 42;
   NUM_BATTLE_STACKS_PER_SIDE = 21;

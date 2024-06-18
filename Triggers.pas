@@ -1,10 +1,11 @@
 unit Triggers;
-{
-DESCRIPTION:  Extends ERM with new triggers
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Extends ERM with new triggers
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
+
 uses
   Math,
   SysUtils,
@@ -15,13 +16,15 @@ uses
   Core,
   DataLib,
   DlgMes,
+  PatchApi,
+  Utils,
+
+  EraSettings,
   Erm,
   EventMan,
   GameExt,
   Heroes,
-  PatchApi,
   Tweaks,
-  Utils,
   WogEvo;
 
 type
@@ -163,7 +166,7 @@ begin
       GameExt.GenerateDebugInfo;
 
       if RootDlgId = Heroes.ADVMAP_DLGID then begin
-        Heroes.PrintChatMsg('{~white}Debug information was dumped to ' + GameExt.DEBUG_DIR +'{~}');
+        Heroes.PrintChatMsg('{~white}Debug information was dumped to ' + EraSettings.DEBUG_DIR +'{~}');
       end;
     end else if (wParam = KEY_F12) and (RootDlgId = Heroes.ADVMAP_DLGID) then begin
       Erm.ReloadErm;

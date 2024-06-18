@@ -21,22 +21,24 @@ uses
   Crypto,
   DataLib,
   DlgMes,
-  Erm,
-  EventMan,
   FastRand,
   Files,
   FilesEx,
-  GameExt,
-  Heroes,
   Ini,
-  Lodman,
   PatchApi,
-  Stores,
   StrLib,
-  Trans,
   Utils,
   WinNative,
   WinUtils,
+
+  EraSettings,
+  Erm,
+  EventMan,
+  GameExt,
+  Heroes,
+  Lodman,
+  Stores,
+  Trans,
   WogDialogs;
 
 type
@@ -455,7 +457,7 @@ var
 
   function ReadValue (const Key: string; const DefVal: string = ''): string;
   begin
-    if Ini.ReadStrFromIni(Key, Heroes.GAME_SETTINGS_SECTION, GameSettingsFilePath, result) then begin
+    if Ini.ReadStrFromIni(Key, EraSettings.GAME_SETTINGS_SECTION, GameSettingsFilePath, result) then begin
       result := SysUtils.Trim(result);
     end else begin
       result := DefVal;
@@ -498,7 +500,7 @@ begin
     CALL EAX
   end;
 
-  GameSettingsFilePath := GameExt.GameDir + '\' + Heroes.GAME_SETTINGS_FILE;
+  GameSettingsFilePath := GameExt.GameDir + '\' + EraSettings.GAME_SETTINGS_FILE;
 
   ReadInt('Show Intro',             Heroes.SHOW_INTRO_OPT);
   ReadInt('Music Volume',           Heroes.MUSIC_VOLUME_OPT);
@@ -538,11 +540,11 @@ begin
     (
       'Unique System ID',
       RandomStr,
-      Heroes.GAME_SETTINGS_SECTION,
-      Heroes.GAME_SETTINGS_FILE
+      EraSettings.GAME_SETTINGS_SECTION,
+      EraSettings.GAME_SETTINGS_FILE
     );
 
-    Ini.SaveIni(Heroes.GAME_SETTINGS_FILE);
+    Ini.SaveIni(EraSettings.GAME_SETTINGS_FILE);
   end; // .if
 
   ReadStr('Network default Name',   Heroes.NETWORK_DEF_NAME_OPT);
@@ -572,8 +574,8 @@ procedure WriteGameSettings;
     (
       Key,
       SysUtils.IntToStr(Value^),
-      Heroes.GAME_SETTINGS_SECTION,
-      Heroes.GAME_SETTINGS_FILE
+      EraSettings.GAME_SETTINGS_SECTION,
+      EraSettings.GAME_SETTINGS_FILE
     );
   end;
 
@@ -583,8 +585,8 @@ procedure WriteGameSettings;
     (
       Key,
       Value,
-      Heroes.GAME_SETTINGS_SECTION,
-      Heroes.GAME_SETTINGS_FILE
+      EraSettings.GAME_SETTINGS_SECTION,
+      EraSettings.GAME_SETTINGS_FILE
     );
   end;
 
@@ -629,7 +631,7 @@ begin
   WriteStr('AppPath',                Heroes.APP_PATH_OPT);
   WriteStr('CDDrive',                Heroes.CD_DRIVE_OPT);
 
-  Ini.SaveIni(Heroes.GAME_SETTINGS_FILE);
+  Ini.SaveIni(EraSettings.GAME_SETTINGS_FILE);
 end; // .procedure WriteGameSettings
 
 function Ip4ToStr (ip: integer): string;
@@ -1816,7 +1818,7 @@ end; // .function Hook_Show3PicDlg_PrepareDialogStruct
 
 procedure DumpWinPeModuleList;
 const
-  DEBUG_WINPE_MODULE_LIST_PATH = GameExt.DEBUG_DIR + '\pe modules.txt';
+  DEBUG_WINPE_MODULE_LIST_PATH = EraSettings.DEBUG_DIR + '\pe modules.txt';
 
 var
   i: integer;
@@ -1839,7 +1841,7 @@ end; // .procedure DumpWinPeModuleList
 
 procedure DumpExceptionContext (ExcRec: Windows.PExceptionRecord; Context: Windows.PContext);
 const
-  DEBUG_EXCEPTION_CONTEXT_PATH = GameExt.DEBUG_DIR + '\exception context.txt';
+  DEBUG_EXCEPTION_CONTEXT_PATH = EraSettings.DEBUG_DIR + '\exception context.txt';
 
 var
   ExceptionText: string;
@@ -2252,6 +2254,14 @@ begin
   Core.p.WriteDataPatch(Ptr($77180E), ['90909090909090909090909090']);
 end; // .procedure OnAfterWoG
 
+procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
+begin
+  CpuTargetLevel          := EraSettings.GetOpt('CpuTargetLevel')    .Int(50);
+  AutoSelectPcIpMaskOpt   := EraSettings.GetOpt('AutoSelectPcIpMask').Str('');
+  UseOnlyOneCpuCoreOpt    := EraSettings.GetOpt('UseOnlyOneCpuCore') .Bool(false);
+  DebugRng                := EraSettings.GetOpt('Debug.Rng')         .Int(0);
+end;
+
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
 begin
   (* Repeat top-level handler installation, because other plugins and dlls could interfere *)
@@ -2277,6 +2287,7 @@ begin
   Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
   ComputerName              := WinUtils.GetComputerNameW;
 
+  EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);

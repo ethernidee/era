@@ -1,11 +1,23 @@
 unit EraLog;
-{
-DESCRIPTION:  Logging support
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Logging support
+  Author:      Alexander Shostak aka Berserker
+*)
+
 
 (***)  interface  (***)
-uses Windows, SysUtils, Utils, Files, ConsoleAPI, Log, StrLib, Concur, DlgMes;
+
+uses
+  Concur,
+  ConsoleAPI,
+  Log,
+  StrLib,
+  SysUtils,
+  Windows,
+
+  EraSettings,
+  VfsImport;
+
 
 type
   TLogger = class (Log.TLogger)
@@ -24,39 +36,44 @@ type
     function  GetPos (out Pos: integer): boolean; override;
     function  Seek (NewPos: integer): boolean; override;
     function  GetCount (out Count: integer): boolean; override;
-  end; // .class TLogger
+  end;
 
-  TMemoryLogger  = class (TLogger)
+  TFakeLogger  = class (TLogger)
     function Write (const EventSource, Operation, Description: string): boolean; override;
   end;
 
   TConsoleLogger  = class (TLogger)
-    (***) protected (***)
-      {O} fCon: ConsoleAPI.TConsole;
+   protected
+   {O} fCon: ConsoleAPI.TConsole;
 
-    (***) public (***)
-      constructor Create (const Title: string);
-      destructor  Destroy; override;
+   public
+    constructor Create (const Title: string);
+    destructor  Destroy; override;
 
-      function Write (const EventSource, Operation, Description: string): boolean; override;
-  end; // .class TConsoleLogger
+    function Write (const EventSource, Operation, Description: string): boolean; override;
+  end;
 
   TFileLogger = class (TLogger)
-    (***) protected (***)
-      {O} fFile: Windows.THandle;
+   protected
+   {O} fFile: Windows.THandle;
 
-    (***) public (***)
-      constructor Create (const FilePath: string);
-      destructor  Destroy; override;
+   public
+    constructor Create (const FilePath: string);
+    destructor  Destroy; override;
 
-      function Write (const EventSource, Operation, Description: string): boolean; override;
+    function Write (const EventSource, Operation, Description: string): boolean; override;
   end;
+
+
+procedure InstallLoggers (const GameDir: string);
 
 
 (***) implementation (***)
 
 
 const
+  LOG_FILE_NAME = 'log.txt';
+
   BR                     = #13#10;
   RECORD_BEGIN_SEPARATOR = '>> ';
   RECORD_END_SEPARATOR   = BR + BR;
@@ -126,7 +143,7 @@ begin
   result := false;
 end;
 
-function TMemoryLogger.Write (const EventSource, Operation, Description: string): boolean;
+function TFakeLogger.Write (const EventSource, Operation, Description: string): boolean;
 begin
   result := true;
 end;
@@ -175,7 +192,11 @@ end; // .function TConsoleLogger.Write
 constructor TFileLogger.Create (const FilePath: string);
 begin
   inherited Create;
-  Self.fFile := Windows.CreateFileA(pchar(FilePath), Windows.GENERIC_WRITE, Windows.FILE_SHARE_READ or Windows.FILE_SHARE_DELETE, nil, Windows.CREATE_ALWAYS, Windows.FILE_ATTRIBUTE_NORMAL, 0);
+
+  Self.fFile := Windows.CreateFileA(
+    pchar(FilePath), Windows.GENERIC_WRITE, Windows.FILE_SHARE_READ or Windows.FILE_SHARE_DELETE, nil, Windows.CREATE_ALWAYS,
+    Windows.FILE_ATTRIBUTE_NORMAL, 0
+  );
 end;
 
 destructor TFileLogger.Destroy;
@@ -217,5 +238,27 @@ begin
     Leave;
   end; // .with
 end; // .function TFileLogger.Write
+
+procedure VfsLogger (Operation, Message: pchar); stdcall;
+begin
+  Log.Write('VFS', Operation, Message);
+end;
+
+procedure InstallLoggers (const GameDir: string);
+begin
+  if EraSettings.IsDebug then begin
+    if SysUtils.AnsiLowerCase(EraSettings.GetOpt('Debug.LogDestination').Str('File')) = 'file' then begin
+      Log.InstallLogger(EraLog.TFileLogger.Create(GameDir + '\' + EraSettings.DEBUG_DIR + '\' + LOG_FILE_NAME), true);
+    end else begin
+      Log.InstallLogger(EraLog.TConsoleLogger.Create('Era Log'), true);
+    end;
+  end else begin
+    Log.InstallLogger(EraLog.TFakeLogger.Create, true);
+  end;
+
+  if EraSettings.GetDebugBoolOpt('Debug.LogVirtualFileSystem', false) then begin
+    VfsImport.SetLoggingProc(@VfsLogger);
+  end;
+end;
 
 end.

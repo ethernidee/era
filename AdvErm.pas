@@ -1,13 +1,39 @@
 unit AdvErm;
-{
-DESCRIPTION: Era custom Memory implementation
-AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Era custom Memory implementation
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
+
 uses
-  Windows, SysUtils, Math, Crypto, Utils, AssocArrays, DataLib, StrLib, TypeWrappers, Files, ApiJack, Alg,
-  PatchApi, Core, GameExt, Erm, Stores, Triggers, Heroes, Lodman, Network, Trans, EventMan, DlgMes;
+  Math,
+  SysUtils,
+  Windows,
+
+  Alg,
+  ApiJack,
+  AssocArrays,
+  Core,
+  Crypto,
+  DataLib,
+  DlgMes,
+  Files,
+  PatchApi,
+  StrLib,
+  TypeWrappers,
+  Utils,
+
+  EraSettings,
+  Erm,
+  EventMan,
+  GameExt,
+  Heroes,
+  Lodman,
+  Network,
+  Stores,
+  Trans,
+  Triggers;
 
 const
   AUTO_ALLOC_SLOT = -1;
@@ -57,7 +83,7 @@ const
   (* Hint code flags *)
   CODE_TYPE_SUBTYPE = $01000000;
 
-  ERM_MEMORY_DUMP_FILE = GameExt.DEBUG_DIR + '\erm memory dump.txt';
+  ERM_MEMORY_DUMP_FILE = EraSettings.DEBUG_DIR + '\erm memory dump.txt';
 
 type
   (* Import *)

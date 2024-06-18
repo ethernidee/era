@@ -699,7 +699,7 @@ begin
   SysUtils.FreeAndNil(FileContentsStream);
 end; // .function LoadImage
 
-(* Loads image and converts it to 24 bit BMP. Returns new default image on error and notifies user. *)
+(* Loads image and converts it to 24 bit BMP. Returns new default image on error. *)
 function LoadImageAsBmp24 (const FilePath: string): TBitmap;
 var
 {On} Image: TGraphic;
@@ -709,7 +709,6 @@ begin
   result := nil;
   // * * * * * //
   if Image = nil then begin
-    //Core.NotifyError(Format('Failed to load image at "%s"', [FilePath]));
     result := CreateDefaultBmp24();
   end else begin
     if GetImageType(Image) = IMG_BMP then begin
