@@ -1948,9 +1948,8 @@ begin
   {!} ExceptionsCritSection.Enter;
 
   if not IsCrashing then begin
-    IsCrashing               := true;
-    Erm.ErmEnabled^          := false;
-    Erm.TrackingOpts.Enabled := false;
+    IsCrashing      := true;
+    Erm.ErmEnabled^ := false;
     DumpExceptionContext(ExceptionRecord, Context);
     EventMan.GetInstance.Fire('OnGenerateDebugInfo');
     Windows.MessageBoxA(Heroes.hWnd^, pchar('Game crashed. All debug information is inside ' + DEBUG_DIR + ' subfolder'), '', Windows.MB_OK);
