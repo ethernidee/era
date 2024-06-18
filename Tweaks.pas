@@ -663,6 +663,10 @@ begin
 
   Addrs := pointer(result.h_addr_list);
 
+  if (Addrs[0] = nil) or (Addrs[1] = nil) then begin
+    exit;
+  end;
+
   {!} Windows.EnterCriticalSection(InetCriticalSection);
 
   if (not IsSelectingPcIp) and (Addrs[0] <> nil) then begin
