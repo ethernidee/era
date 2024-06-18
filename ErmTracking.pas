@@ -1,13 +1,18 @@
 unit ErmTracking;
-{
-DESCRIPTION: Provides ERM receivers and triggers tracking support
-AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Provides ERM receivers and triggers tracking support
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
+
 uses
-  SysUtils, Utils,
-  GameExt, Erm;
+  SysUtils,
+
+  Utils,
+
+  Erm,
+  GameExt;
 
 type
   TTrackEventType        = (TRACKEDEVENT_START_TRIGGER, TRACKEDEVENT_END_TRIGGER, TRACKEDEVENT_CMD);
@@ -25,14 +30,14 @@ type
         Name: array [0..1] of char;
         Addr: pchar;
       );
-      
+
       TRACKEDEVENT_START_TRIGGER, TRACKEDEVENT_END_TRIGGER: (
         v: array [997..1000] of integer;
         f: array [Erm.ERM_FLAG_NETWORK_BATTLE..Erm.ERM_FLAG_HUMAN_VISITOR_OR_REAL_BATTLE] of byte;
         x: Erm.TErmXVars;
       );
   end; // .record TTrackedEvent
-  
+
   TEventTracker = class
    protected
     fEventsBuf:            array of TTrackedEvent;
@@ -44,10 +49,10 @@ type
 
     function AddRecord: {U} PTrackedEvent;
     function DumpCmd (Addr: pchar): string;
-   
+
    public
     constructor Create (TrackingBufSize: integer);
-    
+
     procedure Reset ();
     function  SetDumpCommands (ShouldDumpCommands: boolean): {SELF} TEventTracker;
     function  SetIgnoreEmptyTriggers (ShouldIgnoreEmptyTriggers: boolean): {SELF} TEventTracker;
@@ -93,7 +98,7 @@ end; // .function TEventTracker.AddRecord
 procedure TEventTracker.Reset ();
 begin
   fBufPos           := 0;
-  fNumTrackedEvents := 0; 
+  fNumTrackedEvents := 0;
 end;
 
 function TEventTracker.SetDumpCommands (ShouldDumpCommands: boolean): {SELF} TEventTracker;
@@ -111,7 +116,7 @@ end;
 procedure TEventTracker.TrackTrigger (EventType: TTriggerTrackEventType; TriggerId: integer);
 var
 {U} Rec: PTrackedEvent;
-   
+
 begin
   Rec := Self.AddRecord();
   // * * * * * //
@@ -119,7 +124,7 @@ begin
   Rec.TriggerId    := TriggerId;
   Rec.TriggerLevel := Erm.ErmTriggerDepth;
   Rec.SourceCode   := '';
-  
+
   Utils.CopyMem(sizeof(Rec.v), @v[low(Rec.v)], @Rec.v);
   Utils.CopyMem(sizeof(Rec.f), @f[low(Rec.f)], @Rec.f);
   Utils.CopyMem(sizeof(Rec.x), @Erm.x[1], @Rec.x);
@@ -128,7 +133,7 @@ end; // .procedure TEventTracker.TrackTrigger
 procedure TEventTracker.TrackCmd (Addr: pchar);
 var
 {U} Rec: PTrackedEvent;
-   
+
 begin
   Rec := Self.AddRecord();
   // * * * * * //
@@ -138,8 +143,8 @@ begin
   Rec.Addr         := Addr;
   word(Rec.Name)   := pword(Addr)^;
   Rec.SourceCode   := '';
-  
-  if fDumpCommands then begin
+
+  if Self.fDumpCommands then begin
     Rec.SourceCode := Self.DumpCmd(Addr);
   end;
 end; // .procedure TEventTracker.TrackCmd
@@ -166,7 +171,7 @@ var
     j: integer;
 
   begin
-    with Writer do begin   
+    with Writer do begin
       EmptyLine;
       WriteIndentation;
 
@@ -217,7 +222,7 @@ var
 
         Write(']');
       end; // .if
-      
+
       EmptyLine;
       EmptyLine;
 
@@ -249,7 +254,7 @@ begin
   Event := nil;
   // * * * * * //
   Writer := FilesEx.WriteFormattedOutput(FilePath);
-  
+
   with Writer do begin
     Line('Dump of the last ' + SysUtils.IntToStr(fNumTrackedEvents) + ' tracked events.');
 
@@ -300,16 +305,30 @@ begin
   StartAddr := Addr;
   // * * * * * //
   while (not (Addr^ in [#0, ';'])) do begin
-    inc(Addr);
+    while (not (Addr^ in [#0, ';', '^'])) do begin
+      Inc(Addr);
+    end;
+
+    if Addr^ = '^' then begin
+      Inc(Addr);
+
+      while (not (Addr^ in [#0, '^'])) do begin
+        Inc(Addr);
+      end;
+
+      if Addr^ = '^' then begin
+        Inc(Addr);
+      end;
+    end;
   end;
 
   if Addr^ = ';' then begin
-    inc(Addr);
+    Inc(Addr);
   end;
 
   CmdLen := integer(Addr) - integer(StartAddr);
   SetLength(result, CmdLen);
-  
+
   if CmdLen > 0 then begin
     Utils.CopyMem(CmdLen, StartAddr, @result[1]);
   end;
