@@ -1956,6 +1956,7 @@ begin
   if not IsCrashing then begin
     IsCrashing      := true;
     Erm.ErmEnabled^ := false;
+    Files.ClearDir(GameExt.GameDir + '\' + EraSettings.DEBUG_DIR);
     DumpExceptionContext(ExceptionRecord, Context);
     EventMan.GetInstance.Fire('OnGenerateDebugInfo');
     Windows.MessageBoxA(Heroes.hWnd^, pchar('Game crashed. All debug information is inside ' + DEBUG_DIR + ' subfolder'), '', Windows.MB_OK);
