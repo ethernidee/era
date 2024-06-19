@@ -9,6 +9,9 @@ unit ErmTracking;
 uses
   SysUtils,
 
+  Core,
+  FilesEx,
+  StrLib,
   Utils,
 
   Erm,
@@ -66,7 +69,6 @@ type
 
 
 (***) implementation (***)
-uses StrLib, FilesEx, Core;
 
 
 constructor TEventTracker.Create (TrackingBufSize: integer);

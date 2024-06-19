@@ -134,7 +134,6 @@ begin
     InitLua;
     ExecuteLuaScript(EntryScriptPath);
   end;
-
 end;
 
 begin

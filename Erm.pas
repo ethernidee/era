@@ -783,6 +783,8 @@ var
     IgnoreEmptyTriggers: boolean;
   end;
 
+  ErmTrackingEnabledBackup: boolean;
+
 
 procedure SetZVar (Str: pchar; const Value: string); overload;
 procedure SetZVar (Str, Value: pchar); overload;
@@ -816,6 +818,12 @@ procedure SetErmCurrHero (NewInd: integer); overload;
 procedure SetErmCurrHero ({n} NewHero: Heroes.PHero); overload;
 function  GetErmCurrHero: {n} Heroes.PHero;
 function  GetErmCurrHeroId: integer; // or -1
+
+(* ERM tracking runtime control *)
+procedure DisableErmTracking; stdcall;
+procedure EnableErmTracking; stdcall;
+procedure RestoreErmTracking; stdcall;
+procedure ResetErmTracking; stdcall;
 
 (* Integration with WoG Native Dialogs: possibility to set preselected item for DisplayComplexDialog and text alignment for ShowParsedDlg8Items *)
 function  GetPreselectedDialog8ItemId: integer; stdcall;
@@ -1366,6 +1374,39 @@ begin
   end; // .for
 end; // .procedure ExecErmCmd
 
+procedure DisableErmTracking;
+begin
+  if EraSettings.GetOpt('Debug.AllowRuntimeErmTrackingControl').Bool(true) then begin
+    TrackingOpts.Enabled := false;
+  end;
+end;
+
+procedure EnableErmTracking;
+begin
+  if EraSettings.GetOpt('Debug.AllowRuntimeErmTrackingControl').Bool(true) then begin
+    TrackingOpts.Enabled := true;
+  end;
+end;
+
+procedure DoRestoreErmTracking;
+begin
+  TrackingOpts.Enabled := ErmTrackingEnabledBackup;
+end;
+
+procedure RestoreErmTracking;
+begin
+  if EraSettings.GetOpt('Debug.AllowRuntimeErmTrackingControl').Bool(true) then begin
+    TrackingOpts.Enabled := ErmTrackingEnabledBackup;
+  end;
+end;
+
+procedure ResetErmTracking;
+begin
+  if EraSettings.GetOpt('Debug.AllowRuntimeErmTrackingControl').Bool(true) then begin
+    EventTracker.Reset;
+  end;
+end;
+
 procedure OnEraSaveScripts (Event: GameExt.PEvent); stdcall;
 begin
   (* Save function names and auto ID *)
@@ -1384,7 +1425,8 @@ begin
   ErmLegacySupport := EraSettings.GetOpt('ErmLegacySupport').Bool(false);
 
   with TrackingOpts do begin
-    Enabled := EraSettings.GetDebugBoolOpt('Debug.TrackErm');
+    Enabled                  := EraSettings.GetDebugBoolOpt('Debug.TrackErm');
+    ErmTrackingEnabledBackup := Enabled;
 
     if Enabled then begin
       MaxRecords          := Math.Max(1, EraSettings.GetOpt('Debug.TrackErm.MaxRecords').Int(10000));
@@ -1406,10 +1448,8 @@ begin
   FuncIdToNameMap := DataLib.FlipDict(FuncNames);
   RegisterErmEventNames;
 
-  (* Load scripts *)
-  // Hack to fix HD mods load from battle functionality, using GOTO and leaving dirty memory state
-  ErmTriggerDepth := 0;
-
+  EventTracker.Reset;
+  DoRestoreErmTracking;
   ScriptMan.LoadScriptsFromSavedGame;
 end;
 
@@ -2770,10 +2810,8 @@ procedure TScriptMan.ClearScripts;
 begin
   EventMan.GetInstance.Fire('OnBeforeClearErmScripts');
   fScripts.Clear;
-
-  if TrackingOpts.Enabled then begin
-    EventTracker.Reset;
-  end;
+  EventTracker.Reset;
+  DoRestoreErmTracking;
 end;
 
 procedure TScriptMan.SaveScripts;
@@ -5834,9 +5872,6 @@ const
   GLOBAL_EVENT_SIZE = 52;
 
 begin
-  // Hack to fix HD mods load from battle functionality, using GOTO and leaving dirty memory state
-  ErmTriggerDepth := 0;
-
   // Skip internal map events: GEp_ = GEp1 - [sizeof(_GlbEvent_) = 52]
   pinteger(Context.EBP - $3F4)^ := pinteger(pinteger(Context.EBP - $24)^ + $88)^ - GLOBAL_EVENT_SIZE;
   ErmErrReported                := false;
@@ -8441,10 +8476,7 @@ end;
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   ExtractErm;
-
-  if TrackingOpts.Enabled then begin
-    EventTracker.GenerateReport(GameExt.GameDir + '\' + ERM_TRACKING_REPORT_PATH);
-  end;
+  EventTracker.GenerateReport(GameExt.GameDir + '\' + ERM_TRACKING_REPORT_PATH);
 end;
 
 procedure OnBeforeClearErmScripts (Event: GameExt.PEvent); stdcall;
