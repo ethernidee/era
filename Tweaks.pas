@@ -35,6 +35,7 @@ uses
   Erm,
   EventMan,
   GameExt,
+  Graph,
   Heroes,
   Lodman,
   Stores,
@@ -91,7 +92,8 @@ procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; 
 
 
 const
-  RNG_SAVE_SECTION = 'Era.RNG';
+  RNG_SAVE_SECTION      = 'Era.RNG';
+  CRASH_SCREENHOST_PATH = EraSettings.DEBUG_DIR + '\screenshot.jpg';
 
   DL_GROUP_INDEX_MARKER = 100000; // DL frame index column is DL_GROUP_INDEX_MARKER * groupIndex + frameIndex
 
@@ -1973,8 +1975,17 @@ begin
   result := EXCEPTION_CONTINUE_SEARCH;
 end;
 
+procedure CaptureCrashScreenshot;
+begin
+  Graph.TakeScreenshot(GameExt.GameDir + '\' + CRASH_SCREENHOST_PATH, 70);
+end;
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
+  if EraSettings.GetOpt('Debug.CaptureScreenshotOnCrash').Bool(true) then begin
+    CaptureCrashScreenshot;
+  end;
+
   DumpWinPeModuleList;
 end;
 
