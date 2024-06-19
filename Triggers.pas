@@ -550,6 +550,31 @@ begin
   end;
 end; // .procedure Hook_ExecuteManager
 
+function Hook_LoadSavegame (OrigFunc: pointer; GameMan: Heroes.PGameManager; FileName: pchar; PreventLoading: boolean; Dummy: integer): integer; stdcall;
+const
+  VAR_PLAYER_INDEX = $69D860;
+  VAR_PLAYER_BIT   = $69CD10;
+
+var
+  ShouldSimulateEnterLeaveEvents: boolean;
+
+begin
+  ShouldSimulateEnterLeaveEvents := MainGameLoopDepth > 0;
+
+  if ShouldSimulateEnterLeaveEvents then begin
+    Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+  end;
+
+  result := PatchApi.Call(THISCALL_, OrigFunc, [GameMan, FileName, PreventLoading, Dummy]);
+
+  pinteger(VAR_PLAYER_INDEX)^ := Heroes.CurrentPlayerId^;
+  pinteger(VAR_PLAYER_BIT)^   := 1 shl Heroes.CurrentPlayerId^;
+
+  if ShouldSimulateEnterLeaveEvents and (result <> 0) then begin
+    Erm.FireErmEvent(Erm.TRIGGER_ONGAMEENTER);
+  end;
+end;
+
 procedure RaiseExceptionEx (Code: integer; const Args: array of integer);
 begin
   Windows.RaiseException(EXCEPTION_CODE_ERA, 0, Length(Args), @Args[0]);
@@ -1103,6 +1128,9 @@ begin
 
   (* Main game cycle (AdvMgr, CombatMgr): OnEnterGame, OnLeaveGame and MapFolder settings*)
   ApiJack.StdSplice(Ptr($4B0BA0), @Hook_ExecuteManager, ApiJack.CONV_THISCALL, 1);
+
+  (* Hook LoadSavegame to trigger OnEnterGame and OnLeaveGame if game loading is performed inside ExecuteManager function *)
+  ApiJack.StdSplice(Ptr($4BEFF0), @Hook_LoadSavegame, ApiJack.CONV_THISCALL, 4);
 
   (* Set top level main loop exception handler *)
   ApiJack.HookCode(Ptr($4F824A), @Hook_MainGameLoop);
