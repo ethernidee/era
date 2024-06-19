@@ -12,6 +12,7 @@ uses
 
   Core,
   DataLib,
+  DlgMes,
   Files,
   Json,
   StrLib,
@@ -26,6 +27,7 @@ uses
 
 
 type
+  (* Import *)
   TDict   = DataLib.TDict;
   TString = TypeWrappers.TString;
 
@@ -39,7 +41,7 @@ const
   DONT_OVERRIDE_KEYS = false;
 
 
-function SetLanguage (NewLanguage: string): boolean;
+function SetLanguage (const NewLanguage: string): boolean;
 procedure ReloadLanguageData; stdcall;
 function  tr (const Key: string; const Params: array of string): string;
 
@@ -67,7 +69,7 @@ var
 const
   BoolToStr: array [false..true] of string = ('0', '1');
 
-function SetLanguage (NewLanguage: string): boolean;
+function SetLanguage (const NewLanguage: string): boolean;
 var
   i: integer;
 
@@ -256,7 +258,7 @@ begin
   UpdateLocaleConfig;
 end;
 
-(* Loads map langauge files as resource list without any parsing *)
+(* Loads map language files as resource list without any parsing *)
 function LoadMapLangResources: {O} RscLists.TResourceList;
 var
   MapDirName:   string;

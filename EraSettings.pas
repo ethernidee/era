@@ -26,6 +26,8 @@ const
 type
   TOption = record
     Value: string;
+    Dummy: integer; // This is field is necessary to prevent Delphi 2009 bug, when it tries to optimize 4 byte structures
+                    // Memory corruption occurs quite often, while 8 byte structure will be passed as var-parameter and is thus safe
 
     function Str (const Default: string = ''): string;
     function Int (Default: integer = 0): integer;
