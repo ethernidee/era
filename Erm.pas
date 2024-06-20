@@ -3724,7 +3724,8 @@ begin
   NameTrigger(TRIGGER_PRE_HEROSCREEN,               'OnPreHeroScreen');
   NameTrigger(TRIGGER_POST_HEROSCREEN,              'OnPostHeroScreen');
   NameTrigger(TRIGGER_DETERMINE_MON_INFO_DLG_UPGRADE, 'OnDetermineMonInfoDlgUpgrade');
-  NameTrigger(TRIGGER_ADVMAP_TILE_HINT,             'OnAdvMapTileHint');
+  NameTrigger(TRIGGER_ADVMAP_TILE_HINT,             'OnAdvMapTileHint'); // Name alias first
+  NameTrigger(TRIGGER_ADVMAP_TILE_HINT,             'OnAdventureMapTileHint');
   NameTrigger(TRIGGER_BEFORE_STACK_TURN,            'OnBeforeBattleStackTurn');
   NameTrigger(TRIGGER_CALC_TOWN_INCOME,             'OnCalculateTownIncome');
   NameTrigger(TRIGGER_BATTLE_REPLAY,                'OnBattleReplay');
