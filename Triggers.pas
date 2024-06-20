@@ -515,6 +515,7 @@ var
 
         if MainGameLoopDepth = 0 then begin
           Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+          EventMan.GetInstance.Fire('OnGameLeft');
         end;
       end;
     end;
@@ -563,6 +564,7 @@ begin
 
   if ShouldSimulateEnterLeaveEvents then begin
     Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+    EventMan.GetInstance.Fire('OnGameLeft');
   end;
 
   result := PatchApi.Call(THISCALL_, OrigFunc, [GameMan, FileName, PreventLoading, Dummy]);

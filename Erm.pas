@@ -1450,7 +1450,14 @@ begin
 
   EventTracker.Reset;
   DoRestoreErmTracking;
+  ErmEnabled^ := true;
   ScriptMan.LoadScriptsFromSavedGame;
+end;
+
+procedure OnGameLeft (Event: GameExt.PEvent); stdcall;
+begin
+  // Prevent ERM triggers (real time, Mp3, keyboard, etc) to be called outside of main game loop
+  ErmEnabled^ := false;
 end;
 
 function Hook_LoadErtFile (Context: Core.PHookContext): longbool; stdcall;
@@ -8853,6 +8860,7 @@ begin
   EventMan.GetInstance.On('OnAfterWoG',               OnAfterWoG);
   EventMan.GetInstance.On('OnBeforeClearErmScripts',  OnBeforeClearErmScripts);
   EventMan.GetInstance.On('OnBeforeWoG',              OnBeforeWoG);
+  EventMan.GetInstance.On('OnGameLeft',               OnGameLeft);
   EventMan.GetInstance.On('OnGenerateDebugInfo',      OnGenerateDebugInfo);
   EventMan.GetInstance.On('OnRemoteErmFuncCall',      OnRemoteErmFuncCall);
   EventMan.GetInstance.On('OnSavegameRead',           OnSavegameRead);
