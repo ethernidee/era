@@ -1427,12 +1427,9 @@ begin
   with TrackingOpts do begin
     Enabled                  := EraSettings.GetDebugBoolOpt('Debug.TrackErm');
     ErmTrackingEnabledBackup := Enabled;
-
-    if Enabled then begin
-      MaxRecords          := Math.Max(1, EraSettings.GetOpt('Debug.TrackErm.MaxRecords').Int(10000));
-      DumpCommands        := EraSettings.GetOpt('Debug.TrackErm.DumpCommands')       .Bool(true);
-      IgnoreEmptyTriggers := EraSettings.GetOpt('Debug.TrackErm.IgnoreEmptyTriggers').Bool(true);
-    end;
+    MaxRecords               := Math.Max(1, EraSettings.GetOpt('Debug.TrackErm.MaxRecords').Int(10000));
+    DumpCommands             := EraSettings.GetOpt('Debug.TrackErm.DumpCommands')       .Bool(true);
+    IgnoreEmptyTriggers      := EraSettings.GetOpt('Debug.TrackErm.IgnoreEmptyTriggers').Bool(true);
   end;
 end;
 
@@ -8787,11 +8784,9 @@ begin
   Core.ApiHook(@Hook_ERM2String2, Core.HOOKTYPE_JUMP, Ptr($741D32));
 
   (* Enable ERM tracking and pre-command initialization *)
-  with TrackingOpts do begin
-    if Enabled then begin
-      EventTracker := ErmTracking.TEventTracker.Create(MaxRecords).SetDumpCommands(DumpCommands).SetIgnoreEmptyTriggers(IgnoreEmptyTriggers);
-    end;
-  end;
+  EventTracker := ErmTracking.TEventTracker.Create(TrackingOpts.MaxRecords)
+    .SetDumpCommands(TrackingOpts.DumpCommands)
+    .SetIgnoreEmptyTriggers(TrackingOpts.IgnoreEmptyTriggers);
 end; // .procedure OnAfterWoG
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
