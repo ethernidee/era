@@ -2011,13 +2011,13 @@ begin
   end;
 
   (* Ini handling *)
-  Core.Hook(@Hook_ReadStrIni, Core.HOOKTYPE_JUMP, 5, ZvsReadStrIni);
-  Core.Hook(@Hook_WriteStrIni, Core.HOOKTYPE_JUMP, 5, ZvsWriteStrIni);
-  Core.Hook(@Hook_WriteIntIni, Core.HOOKTYPE_JUMP, 5, ZvsWriteIntIni);
+  Core.Hook(ZvsReadStrIni, Core.HOOKTYPE_JUMP, @Hook_ReadStrIni);
+  Core.Hook(ZvsWriteStrIni, Core.HOOKTYPE_JUMP, @Hook_WriteStrIni);
+  Core.Hook(ZvsWriteIntIni, Core.HOOKTYPE_JUMP, @Hook_WriteIntIni);
 
   (* DL dialogs centering *)
-  Core.Hook(@Hook_ZvsGetWindowWidth, Core.HOOKTYPE_BRIDGE, 5, Ptr($729C5A));
-  Core.Hook(@Hook_ZvsGetWindowHeight, Core.HOOKTYPE_BRIDGE, 5, Ptr($729C6D));
+  Core.Hook(Ptr($729C5A), Core.HOOKTYPE_BRIDGE, @Hook_ZvsGetWindowWidth);
+  Core.Hook(Ptr($729C6D), Core.HOOKTYPE_BRIDGE, @Hook_ZvsGetWindowHeight);
 
   (* Mark the freshest savegame *)
   MarkFreshestSavegame;
@@ -2028,7 +2028,7 @@ begin
   end;
 
   (* Fix HotSeat second hero name *)
-  Core.Hook(@Hook_SetHotseatHeroName, Core.HOOKTYPE_BRIDGE, 6, Ptr($5125B0));
+  Core.Hook(Ptr($5125B0), Core.HOOKTYPE_BRIDGE, @Hook_SetHotseatHeroName);
   Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
 
   (* Universal CPU patch *)
@@ -2039,7 +2039,7 @@ begin
     end;
 
     hTimerEvent := Windows.CreateEvent(nil, true, false, nil);
-    Core.ApiHook(@Hook_PeekMessageA, Core.HOOKTYPE_BRIDGE, Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'));
+    Core.Hook(Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'), Core.HOOKTYPE_BRIDGE, @Hook_PeekMessageA);
   end;
 
   (* Remove duplicate ResetAll call *)
@@ -2069,39 +2069,31 @@ begin
   ApiJack.StdSplice(Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname'), @Hook_GetHostByName, ApiJack.CONV_STDCALL, 1);
 
   (* Fix ApplyDamage calls, so that !?MF1 damage is displayed correctly in log *)
-  Core.ApiHook(@Hook_ApplyDamage_Ebx_Local7,  Core.HOOKTYPE_BRIDGE, Ptr($43F95B + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Ebx,         Core.HOOKTYPE_BRIDGE, Ptr($43FA5E + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Local7,      Core.HOOKTYPE_BRIDGE, Ptr($43FD3D + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Ebx,         Core.HOOKTYPE_BRIDGE, Ptr($4400DF + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Esi_Arg1,    Core.HOOKTYPE_BRIDGE, Ptr($440858 + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Ebx,         Core.HOOKTYPE_BRIDGE, Ptr($440E70 + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Arg1,        Core.HOOKTYPE_BRIDGE, Ptr($441048 + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Esi,         Core.HOOKTYPE_BRIDGE, Ptr($44124C + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Local4,      Core.HOOKTYPE_BRIDGE, Ptr($441739 + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Local8,      Core.HOOKTYPE_BRIDGE, Ptr($44178A + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Arg1,        Core.HOOKTYPE_BRIDGE, Ptr($46595F + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Ebx,         Core.HOOKTYPE_BRIDGE, Ptr($469A93 + 5));
-  Core.ApiHook(@Hook_ApplyDamage_Local13,     Core.HOOKTYPE_BRIDGE, Ptr($5A1065 + 5));
+  Core.Hook(Ptr($43F95B + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx_Local7);
+  Core.Hook(Ptr($43FA5E + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx);
+  Core.Hook(Ptr($43FD3D + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Local7);
+  Core.Hook(Ptr($4400DF + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx);
+  Core.Hook(Ptr($440858 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Esi_Arg1);
+  Core.Hook(Ptr($440E70 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx);
+  Core.Hook(Ptr($441048 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Arg1);
+  Core.Hook(Ptr($44124C + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Esi);
+  Core.Hook(Ptr($441739 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Local4);
+  Core.Hook(Ptr($44178A + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Local8);
+  Core.Hook(Ptr($46595F + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Arg1);
+  Core.Hook(Ptr($469A93 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx);
+  Core.Hook(Ptr($5A1065 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Local13);
 
   (* Fix negative offsets handling in fonts *)
   Core.p.WriteDataPatch(Ptr($4B534A), ['B6']);
   Core.p.WriteDataPatch(Ptr($4B53E6), ['B6']);
 
   (* Fix WoG/ERM versions *)
-  Core.Hook(@Hook_GetWoGAndErmVersions, Core.HOOKTYPE_BRIDGE, 14, Ptr($73226C));
+  Core.Hook(Ptr($73226C), Core.HOOKTYPE_BRIDGE, @Hook_GetWoGAndErmVersions);
 
   (*  Fix zvslib1.dll ExtractDef function to support mods  *)
-  Core.ApiHook
-  (
-    @Hook_ZvsLib_ExtractDef, Core.HOOKTYPE_BRIDGE, Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + 3)
-  );
+  Core.Hook(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + 3), Core.HOOKTYPE_BRIDGE, @Hook_ZvsLib_ExtractDef);
 
-  Core.ApiHook
-  (
-    @Hook_ZvsLib_ExtractDef_GetGamePath,
-    Core.HOOKTYPE_BRIDGE,
-    Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS)
-  );
+  Core.Hook(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS), Core.HOOKTYPE_BRIDGE, @Hook_ZvsLib_ExtractDef_GetGamePath);
 
   Core.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
 
@@ -2111,13 +2103,6 @@ begin
   (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
   Core.p.WriteDataPatch(Ptr($4DC358), ['A0']);
 
-  (* Fix WoG bug: do not rely on MixedPos argument for Enter2Monster(2), get coords from map object instead
-     EDIT: no need anymore, fixed MixedPos *)
-  if FALSE then begin
-    Core.Hook(@Hook_ZvsEnter2Monster,  Core.HOOKTYPE_BRIDGE, 19, Ptr($75779F));
-    Core.Hook(@Hook_ZvsEnter2Monster2, Core.HOOKTYPE_BRIDGE, 19, Ptr($757A74));
-  end;
-
   (* Fix MixedPos to not drop higher order bits and not treat them as underground flag *)
   Core.p.WriteDataPatch(Ptr($711F4F), ['8B451425FFFFFF048945149090909090909090']);
 
@@ -2126,13 +2111,13 @@ begin
 
   (* Fix battle round counting: no !?BR before battlefield is shown, negative FIRST_TACTICS_ROUND incrementing for the whole tactics phase, the
      first real round always starts from 0 *)
-  Core.ApiHook(@Hook_OnBeforeBattlefieldVisible, Core.HOOKTYPE_BRIDGE, Ptr($75EAEA));
-  Core.ApiHook(@Hook_OnBattlefieldVisible,       Core.HOOKTYPE_BRIDGE, Ptr($462E2B));
-  Core.ApiHook(@Hook_OnAfterTacticsPhase,        Core.HOOKTYPE_BRIDGE, Ptr($75D137));
+  Core.Hook(Ptr($75EAEA), Core.HOOKTYPE_BRIDGE, @Hook_OnBeforeBattlefieldVisible);
+  Core.Hook(Ptr($462E2B), Core.HOOKTYPE_BRIDGE, @Hook_OnBattlefieldVisible);
+  Core.Hook(Ptr($75D137), Core.HOOKTYPE_BRIDGE, @Hook_OnAfterTacticsPhase);
   // Call ZvsNoMoreTactic1 in network game for the opposite side
-  Core.ApiHook(ZvsNoMoreTactic1,                 Core.HOOKTYPE_CALL,   Ptr($473E89));
-  Core.ApiHook(@Hook_OnCombatRound_Start,        Core.HOOKTYPE_BRIDGE, Ptr($76065B));
-  Core.ApiHook(@Hook_OnCombatRound_End,          Core.HOOKTYPE_BRIDGE, Ptr($7609A3));
+  Core.Hook(Ptr($473E89), Core.HOOKTYPE_CALL, ZvsNoMoreTactic1);
+  Core.Hook(Ptr($76065B), Core.HOOKTYPE_BRIDGE, @Hook_OnCombatRound_Start);
+  Core.Hook(Ptr($7609A3), Core.HOOKTYPE_BRIDGE, @Hook_OnCombatRound_End);
 
   // Disable BACall2 function, generating !?BR event, because !?BR will be the same as OnCombatRound now
   Core.p.WriteDataPatch(Ptr($74D1AB), ['C3']);

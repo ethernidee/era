@@ -8519,10 +8519,10 @@ begin
   Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
 
   (* Disable internal map scripts interpretation *)
-  Core.ApiHook(@Hook_FindErm_BeforeMainLoop, Core.HOOKTYPE_BRIDGE, Ptr($749BBA));
+  Core.Hook(Ptr($749BBA), Core.HOOKTYPE_BRIDGE, @Hook_FindErm_BeforeMainLoop);
 
   (* Free ERM heap on scripts recompilation *)
-  Core.ApiHook(@Hook_FindErm_ZeroHeap, Core.HOOKTYPE_BRIDGE, Ptr($7499A2));
+  Core.Hook(Ptr($7499A2), Core.HOOKTYPE_BRIDGE, @Hook_FindErm_ZeroHeap);
 
   (* Remove default mechanism of loading [mapname].erm *)
   Core.p.WriteDataPatch(Ptr($72CA8A), ['E90102000090909090']);
@@ -8547,7 +8547,7 @@ begin
   Core.p.WriteDataPatch(Ptr($74C6E1 + 6), ['01']);
 
   (* New way of iterating scripts in FindErm *)
-  Core.ApiHook(@Hook_FindErm_AfterMapScripts, Core.HOOKTYPE_BRIDGE, Ptr($749BF5));
+  Core.Hook(Ptr($749BF5), Core.HOOKTYPE_BRIDGE, @Hook_FindErm_AfterMapScripts);
 
   (* Remove LoadERMTXT calls everywhere *)
   Core.p.WriteDataPatch(Ptr($749932 - 2), ['33C09090909090909090']);
@@ -8566,21 +8566,21 @@ begin
   Core.p.WriteDataPatch(Ptr($74C6FC), ['9090']);
 
   (* Reimplement ProcessErm *)
-  Core.ApiHook(@ProcessErm, Core.HOOKTYPE_JUMP, Ptr($74C816));
+  Core.Hook(Ptr($74C816), Core.HOOKTYPE_JUMP, @ProcessErm);
 
   (* Fix ERM CA:B3 bug *)
-  Core.Hook(@Hook_ErmCastleBuilding, Core.HOOKTYPE_JUMP, 7, Ptr($70E8A2));
+  Core.Hook(Ptr($70E8A2), Core.HOOKTYPE_JUMP, @Hook_ErmCastleBuilding);
 
   (* Fix HE:A art get syntax bug *)
-  Core.Hook(@Hook_ErmHeroArt, Core.HOOKTYPE_BRIDGE, 9, Ptr($744B13));
+  Core.Hook(Ptr($744B13), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt);
 
   (* Fix HE:A# - set flag 1 as success *)
-  Core.Hook(@Hook_ErmHeroArt_FindFreeSlot, Core.HOOKTYPE_BRIDGE, 10, Ptr($7454B2));
-  Core.Hook(@Hook_ErmHeroArt_FoundFreeSlot, Core.HOOKTYPE_BRIDGE, 6, Ptr($7454EC));
+  Core.Hook(Ptr($7454B2), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt_FindFreeSlot);
+  Core.Hook(Ptr($7454EC), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt_FoundFreeSlot);
 
   (* Fix HE:A3 artifacts delete - update art number *)
-  Core.ApiHook(@Hook_ErmHeroArt_DeleteFromBag, Core.HOOKTYPE_BRIDGE, Ptr($745051));
-  Core.ApiHook(@Hook_ErmHeroArt_DeleteFromBag, Core.HOOKTYPE_BRIDGE, Ptr($7452F3));
+  Core.Hook(Ptr($745051), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt_DeleteFromBag);
+  Core.Hook(Ptr($7452F3), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt_DeleteFromBag);
 
   (* Fix HE:P accept any d-modifiers, honor passed flags *)
   ApiJack.HookCode(Ptr($743E2D), @Hook_HE_P);
@@ -8618,20 +8618,20 @@ begin
   Core.p.WriteDataPatch(Ptr($76FC71), ['0F8DDD0A']);
 
   (* Fix DL:C close all dialogs bug *)
-  Core.Hook(@Hook_DlgCallback, Core.HOOKTYPE_BRIDGE, 6, Ptr($729774));
+  Core.Hook(Ptr($729774), Core.HOOKTYPE_BRIDGE, @Hook_DlgCallback);
 
   (* Fully rewrite VR command *)
   AdvErm.RegisterErmReceiver('VR', @New_VR_Receiver, CMD_PARAMS_CONFIG_SINGLE_INT);
 
   (* Fix LoadErtFile to handle any relative pathes *)
-  Core.Hook(@Hook_LoadErtFile, Core.HOOKTYPE_BRIDGE, 5, Ptr($72C660));
+  Core.Hook(Ptr($72C660), Core.HOOKTYPE_BRIDGE, @Hook_LoadErtFile);
 
   (* Replace ERT files storage implementation entirely *)
-  Core.ApiHook(@Hook_ZvsStringSet_Clear,   Core.HOOKTYPE_JUMP, @ZvsStringSet_Clear);
-  Core.ApiHook(@Hook_ZvsStringSet_Add,     Core.HOOKTYPE_JUMP, @ZvsStringSet_Add);
-  Core.ApiHook(@Hook_ZvsStringSet_GetText, Core.HOOKTYPE_JUMP, @ZvsStringSet_GetText);
-  Core.ApiHook(@Hook_ZvsStringSet_Load,    Core.HOOKTYPE_JUMP, @ZvsStringSet_Load);
-  Core.ApiHook(@Hook_ZvsStringSet_Save,    Core.HOOKTYPE_JUMP, @ZvsStringSet_Save);
+  Core.Hook(@ZvsStringSet_Clear, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Clear);
+  Core.Hook(@ZvsStringSet_Add, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Add);
+  Core.Hook(@ZvsStringSet_GetText, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_GetText);
+  Core.Hook(@ZvsStringSet_Load, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Load);
+  Core.Hook(@ZvsStringSet_Save, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Save);
 
   (* Disable connection between script number and option state in WoG options *)
   Core.p.WriteDataPatch(Ptr($777E48), ['E9180100009090909090']);
@@ -8641,12 +8641,12 @@ begin
   ApiJack.HookCode(Ptr($77846B), @Hook_ApplyErsOptions);
 
   (* Fix CM3 trigger allowing to handle all clicks *)
-  Core.ApiHook(@Hook_CM3, Core.HOOKTYPE_BRIDGE, Ptr($5B0255));
+  Core.Hook(Ptr($5B0255), Core.HOOKTYPE_BRIDGE, @Hook_CM3);
   Core.p.WriteDataPatch(Ptr($5B02DD), ['8B47088D70FF']);
 
   (* UN:J3 does not reset commanders or load scripts. New: it can be used to reset wog options *)
   // Turned off because of side effects of NPC reset and not displaying wogification message some authors could rely on.
-  Core.ApiHook(@Hook_UN_J3_End, Core.HOOKTYPE_BRIDGE, Ptr($733A85));
+  Core.Hook(Ptr($733A85), Core.HOOKTYPE_BRIDGE, @Hook_UN_J3_End);
 
   (* Add UN:J13 command: Reset Commanders *)
   ApiJack.HookCode(Ptr($733F11), @Hook_UN_J13);
@@ -8658,7 +8658,7 @@ begin
   ApiJack.HookCode(Ptr($732EA5), @Hook_UN_P3);
 
   (* Fix MR:N in !?MR1 !?MR2 *)
-  Core.ApiHook(@Hook_MR_N, Core.HOOKTYPE_BRIDGE, Ptr($75DC67));
+  Core.Hook(Ptr($75DC67), Core.HOOKTYPE_BRIDGE, @Hook_MR_N);
 
   (* Add BM:U6/?$ command to get final stack speed, including slow effect *)
   ApiJack.HookCode(Ptr($75F2B1), @Hook_BM_U6);
@@ -8705,13 +8705,13 @@ begin
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
-  Core.ApiHook(@Hook_MError,  Core.HOOKTYPE_BRIDGE, Ptr($71236A));
+  Core.Hook(Ptr($71236A), Core.HOOKTYPE_BRIDGE, @Hook_MError);
   // Disallow repeated message, display detailed message with location otherwise
   ApiJack.StdSplice(Ptr($73DE8A), @Hook_ErmMess, ApiJack.CONV_CDECL, 1);
   // Disable double reporting of error location in ProcessCmd
   Core.p.WriteDataPatch(Ptr($749421), ['E9BF0200009090']);
   // Track ERM errors location during FindErm
-  Core.ApiHook(@Hook_FindErm_SkipUntil2, Core.HOOKTYPE_CALL, Ptr($74A14A));
+  Core.Hook(Ptr($74A14A), Core.HOOKTYPE_CALL, @Hook_FindErm_SkipUntil2);
 
   (* Implement universal !?FU(OnEveryDay) event, like !?TM-1 occuring every day for every color before other !?TM triggers *)
   ApiJack.StdSplice(Ptr($74DC74), @Hook_RunTimer, ApiJack.CONV_CDECL, 1);
@@ -8745,22 +8745,22 @@ begin
   Core.p.WriteDataPatch(Ptr($746319), ['8365B01FEB19']);
 
   // Rewrite DO:P implementation
-  Core.ApiHook(@Hook_DO_P, Core.HOOKTYPE_JUMP, Ptr($72D79C));
+  Core.Hook(Ptr($72D79C), Core.HOOKTYPE_JUMP, @Hook_DO_P);
 
   // Replace ZvsCheckFlags with own implementation, free from e-variables issues
-  Core.ApiHook(@Hook_ZvsGetFlags, Core.HOOKTYPE_JUMP, @ZvsGetFlags);
+  Core.Hook(@ZvsGetFlags, Core.HOOKTYPE_JUMP, @Hook_ZvsGetFlags);
 
   // Replace ZvsCheckFlags with own implementation, free from e-variables issues
-  Core.ApiHook(@Hook_ZvsCheckFlags, Core.HOOKTYPE_JUMP, @ZvsCheckFlags);
+  Core.Hook(@ZvsCheckFlags, Core.HOOKTYPE_JUMP, @Hook_ZvsCheckFlags);
 
   // Replace GetNum with own implementation, capable to process named global variables
-  Core.ApiHook(@Hook_ZvsGetNum, Core.HOOKTYPE_JUMP, @ZvsGetNum);
+  Core.Hook(@ZvsGetNum, Core.HOOKTYPE_JUMP, @Hook_ZvsGetNum);
 
   // Replace Apply with own implementation, capable to process named global variables
-  Core.ApiHook(@Hook_ZvsApply, Core.HOOKTYPE_JUMP, @ZvsApply);
+  Core.Hook(@ZvsApply, Core.HOOKTYPE_JUMP, @Hook_ZvsApply);
 
   // Replace ZvsGetVarVal with GetErmParamValue
-  Core.ApiHook(@Hook_ZvsGetVarVal, Core.HOOKTYPE_JUMP, @ZvsGetVarVal);
+  Core.Hook(@ZvsGetVarVal, Core.HOOKTYPE_JUMP, @Hook_ZvsGetVarVal);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF909090890D0C0E84008885' +
@@ -8770,19 +8770,19 @@ begin
                                        '90909090909090909090909090']);
 
   (* Ovewrite GetNumAuto call from upper patch with Era filtering method *)
-  Core.ApiHook(@CustomGetNumAuto, Core.HOOKTYPE_CALL, Ptr($741EAE));
+  Core.Hook(Ptr($741EAE), Core.HOOKTYPE_CALL, @CustomGetNumAuto);
 
   (* Splice ProcessCmd for cmd local memory allocation/deallocation *)
   ApiJack.StdSplice(@ZvsProcessCmd, @Hook_ProcessCmd, ApiJack.CONV_CDECL, 3);
-  //Core.ApiHook(@Hook_ProcessCmd, Core.HOOKTYPE_BRIDGE, Ptr($741E3F));
+  //Core.Hook(Ptr($741E3F), Core.HOOKTYPE_BRIDGE, @Hook_ProcessCmd);
   //ApiJack.HookCode(Ptr($749702), @Hook_ProcessCmd_End);
 
   (* Replace ERM interpolation function *)
-  Core.ApiHook(@InterpolateErmStr, Core.HOOKTYPE_JUMP, @ZvsInterpolateStr);
+  Core.Hook(@ZvsInterpolateStr, Core.HOOKTYPE_JUMP, @InterpolateErmStr);
 
   (* Replace ERM2String and ERM2String2 WoG functions *)
-  Core.ApiHook(@Hook_ERM2String,  Core.HOOKTYPE_JUMP, Ptr($73DF05));
-  Core.ApiHook(@Hook_ERM2String2, Core.HOOKTYPE_JUMP, Ptr($741D32));
+  Core.Hook(Ptr($73DF05), Core.HOOKTYPE_JUMP, @Hook_ERM2String);
+  Core.Hook(Ptr($741D32), Core.HOOKTYPE_JUMP, @Hook_ERM2String2);
 
   (* Enable ERM tracking and pre-command initialization *)
   EventTracker := ErmTracking.TEventTracker.Create(TrackingOpts.MaxRecords)

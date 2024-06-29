@@ -449,18 +449,18 @@ end;
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* Setup snd/vid hooks *)
-  Core.Hook(@Hook_LoadVideoHeaders, Core.HOOKTYPE_BRIDGE, 6, Ptr($598510));
-  Core.Hook(@Hook_OpenSmack, Core.HOOKTYPE_BRIDGE, 6, Ptr($598A90));
-  Core.Hook(@Hook_OpenBik, Core.HOOKTYPE_BRIDGE, 6, Ptr($44D270));
-  Core.Hook(@Hook_LoadSndHeaders, Core.HOOKTYPE_BRIDGE, 6, Ptr($5987A0));
-  Core.Hook(@Hook_LoadSnd, Core.HOOKTYPE_BRIDGE, 5, Ptr($55C340));
+  Core.Hook(Ptr($598510), Core.HOOKTYPE_BRIDGE, @Hook_LoadVideoHeaders);
+  Core.Hook(Ptr($598A90), Core.HOOKTYPE_BRIDGE, @Hook_OpenSmack);
+  Core.Hook(Ptr($44D270), Core.HOOKTYPE_BRIDGE, @Hook_OpenBik);
+  Core.Hook(Ptr($5987A0), Core.HOOKTYPE_BRIDGE, @Hook_LoadSndHeaders);
+  Core.Hook(Ptr($55C340), Core.HOOKTYPE_BRIDGE, @Hook_LoadSnd);
 
   (* Disable CloseSndHandles function *)
   PBYTE($4F3DFD)^    := $90;
   pinteger($4F3DFE)^ := integer($90909090);
 
   (* Disable SavePointersToSndHandles function *)
-  Core.Hook(Core.Ret(0), Core.HOOKTYPE_JUMP, 5, Ptr($5594F0));
+  Core.Hook(Ptr($5594F0), Core.HOOKTYPE_JUMP, Core.Ret(0));
 
   (* Find game CD *)
   if LoadCDOpt then begin

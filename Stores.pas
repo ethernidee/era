@@ -668,9 +668,9 @@ end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
-  Core.Hook(@Hook_SaveGame, Core.HOOKTYPE_BRIDGE, 5, Ptr($4BEB65));
-  Core.Hook(@Hook_SaveGameWrite, Core.HOOKTYPE_BRIDGE, 6, Ptr($704EEC));
-  Core.Hook(@Hook_SaveGameRead, Core.HOOKTYPE_BRIDGE, 6, Ptr($7051B8));
+  Core.Hook(Ptr($4BEB65), Core.HOOKTYPE_BRIDGE, @Hook_SaveGame);
+  Core.Hook(Ptr($704EEC), Core.HOOKTYPE_BRIDGE, @Hook_SaveGameWrite);
+  Core.Hook(Ptr($7051B8), Core.HOOKTYPE_BRIDGE, @Hook_SaveGameRead);
 
   (* Remove Erm trigger "BeforeSaveGame" call *)
   Core.p.WriteDataPatch(Ptr($7051F5), ['9090909090']);

@@ -46,7 +46,7 @@ begin
   Squares2Size   := BasicPoSize * sizeof(TSquare2);
   SecondDimSize  := MapSize * 2 * sizeof(TSquare);
   SecondDimSize2 := MapSize * 2 * sizeof(TSquare2);
-  
+
   // Patch Squares
   PPOINTER($73644C)^ := @Squares[0];
   PPOINTER($73BB32)^ := @Squares[0];
@@ -63,13 +63,13 @@ begin
   PPOINTER($752C2E)^ := @Squares[0];
   PPOINTER($752C47)^ := @Squares[0];
   PPOINTER($752C66)^ := @Squares[0];
-  
+
   // Patch Squares2
   PPOINTER($73BB51)^ := @Squares2[0];
   PPOINTER($751582)^ := @Squares2[0];
   PPOINTER($752472)^ := @Squares2[0];
   PPOINTER($752FA4)^ := @Squares2[0];
-  
+
   // Patch calculating Squares addresses
   PINTEGER($736442)^ := SecondDimSize;
   PINTEGER($73BB28)^ := SecondDimSize;
@@ -84,11 +84,11 @@ begin
   PINTEGER($752C24)^ := SecondDimSize;
   PINTEGER($752C3D)^ := SecondDimSize;
   PINTEGER($752C5C)^ := SecondDimSize;
-  
+
   // Patch calculating Squares2 addresses
   PINTEGER($73BB44)^ := SecondDimSize2;
   PINTEGER($752FBD)^ := Squares2Size;
-  
+
   // Fix cycles
   PINTEGER($752B14)^ := MapSize;
   PINTEGER($752B33)^ := MapSize;
@@ -125,7 +125,7 @@ begin
   PBYTE($75118D)^    := byte($90);
   PINTEGER($75196F)^ := integer($909023EB);
   PBYTE($751973)^    := byte($90);
-  
+
   // Disable Squares2 Save/Load
   PINTEGER($75157C)^ := integer($909020EB);
   PBYTE($751580)^    := byte($90);
@@ -133,7 +133,7 @@ begin
   PBYTE($752470)^    := byte($90);
 
   // $OnBeforeResetErmFunc event for patching PO code before being inited by ERM
-  Core.ApiHook(@Hook_BeforeResetErmFunc, Core.HOOKTYPE_BRIDGE, Ptr($75259E));
+  Core.Hook(Ptr($75259E), Core.HOOKTYPE_BRIDGE, @Hook_BeforeResetErmFunc);
 end; // .procedure OnAfterWoG
 
 begin

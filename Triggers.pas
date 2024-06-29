@@ -1106,27 +1106,27 @@ end;
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
-  Core.Hook(@Hook_BattleHint_GetAttacker, Core.HOOKTYPE_BRIDGE, 7, Ptr($492409));
-  Core.Hook(@Hook_BattleHint_GetDefender, Core.HOOKTYPE_BRIDGE, 7, Ptr($492442));
-  Core.Hook(@Hook_BattleHint_CalcMinMaxDamage, Core.HOOKTYPE_BRIDGE, 5, Ptr($493053));
+  Core.Hook(Ptr($492409), Core.HOOKTYPE_BRIDGE, @Hook_BattleHint_GetAttacker);
+  Core.Hook(Ptr($492442), Core.HOOKTYPE_BRIDGE, @Hook_BattleHint_GetDefender);
+  Core.Hook(Ptr($493053), Core.HOOKTYPE_BRIDGE, @Hook_BattleHint_CalcMinMaxDamage);
 
   (* Key handling trigger *)
-  Core.Hook(@Hook_AfterCreateWindow, Core.HOOKTYPE_BRIDGE, 6, Ptr($4F8226));
+  Core.Hook(Ptr($4F8226), Core.HOOKTYPE_BRIDGE, @Hook_AfterCreateWindow);
 
   (* Stack to stack damage calculation *)
-  Core.Hook(@Hook_StartCalcDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($443C88));
-  Core.Hook(@Hook_CalcDamage_GetDamageBonus, Core.HOOKTYPE_BRIDGE, 5, Ptr($443CA1));
-  Core.Hook(@Hook_EndCalcDamage, Core.HOOKTYPE_BRIDGE, 5, Ptr($443DA7));
+  Core.Hook(Ptr($443C88), Core.HOOKTYPE_BRIDGE, @Hook_StartCalcDamage);
+  Core.Hook(Ptr($443CA1), Core.HOOKTYPE_BRIDGE, @Hook_CalcDamage_GetDamageBonus);
+  Core.Hook(Ptr($443DA7), Core.HOOKTYPE_BRIDGE, @Hook_EndCalcDamage);
 
   (* AI Target attack effect *)
-  Core.Hook(@Hook_AI_CalcStackAttackEffect_Start, Core.HOOKTYPE_BRIDGE, 6, Ptr($4357E0));
-  Core.Hook(@Hook_AI_CalcStackAttackEffect_End, Core.HOOKTYPE_BRIDGE, 5, Ptr($4358AA));
+  Core.Hook(Ptr($4357E0), Core.HOOKTYPE_BRIDGE, @Hook_AI_CalcStackAttackEffect_Start);
+  Core.Hook(Ptr($4358AA), Core.HOOKTYPE_BRIDGE, @Hook_AI_CalcStackAttackEffect_End);
 
   (* OnChat trigger *)
-  Core.Hook(@Hook_EnterChat, Core.HOOKTYPE_BRIDGE, 5, Ptr($4022B0));
-  Core.Hook(@Hook_ChatInput, Core.HOOKTYPE_BRIDGE, 6, Ptr($554780));
-  Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402298));
-  Core.Hook(@Hook_LeaveChat, Core.HOOKTYPE_BRIDGE, 6, Ptr($402240));
+  Core.Hook(Ptr($4022B0), Core.HOOKTYPE_BRIDGE, @Hook_EnterChat);
+  Core.Hook(Ptr($554780), Core.HOOKTYPE_BRIDGE, @Hook_ChatInput);
+  Core.Hook(Ptr($402298), Core.HOOKTYPE_BRIDGE, @Hook_LeaveChat);
+  Core.Hook(Ptr($402240), Core.HOOKTYPE_BRIDGE, @Hook_LeaveChat);
 
   (* Main game cycle (AdvMgr, CombatMgr): OnEnterGame, OnLeaveGame and MapFolder settings*)
   ApiJack.StdSplice(Ptr($4B0BA0), @Hook_ExecuteManager, ApiJack.CONV_THISCALL, 1);

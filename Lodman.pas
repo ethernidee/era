@@ -335,8 +335,8 @@ begin
   LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
 
   (* Begin lods files redirection *)
-  Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FB106));
-  Core.ApiHook(@Hook_FindFileInLod, Core.HOOKTYPE_BRIDGE, Ptr($4FACA6)); // A0_Lod_FindResource_sub_4FACA0
+  Core.Hook(Ptr($4FB106), Core.HOOKTYPE_BRIDGE, @Hook_FindFileInLod);
+  Core.Hook(Ptr($4FACA6), Core.HOOKTYPE_BRIDGE, @Hook_FindFileInLod); // A0_Lod_FindResource_sub_4FACA0
 
   EventMan.GetInstance().Fire('OnAfterLoadLods');
 
@@ -472,7 +472,7 @@ begin
   PWORD($7015E5)^ := $38EB;
 
   (* Lead lods loading/reordering *)
-  Core.Hook(@Hook_LoadLods, Core.HOOKTYPE_BRIDGE, 5, Ptr($559408));
+  Core.Hook(Ptr($559408), Core.HOOKTYPE_BRIDGE, @Hook_LoadLods);
 
   (* Implement OnAfterLoadLods event and missing resources redirection *)
   ApiJack.HookCode(Ptr($4EDD65), @Hook_AfterLoadLods);

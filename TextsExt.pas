@@ -25,7 +25,7 @@ var
 procedure AddLinesToText (const FileName, Lines: string);
 var
 {U} AddText:  TString;
-   
+
 begin
   AddText :=  AddTexts[FileName];
   // * * * * * //
@@ -71,7 +71,7 @@ end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent);
 begin
-  Core.ApiHook(@Hook_LoadTextFromFile, Core.HOOKTYPE_BRIDGE, Ptr($55C106));
+  Core.Hook(Ptr($55C106), Core.HOOKTYPE_BRIDGE, @Hook_LoadTextFromFile);
 end;
 
 begin
