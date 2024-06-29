@@ -50,6 +50,12 @@ type
 
   TDwordBool = integer; // 0 or 1
 
+  PAppliedPatch = ^TAppliedPatch;
+  TAppliedPatch = packed record
+  {O} Data: Utils.PEndlessByteArr;
+      Size: integer;
+  end;
+
 
 (***) implementation (***)
 
@@ -272,6 +278,8 @@ begin
   result := ApiJack.StdSplice(OrigFunc, HandlerFunc, ApiJack.TCallingConv(CallingConv), NumArgs, CustomParam, ApiJack.PAppliedPatch(AppliedPatch));
 end;
 
+(* Installs new hook at specified address. Returns pointer to bridge with original code. Optionally specify address of a pointer to write applied patch structure pointer to.
+   It will allow to rollback the patch later. *)
 function HookCode (Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer): pointer; stdcall;
 begin
   if AppliedPatch <> nil then begin
@@ -282,6 +290,27 @@ begin
   result := ApiJack.HookCode(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch));
 end;
 
+function CalcHookPatchSize (Addr: pointer): integer; stdcall;
+begin
+  result := ApiJack.CalcHookPatchSize(Addr);
+end;
+
+(* The patch will be rollback and internal memory and freed. Do not use it anymore *)
+procedure RollbackAppliedPatch ({O} AppliedPatch: pointer); stdcall;
+begin
+  {!} Assert(AppliedPatch <> nil);
+  ApiJack.PAppliedPatch(AppliedPatch).Rollback;
+  Dispose(AppliedPatch);
+end;
+
+(* Frees applied patch structure. Use it if you don't plan to rollback it anymore *)
+procedure FreeAppliedPatch ({O} AppliedPatch: pointer); stdcall;
+begin
+  if AppliedPatch <> nil then begin
+    Dispose(AppliedPatch);
+  end;
+end;
+
 function GetArgXVars: PErmXVars; stdcall;
 begin
   result := @Erm.ArgXVars;
@@ -290,6 +319,11 @@ end;
 function GetRetXVars: PErmXVars; stdcall;
 begin
   result := @Erm.RetXVars;
+end;
+
+function GetTriggerReadableName (EventId: integer): {O} pchar; stdcall;
+begin
+  result := Externalize(Erm.GetTriggerReadableName(EventId));
 end;
 
 procedure RegisterErmReceiver (const Cmd: pchar; {n} Handler: TErmCmdHandler; ParamsConfig: integer); stdcall;
@@ -607,9 +641,8 @@ exports
   AdvErm.ExtendArrayLifetime,
   AllocErmFunc,
   Ask,
+  CalcHookPatchSize,
   ClearIniCache,
-  Core.ApiHook,
-  Core.Hook,
   Core.WriteAtCode,
   DecorateInt,
   Erm.DisableErmTracking,
@@ -638,6 +671,7 @@ exports
   FireEvent,
   FireRemoteEvent,
   FormatQuantity,
+  FreeAppliedPatch,
   GameExt.GenerateDebugInfo,
   GameExt.GetRealAddr,
   GameExt.RedirectMemoryBlock,
@@ -652,6 +686,7 @@ exports
   GetMapFileName,
   GetProcessGuid,
   GetRetXVars,
+  GetTriggerReadableName,
   GetVersion,
   GetVersionNum,
   GlobalRedirectFile,
@@ -676,6 +711,7 @@ exports
   RegisterErmReceiver,
   RegisterHandler,
   ReportPluginVersion,
+  RollbackAppliedPatch,
   SaveIni,
   SetAssocVarIntValue,
   SetAssocVarStrValue,
