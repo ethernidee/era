@@ -22,13 +22,13 @@ const
     If default code should be executed, it can contain any commands except jumps.
   *)
   HOOKTYPE_BRIDGE = 2;
-  
+
   OPCODE_JUMP = $E9;
   OPCODE_CALL = $E8;
   OPCODE_RET  = $C3;
-  
+
   EXEC_DEF_CODE = true;
-  
+
   (* Erm triggers *)
   TRIGGER_FU1      = 0;
   TRIGGER_FU30000  = 29999;
@@ -94,7 +94,7 @@ const
   TRIGGER_OB_POS   = integer($10000000);
   TRIGGER_LE_POS   = integer($20000000);
   TRIGGER_OB_LEAVE = integer($08000000);
-  
+
   (* Era Triggers *)
   TRIGGER_SAVEGAME_WRITE            = 77001;
   TRIGGER_SAVEGAME_READ             = 77002;
@@ -140,12 +140,17 @@ type
   TErmFlags = array [1..1000] of boolean;
   PErmEVars = ^TErmEVars;
   TErmEVars = array [1..100] of single;
-  
+
   PGameState  = ^TGameState;
   TGameState  = packed record
     RootDlgId:    integer;
     CurrentDlgId: integer;
   end;
+
+  TDwordBool = integer; // 0 or 1
+
+  (* Stubs *)
+  PPcx16Item = pointer;
 
 
 {$IFDEF FPC}
@@ -169,14 +174,23 @@ const
 {$ENDIF}
 
 
+function  GetArgXVars: PErmXVars; stdcall; external 'era.dll' name 'GetArgXVars';
 function  GetButtonID (ButtonName: pchar): integer; stdcall; external 'era.dll' name 'GetButtonID';
 function  GetRealAddr (Addr: pointer): pointer; stdcall; external 'era.dll' name 'GetRealAddr';
-function  PatchExists (PatchName: pchar): longbool; stdcall; external 'era.dll' name 'PatchExists';
-function  PluginExists (PluginName: pchar): longbool; stdcall; external 'era.dll' name 'PluginExists';
+function  GetRetXVars: PErmXVars; stdcall; external 'era.dll' name 'GetRetXVars';
+function  PatchExists (PatchName: pchar): boolean; stdcall; external 'era.dll' name 'PatchExists';
+function  PluginExists (PluginName: pchar): boolean; stdcall; external 'era.dll' name 'PluginExists';
 function  ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar ): integer; stdcall; external 'era.dll' name 'ReadSavegameSection';
-function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): longbool; stdcall; external 'era.dll' name 'ReadStrFromIni';
-function  SaveIni (FilePath: pchar): longbool; stdcall; external 'era.dll' name 'SaveIni';
-function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): longbool; stdcall; external 'era.dll' name 'WriteStrToIni';
+function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall; external 'era.dll' name 'ReadStrFromIni';
+function  SaveIni (FilePath: pchar): boolean; stdcall; external 'era.dll' name 'SaveIni';
+function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall; external 'era.dll' name 'WriteStrToIni';
+function GetVersion: pchar; stdcall; external 'era.dll' name 'GetVersion';
+function GetVersionNum: integer; stdcall; external 'era.dll' name 'GetVersionNum';
+function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height, MaxWidth, MaxHeight, ResizeAlg: integer): {OU} PPcx16Item; stdcall; external 'era.dll' name 'LoadImageAsPcx16';
+function SetLanguage (NewLanguage: pchar): TDwordBool; stdcall; external 'era.dll' name 'SetLanguage';
+function Splice (OrigFunc, HandlerFunc: pointer; CallingConv: integer; NumArgs: integer; {n} CustomParam: pinteger; {n} AppliedPatch: ppointer): pointer; stdcall; external 'era.dll' name 'Splice';
+function TakeScreenshot (FilePath: pchar; Quality: integer; Flags: integer): TDwordBool; stdcall; external 'era.dll' name 'TakeScreenshot';
+function tr (const Key: pchar; const Params: array of pchar): pchar; stdcall; external 'era.dll' name 'tr';
 procedure ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer); stdcall; external 'era.dll' name 'ApiHook';
 procedure ClearAllIniCache; external 'era.dll' name 'ClearAllIniCache';
 procedure ClearIniCache (FileName: pchar); stdcall; external 'era.dll' name 'ClearIniCache';
@@ -189,11 +203,15 @@ procedure GenerateDebugInfo; external 'era.dll' name 'GenerateDebugInfo';
 procedure GetGameState (var GameState: TGameState); stdcall; external 'era.dll' name 'GetGameState';
 procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall; external 'era.dll' name 'GlobalRedirectFile';
 procedure Hook (HandlerAddr:  pointer; HookType: integer; PatchSize: integer; CodeAddr: pointer ); stdcall; external 'era.dll' name 'Hook';
+procedure MemFree ({On} Buf: pointer); stdcall; external 'era.dll' name 'MemFree';
 procedure NameColor (Color32: integer; Name: pchar); stdcall; external 'era.dll' name 'NameColor';
+procedure NameTrigger (TriggerId: integer; Name: pchar); stdcall; external 'era.dll' name 'NameTrigger';
 procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall; external 'era.dll' name 'RedirectFile';
 procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall; external 'era.dll' name 'RedirectMemoryBlock';
 procedure RegisterHandler (Handler: TEventHandler; EventName: pchar); stdcall; external 'era.dll' name 'RegisterHandler';
 procedure ReloadErm; external 'era.dll' name 'ReloadErm';
+procedure ReportPluginVersion (const VersionLine: pchar); stdcall; external 'era.dll' name 'ReportPluginVersion';
+procedure ShowMessage (Mes: pchar); stdcall; external 'era.dll' name 'ShowMessage';
 procedure WriteAtCode (Count: integer; Src, Dst: pointer); stdcall; external 'era.dll' name 'WriteAtCode';
 procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall; external 'era.dll' name 'WriteSavegameSection';
 
