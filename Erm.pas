@@ -5343,6 +5343,10 @@ begin
   end; // .if
 end; // .function Hook_ZvsApply
 
+(*
+  Many in-game events are generated as ERM events in WoG code. ProcessERM generates additionally human readable event for Era and plugins.
+  This its crucial to handle events even if ERM/scripting is disabled.
+*)
 procedure ProcessErm;
 const
   (* Ifs state *)
@@ -5514,11 +5518,6 @@ begin
   Trigger      := nil;
   EventManager := EventMan.GetInstance;
   // * * * * * //
-  if not ErmEnabled^ then begin
-    RetXVars := ArgXVars;
-    exit;
-  end;
-
   ServiceMemAllocator.AllocPage;
   TriggerId := CurrErmEventId^;
 
@@ -5574,7 +5573,9 @@ begin
       EventManager.Fire(NumericEventName, @TriggerId, sizeof(TriggerId));
       EventManager.Fire(HumanEventName, @TriggerId, sizeof(TriggerId));
 
-      Trigger := StartTrigger;
+      if ErmEnabled^ then begin
+        Trigger := StartTrigger;
+      end;
 
       // Loop through all triggers with specified ID / through all triggers in instructions phase
       while (Trigger <> nil) and (Trigger.Id <> 0) do begin
