@@ -10,6 +10,7 @@ uses
   SysUtils,
   Windows,
 
+  ApiJack,
   AssocArrays,
   Core,
   Crypto,
@@ -449,11 +450,11 @@ end;
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* Setup snd/vid hooks *)
-  Core.Hook(Ptr($598510), Core.HOOKTYPE_BRIDGE, @Hook_LoadVideoHeaders);
-  Core.Hook(Ptr($598A90), Core.HOOKTYPE_BRIDGE, @Hook_OpenSmack);
-  Core.Hook(Ptr($44D270), Core.HOOKTYPE_BRIDGE, @Hook_OpenBik);
-  Core.Hook(Ptr($5987A0), Core.HOOKTYPE_BRIDGE, @Hook_LoadSndHeaders);
-  Core.Hook(Ptr($55C340), Core.HOOKTYPE_BRIDGE, @Hook_LoadSnd);
+  ApiJack.HookCode(Ptr($598510), @Hook_LoadVideoHeaders);
+  ApiJack.HookCode(Ptr($598A90), @Hook_OpenSmack);
+  ApiJack.HookCode(Ptr($44D270), @Hook_OpenBik);
+  ApiJack.HookCode(Ptr($5987A0), @Hook_LoadSndHeaders);
+  ApiJack.HookCode(Ptr($55C340), @Hook_LoadSnd);
 
   (* Disable CloseSndHandles function *)
   PBYTE($4F3DFD)^    := $90;

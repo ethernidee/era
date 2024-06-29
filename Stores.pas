@@ -11,6 +11,7 @@ uses
   SysUtils,
   Windows,
 
+  ApiJack,
   AssocArrays,
   Core,
   Crypto,
@@ -668,9 +669,9 @@ end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
-  Core.Hook(Ptr($4BEB65), Core.HOOKTYPE_BRIDGE, @Hook_SaveGame);
-  Core.Hook(Ptr($704EEC), Core.HOOKTYPE_BRIDGE, @Hook_SaveGameWrite);
-  Core.Hook(Ptr($7051B8), Core.HOOKTYPE_BRIDGE, @Hook_SaveGameRead);
+  ApiJack.HookCode(Ptr($4BEB65), @Hook_SaveGame);
+  ApiJack.HookCode(Ptr($704EEC), @Hook_SaveGameWrite);
+  ApiJack.HookCode(Ptr($7051B8), @Hook_SaveGameRead);
 
   (* Remove Erm trigger "BeforeSaveGame" call *)
   Core.p.WriteDataPatch(Ptr($7051F5), ['9090909090']);

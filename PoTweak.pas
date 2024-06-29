@@ -5,7 +5,15 @@ AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
 }
 
 (***)  interface  (***)
-uses Core, GameExt, Heroes, Stores, EventMan;
+
+uses
+  Core,
+  ApiJack,
+
+  EventMan,
+  GameExt,
+  Heroes,
+  Stores;
 
 const
   FILE_SECTION_NAME = 'Era.PO';
@@ -133,7 +141,7 @@ begin
   PBYTE($752470)^    := byte($90);
 
   // $OnBeforeResetErmFunc event for patching PO code before being inited by ERM
-  Core.Hook(Ptr($75259E), Core.HOOKTYPE_BRIDGE, @Hook_BeforeResetErmFunc);
+  ApiJack.HookCode(Ptr($75259E), @Hook_BeforeResetErmFunc);
 end; // .procedure OnAfterWoG
 
 begin

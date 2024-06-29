@@ -8519,10 +8519,10 @@ begin
   Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
 
   (* Disable internal map scripts interpretation *)
-  Core.Hook(Ptr($749BBA), Core.HOOKTYPE_BRIDGE, @Hook_FindErm_BeforeMainLoop);
+  ApiJack.HookCode(Ptr($749BBA), @Hook_FindErm_BeforeMainLoop);
 
   (* Free ERM heap on scripts recompilation *)
-  Core.Hook(Ptr($7499A2), Core.HOOKTYPE_BRIDGE, @Hook_FindErm_ZeroHeap);
+  ApiJack.HookCode(Ptr($7499A2), @Hook_FindErm_ZeroHeap);
 
   (* Remove default mechanism of loading [mapname].erm *)
   Core.p.WriteDataPatch(Ptr($72CA8A), ['E90102000090909090']);
@@ -8547,7 +8547,7 @@ begin
   Core.p.WriteDataPatch(Ptr($74C6E1 + 6), ['01']);
 
   (* New way of iterating scripts in FindErm *)
-  Core.Hook(Ptr($749BF5), Core.HOOKTYPE_BRIDGE, @Hook_FindErm_AfterMapScripts);
+  ApiJack.HookCode(Ptr($749BF5), @Hook_FindErm_AfterMapScripts);
 
   (* Remove LoadERMTXT calls everywhere *)
   Core.p.WriteDataPatch(Ptr($749932 - 2), ['33C09090909090909090']);
@@ -8572,15 +8572,15 @@ begin
   Core.Hook(Ptr($70E8A2), Core.HOOKTYPE_JUMP, @Hook_ErmCastleBuilding);
 
   (* Fix HE:A art get syntax bug *)
-  Core.Hook(Ptr($744B13), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt);
+  ApiJack.HookCode(Ptr($744B13), @Hook_ErmHeroArt);
 
   (* Fix HE:A# - set flag 1 as success *)
-  Core.Hook(Ptr($7454B2), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt_FindFreeSlot);
-  Core.Hook(Ptr($7454EC), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt_FoundFreeSlot);
+  ApiJack.HookCode(Ptr($7454B2), @Hook_ErmHeroArt_FindFreeSlot);
+  ApiJack.HookCode(Ptr($7454EC), @Hook_ErmHeroArt_FoundFreeSlot);
 
   (* Fix HE:A3 artifacts delete - update art number *)
-  Core.Hook(Ptr($745051), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt_DeleteFromBag);
-  Core.Hook(Ptr($7452F3), Core.HOOKTYPE_BRIDGE, @Hook_ErmHeroArt_DeleteFromBag);
+  ApiJack.HookCode(Ptr($745051), @Hook_ErmHeroArt_DeleteFromBag);
+  ApiJack.HookCode(Ptr($7452F3), @Hook_ErmHeroArt_DeleteFromBag);
 
   (* Fix HE:P accept any d-modifiers, honor passed flags *)
   ApiJack.HookCode(Ptr($743E2D), @Hook_HE_P);
@@ -8618,13 +8618,13 @@ begin
   Core.p.WriteDataPatch(Ptr($76FC71), ['0F8DDD0A']);
 
   (* Fix DL:C close all dialogs bug *)
-  Core.Hook(Ptr($729774), Core.HOOKTYPE_BRIDGE, @Hook_DlgCallback);
+  ApiJack.HookCode(Ptr($729774), @Hook_DlgCallback);
 
   (* Fully rewrite VR command *)
   AdvErm.RegisterErmReceiver('VR', @New_VR_Receiver, CMD_PARAMS_CONFIG_SINGLE_INT);
 
   (* Fix LoadErtFile to handle any relative pathes *)
-  Core.Hook(Ptr($72C660), Core.HOOKTYPE_BRIDGE, @Hook_LoadErtFile);
+  ApiJack.HookCode(Ptr($72C660), @Hook_LoadErtFile);
 
   (* Replace ERT files storage implementation entirely *)
   Core.Hook(@ZvsStringSet_Clear, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Clear);
@@ -8641,12 +8641,12 @@ begin
   ApiJack.HookCode(Ptr($77846B), @Hook_ApplyErsOptions);
 
   (* Fix CM3 trigger allowing to handle all clicks *)
-  Core.Hook(Ptr($5B0255), Core.HOOKTYPE_BRIDGE, @Hook_CM3);
+  ApiJack.HookCode(Ptr($5B0255), @Hook_CM3);
   Core.p.WriteDataPatch(Ptr($5B02DD), ['8B47088D70FF']);
 
   (* UN:J3 does not reset commanders or load scripts. New: it can be used to reset wog options *)
   // Turned off because of side effects of NPC reset and not displaying wogification message some authors could rely on.
-  Core.Hook(Ptr($733A85), Core.HOOKTYPE_BRIDGE, @Hook_UN_J3_End);
+  ApiJack.HookCode(Ptr($733A85), @Hook_UN_J3_End);
 
   (* Add UN:J13 command: Reset Commanders *)
   ApiJack.HookCode(Ptr($733F11), @Hook_UN_J13);
@@ -8658,7 +8658,7 @@ begin
   ApiJack.HookCode(Ptr($732EA5), @Hook_UN_P3);
 
   (* Fix MR:N in !?MR1 !?MR2 *)
-  Core.Hook(Ptr($75DC67), Core.HOOKTYPE_BRIDGE, @Hook_MR_N);
+  ApiJack.HookCode(Ptr($75DC67), @Hook_MR_N);
 
   (* Add BM:U6/?$ command to get final stack speed, including slow effect *)
   ApiJack.HookCode(Ptr($75F2B1), @Hook_BM_U6);
@@ -8705,7 +8705,7 @@ begin
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
-  Core.Hook(Ptr($71236A), Core.HOOKTYPE_BRIDGE, @Hook_MError);
+  ApiJack.HookCode(Ptr($71236A), @Hook_MError);
   // Disallow repeated message, display detailed message with location otherwise
   ApiJack.StdSplice(Ptr($73DE8A), @Hook_ErmMess, ApiJack.CONV_CDECL, 1);
   // Disable double reporting of error location in ProcessCmd
@@ -8774,7 +8774,7 @@ begin
 
   (* Splice ProcessCmd for cmd local memory allocation/deallocation *)
   ApiJack.StdSplice(@ZvsProcessCmd, @Hook_ProcessCmd, ApiJack.CONV_CDECL, 3);
-  //Core.Hook(Ptr($741E3F), Core.HOOKTYPE_BRIDGE, @Hook_ProcessCmd);
+  //ApiJack.HookCode(Ptr($741E3F), @Hook_ProcessCmd);
   //ApiJack.HookCode(Ptr($749702), @Hook_ProcessCmd_End);
 
   (* Replace ERM interpolation function *)

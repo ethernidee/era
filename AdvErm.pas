@@ -3551,7 +3551,7 @@ end;
 procedure OnBeforeWoG (Event: PEvent); stdcall;
 begin
   (* Custom ERM memory dump *)
-  Core.Hook(@Erm.ZvsDumpErmVars, Core.HOOKTYPE_BRIDGE, @Hook_DumpErmVars);
+  ApiJack.HookCode(@Erm.ZvsDumpErmVars, @Hook_DumpErmVars);
 
   (* ERM direct call by hanlder instead of cmd linear scan implementation *)
   // Allocate additional local variable for FindErm. CmdHandler: TErmCmdHandler; absolute (EBP - $6C8)
@@ -3590,7 +3590,7 @@ end;
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* SN:H and new events for adventure map tile hints *)
-  Core.Hook(Ptr($74DE9D), Core.HOOKTYPE_BRIDGE, @Hook_ZvsCheckObjHint);
+  ApiJack.HookCode(Ptr($74DE9D), @Hook_ZvsCheckObjHint);
   ApiJack.StdSplice(Ptr($74E007), @Hook_ZvsHintControl0, ApiJack.CONV_THISCALL, 4);
   ApiJack.StdSplice(Ptr($74E179), @Hook_ZvsHintWindow, ApiJack.CONV_THISCALL, 4);
 

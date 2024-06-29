@@ -2016,8 +2016,8 @@ begin
   Core.Hook(ZvsWriteIntIni, Core.HOOKTYPE_JUMP, @Hook_WriteIntIni);
 
   (* DL dialogs centering *)
-  Core.Hook(Ptr($729C5A), Core.HOOKTYPE_BRIDGE, @Hook_ZvsGetWindowWidth);
-  Core.Hook(Ptr($729C6D), Core.HOOKTYPE_BRIDGE, @Hook_ZvsGetWindowHeight);
+  ApiJack.HookCode(Ptr($729C5A), @Hook_ZvsGetWindowWidth);
+  ApiJack.HookCode(Ptr($729C6D), @Hook_ZvsGetWindowHeight);
 
   (* Mark the freshest savegame *)
   MarkFreshestSavegame;
@@ -2028,7 +2028,7 @@ begin
   end;
 
   (* Fix HotSeat second hero name *)
-  Core.Hook(Ptr($5125B0), Core.HOOKTYPE_BRIDGE, @Hook_SetHotseatHeroName);
+  ApiJack.HookCode(Ptr($5125B0), @Hook_SetHotseatHeroName);
   Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
 
   (* Universal CPU patch *)
@@ -2069,31 +2069,31 @@ begin
   ApiJack.StdSplice(Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname'), @Hook_GetHostByName, ApiJack.CONV_STDCALL, 1);
 
   (* Fix ApplyDamage calls, so that !?MF1 damage is displayed correctly in log *)
-  Core.Hook(Ptr($43F95B + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx_Local7);
-  Core.Hook(Ptr($43FA5E + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx);
-  Core.Hook(Ptr($43FD3D + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Local7);
-  Core.Hook(Ptr($4400DF + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx);
-  Core.Hook(Ptr($440858 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Esi_Arg1);
-  Core.Hook(Ptr($440E70 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx);
-  Core.Hook(Ptr($441048 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Arg1);
-  Core.Hook(Ptr($44124C + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Esi);
-  Core.Hook(Ptr($441739 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Local4);
-  Core.Hook(Ptr($44178A + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Local8);
-  Core.Hook(Ptr($46595F + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Arg1);
-  Core.Hook(Ptr($469A93 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Ebx);
-  Core.Hook(Ptr($5A1065 + 5), Core.HOOKTYPE_BRIDGE, @Hook_ApplyDamage_Local13);
+  ApiJack.HookCode(Ptr($43F95B + 5), @Hook_ApplyDamage_Ebx_Local7);
+  ApiJack.HookCode(Ptr($43FA5E + 5), @Hook_ApplyDamage_Ebx);
+  ApiJack.HookCode(Ptr($43FD3D + 5), @Hook_ApplyDamage_Local7);
+  ApiJack.HookCode(Ptr($4400DF + 5), @Hook_ApplyDamage_Ebx);
+  ApiJack.HookCode(Ptr($440858 + 5), @Hook_ApplyDamage_Esi_Arg1);
+  ApiJack.HookCode(Ptr($440E70 + 5), @Hook_ApplyDamage_Ebx);
+  ApiJack.HookCode(Ptr($441048 + 5), @Hook_ApplyDamage_Arg1);
+  ApiJack.HookCode(Ptr($44124C + 5), @Hook_ApplyDamage_Esi);
+  ApiJack.HookCode(Ptr($441739 + 5), @Hook_ApplyDamage_Local4);
+  ApiJack.HookCode(Ptr($44178A + 5), @Hook_ApplyDamage_Local8);
+  ApiJack.HookCode(Ptr($46595F + 5), @Hook_ApplyDamage_Arg1);
+  ApiJack.HookCode(Ptr($469A93 + 5), @Hook_ApplyDamage_Ebx);
+  ApiJack.HookCode(Ptr($5A1065 + 5), @Hook_ApplyDamage_Local13);
 
   (* Fix negative offsets handling in fonts *)
   Core.p.WriteDataPatch(Ptr($4B534A), ['B6']);
   Core.p.WriteDataPatch(Ptr($4B53E6), ['B6']);
 
   (* Fix WoG/ERM versions *)
-  Core.Hook(Ptr($73226C), Core.HOOKTYPE_BRIDGE, @Hook_GetWoGAndErmVersions);
+  ApiJack.HookCode(Ptr($73226C), @Hook_GetWoGAndErmVersions);
 
   (*  Fix zvslib1.dll ExtractDef function to support mods  *)
-  Core.Hook(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + 3), Core.HOOKTYPE_BRIDGE, @Hook_ZvsLib_ExtractDef);
+  ApiJack.HookCode(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + 3), @Hook_ZvsLib_ExtractDef);
 
-  Core.Hook(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS), Core.HOOKTYPE_BRIDGE, @Hook_ZvsLib_ExtractDef_GetGamePath);
+  ApiJack.HookCode(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS), @Hook_ZvsLib_ExtractDef_GetGamePath);
 
   Core.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
 
@@ -2111,13 +2111,13 @@ begin
 
   (* Fix battle round counting: no !?BR before battlefield is shown, negative FIRST_TACTICS_ROUND incrementing for the whole tactics phase, the
      first real round always starts from 0 *)
-  Core.Hook(Ptr($75EAEA), Core.HOOKTYPE_BRIDGE, @Hook_OnBeforeBattlefieldVisible);
-  Core.Hook(Ptr($462E2B), Core.HOOKTYPE_BRIDGE, @Hook_OnBattlefieldVisible);
-  Core.Hook(Ptr($75D137), Core.HOOKTYPE_BRIDGE, @Hook_OnAfterTacticsPhase);
+  ApiJack.HookCode(Ptr($75EAEA), @Hook_OnBeforeBattlefieldVisible);
+  ApiJack.HookCode(Ptr($462E2B), @Hook_OnBattlefieldVisible);
+  ApiJack.HookCode(Ptr($75D137), @Hook_OnAfterTacticsPhase);
   // Call ZvsNoMoreTactic1 in network game for the opposite side
   Core.Hook(Ptr($473E89), Core.HOOKTYPE_CALL, ZvsNoMoreTactic1);
-  Core.Hook(Ptr($76065B), Core.HOOKTYPE_BRIDGE, @Hook_OnCombatRound_Start);
-  Core.Hook(Ptr($7609A3), Core.HOOKTYPE_BRIDGE, @Hook_OnCombatRound_End);
+  ApiJack.HookCode(Ptr($76065B), @Hook_OnCombatRound_Start);
+  ApiJack.HookCode(Ptr($7609A3), @Hook_OnCombatRound_End);
 
   // Disable BACall2 function, generating !?BR event, because !?BR will be the same as OnCombatRound now
   Core.p.WriteDataPatch(Ptr($74D1AB), ['C3']);

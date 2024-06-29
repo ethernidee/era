@@ -1588,11 +1588,11 @@ begin
     pword($4B5202)^    := word($840F); // JE
     pinteger($4B5204)^ := $02E7;       // 4B54EF
   end else begin
-    Core.Hook(Ptr($4B509B), Core.HOOKTYPE_BRIDGE, @Hook_HandleTags);
+    ApiJack.HookCode(Ptr($4B509B), @Hook_HandleTags);
   end;
 
-  Core.Hook(Ptr($4B4F74), Core.HOOKTYPE_BRIDGE, @Hook_GetCharColor);
-  Core.Hook(Ptr($4B5255), Core.HOOKTYPE_BRIDGE, @Hook_BeginParseText);
+  ApiJack.HookCode(Ptr($4B4F74), @Hook_GetCharColor);
+  ApiJack.HookCode(Ptr($4B5255), @Hook_BeginParseText);
   Core.Hook(Ptr($4B5275), Core.HOOKTYPE_CALL, @Hook_CountNumTextLines);
   Core.Hook(Ptr($4B52CA), Core.HOOKTYPE_CALL, @Hook_CountNumTextLines);
   Core.Hook(Ptr($5BA547), Core.HOOKTYPE_CALL, @Hook_ScrollTextDlg_CreateLineTextItem);

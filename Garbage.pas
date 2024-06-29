@@ -30,7 +30,7 @@ var
 
 begin
   HookAddr :=  integer(Context.RetAddr) - sizeof(Core.THookRec);
-  case HookAddr of 
+  case HookAddr of
     $43F960:  PINTEGER(Context.EBP - $1C)^  :=  WOG_MF_DAMAGE^;
     $43FA63:  Context.EBX                   :=  WOG_MF_DAMAGE^;
     $43FD42:  PINTEGER(Context.EBP - $1C)^  :=  WOG_MF_DAMAGE^;
@@ -51,19 +51,19 @@ begin
 end; // .function Hook_AfterApplyDamage
 
 (* Fix MF:F corrected damage log *)
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 10, Ptr($43F960));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 10, Ptr($43FA63));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 10, Ptr($43FD42));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 10, Ptr($4400E4));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($44085D));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($440E75));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($44104D));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($441251));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($44173E));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 10, Ptr($44178F));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($465964));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 6, Ptr($469A98));
-Core.Hook(@Hook_AfterApplyDamage, Core.HOOKTYPE_BRIDGE, 5, Ptr($5A106A));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 10, Ptr($43F960));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 10, Ptr($43FA63));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 10, Ptr($43FD42));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 10, Ptr($4400E4));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 6, Ptr($44085D));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 6, Ptr($440E75));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 6, Ptr($44104D));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 6, Ptr($441251));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 6, Ptr($44173E));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 10, Ptr($44178F));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 6, Ptr($465964));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 6, Ptr($469A98));
+ApiJack.HookCode(@Hook_AfterApplyDamage, 5, Ptr($5A106A));
 
 procedure LoadExtraErm;
 const
@@ -104,7 +104,7 @@ begin
   ScriptList.ForbidDuplicates  :=  true;
 
   Locator.InitSearch('*.erm');
-  
+
   while Locator.NotEnd do begin
     ScriptName :=  Locator.GetNextItem(Files.TItemInfo(FileInfo));
 
@@ -127,7 +127,7 @@ begin
       );
 
       ScriptPriority  :=  DEFAULT_PRIORITY;
-      
+
       if
         (Length(ScriptNameTokens) = SCRIPTNAME_NUM_TOKENS)  and
         (SysUtils.TryStrToInt(ScriptNameTokens[PRIORITY_TOKEN], TestPriority))
@@ -140,7 +140,7 @@ begin
 
     SysUtils.FreeAndNil(FileInfo);
   end; // .while
-  
+
   Locator.FinitSearch;
 
   ScriptList.Sorted            :=  false;
@@ -162,7 +162,7 @@ begin
   SetLength(ScriptContents, ScriptList.Count);
   FirstScriptSize :=  0;
   LastScriptSize  :=  0;
-  
+
   for i:=0 to ScriptList.Count - 1 do begin
     if
       not Files.ReadFileContents(SCRIPTS_PATH + '\' + ScriptList.Keys[i], ScriptContents[i]) or
@@ -171,7 +171,7 @@ begin
       ScriptContents[i] :=  nil;
     end else begin
       Priority  :=  integer(ScriptList.Values[i]);
-      
+
       if Priority < 0 then begin
         FirstScriptSize  :=  FirstScriptSize + Length(ScriptContents[i]) - Length(SCRIPT_POSTFIX);
         FirstScriptBuilder.AppendBuf(pointer(ScriptContents), ScriptEndMarkerPos - 1);
@@ -180,11 +180,11 @@ begin
       end;
     end; // .else
   end; // .for
-  
-      
-  
+
+
+
   StrLib.RevFindChar(SCRIPT_END_MARKER, ScriptContents[i], ScriptEndMarkerPos)
-  
+
   (*
   replace script00.erm and script99.erm
   *)
@@ -216,7 +216,7 @@ var
   PatternBasePos: integer;
   s:              integer;  // Pos in Pattern
   p:              integer;  // Pos in Str
-  
+
   function CharMatch: boolean;
   begin
     result  :=
@@ -235,68 +235,68 @@ var
       Inc(p);
       Inc(s);
     end;
-    
+
     result  :=  ( <= StrLen;
   end;
-  
+
   function SkipWildcards: boolean;
   var
     NumOneSymWildcards: integer;
-  
+
   begin
     NumOneSymWildcards  :=  0;
-    
+
     while (p <= PatternLen) and (Pattern[p] in WILDCARDS) do begin
       if Pattern[p] = ONE_SYM_WILDCARD then begin
         Inc(NumOneSymWildcards);
       end;
-      
+
       Inc(p);
     end;
-    
+
     result  :=  (p <= PatternLen) and ((s + NumOneSymWildcards - 1) <= StrLen);
-    
+
     if result then begin
       s :=  s + NumOneSymWildcards;
     end;
   end; // .function SkipWildcards
-  
+
   function FindNextStr;
   var
     StrBasePos:     integer;
     PatternBasePos: integer;
-    
+
     function FindFirstChar: boolean;
     var
       c:  char;
-    
+
     begin
       c :=  Pattern[p];
-      
+
       while (s <= StrLen) and (Str[s] <> c) do begin
         Inc(s);
       end;
-      
+
       result  :=  s <= StrLen;
-      
+
       if result then begin
         Inc(p);
         Inc(s);
       end;
     end; // .function FindFirstChar
-  
+
   begin
     result          :=  false;
     StrBasePos      :=  s;
     PatternBasePos  :=  p;
-  
+
     while not result and (s <= StrLen) and FindFirstChar do begin
       while CharMatch do begin
         Inc(p);
         Inc(s);
       end;
     end;
-    
+
     result  :=  s <= StrLen;
   end; // .function FindNextStr
 
@@ -307,7 +307,7 @@ begin
   p               :=  1;
   State           :=  STATE_STRICT_COMPARE;
   result          :=  false;
-  
+
   if StrictMatch then begin
     while SkipWillcards and FindNextStr do begin end;
   end;
