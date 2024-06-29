@@ -116,14 +116,14 @@ type
   THookContext = packed record
     EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX: integer;
     RetAddr:                                pointer;
-  end; // .record THookContext
+  end;
 
   PEvent = ^TEvent;
   TEvent = packed record
       Name:     pchar;
   {n} Data:     pointer;
       DataSize: integer;
-  end; // .record TEvent
+  end;
 
   TEventHandler = procedure (Event: PEvent) stdcall;
 
@@ -184,6 +184,7 @@ function  ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName
 function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall; external 'era.dll' name 'ReadStrFromIni';
 function  SaveIni (FilePath: pchar): boolean; stdcall; external 'era.dll' name 'SaveIni';
 function  WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdcall; external 'era.dll' name 'WriteStrToIni';
+function CalcHookPatchSize (Addr: pointer): integer; stdcall; external 'era.dll' name 'CalcHookPatchSize';
 function GetVersion: pchar; stdcall; external 'era.dll' name 'GetVersion';
 function GetVersionNum: integer; stdcall; external 'era.dll' name 'GetVersionNum';
 function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height, MaxWidth, MaxHeight, ResizeAlg: integer): {OU} PPcx16Item; stdcall; external 'era.dll' name 'LoadImageAsPcx16';
