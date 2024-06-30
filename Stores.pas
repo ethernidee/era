@@ -522,7 +522,7 @@ begin
   end;
 end; // .function TMemReader.ReadStr
 
-function Hook_SaveGame (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_SaveGame (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 const
   PARAM_SAVEGAME_NAME = 1;
 
@@ -548,7 +548,7 @@ begin
   result := true;
 end; // .function Hook_SaveGame
 
-function Hook_SaveGameWrite (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_SaveGameWrite (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 var
 {U} StrBuilder:     StrLib.TStrBuilder;
     NumSections:    integer;
@@ -607,7 +607,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SaveGameWrite
 
-function Hook_SaveGameRead (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_SaveGameRead (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 var
 {U} StoredData:     TStoredData;
     BytesRead:      integer;

@@ -2873,7 +2873,7 @@ begin
   result            := PatchApi.Call(THISCALL_, OrigFunc, [Self, x, y, z]);
 end;
 
-function Hook_ZvsCheckObjHint (C: Core.PHookContext): longbool; stdcall;
+function Hook_ZvsCheckObjHint (C: ApiJack.PHookContext): longbool; stdcall;
 var
 {U} HintSection: TObjDict;
 {U} StrValue:    TString;
@@ -3376,7 +3376,7 @@ begin
   SysUtils.FreeAndNil(Buf);
 end; // .procedure DumpErmMemory
 
-function Hook_DumpErmVars (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_DumpErmVars (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 begin
   GameExt.GenerateDebugInfo;
   Context.RetAddr := Core.Ret(0);

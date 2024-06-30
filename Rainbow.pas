@@ -1239,7 +1239,7 @@ begin
   CurrTextBlock := SavedCurrTextBlock;
 end;
 
-function Hook_BeginParseText (Context: Core.PHookContext): longbool; stdcall;
+function Hook_BeginParseText (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   UpdateCurrParsedText(Heroes.PFontItem(Context.EBX), pchar(Context.EDX), Context.ECX);
   CurrTextNumLines := CurrParsedText.CountLines(pinteger(Context.EBP + $18)^);
@@ -1307,7 +1307,7 @@ begin
   result        := true;
 end;
 
-function Hook_GetCharColor (Context: Core.PHookContext): longbool; stdcall;
+function Hook_GetCharColor (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   result := CurrColor = DEF_COLOR;
 
@@ -1316,7 +1316,7 @@ begin
   end;
 end;
 
-function Hook_HandleTags (Context: Core.PHookContext): longbool; stdcall;
+function Hook_HandleTags (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   c:  char;
 

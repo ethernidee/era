@@ -1457,7 +1457,7 @@ begin
   ErmEnabled^ := false;
 end;
 
-function Hook_LoadErtFile (Context: Core.PHookContext): longbool; stdcall;
+function Hook_LoadErtFile (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   ARG_FILENAME = 2;
 
@@ -3178,7 +3178,7 @@ begin
   ErmErrReported := true;
 end; // .procedure ReportErmError
 
-function Hook_MError (Context: Core.PHookContext): longbool; stdcall;
+function Hook_MError (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   ReportErmError(ppchar(Context.EBP + 16)^, ErmErrCmdPtr^);
   Context.RetAddr := Ptr($712483);
@@ -5873,7 +5873,7 @@ begin
   end;
 end;
 
-function Hook_FindErm_BeforeMainLoop (Context: Core.PHookContext): longbool; stdcall;
+function Hook_FindErm_BeforeMainLoop (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   GLOBAL_EVENT_SIZE = 52;
 
@@ -5891,7 +5891,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_FindErm_BeforeMainLoop
 
-function Hook_FindErm_ZeroHeap (Context: Core.PHookContext): longbool; stdcall;
+function Hook_FindErm_ZeroHeap (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - $354)^ := ZvsErmHeapSize^;
   Windows.VirtualFree(ZvsErmHeapPtr^, ZvsErmHeapSize^, Windows.MEM_DECOMMIT);
@@ -5905,7 +5905,7 @@ var
   _NumMapScripts:    integer;
   _NumGlobalScripts: integer;
 
-function Hook_FindErm_AfterMapScripts (Context: Core.PHookContext): longbool; stdcall;
+function Hook_FindErm_AfterMapScripts (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   GLOBAL_EVENT_SIZE = 52;
 
@@ -6012,7 +6012,7 @@ begin
   end;
 end;
 
-function Hook_UN_J3_End (Context: Core.PHookContext): longbool; stdcall;
+function Hook_UN_J3_End (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   RESET_OPTIONS_COMMAND = ':clear:';
   USE_SELECTED_RULES    = 2;
@@ -6047,7 +6047,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_UN_J3_End
 
-function Hook_UN_J13 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_UN_J13 (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   SUBCMD_ID = 13;
 
@@ -6061,7 +6061,7 @@ begin
   end;
 end;
 
-function Hook_UN_U (Context: Core.PHookContext): longbool; stdcall;
+function Hook_UN_U (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   NumParams:   integer;
   SubCmd:      PErmSubCmd;
@@ -6129,7 +6129,7 @@ begin
   Context.RetAddr := Ptr($733F57);
 end; // .function Hook_UN_U
 
-function Hook_UN_P3 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_UN_P3 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   if WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_COMMANDERS_DISABLED] = 0 then begin
     EnableCommanders;
@@ -6152,7 +6152,7 @@ asm
 end;
 {$W+}
 
-function Hook_ErmHeroArt (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ErmHeroArt (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   result := ((pinteger(Context.EBP - $E8)^ shr 8) and 7) = 0;
 
@@ -6161,19 +6161,19 @@ begin
   end;
 end;
 
-function Hook_ErmHeroArt_FindFreeSlot (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ErmHeroArt_FindFreeSlot (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   f[1]   := false;
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ErmHeroArt_FoundFreeSlot (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ErmHeroArt_FoundFreeSlot (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   f[1]   := true;
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ErmHeroArt_DeleteFromBag (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ErmHeroArt_DeleteFromBag (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   NUM_BAG_ARTS_OFFSET = +$3D4;
   HERO_PTR_OFFSET     = -$380;
@@ -6531,7 +6531,7 @@ begin
   end;
 end; // .function Hook_UN_C
 
-function Hook_DlgCallback (Context: Core.PHookContext): longbool; stdcall;
+function Hook_DlgCallback (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   NO_CMD = 0;
 
@@ -6540,7 +6540,7 @@ begin
   result     := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_CM3 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_CM3 (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   MOUSE_STRUCT_ITEM_OFS = +$8;
   CM3_RES_ADDR          = $A6929C;
@@ -6568,14 +6568,14 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_CM3
 
-function Hook_MR_N (c: Core.PHookContext): longbool; stdcall;
+function Hook_MR_N (c: ApiJack.PHookContext): longbool; stdcall;
 begin
   c.eax     := Heroes.GetVal(MrMonPtr^, STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(MrMonPtr^, STACK_IND).v;
   c.RetAddr := Ptr($75DC76);
   result    := not Core.EXEC_DEF_CODE;
 end;
 
-function Hook_BM_U6 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_BM_U6 (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   FinalSpeed: integer;
 

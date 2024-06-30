@@ -296,7 +296,7 @@ begin
   FreeAndNil(Config);
 end; // .procedure LoadGlobalRedirectionConfig
 
-function Hook_FindFileInLod (Context: Core.PHookContext): longbool; stdcall;
+function Hook_FindFileInLod (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   Redirected: string;
 
@@ -308,7 +308,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_LoadLods (Context: Core.PHookContext): longbool; stdcall;
+function Hook_LoadLods (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   i: integer;
 
@@ -330,7 +330,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_LoadLods
 
-function Hook_AfterLoadLods (Context: Core.PHookContext): longbool; stdcall;
+function Hook_AfterLoadLods (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   LoadGlobalRedirectionConfig(GLOBAL_MISSING_REDIRECTIONS_CONFIG_DIR, REDIRECT_ONLY_MISSING);
 
@@ -343,7 +343,7 @@ begin
   result := true;
 end;
 
-function Hook_AfterLoadMedia (Context: Core.PHookContext): longbool; stdcall;
+function Hook_AfterLoadMedia (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   ResourceName:     string;
   WillBeRedirected: boolean;

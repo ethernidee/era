@@ -102,7 +102,7 @@ begin
   PINTEGER($752B33)^ := MapSize;
 end; // .procedure PatchSquaresRefs
 
-function Hook_BeforeResetErmFunc (Context: Core.PHookContext): LONGBOOL; stdcall;
+function Hook_BeforeResetErmFunc (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
 begin
   EventMan.GetInstance.Fire('$OnBeforeResetErmFunc');
   result := Core.EXEC_DEF_CODE;

@@ -111,7 +111,7 @@ begin
   result := MainGameLoopDepth > 0;
 end;
 
-function Hook_BattleHint_GetAttacker (Context: Core.PHookContext): longbool; stdcall;
+function Hook_BattleHint_GetAttacker (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.ArgXVars[ATTACKER_STACK_N_PARAM] := Context.EAX;
   Erm.ArgXVars[DEFENDER_STACK_N_PARAM] := NO_STACK;
@@ -121,13 +121,13 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_BattleHint_GetDefender (Context: Core.PHookContext): longbool; stdcall;
+function Hook_BattleHint_GetDefender (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.ArgXVars[DEFENDER_STACK_N_PARAM] := Context.EAX;
   result                               := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_BattleHint_CalcMinMaxDamage (Context: Core.PHookContext): longbool; stdcall;
+function Hook_BattleHint_CalcMinMaxDamage (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.ArgXVars[MIN_DAMAGE_PARAM] := Context.EDI;
   Erm.ArgXVars[MAX_DAMAGE_PARAM] := Context.EAX;
@@ -222,7 +222,7 @@ begin
   end; // .else
 end; // .function MainWndProc
 
-function Hook_AfterCreateWindow (Context: Core.PHookContext): longbool; stdcall;
+function Hook_AfterCreateWindow (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   PrevWndProc := Ptr(Windows.SetWindowLong(Heroes.hWnd^, Windows.GWL_WNDPROC, integer(@MainWndProc)));
 
@@ -231,7 +231,7 @@ begin
   result := true;
 end;
 
-function Hook_StartCalcDamage (Context: Core.PHookContext): longbool; stdcall;
+function Hook_StartCalcDamage (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   AttackerId := Heroes.GetStackIdByPos(pinteger(Context.EBX + STACK_POS_OFS)^);
   DefenderId := Heroes.GetStackIdByPos(pinteger(Context.ESI + STACK_POS_OFS)^);
@@ -244,13 +244,13 @@ begin
   result := Core.EXEC_DEF_CODE;
 end; // .function Hook_StartCalcDamage
 
-function Hook_CalcDamage_GetDamageBonus (Context: Core.PHookContext): longbool; stdcall;
+function Hook_CalcDamage_GetDamageBonus (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   DamageBonus := Context.EAX;
   result      := true;
 end;
 
-function Hook_EndCalcDamage (Context: Core.PHookContext): longbool; stdcall;
+function Hook_EndCalcDamage (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   ATTACKER           = 1;
   DEFENDER           = 2;
@@ -279,14 +279,14 @@ begin
   result      := Core.EXEC_DEF_CODE;
 end; // .function Hook_EndCalcDamage
 
-function Hook_AI_CalcStackAttackEffect_Start (Context: Core.PHookContext): longbool; stdcall;
+function Hook_AI_CalcStackAttackEffect_Start (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   AIAttackerId := Heroes.GetStackIdByPos(pinteger(pinteger(Context.ESP + 8)^ + STACK_POS_OFS)^);
   AIDefenderId := Heroes.GetStackIdByPos(pinteger(pinteger(Context.ESP + 16)^ + STACK_POS_OFS)^);
   result       := true;
 end;
 
-function Hook_AI_CalcStackAttackEffect_End (Context: Core.PHookContext): longbool; stdcall;
+function Hook_AI_CalcStackAttackEffect_End (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   ATTACKER           = 1;
   DEFENDER           = 2;
@@ -305,7 +305,7 @@ begin
   result      := true;
 end; // .function Hook_AI_CalcStackAttackEffect_End
 
-function Hook_EnterChat (Context: Core.PHookContext): longbool; stdcall;
+function Hook_EnterChat (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   NUM_ARGS = 0;
 
@@ -336,7 +336,7 @@ asm
   // RET
 end;
 
-function Hook_ChatInput (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ChatInput (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   (* Event parameters *)
   ARG_EVENT_SUBTYPE = 1;
@@ -382,7 +382,7 @@ begin
   end; // .switch Action
 end; // .function Hook_ChatInput
 
-function Hook_LeaveChat (Context: Core.PHookContext): longbool; stdcall;
+function Hook_LeaveChat (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   (* Event parameters *)
   EVENT_SUBTYPE = 1;

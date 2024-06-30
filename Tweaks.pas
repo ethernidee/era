@@ -329,13 +329,13 @@ begin
   end;
 end;
 
-function Hook_ZvsGetWindowWidth (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ZvsGetWindowWidth (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.ECX :=  WndManagerPtr^.ScreenPcx16.Width;
   result      :=  not Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ZvsGetWindowHeight (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ZvsGetWindowHeight (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.EDX :=  WndManagerPtr^.ScreenPcx16.Height;
   result      :=  not Core.EXEC_DEF_CODE;
@@ -379,7 +379,7 @@ begin
   SysUtils.FreeAndNil(Locator);
 end; // .procedure MarkFreshestSavegame
 
-function Hook_SetHotseatHeroName (Context: Core.PHookContext): longbool; stdcall;
+function Hook_SetHotseatHeroName (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   PlayerName:     string;
   NewPlayerName:  string;
@@ -411,7 +411,7 @@ begin
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_SetHotseatHeroName
 
-function Hook_PeekMessageA (Context: Core.PHookContext): longbool; stdcall;
+function Hook_PeekMessageA (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Inc(CpuPatchCounter, CpuTargetLevel);
 
@@ -708,63 +708,63 @@ begin
   SysUtils.FreeAndNil(AddrList);
 end; // .function Hook_GetHostByName
 
-function Hook_ApplyDamage_Ebx (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Ebx (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.EBX := ZvsAppliedDamage^;
   result      := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Esi (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Esi (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.ESI := ZvsAppliedDamage^;
   result      := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Esi_Arg1 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Esi_Arg1 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.ESI                 := ZvsAppliedDamage^;
   pinteger(Context.EBP + $8)^ := ZvsAppliedDamage^;
   result                      := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Arg1 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Arg1 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
   result                      :=  Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Ebx_Local7 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Ebx_Local7 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.EBX                    := ZvsAppliedDamage^;
   pinteger(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Local7 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Local7 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Local4 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Local4 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Local8 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Local8 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ApplyDamage_Local13 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ApplyDamage_Local13 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
   result                          := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_GetWoGAndErmVersions (Context: Core.PHookContext): longbool; stdcall;
+function Hook_GetWoGAndErmVersions (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   NEW_WOG_VERSION = 400;
 
@@ -774,7 +774,7 @@ begin
   result                       := not Core.EXEC_DEF_CODE;
 end;
 
-function Hook_ZvsLib_ExtractDef (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ZvsLib_ExtractDef (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   MIN_NUM_TOKENS = 2;
   TOKEN_LODNAME  = 0;
@@ -805,7 +805,7 @@ begin
   result  :=  Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsLib_ExtractDef
 
-function Hook_ZvsLib_ExtractDef_GetGamePath (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ZvsLib_ExtractDef_GetGamePath (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   EBP_LOCAL_GAME_PATH = 16;
 
@@ -841,7 +841,7 @@ begin
   end;
 end; // .procedure OnRemoteMapObjectPlace
 
-function Hook_ZvsEnter2Monster (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ZvsEnter2Monster (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   ARG_MAP_ITEM  = 8;
   ARG_MIXED_POS = 16;
@@ -861,7 +861,7 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsEnter2Monster
 
-function Hook_ZvsEnter2Monster2 (Context: Core.PHookContext): longbool; stdcall;
+function Hook_ZvsEnter2Monster2 (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   ARG_MAP_ITEM  = 8;
   ARG_MIXED_POS = 16;
@@ -922,7 +922,7 @@ begin
   GlobalRng := QualitativeRng;
 end; // .function Hook_StartBattle
 
-function Hook_WoGBeforeBattleAction (Context: Core.PHookContext): longbool; stdcall;
+function Hook_WoGBeforeBattleAction (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   BattleMgr: Heroes.PCombatManager;
 
@@ -939,7 +939,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_WoGBeforeBattleAction_HandleEnchantress (Context: Core.PHookContext): longbool; stdcall;
+function Hook_WoGBeforeBattleAction_HandleEnchantress (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   LOCAL_ACTING_MON_TYPE = -$2C;
 
@@ -957,7 +957,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_WoGCallAfterBattleAction (Context: Core.PHookContext): longbool; stdcall;
+function Hook_WoGCallAfterBattleAction (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.v[997] := CombatRound;
   Erm.FireErmEvent(TRIGGER_BG1);
@@ -966,7 +966,7 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end;
 
-function Hook_SendBattleAction_CopyActionParams (Context: Core.PHookContext): longbool; stdcall;
+function Hook_SendBattleAction_CopyActionParams (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.EAX := CombatOrigStackActionInfo.ActionParam2;
   Context.ECX := CombatOrigStackActionInfo.TargetPos;
@@ -976,13 +976,13 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OnBeforeBattlefieldVisible (Context: Core.PHookContext): longbool; stdcall;
+function Hook_OnBeforeBattlefieldVisible (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.FireErmEvent(Erm.TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE);
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OnBattlefieldVisible (Context: Core.PHookContext): longbool; stdcall;
+function Hook_OnBattlefieldVisible (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   HadTacticsPhase := Heroes.CombatManagerPtr^.IsTactics;
 
@@ -999,7 +999,7 @@ begin
   result := true;
 end;
 
-function Hook_OnAfterTacticsPhase (Context: Core.PHookContext): longbool; stdcall;
+function Hook_OnAfterTacticsPhase (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.FireErmEvent(Erm.TRIGGER_AFTER_TACTICS_PHASE);
 
@@ -1012,7 +1012,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OnCombatRound_Start (Context: Core.PHookContext): longbool; stdcall;
+function Hook_OnCombatRound_Start (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   if pinteger($79F0B8)^ <> Heroes.CombatManagerPtr^.Round then begin
     Inc(CombatRound);
@@ -1021,7 +1021,7 @@ begin
   result := Core.EXEC_DEF_CODE;
 end;
 
-function Hook_OnCombatRound_End (Context: Core.PHookContext): longbool; stdcall;
+function Hook_OnCombatRound_End (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.v[997] := CombatRound;
   Erm.FireErmEvent(Erm.TRIGGER_BR);
