@@ -311,6 +311,17 @@ begin
   end;
 end;
 
+(* Deprecated legacy. Use HookCode instead *)
+function ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer): {n} pointer; stdcall;
+begin
+  result := Core.Hook(CodeAddr, HookType, HandlerAddr);
+end;
+
+procedure Hook (HandlerAddr: pointer; HookType: integer; PatchSize: integer; CodeAddr: pointer); stdcall;
+begin
+  Heroes.ShowMessage('"Hook" function is not supported anymore. Use "HookCode" instead');
+end;
+
 function GetArgXVars: PErmXVars; stdcall;
 begin
   result := @Erm.ArgXVars;
@@ -640,6 +651,7 @@ end;
 exports
   AdvErm.ExtendArrayLifetime,
   AllocErmFunc,
+  ApiHook,
   Ask,
   CalcHookPatchSize,
   ClearIniCache,
@@ -694,6 +706,7 @@ exports
   Hash32,
   Heroes.GetGameState,
   Heroes.LoadTxt,
+  Hook,
   HookCode,
   Ini.ClearAllIniCache,
   IsCampaign,
