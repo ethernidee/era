@@ -192,7 +192,6 @@ function SetLanguage (NewLanguage: pchar): TDwordBool; stdcall; external 'era.dl
 function Splice (OrigFunc, HandlerFunc: pointer; CallingConv: integer; NumArgs: integer; {n} CustomParam: pinteger; {n} AppliedPatch: ppointer): pointer; stdcall; external 'era.dll' name 'Splice';
 function TakeScreenshot (FilePath: pchar; Quality: integer; Flags: integer): TDwordBool; stdcall; external 'era.dll' name 'TakeScreenshot';
 function tr (const Key: pchar; const Params: array of pchar): pchar; stdcall; external 'era.dll' name 'tr';
-procedure ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer); stdcall; external 'era.dll' name 'ApiHook';
 procedure ClearAllIniCache; external 'era.dll' name 'ClearAllIniCache';
 procedure ClearIniCache (FileName: pchar); stdcall; external 'era.dll' name 'ClearIniCache';
 procedure ExecErmCmd (CmdStr: pchar); stdcall; external 'era.dll' name 'ExecErmCmd';
@@ -203,7 +202,6 @@ procedure FireEvent (EventName: pchar; {n} EventData: pointer; DataSize: integer
 procedure GenerateDebugInfo; external 'era.dll' name 'GenerateDebugInfo';
 procedure GetGameState (var GameState: TGameState); stdcall; external 'era.dll' name 'GetGameState';
 procedure GlobalRedirectFile (OldFileName, NewFileName: pchar); stdcall; external 'era.dll' name 'GlobalRedirectFile';
-procedure Hook (HandlerAddr:  pointer; HookType: integer; PatchSize: integer; CodeAddr: pointer ); stdcall; external 'era.dll' name 'Hook';
 procedure MemFree ({On} Buf: pointer); stdcall; external 'era.dll' name 'MemFree';
 procedure NameColor (Color32: integer; Name: pchar); stdcall; external 'era.dll' name 'NameColor';
 procedure NameTrigger (TriggerId: integer; Name: pchar); stdcall; external 'era.dll' name 'NameTrigger';
