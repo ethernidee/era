@@ -82,7 +82,6 @@ type
 var
 {O} PluginsList:      DataLib.TStrList {OF TDllHandle};
     hEra:             Windows.THandle;
-    DumpVfsOpt:       boolean;
     ProcessStartTime: Windows.TSystemTime;
 
 (* Means for exe structures relocation (enlarging). It's possible to find relocated address by old
@@ -110,6 +109,7 @@ procedure Init (hDll: integer);
 
 
 (***) implementation (***)
+
 uses Heroes;
 
 const
@@ -132,7 +132,7 @@ asm
   CALL EAX
   MOV EAX, $701215
   CALL EAX
-end; // .procedure InitWoG
+end;
 
 procedure LoadPlugins (const Ext: string);
 const
@@ -518,7 +518,6 @@ begin
 
   // Better callstack
   pinteger(0)^ := 0;
-  //raise EAssertFailure.Create(CrashMes) at Address;
 end; // .procedure AssertHandler
 
 begin
