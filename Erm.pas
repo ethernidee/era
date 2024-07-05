@@ -773,6 +773,9 @@ var
     FuncArgsGetSyntaxFlagsPassed:   integer = 0;
     FuncArgsGetSyntaxFlagsReceived: integer = 0;
 
+    // Should ERM engine execute cleanup code on exception in trigger or command
+    PerformCleanupOnExceptions: boolean = false;
+
     ErmLegacySupport: boolean = false;
 
   (* ERM tracking options *)
@@ -5411,6 +5414,7 @@ var
   CurrHero:             Heroes.PHero;
   Cmd:                  PErmCmd;
   CmdId:                TErmCmdId;
+  IsException:          longbool;
   i, j:                 integer;
 
   procedure SetTriggerQuickVarsAndFlags;
@@ -5540,6 +5544,7 @@ begin
     HumanEventName := GetTriggerReadableName(TriggerId);
   end;
 
+  IsException      := true;
   HasEventHandlers := (StartTrigger.Id <> 0) or EventManager.HasEventHandlers(NumericEventName) or EventManager.HasEventHandlers(HumanEventName);
 
   try // begin exception protection block //
@@ -5809,39 +5814,44 @@ begin
 
   AfterTriggers:
 
+  IsException := false;
+
   finally // begin resources finalization block //
-  Dec(ErmTriggerDepth);
 
-  if HasEventHandlers then begin
-    if TrackingOpts.Enabled then begin
-      EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_END_TRIGGER, TriggerId);
-    end;
+  if not IsException or PerformCleanupOnExceptions then begin
+    Dec(ErmTriggerDepth);
 
-    // It's a function call, save result string variables
-    if FuncArgs <> nil then begin
-      for j := 0 to NumFuncArgsReceived - 1 do begin
-        if (FuncArgs[j].GetCheckType() = PARAM_CHECK_GET) and (FuncArgs[j].GetType() in PARAM_VARTYPES_STRINGS) then begin
-          RetStrVars[j + 1] := GetInterpolatedZVarAddr(x[j + 1]);
+    if HasEventHandlers then begin
+      if TrackingOpts.Enabled then begin
+        EventTracker.TrackTrigger(ErmTracking.TRACKEDEVENT_END_TRIGGER, TriggerId);
+      end;
+
+      // It's a function call, save result string variables
+      if FuncArgs <> nil then begin
+        for j := 0 to NumFuncArgsReceived - 1 do begin
+          if (FuncArgs[j].GetCheckType() = PARAM_CHECK_GET) and (FuncArgs[j].GetType() in PARAM_VARTYPES_STRINGS) then begin
+            RetStrVars[j + 1] := GetInterpolatedZVarAddr(x[j + 1]);
+          end;
         end;
       end;
-    end;
 
-    RestoreVars;
+      RestoreVars;
 
-    if LocalData.Items <> nil then begin
-      for j := LocalData.Items.Count - 1 downto 0 do begin
-        LocalData.Items[j] := nil;
+      if LocalData.Items <> nil then begin
+        for j := LocalData.Items.Count - 1 downto 0 do begin
+          LocalData.Items[j] := nil;
+        end;
+
+        LocalData.Items.Free;
       end;
 
-      LocalData.Items.Free;
+      TriggerLocalData := LocalData.PrevTriggerData;
+    end else begin
+      RetXVars := ArgXVars;
     end;
 
-    TriggerLocalData := LocalData.PrevTriggerData;
-  end else begin
-    RetXVars := ArgXVars;
-  end;
-
-  ServiceMemAllocator.FreePage;
+    ServiceMemAllocator.FreePage;
+  end; // .if PerformCleanupOnExceptions
 
   end; // end resources finalization block //
 end; // .procedure ProcessErm
@@ -5849,6 +5859,7 @@ end; // .procedure ProcessErm
 procedure Hook_ProcessCmd (OrigFunc: pointer; Cmd: PErmCmd; Dummy: integer; IsPostInstr: longbool); stdcall;
 var
 {Un} PrevCmdLocalObjects: PCmdLocalObject;
+     IsException:         longbool;
 
 begin
   if TrackingOpts.Enabled then begin
@@ -5859,17 +5870,21 @@ begin
   PrevCmdLocalObjects := CmdLocalObjects;
   CmdLocalObjects     := nil;
   ErmErrReported      := false;
+  IsException         := true;
 
   try
     TZvsProcessCmd(OrigFunc)(Cmd, Dummy, IsPostInstr);
+    IsException := false;
   finally
-    while CmdLocalObjects <> nil do begin
-      ErtStrings.DeleteItem(Ptr(CmdLocalObjects.ErtIndex));
-      CmdLocalObjects := CmdLocalObjects.Prev;
-    end;
+    if not IsException or PerformCleanupOnExceptions then begin
+      while CmdLocalObjects <> nil do begin
+        ErtStrings.DeleteItem(Ptr(CmdLocalObjects.ErtIndex));
+        CmdLocalObjects := CmdLocalObjects.Prev;
+      end;
 
-    CmdLocalObjects := PrevCmdLocalObjects;
-    ServiceMemAllocator.FreePage;
+      CmdLocalObjects := PrevCmdLocalObjects;
+      ServiceMemAllocator.FreePage;
+    end;
   end;
 end;
 

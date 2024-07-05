@@ -539,8 +539,9 @@ begin
     Leave;
   except
     if (ExceptionRecord.ExceptionCode = EXCEPTION_CODE_ERA) and (ExceptionArgs[0] = EXCEPTION_ERA_FAST_QUIT_TO_GAME_MENU) then begin
-      Heroes.MainMenuTarget^ := ExceptionArgs[1];
-      ShouldFastQuit         := not Leave;
+      Erm.PerformCleanupOnExceptions := false;
+      Heroes.MainMenuTarget^         := ExceptionArgs[1];
+      ShouldFastQuit                 := not Leave;
     end else begin
       Tweaks.ProcessUnhandledException(ExceptionRecord, ExceptionContext);
     end;
@@ -577,8 +578,9 @@ begin
   end;
 end;
 
-procedure RaiseExceptionEx (Code: integer; const Args: array of integer);
+procedure RaiseEraServiceException (Code: integer; const Args: array of integer);
 begin
+  Erm.PerformCleanupOnExceptions := true;
   Windows.RaiseException(EXCEPTION_CODE_ERA, 0, Length(Args), @Args[0]);
 end;
 
@@ -590,7 +592,7 @@ begin
   Heroes.GetGameState(GameState);
 
   if GameState.RootDlgId <> 0 then begin
-    RaiseExceptionEx(EXCEPTION_CODE_ERA, [EXCEPTION_ERA_FAST_QUIT_TO_GAME_MENU, TargetScreen])
+    RaiseEraServiceException(EXCEPTION_CODE_ERA, [EXCEPTION_ERA_FAST_QUIT_TO_GAME_MENU, TargetScreen])
   end;
 end;
 // ====================================== END GAME LOOP AND EXCEPTION HANDLING ====================================== //
