@@ -9,6 +9,7 @@ unit Extern;
 
 uses
   Math,
+  ShlwApi,
   SysUtils,
   Windows,
 
@@ -441,6 +442,19 @@ begin
   result := StrLib.ComparePchars(Addr1, Addr2);
 end;
 
+function Erm_StrPos (Where: pchar; What: pchar): integer; stdcall;
+var
+  FoundPos: pchar;
+
+begin
+  result   := -1;
+  FoundPos := ShlwApi.StrStrA(Where, What);
+
+  if FoundPos <> nil then begin
+    result := integer(FoundPos) - integer(Where);
+  end;
+end;
+
 procedure ShowErmError (Error: pchar); stdcall;
 begin
   if Error = nil then begin
@@ -676,6 +690,7 @@ exports
   Erm_SortInt32Array,
   Erm_SortStrArray,
   Erm_Sqrt,
+  Erm_StrPos,
   ExecErmCmd,
   FatalError,
   FindNextObject,
