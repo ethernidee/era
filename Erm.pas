@@ -321,6 +321,9 @@ const
   SPELL_TEXT_SOUND          = 6;
   SPELL_TEXT_LAST           = 6;
 
+  (* ERM command compilation flags *)
+  ECF_PERSISTED = 1;
+
 
 type
   TErmValType   = (ValNum, ValF, ValQuick, ValV, ValW, ValX, ValY, ValZ);
@@ -366,13 +369,13 @@ type
   TErmString = packed record
     Value:  pchar;
     Len:    integer;
-  end; // .record TErmString
+  end;
 
   TGameString = packed record
     Value:  pchar;
     Len:    integer;
     Dummy:  integer;
-  end; // .record TGameString
+  end;
 
   PErmCmdConditions = ^TErmCmdConditions;
   TErmCmdConditions = array [COND_AND..COND_OR, 0..15, LEFT_PARAM..RIGHT_PARAM] of TErmCmdParam;
@@ -384,7 +387,7 @@ type
     case boolean of
       true:  (Name: array [0..1] of char);
       false: (Id: word);
-  end; // .record TErmCmdId
+  end;
 
   PErmCmd = ^TErmCmd;
   TErmCmd = packed record
@@ -398,9 +401,16 @@ type
     CmdHeader:    TErmString; // ##:...
     CmdBody:      TErmString; // #^...^/...
 
-    procedure SetIsGenerated (NewValue: boolean); inline;
-    function  IsGenerated: boolean; inline;
-  end; // .record TErmCmd
+    procedure SetIsPersisted (NewValue: boolean); inline;
+
+    (* If true, command address lifetime is at least the same, as loaded ERM subcommands cache lifetime and is thus stable ID for caching *)
+    function IsPersisted: boolean; inline;
+  end;
+
+  TCompiledErmCmd = class
+    Cmd:  TErmCmd;
+    Text: Utils.TArrayOfChar;
+  end;
 
   PErmSubCmd = ^TErmSubCmd;
   TErmSubCmd = packed record
@@ -411,7 +421,13 @@ type
     Chars:      array [0..15] of char;
     Modifiers:  array [0..15] of byte;
     Nums:       array [0..15] of integer;
-  end; // .record TErmSubCmd
+
+    // Character at current position
+    function c:  char; inline;
+
+    // Address of character of current position
+    function pc: pchar; inline;
+  end;
 
   PErmTrigger = ^TErmTrigger;
   TErmTrigger = packed record
@@ -885,12 +901,12 @@ var
     Dialog8TextAlignment:      integer = Heroes.TEXT_ALIGN_CENTER;
     Dialog8SelectablePicsMask: integer = 3;
 
-{O} FuncNames:         DataLib.TDict {OF FuncId: integer};
-{O} FuncIdToNameMap:   DataLib.TObjDict {O} {OF TString};
+{O} FuncNames:         DataLib.TDict {of FuncId: integer};
+{O} FuncIdToNameMap:   DataLib.TObjDict {O} {of TString};
     FuncAutoId:        integer;
 {O} ScriptNames:       Lists.TStringList;
 {O} ErmScanner:        TextScan.TTextScanner;
-{O} ErmCmdCache:       {O} TAssocArray {OF PErmCmd};
+{O} ErmCmdCache:       DataLib.TDict {of TCompiledErmCmd};
 {O} EventTracker:      ErmTracking.TEventTracker;
     ErmErrReported:    boolean = false;
     LocalErtAutoIndex: integer = FIRST_LOCAL_ERT_INDEX;
@@ -969,14 +985,24 @@ begin
   Self.ValType := (Self.ValType and not $2000) or (ord(Value) shl 13);
 end;
 
-procedure TErmCmd.SetIsGenerated (NewValue: boolean);
+procedure TErmCmd.SetIsPersisted (NewValue: boolean);
 begin
-  Self.Params[14].Value := (Self.Params[14].Value and not $1) or ord(NewValue);
+  Self.Params[14].Value := (Self.Params[14].Value and not $1) or (1 - ord(NewValue));
 end;
 
-function TErmCmd.IsGenerated: boolean;
+function TErmCmd.IsPersisted: boolean;
 begin
-  result := (Self.Params[14].Value and $1) <> 0;
+  result := (Self.Params[14].Value and $1) = 0;
+end;
+
+function TErmSubCmd.c: char;
+begin
+  result := Self.Code.Value[Self.Pos];
+end;
+
+function TErmSubCmd.pc: pchar;
+begin
+  result := @Self.Code.Value[Self.Pos];
 end;
 
 function TErmTrigger.GetSize: integer;
@@ -1213,169 +1239,157 @@ begin
   end;
 end;
 
-procedure ClearErmCmdCache;
-begin
-  with DataLib.IterateDict(ErmCmdCache) do begin
-    while IterNext do begin
-      FreeMem(Utils.PtrOfs(PErmCmd(IterValue).CmdHeader.Value, -Length('!!')));
-      Dispose(PErmCmd(IterValue));
-    end;
-  end;
+function Hook_ZvsGetNum (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool; cdecl; forward;
 
-  ErmCmdCache.Clear;
-end; // .procedure ClearErmCmdCache
-
-procedure ExecSingleErmCmd (const CmdStr: string);
+function CompileErmCmd (CmdStr: string; Flags: integer = 0): {On} TCompiledErmCmd;
 const
-  LETTERS = ['A'..'Z'];
-  DIGITS  = ['0'..'9'];
-  SIGNS   = ['+', '-'];
-  NUMBER  = DIGITS + SIGNS;
-  DELIMS  = ['/', ':'];
+  MIN_CMD_LEN = Length('XX:Y');
+  CAP_LETTERS = ['A'..'Z'];
+  DONT_EVAL   = 0;
 
 var
-{U} Cmd:      PErmCmd;
-    CmdName:  string;
-    NumArgs:  integer;
-    Res:      boolean;
-    c:        char;
-
-  function ReadNum (out Num: integer): boolean;
-  var
-    StartPos: integer;
-    Token:    string;
-    c:        char;
-
-  begin
-    result := ErmScanner.GetCurrChar(c) and (c in NUMBER);
-
-    if result then begin
-      if c in SIGNS then begin
-        StartPos := ErmScanner.Pos;
-        ErmScanner.GotoNextChar;
-        ErmScanner.SkipCharset(DIGITS);
-        Token := ErmScanner.GetSubstrAtPos(StartPos, ErmScanner.Pos - StartPos);
-      end else begin
-        ErmScanner.ReadToken(DIGITS, Token);
-      end;
-
-      result := SysUtils.TryStrToInt(Token, Num) and ErmScanner.GetCurrChar(c) and (c in DELIMS);
-    end; // .if
-  end; // .function ReadNum
-
-  function ReadArg (out Arg: TErmCmdParam): boolean;
-  var
-    ValType: TErmValType;
-    IndType: TErmValType;
-
-  begin
-    result := ErmScanner.GetCurrChar(c) and GetErmValType(c, ValType);
-
-    if result then begin
-      IndType := ValNum;
-
-      if ValType <> ValNum then begin
-        result := ErmScanner.GotoNextChar and ErmScanner.GetCurrChar(c) and
-                  GetErmValType(c, IndType);
-
-        if result and (IndType <> ValNum) then begin
-          ErmScanner.GotoNextChar;
-        end;
-      end;
-
-      if result then begin
-        result := ReadNum(Arg.Value);
-
-        if result then begin
-          Arg.ValType := ord(IndType) shl 4 + ord(ValType);
-        end;
-      end;
-    end; // .if
-  end; // .function ReadArg
+{U} Cmd:     PErmCmd;
+    SubCmd:  TErmSubCmd;
+    TextLen: integer;
+    Res:     longbool;
 
 begin
-  Cmd := ErmCmdCache[CmdStr];
+  Cmd    := nil;
+  result := nil;
   // * * * * * //
-  Res := true;
+  Res := (Length(CmdStr) >= MIN_CMD_LEN) and (CmdStr[1] in CAP_LETTERS) and (CmdStr[2] in CAP_LETTERS);
 
-  if Cmd = nil then begin
-    New(Cmd);
+  if Res then begin
+    result := TCompiledErmCmd.Create;
+    Cmd    := @result.Cmd;
     FillChar(Cmd^, sizeof(Cmd^), 0);
-    ErmScanner.Connect(CmdStr, LINE_END_MARKER);
-    Res     := ErmScanner.ReadToken(LETTERS, CmdName) and (Length(CmdName) = 2);
-    NumArgs := 0;
 
-    while Res and ErmScanner.GetCurrChar(c) and (c <> ':') and (NumArgs < ERM_CMD_MAX_PARAMS_NUM) do begin
-      Res := ReadArg(Cmd.Params[NumArgs]) and ErmScanner.GetCurrChar(c);
+    // Provide required trailing ';' delimiter
+    if CmdStr[Length(CmdStr)] <> ';' then begin
+      CmdStr := CmdStr + ';';
+    end;
+
+    // Form and save final ERM command text with leading '!!' and trailing ';'#0
+    TextLen := Length('!!') + Length(CmdStr) + ord(CmdStr[Length(CmdStr)] <> ';') + Length(#0);
+    SetLength(result.Text, TextLen);
+
+    result.Text[0] := '!';
+    result.Text[1] := '!';
+    Utils.CopyMem(Length(CmdStr), pchar(CmdStr), @result.Text[2]);
+    result.Text[TextLen - 2] := ';';
+    result.Text[TextLen - 1] := #0;
+
+    Cmd.CmdHeader.Value := @result.Text[2];
+
+    // Copy command name
+    Cmd.CmdId.Name[0] := CmdStr[1];
+    Cmd.CmdId.Name[1] := CmdStr[2];
+
+    // Reset default parameter values to zeroes
+    FillChar(SubCmd.Params, sizeof(SubCmd.Params), #0);
+
+    // Position subcommand to the first character after command name, ready to parse command parameters
+    SubCmd.Code.Value := Utils.PtrOfs(pointer(result.Text), Length('!!XX'));
+    SubCmd.Code.Len   := TextLen - Length('!!XX') - Length(#0);
+    SubCmd.Pos        := 0;
+
+    // Skip blank characters
+    while SubCmd.c in [#1..#32] do begin
+      Inc(SubCmd.Pos);
+    end;
+
+    Cmd.NumParams := 0;
+
+    while Res and not (SubCmd.c in [#0, ':', ';']) and (Cmd.NumParams < ERM_CMD_MAX_PARAMS_NUM) do begin
+      if (SubCmd.c <> '/') then begin
+        Res := not Hook_ZvsGetNum(@SubCmd, Cmd.NumParams, DONT_EVAL);
+      end;
 
       if Res then begin
-        Inc(NumArgs);
+        Inc(Cmd.NumParams);
 
-        if c = '/' then begin
-          ErmScanner.GotoNextChar;
+        if SubCmd.c = '/' then begin
+          Inc(SubCmd.Pos);
+        end else begin
+          break;
         end;
       end;
-    end; // .while
+    end;
 
-    Res := Res and ErmScanner.GotoNextChar;
+    Res := Res and (SubCmd.c = ':');
 
     if Res then begin
-      Cmd.SetIsGenerated(true);
+      Cmd.CmdHeader.Len := SubCmd.pc - Cmd.CmdHeader.Value;
+      Cmd.CmdBody.Value := SubCmd.pc + Length(':');
+      Cmd.CmdBody.Len   := (pchar(@result.Text[TextLen]) - Cmd.CmdBody.Value) - Length(#0);
+      Cmd.Params        := SubCmd.Params;
 
-      // Allocate memory, because ERM engine changes command contents during execution
-      GetMem(Cmd.CmdHeader.Value, Length(CmdStr) + 1 + Length('!!'));
-      pchar(Cmd.CmdHeader.Value)[0] := '!';
-      pchar(Cmd.CmdHeader.Value)[1] := '!';
-      Inc(pchar(Cmd.CmdHeader.Value), 2);
-      Utils.CopyMem(Length(CmdStr) + 1, pointer(CmdStr), Cmd.CmdHeader.Value);
-
-      Cmd.CmdBody.Value := Utils.PtrOfs(Cmd.CmdHeader.Value, ErmScanner.Pos - 1);
-      Cmd.CmdId.Name[0] := CmdName[1];
-      Cmd.CmdId.Name[1] := CmdName[2];
-      Cmd.NumParams     := NumArgs;
-      Cmd.CmdHeader.Len := ErmScanner.Pos - 1;
-      Cmd.CmdBody.Len   := Length(CmdStr) - ErmScanner.Pos + 1;
+      // The persistence flag is stored in the parameters themselves, thus must be called after parameters copying
+      Cmd.SetIsPersisted((Flags and ECF_PERSISTED) <> 0);
 
       if @ErmCmdOptimizer <> nil then begin
         ErmCmdOptimizer(Cmd);
       end;
-
-      if ErmCmdCache.ItemCount = ERM_CMD_CACHE_LIMIT then begin
-        ClearErmCmdCache;
-      end;
-
-      ErmCmdCache[CmdStr] := Cmd;
-    end; // .if
+    end;
   end; // .if
 
   if not Res then begin
-    ShowMessage('ExecErmCmd: Invalid command "' + CmdStr + '"');
-  end else begin
-    ZvsProcessCmd(Cmd);
+    SysUtils.FreeAndNil(result);
+    ShowMessage('CompileErmCmd: Invalid command "' + CmdStr + '"');
   end;
+end; // .function CompileErmCmd
+
+procedure ExecSingleErmCmd (const CmdStr: string);
+var
+{Un} Cmd:    TCompiledErmCmd;
+{On} NewCmd: TCompiledErmCmd;
+
+begin
+  Cmd    := ErmCmdCache[CmdStr];
+  NewCmd := nil;
+  // * * * * * //
+  if Cmd = nil then begin
+    NewCmd := CompileErmCmd(CmdStr);
+    Cmd    := NewCmd;
+  end;
+
+  if Cmd <> nil then begin
+    ZvsProcessCmd(@Cmd.Cmd);
+  end;
+
+  if NewCmd <> nil then begin
+    if ErmCmdCache.ItemCount = ERM_CMD_CACHE_LIMIT then begin
+      ErmCmdCache.Clear;
+    end;
+
+    ErmCmdCache[CmdStr] := NewCmd; NewCmd := nil;
+  end;
+  // * * * * * //
+  SysUtils.FreeAndNil(NewCmd);
 end; // .procedure ExecSingleErmCmd
 
 procedure ExecErmCmd (const CmdStr: string);
 var
-  Commands: Utils.TArrayOfStr;
-  Command:  string;
-  i:        integer;
+  Commands:     Utils.TArrayOfStr;
+  Command:      string;
+  SemicolonPos: integer;
+  i:            integer;
 
 begin
-  Commands := StrLib.ExplodeEx(CmdStr, ';', StrLib.INCLUDE_DELIM, not StrLib.LIMIT_TOKENS, 0);
+  if not StrLib.FindChar(';', CmdStr, SemicolonPos) or (SemicolonPos = Length(CmdStr)) then begin
+    ExecSingleErmCmd(CmdStr);
+  end else begin
+    Commands := StrLib.ExplodeEx(CmdStr, ';', StrLib.INCLUDE_DELIM, not StrLib.LIMIT_TOKENS, 0);
 
-  for i := 0 to High(Commands) do begin
-    Command := SysUtils.Trim(Commands[i]);
+    for i := 0 to High(Commands) do begin
+      Command := SysUtils.Trim(Commands[i]);
 
-    if Command <> '' then begin
-      if (i = High(Commands)) and (Command[Length(Command)] <> ';') then begin
-        Command := Command + ';';
+      if Command <> '' then begin
+        ExecSingleErmCmd(Command);
       end;
-
-      ExecSingleErmCmd(Command);
     end;
-  end; // .for
-end; // .procedure ExecErmCmd
+  end;
+end;
 
 procedure DisableErmTracking;
 begin
@@ -5098,7 +5112,7 @@ label
 begin
   CmdId := Cmd.CmdId.Id;
 
-  // Skip Era triggers, which are interpreted separately
+  // Skip Era commands, which are interpreted separately
   if (CmdId = CMD_SN) or (CmdId = CMD_MP) or (CmdId = CMD_RD) then begin
     result := 1;
     exit;
@@ -5106,7 +5120,7 @@ begin
 
   ParamsAddrHash := Crypto.Tm32Encode(integer(@SubCmd.Code.Value[SubCmd.Pos]));
   CacheEntry     := @SubCmdCache[integer(cardinal(ParamsAddrHash) mod cardinal(Length(SubCmdCache)))];
-  UseCaching     := not Cmd.IsGenerated;
+  UseCaching     := Cmd.IsPersisted;
 
   // Initialize all subcommand parameters to NONE value to improve ERM stability
   for i := 0 to High(SubCmd.Params) do begin
@@ -5119,7 +5133,7 @@ begin
     result := CacheEntry.NumParams;
 
     if result > 0 then begin
-      System.Move(CacheEntry.Params, SubCmd.Params, sizeof(SubCmd.Params[0]) * result);
+      System.Move(CacheEntry.Params,    SubCmd.Params,    sizeof(SubCmd.Params[0]) * result);
       System.Move(CacheEntry.Modifiers, SubCmd.Modifiers, sizeof(CacheEntry.Modifiers));
     end;
 
@@ -5189,7 +5203,7 @@ Quit:
   CacheEntry.NumParams := result;
 
   if result > 0 then begin
-    System.Move(SubCmd.Params, CacheEntry.Params, sizeof(SubCmd.Params[0]) * result);
+    System.Move(SubCmd.Params,    CacheEntry.Params,    sizeof(SubCmd.Params[0]) * result);
     System.Move(SubCmd.Modifiers, CacheEntry.Modifiers, sizeof(CacheEntry.Modifiers));
   end;
 
@@ -8789,8 +8803,6 @@ begin
 
   (* Splice ProcessCmd for cmd local memory allocation/deallocation *)
   ApiJack.StdSplice(@ZvsProcessCmd, @Hook_ProcessCmd, ApiJack.CONV_CDECL, 3);
-  //ApiJack.HookCode(Ptr($741E3F), @Hook_ProcessCmd);
-  //ApiJack.HookCode(Ptr($749702), @Hook_ProcessCmd_End);
 
   (* Replace ERM interpolation function *)
   Core.Hook(@ZvsInterpolateStr, Core.HOOKTYPE_JUMP, @InterpolateErmStr);
@@ -8855,11 +8867,7 @@ begin
   RegisterStdGlobalConsts;
 
   ErmScanner  := TextScan.TTextScanner.Create;
-  ErmCmdCache := AssocArrays.NewSimpleAssocArr
-  (
-    Crypto.AnsiCRC32,
-    AssocArrays.NO_KEY_PREPROCESS_FUNC
-  );
+  ErmCmdCache := DataLib.NewDict(OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   IsWoG^      := true;
   ScriptNames := Lists.NewSimpleStrList;
 
