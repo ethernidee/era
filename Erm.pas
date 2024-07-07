@@ -659,6 +659,7 @@ const
   ZvsAttackingHeroPtr:        ^Heroes.PHero          = Ptr($2860248);
   ZvsAllowDefMouseReaction:   plongbool              = Ptr($A4AAFC);
   ZvsMouseEventInfo:          Heroes.PMouseEventInfo = Ptr($8912A8);
+  ZvsMouseClickEventInfo:     ^Heroes.PMouseEventInfo = Ptr($8A3524);
   ZvsEventX:                  pinteger               = Ptr($27F9964);
   ZvsEventY:                  pinteger               = Ptr($27F9968);
   ZvsEventZ:                  pinteger               = Ptr($27F996C);
@@ -698,6 +699,7 @@ const
   ZvsLoadErtFile:     TZvsLoadErtFile   = Ptr($72C641);
   ZvsShowMessage:     TZvsShowMessage   = Ptr($70FB63);
   ZvsDisplay8Dialog:  function (Message: pchar; DialogPics: pointer; MsgType: Heroes.TMesType; TextAlignment: integer): integer cdecl = Ptr($7169A8);
+  ZvsHandleAdvMapMouseClick: procedure (IsLeftButton: integer) cdecl = Ptr($74ED6B);
   ZvsGetFlags:        TZvsGetFlags      = Ptr($73F4AF);
   ZvsCheckFlags:      TZvsCheckFlags    = Ptr($740DF1);
   ZvsGetNum:          function (SubCmd: PErmSubCmd; ParamInd: integer; DoEval: integer): longbool cdecl = Ptr($73E970);
