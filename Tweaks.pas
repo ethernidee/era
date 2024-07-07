@@ -881,6 +881,27 @@ begin
   result          := not Core.EXEC_DEF_CODE;
 end; // .function Hook_ZvsEnter2Monster2
 
+function Hook_WoGMouseClick3 (OrigFunc: pointer; AdvMan: pointer; MouseEvent: Heroes.PMouseEventInfo; Arg3: integer; Arg4: integer): integer; stdcall;
+const
+  ITEM_CHAT       = 38;
+  VANILLA_HANDLER = $409740;
+
+begin
+  // Bug fix: chat typing produces phantom mouse click event
+  if (MouseEvent.Item = ITEM_CHAT) and (MouseEvent.X = 0) and (MouseEvent.Y = 0) then begin
+    result := PatchApi.Call(THISCALL_, Ptr(VANILLA_HANDLER), [AdvMan, MouseEvent, Arg3, Arg4]);
+  end else begin
+    ZvsMouseClickEventInfo^ := MouseEvent;
+    ZvsHandleAdvMapMouseClick(ord(true));
+
+    if ZvsAllowDefMouseReaction^ then begin
+      result := PatchApi.Call(THISCALL_, Ptr(VANILLA_HANDLER), [AdvMan, MouseEvent, Arg3, Arg4]);
+    end else begin
+      result := 1;
+    end;
+  end;
+end;
+
 function Hook_StartBattle (OrigFunc: pointer; WndMan: Heroes.PWndManager; PackedCoords: integer; AttackerHero: Heroes.PHero; AttackerArmy: Heroes.PArmy; DefenderPlayerId: integer;
                            DefenderTown: Heroes.PTown; DefenderHero: Heroes.PHero; DefenderArmy: Heroes.PArmy; Seed, Unk10: integer; IsBank: boolean): integer; stdcall;
 
@@ -2108,6 +2129,9 @@ begin
 
   (* Fix WoG bug: double !?OB54 event generation when attacking without moving due to Enter2Object + Enter2Monster2 calling *)
   Core.p.WriteDataPatch(Ptr($757AA0), ['EB2C90909090']);
+
+  (* Fixe WoG adventure map mouse click handler: chat input produces left click event *)
+  ApiJack.StdSplice(Ptr($74EF37), @Hook_WoGMouseClick3, CONV_THISCALL, 4);
 
   (* Fix battle round counting: no !?BR before battlefield is shown, negative FIRST_TACTICS_ROUND incrementing for the whole tactics phase, the
      first real round always starts from 0 *)
