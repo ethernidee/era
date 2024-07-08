@@ -826,6 +826,8 @@ procedure NameTrigger (const TriggerId: integer; const FuncName: string);
 (* Registers object as trigger local object. It will be freed on exit from current trigger *)
 procedure RegisterTriggerLocalObject (TriggerData: PTriggerLocalData; {O} Obj: TObject);
 
+function CreateTriggerLocalErt (Str: pchar; StrLen: integer = -1): integer;
+
 (* Returns true if default reaction is allowed *)
 function  FireMouseEvent (TriggerId: integer; MouseEventInfo: Heroes.PMouseEventInfo): boolean;
 
@@ -6631,7 +6633,20 @@ begin
   result          := false;
 
   ZvsShowMessage(GetInterpolatedZVarAddr(SubCmd.Nums[0]), ord(Heroes.MES_MES));
-end; // .function Hook_IF_M
+end;
+
+function Hook_IF_L (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd: PErmSubCmd;
+
+begin
+  // OK result
+  Context.RetAddr := Ptr($74943B);
+  SubCmd          := pointer(Context.EBP - $300);
+  result          := false;
+
+  Heroes.PrintChatMsg(GetInterpolatedZVarAddr(SubCmd.Nums[0]));
+end;
 
 function GetPreselectedDialog8ItemId: integer; stdcall;
 begin
@@ -8696,6 +8711,9 @@ begin
 
   (* Fix IF:M# command: allow any string *)
   ApiJack.HookCode(Ptr($74751A), @Hook_IF_M);
+
+  (* Fix IF:L# command: allow any string and escape % with %% *)
+  ApiJack.HookCode(Ptr($749272), @Hook_IF_L);
 
   (* Fix TR:T command: allow any number of arguments *)
   Core.p.WriteDataPatch(Ptr($73B771), ['EB']);
