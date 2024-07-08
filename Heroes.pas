@@ -1460,19 +1460,21 @@ end;
 
 procedure PrintChatMsg (const Msg: string);
 var
-  PtrMsg: pchar;
+  EncodedMsg: string;
+  PtrMsg:     pchar;
 
 begin
-  PtrMsg := pchar(Msg);
-  // * * * * * //
+  EncodedMsg := SysUtils.StringReplace(Msg, '%', '%%', [SysUtils.rfReplaceAll]);
+  PtrMsg     := pchar(EncodedMsg);
+
   asm
     PUSH PtrMsg
     PUSH $69D800
     MOV EAX, $553C40
     CALL EAX
     ADD ESP, $8
-  end; // .asm
-end; // .procedure PrintChatMsg
+  end;
+end;
 
 function Msg
 (
