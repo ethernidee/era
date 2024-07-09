@@ -826,6 +826,10 @@ procedure NameTrigger (const TriggerId: integer; const FuncName: string);
 (* Registers object as trigger local object. It will be freed on exit from current trigger *)
 procedure RegisterTriggerLocalObject (TriggerData: PTriggerLocalData; {O} Obj: TObject);
 
+(* Interpolates string with ERM placeholders like %VZ3 or %T(json_key). If code is executed in ERM trigger, the result
+   will be current receiver or trigger local memory buffer. Otherwise the result is global interpolation buffer. *)
+function InterpolateErmStr (Str: pchar): pchar; cdecl;
+
 function CreateTriggerLocalErt (Str: pchar; StrLen: integer = -1): integer;
 
 (* Returns true if default reaction is allowed *)
@@ -1222,8 +1226,6 @@ begin
     result := 'STRING NOT FOUND';
   end;
 end;
-
-function InterpolateErmStr (Str: pchar): pchar; cdecl; forward;
 
 function GetInterpolatedZVarAddr (Ind: integer): pchar;
 begin
@@ -4522,8 +4524,6 @@ var
   InterpolationBuf:   array [0..999999] of char;
   InterpolationLevel: integer = 0;
 
-(* Interpolates string with ERM placeholders like %VZ3 or %T(json_key). If code is executed in ERM trigger, the result
-   will be current receiver or trigger local memory buffer. Otherwise the result is global interpolation buffer. *)
 function InterpolateErmStr (Str: pchar): pchar; cdecl;
 const
   OPTIONALLY_UPPERCASE_TYPES = ['V', 'Y', 'X', 'Z', 'E', 'W', 'S', 'I'];

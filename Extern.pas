@@ -1,7 +1,7 @@
 unit Extern;
 (*
-  DESCRIPTION: API Wrappers for plugins
-  AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+  Description: API Wrappers for plugins
+  Author:      Alexander Shostak aka Berserker
 *)
 
 (***)  interface  (***)
@@ -217,7 +217,22 @@ begin
 
   Translation := Trans.tr(Key, ParamList);
   result      := Externalize(Translation);
-end; // .function tr
+end;
+
+function trStatic (const Key: pchar; const Params: array of pchar): pchar; stdcall;
+var
+  ParamList: Utils.TArrayOfStr;
+  i:         integer;
+
+begin
+  SetLength(ParamList, length(Params));
+
+  for i := 0 to High(Params) do begin
+    ParamList[i] := Params[i];
+  end;
+
+  result := Memory.UniqueStrings[pchar(Trans.tr(Key, ParamList))];
+end;
 
 function SetLanguage (NewLanguage: pchar): TDwordBool; stdcall;
 begin
@@ -442,16 +457,101 @@ begin
   result := StrLib.ComparePchars(Addr1, Addr2);
 end;
 
-function Erm_StrPos (Where: pchar; What: pchar): integer; stdcall;
+(* Returns substring of original string in the form of new trigger-local ert z-var index *)
+function Erm_Substr (Str: pchar; Offset, Count: integer): integer; stdcall;
 var
+  Res:    string;
+  StrLen: integer;
+
+begin
+  result := 0;
+
+  if Erm.ErmTriggerDepth > 0 then begin
+    StrLen := Windows.LStrLen(Str);
+    Res    := '';
+
+    if Offset < 0 then begin
+      Offset := Math.Max(0, StrLen + Offset);
+    end;
+
+    if Count < 0 then begin
+      Inc(Count, StrLen);
+    end;
+
+    if (StrLen > 0) and (Offset < StrLen) and (Count > 0) then begin
+      Count := Math.Min(StrLen - Offset, Count);
+      SetLength(Res, Count);
+      Utils.CopyMem(Count, @Str[Offset], pointer(Res));
+    end;
+
+    result := Erm.CreateTriggerLocalErt(pchar(Res), Length(Res));
+  end;
+end;
+
+function Erm_StrPos (Where, What: pchar; Offset: integer): integer; stdcall;
+var
+  WhereLen: integer;
   FoundPos: pchar;
 
 begin
-  result   := -1;
-  FoundPos := ShlwApi.StrStrA(Where, What);
+  result := -1;
+
+  if Offset <> 0 then begin
+    if Offset < 0 then begin
+      exit;
+    end;
+
+    WhereLen := StrLib.StrLen(Where);
+
+    if Offset >= WhereLen then begin
+      exit;
+    end;
+
+    FoundPos := ShlwApi.StrStrA(Utils.PtrOfs(Where, Offset), What);
+  end else begin
+    FoundPos := ShlwApi.StrStrA(Where, What);
+  end;
 
   if FoundPos <> nil then begin
     result := integer(FoundPos) - integer(Where);
+  end;
+end;
+
+(* Replaces What strings inside Where string with Replacement strings and returns new trigger-local ert z-var index *)
+function Erm_StrReplace (Where, What, Replacement: pchar): integer; stdcall;
+var
+  Res: string;
+
+begin
+  result := 0;
+
+  if Erm.ErmTriggerDepth > 0 then begin
+    Res    := SysUtils.StringReplace(Where, What, Replacement, [SysUtils.rfReplaceAll]);
+    result := Erm.CreateTriggerLocalErt(pchar(Res), Length(Res));
+  end;
+end;
+
+(* Trims string and returns new trigger-local ert z-var index *)
+function Erm_StrTrim (Str: pchar): integer; stdcall;
+var
+  Res: string;
+
+begin
+  result := 0;
+
+  if Erm.ErmTriggerDepth > 0 then begin
+    Res    := SysUtils.Trim(Str);
+    result := Erm.CreateTriggerLocalErt(pchar(Res), Length(Res));
+  end;
+end;
+
+(* Interpolates ERM variables inside string (%v1, etc) and returns newtrigger-local ert z-var index *)
+function Erm_Interpolate (Str: pchar): integer; stdcall;
+begin
+  result := 0;
+
+  if Erm.ErmTriggerDepth > 0 then begin
+    result := Erm.CreateTriggerLocalErt(Erm.InterpolateErmStr(Str));
   end;
 end;
 
@@ -684,6 +784,7 @@ exports
   Erm_CompareStrings,
   Erm_CustomStableSortInt32Array,
   Erm_FillInt32Array,
+  Erm_Interpolate,
   Erm_IntLog2,
   Erm_Pow,
   Erm_RevertInt32Array,
@@ -691,6 +792,9 @@ exports
   Erm_SortStrArray,
   Erm_Sqrt,
   Erm_StrPos,
+  Erm_StrReplace,
+  Erm_StrTrim,
+  Erm_Substr,
   ExecErmCmd,
   FatalError,
   FindNextObject,
@@ -757,6 +861,7 @@ exports
   Triggers.FastQuitToGameMenu,
   Triggers.SetRegenerationAbility,
   Triggers.SetStdRegenerationEffect,
+  trStatic,
   Tweaks.RandomRangeWithFreeParam,
   WriteSavegameSection,
   WriteStrToIni;
