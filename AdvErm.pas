@@ -1845,11 +1845,15 @@ begin
           // K(str)/(ind)/[?](strchar) Get/set string character at position
           3:
             begin
-              result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET, ACTION_SET or TYPE_INT, TYPE_STR]) and (Params[1].Value.v >= 0);
+              result := CheckCmdParamsEx(Params, NumParams, [ACTION_SET, ACTION_SET or TYPE_INT, TYPE_ANY]) and (Params[1].Value.v >= 0);
 
               if result then begin
                 if Params[2].OperGet then begin
-                  Params[2].RetPchar(pchar(@Params[0].Value.pc[Params[1].Value.v]), 1);
+                  if Params[2].IsStr then begin
+                    Params[2].RetPchar(pchar(@Params[0].Value.pc[Params[1].Value.v]), 1);
+                  end else begin
+                    Params[2].RetInt(ord(Params[0].Value.pc^));
+                  end;
                 end else begin
                   Params[0].Value.pc[Params[1].Value.v] := pchar(Params[2].Value.v)^;
                 end;
