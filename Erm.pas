@@ -7397,14 +7397,16 @@ var
   VarParamValType: integer;
   MinValueValType: integer;
   MaxValueValType: integer;
+  DefValueType:    integer;
   MinValue:        Heroes.TValue;
   MaxValue:        Heroes.TValue;
   FinalValue:      Heroes.TValue;
-  DoShowErrors:    boolean;
+  DoShowErrors:    longbool;
+  IsOutOfBounds:   longbool;
 
 begin
-  if (NumParams < 2) or (NumParams > 3) then begin
-    ShowErmError('"!!VR:F" - expected 2-3 parameters');
+  if (NumParams < 2) or (NumParams > 4) then begin
+    ShowErmError('"!!VR:F" - expected 2-4 parameters');
     result := 0; exit;
   end;
 
@@ -7412,15 +7414,25 @@ begin
   FinalValue.v    := GetErmParamValue(VarParam, VarParamValType);
   MinValueValType := GetErmParamValType(@SubCmd.Params[0]);
   MaxValueValType := GetErmParamValType(@SubCmd.Params[1]);
+  DefValueType    := GetErmParamValType(@SubCmd.Params[3]);
 
-  if not ((VarParamValType in [VALTYPE_INT, VALTYPE_FLOAT]) and (MinValueValType in [VALTYPE_INT, VALTYPE_FLOAT]) and (MaxValueValType in [VALTYPE_INT, VALTYPE_FLOAT])) then begin
+  if not (
+    (VarParamValType in [VALTYPE_INT, VALTYPE_FLOAT]) and
+    (MinValueValType in [VALTYPE_INT, VALTYPE_FLOAT]) and
+    (MaxValueValType in [VALTYPE_INT, VALTYPE_FLOAT]) and
+    (
+      (NumParams < 4) or
+      (DefValueType in [VALTYPE_INT, VALTYPE_FLOAT])
+    )
+  ) then begin
     ShowErmError('"!!VR:F" - only numeric variables and values are supported');
     result := 0; exit;
   end;
 
-  MinValue.v   := SubCmd.Nums[0];
-  MaxValue.v   := SubCmd.Nums[1];
-  DoShowErrors := (NumParams = 3) and (SubCmd.Nums[2] <> 0);
+  MinValue.v    := SubCmd.Nums[0];
+  MaxValue.v    := SubCmd.Nums[1];
+  DoShowErrors  := (NumParams >= 3) and (SubCmd.Nums[2] <> 0);
+  IsOutOfBounds := false;
 
   if VarParamValType = VALTYPE_INT then begin
     if MinValueValType = VALTYPE_FLOAT  then begin
@@ -7436,7 +7448,8 @@ begin
         ShowErmError(SysUtils.Format('"SN:F" - value %d is out of allowed range [%d..%d]. Forced value to range.', [FinalValue.v, MinValue.v, MaxValue.v]));
       end;
 
-      FinalValue.v := MaxValue.v;
+      IsOutOfBounds := true;
+      FinalValue.v  := MaxValue.v;
     end;
 
     if FinalValue.v < MinValue.v then begin
@@ -7444,7 +7457,12 @@ begin
         ShowErmError(SysUtils.Format('"SN:F" - value %d is out of allowed range [%d..%d]. Forced value to range.', [FinalValue.v, MinValue.v, MaxValue.v]));
       end;
 
-      FinalValue.v := MinValue.v;
+      IsOutOfBounds := true;
+      FinalValue.v  := MinValue.v;
+    end;
+
+    if IsOutOfBounds and (NumParams >= 4) then begin
+      FinalValue.v := SubCmd.Nums[3];
     end;
 
     result := ord(SetErmParamValue(VarParam, FinalValue.v));
@@ -8511,7 +8529,7 @@ begin
     SysUtils.FreeAndNil(GlobalConsts);
     GlobalConsts := DataLib.UnserializeDict(SerializedDict, not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   end;
-end; // .procedure DoLoadGlobalConsts
+end;
 
 procedure OnSavegameWrite (Event: PEvent); stdcall;
 begin
