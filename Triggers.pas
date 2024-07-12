@@ -861,7 +861,7 @@ begin
 
   HasElixirOfLife := (MonHero <> nil)                                and
                      MonHero.HasArtOnDoll(Heroes.ART_ELIXIR_OF_LIFE) and
-                     WogEvo.IsElixirOfLifeStack(Stack);
+                     Boolean(WogEvo.IsElixirOfLifeStack(Stack));
 
   // Elixir of Life regeneration is used only if it's greater than the native one
   if HasElixirOfLife then begin

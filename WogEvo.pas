@@ -12,13 +12,13 @@ uses
   Heroes;
 
 type
-  TIsCommanderIdFunc       = function (MonId: integer): boolean stdcall;
-  TIsElixirOfLifeStackFunc = function (Stack: Heroes.PBattleStack): boolean stdcall;
+  TIsCommanderIdFunc       = function (MonId: integer): TInt32Bool stdcall;
+  TIsElixirOfLifeStackFunc = function (Stack: Heroes.PBattleStack): TInt32Bool stdcall;
 
 
-function IsCommanderId (MonId: integer): boolean; stdcall;
+function IsCommanderId (MonId: integer): TInt32Bool; stdcall;
 function SetIsCommanderIdFunc (NewImpl: TIsCommanderIdFunc): {n} TIsCommanderIdFunc; stdcall;
-function IsElixirOfLifeStack (Stack: Heroes.PBattleStack): boolean; stdcall;
+function IsElixirOfLifeStack (Stack: Heroes.PBattleStack): TInt32Bool; stdcall;
 function SetIsElixirOfLifeStackFunc (NewImpl: TIsElixirOfLifeStackFunc): {n} TIsElixirOfLifeStackFunc; stdcall;
 
 
@@ -30,7 +30,7 @@ var
   IsElixirOfLifeStackFunc: TIsElixirOfLifeStackFunc;
 
 
-function IsCommanderId (MonId: integer): boolean; stdcall;
+function IsCommanderId (MonId: integer): TInt32Bool; stdcall;
 begin
   result := IsCommanderIdFunc(MonId);
 end;
@@ -41,14 +41,19 @@ begin
   IsCommanderIdFunc := @NewImpl;
 end;
 
-function ImplIsCommanderId (MonId: integer): boolean; stdcall;
+function ImplIsCommanderId (MonId: integer): TInt32Bool; stdcall;
 begin
-  result := (MonId >= Heroes.MON_COMMANDER_FIRST_A) and (MonId <= Heroes.MON_COMMANDER_LAST_D);
+  result := ord((MonId >= Heroes.MON_COMMANDER_FIRST_A) and (MonId <= Heroes.MON_COMMANDER_LAST_D));
 end;
 
-function IsElixirOfLifeStack (Stack: Heroes.PBattleStack): boolean; stdcall;
+function IsElixirOfLifeStack (Stack: Heroes.PBattleStack): TInt32Bool; stdcall;
 begin
   result := IsElixirOfLifeStackFunc(Stack);
+end;
+
+function StubIsElixirOfLifeStack (Stack: Heroes.PBattleStack): TInt32Bool; stdcall;
+begin
+  result := ord(false);
 end;
 
 function SetIsElixirOfLifeStackFunc (NewImpl: TIsElixirOfLifeStackFunc): {n} TIsElixirOfLifeStackFunc; stdcall;
@@ -64,5 +69,6 @@ exports
   SetIsElixirOfLifeStackFunc;
 
 begin
-  SetIsCommanderIdFunc(IsCommanderIdFunc);
+  SetIsCommanderIdFunc(@ImplIsCommanderId);
+  SetIsElixirOfLifeStackFunc(@StubIsElixirOfLifeStack);
 end.
