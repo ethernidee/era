@@ -209,9 +209,9 @@ var
   i:           integer;
 
 begin
-  SetLength(ParamList, length(Params));
+  SetLength(ParamList, Length(Params) and not 1);
 
-  for i := 0 to High(Params) do begin
+  for i := 0 to Length(ParamList) - 1 do begin
     ParamList[i] := Params[i];
   end;
 
@@ -219,19 +219,28 @@ begin
   result      := Externalize(Translation);
 end;
 
-function trStatic (const Key: pchar; const Params: array of pchar): pchar; stdcall;
+var
+  trTempBuf: string;
+
+function trTemp (const Key: pchar; const Params: array of pchar): pchar; stdcall;
 var
   ParamList: Utils.TArrayOfStr;
   i:         integer;
 
 begin
-  SetLength(ParamList, length(Params));
+  SetLength(ParamList, Length(Params) and not 1);
 
-  for i := 0 to High(Params) do begin
+  for i := 0 to Length(ParamList) - 1 do begin
     ParamList[i] := Params[i];
   end;
 
-  result := Memory.UniqueStrings[pchar(Trans.tr(Key, ParamList))];
+  trTempBuf := Trans.tr(Key, ParamList);
+  result    := pchar(trTempBuf);
+end;
+
+function trStatic (const Key: pchar): pchar; stdcall;
+begin
+  result := Memory.UniqueStrings[pchar(Trans.tr(Key, []))];
 end;
 
 function SetLanguage (NewLanguage: pchar): TDwordBool; stdcall;
@@ -862,6 +871,7 @@ exports
   Triggers.SetRegenerationAbility,
   Triggers.SetStdRegenerationEffect,
   trStatic,
+  trTemp,
   Tweaks.RandomRangeWithFreeParam,
   WriteSavegameSection,
   WriteStrToIni;
