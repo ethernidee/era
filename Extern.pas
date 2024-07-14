@@ -147,6 +147,16 @@ begin
   Erm.ExecErmCmd(CmdStr);
 end;
 
+// procedure PersistErmCmd (CmdStr: pchar): pointer; stdcall;
+// begin
+//   result := Erm.CompileErmCmd(CmdStr);
+// end;
+
+// procedure ExecPersistedErmCmd (PersistedCmd: Erm.PCompiledErmCmd): pointer; stdcall;
+// begin
+//   Erm.ZvsProcessCmd(@PersistedCmd.Cmd);
+// end;
+
 procedure FireErmEvent (EventID: integer); stdcall;
 begin
   Erm.FireErmEvent(EventID);
@@ -613,7 +623,7 @@ var
   ProcessGuid: string;
 
 (* Returns 32-character unique key for current game process. The ID will be unique between multiple game runs. *)
-procedure GetProcessGuid (Buf: pchar); stdcall;
+function GetProcessGuid: pchar; stdcall;
 var
   ProcessGuidBuf: array [0..sizeof(GameExt.ProcessStartTime) - 1] of byte;
 
@@ -628,7 +638,7 @@ begin
     ProcessGuid := StrLib.BinToHex(sizeof(ProcessGuidBuf), @ProcessGuidBuf);
   end;
 
-  Utils.CopyMem(Length(ProcessGuid) + 1, pchar(ProcessGuid), Buf);
+  result := pchar(ProcessGuid);
 end;
 
 function IsCampaign: TDwordBool; stdcall;
