@@ -3666,7 +3666,7 @@ begin
 
   if (FreeBufSize <= 0) or not OptimizeCompiledErm(TriggersStart, TriggersSize, FreeBuf, FreeBufSize) then begin
     ErmEnabled^ := false;
-    Heroes.ShowMessage(Trans.tr('no_memory_for_erm_optimization', ['limit', IntToStr(ZvsErmHeapSize^ div 1000000)]));
+    Heroes.ShowMessage(Trans.tr('era.no_memory_for_erm_optimization', ['limit', IntToStr(ZvsErmHeapSize^ div 1000000)]));
   end;
 
   result := true;
@@ -5952,6 +5952,14 @@ begin
 
   Context.RetAddr := Ptr($7499ED);
   result          := not Core.EXEC_DEF_CODE;
+end;
+
+function Hook_FindErm_OutOfMemory (Context: ApiJack.PHookContext): longbool; stdcall;
+begin
+  Heroes.ShowMessage(Trans.tr('era.no_memory_for_erm_optimization', ['limit', IntToStr(ZvsErmHeapSize^ div 1000000)]));
+
+  Context.RetAddr := Ptr($74C65B);
+  result          := false;
 end;
 
 var
@@ -8594,6 +8602,9 @@ begin
   {!} Assert(NewErmHeap <> nil, SysUtils.Format('Failed to allocate %d MB memory block for new ERM heap', [NewErmHeapSize div 1000000]));
   Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
   Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', NewErmHeapSize]);
+
+  (* Move not enough memory for ERM script compilation message to json *)
+  ApiJack.HookCode(Ptr($74C53A), @Hook_FindErm_OutOfMemory);
 
   (* Register new code control receivers *)
   AdvErm.RegisterErmReceiver('re', nil, AdvErm.CMD_PARAMS_CONFIG_ONE_TO_FIVE_INTS);
