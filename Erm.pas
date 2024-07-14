@@ -3666,7 +3666,7 @@ begin
 
   if (FreeBufSize <= 0) or not OptimizeCompiledErm(TriggersStart, TriggersSize, FreeBuf, FreeBufSize) then begin
     ErmEnabled^ := false;
-    Heroes.ShowMessage(Trans.tr('no_memory_for_erm_optimization', ['limit', IntToStr(ZvsErmHeapSize^ div (1024 * 1024))]));
+    Heroes.ShowMessage(Trans.tr('no_memory_for_erm_optimization', ['limit', IntToStr(ZvsErmHeapSize^ div 1000000)]));
   end;
 
   result := true;
@@ -8576,20 +8576,24 @@ end;
 
 procedure OnBeforeWoG (Event: GameExt.PEvent); stdcall;
 const
-  NEW_ERM_HEAP_SIZE = 128 * 1000 * 1000;
+  MIN_ERM_HEAP_SIZE     = 1;
+  DEFAULT_ERM_HEAP_SIZE = 128 * 1024 * 1024;
 
 var
-{On} NewErmHeap: pointer;
+{On} NewErmHeap:     pointer;
+     NewErmHeapSize: integer;
 
 begin
   (* Remove WoG CM3 trigger *)
   Core.p.WriteDword(Ptr($78C210), $887668);
 
-  (* Extend ERM memory limit to 128 MB *)
-  NewErmHeap := Windows.VirtualAlloc(nil, NEW_ERM_HEAP_SIZE, Windows.MEM_RESERVE or Windows.MEM_COMMIT, Windows.PAGE_READWRITE);
-  {!} Assert(NewErmHeap <> nil, 'Failed to allocate 128 MB memory block for new ERM heap');
+  (* Extend compiled ERM memory limit *)
+  NewErmHeapSize  := Math.Max(MIN_ERM_HEAP_SIZE, EraSettings.GetOpt('CompiledErmBufSize').Int(DEFAULT_ERM_HEAP_SIZE));
+  ZvsErmHeapSize^ := NewErmHeapSize;
+  NewErmHeap      := Windows.VirtualAlloc(nil, NewErmHeapSize, Windows.MEM_RESERVE or Windows.MEM_COMMIT, Windows.PAGE_READWRITE);
+  {!} Assert(NewErmHeap <> nil, SysUtils.Format('Failed to allocate %d MB memory block for new ERM heap', [NewErmHeapSize div 1000000]));
   Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
-  Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', integer(NEW_ERM_HEAP_SIZE)]);
+  Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', NewErmHeapSize]);
 
   (* Register new code control receivers *)
   AdvErm.RegisterErmReceiver('re', nil, AdvErm.CMD_PARAMS_CONFIG_ONE_TO_FIVE_INTS);
