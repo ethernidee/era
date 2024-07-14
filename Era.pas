@@ -89,6 +89,7 @@ function GetVersionNum: integer; stdcall; external 'era.dll' name 'GetVersionNum
 function HookCode (Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer = nil): pointer; stdcall; external 'era.dll' name 'HookCode';
 function LoadImageAsPcx16 (FilePath, PcxName: pchar; Width, Height, MaxWidth, MaxHeight, ResizeAlg: integer): {OU} PPcx16Item; stdcall; external 'era.dll' name 'LoadImageAsPcx16';
 function PatchExists (PatchName: pchar): boolean; stdcall; external 'era.dll' name 'PatchExists';
+function PersistErmCmd (CmdStr: pchar): {n} pointer; stdcall;
 function PluginExists (PluginName: pchar): boolean; stdcall; external 'era.dll' name 'PluginExists';
 function ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar ): integer; stdcall; external 'era.dll' name 'ReadSavegameSection';
 function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall; external 'era.dll' name 'ReadStrFromIni';
@@ -101,6 +102,7 @@ function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): boolean; stdc
 procedure ClearAllIniCache; external 'era.dll' name 'ClearAllIniCache';
 procedure ClearIniCache (FileName: pchar); stdcall; external 'era.dll' name 'ClearIniCache';
 procedure ExecErmCmd (CmdStr: pchar); stdcall; external 'era.dll' name 'ExecErmCmd';
+procedure ExecPersistedErmCmd (PersistedCmd: pointer); stdcall;
 procedure ExtractErm; external 'era.dll' name 'ExtractErm';
 procedure FatalError (Err: pchar); stdcall; external 'era.dll' name 'FatalError';
 procedure FireErmEvent (EventID: integer); stdcall; external 'era.dll' name 'FireErmEvent';
