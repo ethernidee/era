@@ -826,6 +826,7 @@ function  GetErmFuncByName (const FuncName: string): integer;
 function  GetErmFuncName (FuncId: integer; out Name: string): boolean;
 function  AllocErmFunc (const FuncName: string; {i} out FuncId: integer): boolean;
 function  GetTriggerReadableName (EventId: integer): string;
+function  CompileErmCmd (CmdStr: string; Flags: integer = 0): {On} PCompiledErmCmd;
 procedure ExecErmCmd (const CmdStr: string);
 procedure ReloadErm; stdcall;
 procedure ExtractErm; stdcall;

@@ -147,15 +147,18 @@ begin
   Erm.ExecErmCmd(CmdStr);
 end;
 
-// procedure PersistErmCmd (CmdStr: pchar): pointer; stdcall;
-// begin
-//   result := Erm.CompileErmCmd(CmdStr);
-// end;
+(* Compiles single ERM command without !! prefix and conditions and saves its compiled code in persisted memory storage.
+   Returns non-nil opaque pointer on success and nil on failure. Trailing semicolon is optional *)
+function PersistErmCmd (CmdStr: pchar): {n} pointer; stdcall;
+begin
+  result := Erm.CompileErmCmd(CmdStr);
+end;
 
-// procedure ExecPersistedErmCmd (PersistedCmd: Erm.PCompiledErmCmd): pointer; stdcall;
-// begin
-//   Erm.ZvsProcessCmd(@PersistedCmd.Cmd);
-// end;
+(* Executes previously compiled and persisted ERM command. Use PersistErmCmd API for compilation *)
+procedure ExecPersistedErmCmd (PersistedCmd: pointer); stdcall;
+begin
+  Erm.ZvsProcessCmd(@Erm.PCompiledErmCmd(PersistedCmd).Cmd);
+end;
 
 procedure FireErmEvent (EventID: integer); stdcall;
 begin
@@ -815,6 +818,7 @@ exports
   Erm_StrTrim,
   Erm_Substr,
   ExecErmCmd,
+  ExecPersistedErmCmd,
   FatalError,
   FindNextObject,
   FireErmEvent,
@@ -855,6 +859,7 @@ exports
   NotifyError,
   PatchExists,
   PcxPngExists,
+  PersistErmCmd
   PluginExists,
   ReadSavegameSection,
   ReadStrFromIni,
