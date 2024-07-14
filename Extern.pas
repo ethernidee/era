@@ -859,7 +859,7 @@ exports
   NotifyError,
   PatchExists,
   PcxPngExists,
-  PersistErmCmd
+  PersistErmCmd,
   PluginExists,
   ReadSavegameSection,
   ReadStrFromIni,
