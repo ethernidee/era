@@ -3,11 +3,15 @@ unit EventMan;
   Global event dispatcher.
 *)
 
-
 (***)  interface  (***)
 
 uses
-  Core, SysUtils, Utils, DataLib, FilesEx;
+  SysUtils,
+
+  Core,
+  DataLib,
+  FilesEx,
+  Utils;
 
 type
   (* Import *)
