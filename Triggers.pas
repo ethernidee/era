@@ -21,6 +21,7 @@ uses
 
   EraSettings,
   Erm,
+  EventLib,
   EventMan,
   GameExt,
   Heroes,
@@ -559,6 +560,7 @@ const
 
 var
   ShouldSimulateEnterLeaveEvents: boolean;
+  Event:                          EventLib.TOnBeforeLoadGameEvent;
 
 begin
   ShouldSimulateEnterLeaveEvents := MainGameLoopDepth > 0;
@@ -567,6 +569,9 @@ begin
     Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
     EventMan.GetInstance.Fire('OnGameLeft');
   end;
+
+  Event.FileName := FileName;
+  EventMan.GetInstance.Fire('OnBeforeLoadGame', @Event, sizeof(Event));
 
   result := PatchApi.Call(THISCALL_, OrigFunc, [GameMan, FileName, PreventLoading, Dummy]);
 
