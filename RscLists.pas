@@ -19,36 +19,38 @@ type
      fName:     string;
      fContents: string;
      fCrc32:    integer;
+     fTag:      integer;
 
-    procedure Init (const Name, Contents: string; Crc32: integer);
+    procedure Init (const Name, Contents: string; Crc32: integer; Tag: integer = 0);
 
    public
-    constructor Create (const Name, Contents: string; Crc32: integer); overload;
-    constructor Create (const Name, Contents: string); overload;
-    
+    constructor CreateWithCrc32 (const Name, Contents: string; Crc32: integer; Tag: integer = 0); overload;
+    constructor Create (const Name, Contents: string; Tag: integer = 0); overload;
+
     function  Assign (OtherResource: TResource): TResource;
     function  UpdateContentsAndHash (const Contents: string): TResource;
     function  FastCompare (OtherResource: TResource): boolean;
     function  OwnsAddr ({n} Addr: pchar): boolean;
     function  GetPtr: pchar;
-    
+
     property Name:     string  read fName     write fName;
     property Contents: string  read fContents write fContents;
     property Crc32:    integer read fCrc32    write fCrc32;
+    property Tag:      integer read fTag    write fTag;
   end; // .class TResource
 
   TResourceList = class
    private
     {O} fItems:        {O} TList {OF TResource};
     {O} fItemIsLoaded: {U} TDict {OF ItemName => Ptr(boolean)};
-    
+
     function GetItemsCount: integer;
     function GetItem (Ind: integer): TResource;
-   
+
    public
     constructor Create;
     destructor  Destroy; override;
-   
+
     procedure Clear;
     function  ItemExists (const ItemName: string): boolean;
     function  Add ({O} Item: TResource): boolean;
@@ -56,7 +58,7 @@ type
     procedure Save (const SectionName: string);
     procedure LoadFromSavedGame (const SectionName: string);
     function  FastCompare (OtherResourceList: TResourceList): boolean;
-    
+
     (* Returns error string *)
     function Export (const DestDir: string): string;
 
@@ -68,21 +70,22 @@ type
 (***)  implementation  (***)
 
 
-procedure TResource.Init (const Name, Contents: string; Crc32: integer);
+procedure TResource.Init (const Name, Contents: string; Crc32: integer; Tag: integer);
 begin
   Self.fName     := Name;
   Self.fContents := Contents;
   Self.fCrc32    := Crc32;
+  Self.fTag      := Tag;
 end;
 
-constructor TResource.Create (const Name, Contents: string; Crc32: integer);
+constructor TResource.CreateWithCrc32 (const Name, Contents: string; Crc32: integer; Tag: integer = 0);
 begin
-  Self.Init(Name, Contents, Crc32);
+  Self.Init(Name, Contents, Crc32, Tag);
 end;
 
-constructor TResource.Create (const Name, Contents: string);
+constructor TResource.Create (const Name, Contents: string; Tag: integer = 0);
 begin
-  Init(Name, Contents, Crypto.AnsiCrc32(Contents));
+  Init(Name, Contents, Crypto.AnsiCrc32(Contents), Tag);
 end;
 
 function TResource.Assign (OtherResource: TResource): TResource;
@@ -122,7 +125,7 @@ begin
   Self.fItems        := DataLib.NewList(Utils.OWNS_ITEMS);
   Self.fItemIsLoaded := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
 end;
-  
+
 destructor TResourceList.Destroy;
 begin
   SysUtils.FreeAndNil(Self.fItems);
@@ -169,7 +172,7 @@ procedure TResourceList.Save (const SectionName: string);
 var
 {Un} Item: TResource;
      i:    integer;
-  
+
 begin
   Item := nil;
   // * * * * * //
@@ -192,7 +195,7 @@ var
   ItemName:     string;
   ItemCrc32:    integer;
   i:            integer;
-  
+
 begin
   with Stores.NewRider(SectionName) do begin
     NumItems := ReadInt;
@@ -212,16 +215,16 @@ var
   ItemName: string;
   ItemPath: string;
   i:        integer;
-  
+
 begin
   result := '';
   Res    := SysUtils.DirectoryExists(DestDir) or SysUtils.CreateDir(DestDir);
-  
+
   if not Res then begin
     result := 'Cannot recreate directory "' + DestDir + '"';
   end else begin
     i := 0;
-    
+
     while Res and (i < Self.fItems.Count) do begin
       ItemName := TResource(Self.fItems[i]).Name;
       ItemPath := DestDir + '\' + ItemName;
@@ -241,7 +244,7 @@ begin
           result := 'Error writing to file "' + ItemPath + '"';
         end;
       end;
-    
+
       Inc(i);
     end;
   end; // .else
