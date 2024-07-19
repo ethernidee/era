@@ -33,6 +33,7 @@ uses
 
   EraSettings,
   Erm,
+  EventLib,
   EventMan,
   GameExt,
   Graph,
@@ -94,6 +95,7 @@ procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; 
 const
   RNG_SAVE_SECTION      = 'Era.RNG';
   CRASH_SCREENHOST_PATH = EraSettings.DEBUG_DIR + '\screenshot.jpg';
+  CRASH_SAVEGAME_PATH   = EraSettings.DEBUG_DIR + '\savegame.gm1';
 
   DL_GROUP_INDEX_MARKER = 100000; // DL frame index column is DL_GROUP_INDEX_MARKER * groupIndex + frameIndex
 
@@ -147,6 +149,7 @@ var
   DlgLastEvent:          Heroes.TMouseEventInfo;
   ComputerName:          string;
   IsCrashing:            boolean;
+  CrashSavegameName:     string;
 
   Mp3TriggerHandledEvent: THandle;
   IsMp3Trigger:           boolean = false;
@@ -2002,10 +2005,28 @@ begin
   Graph.TakeScreenshot(GameExt.GameDir + '\' + CRASH_SCREENHOST_PATH, 70);
 end;
 
+procedure CopyCrashSavegameToDebugDir;
+var
+  CrashSavegamePath: string;
+
+begin
+  if CrashSavegameName <> '' then begin
+    CrashSavegamePath := GameExt.GameDir + '\games\' + CrashSavegameName;
+
+    if Files.FileExists(CrashSavegamePath) then begin
+      Windows.CopyFile(pchar(CrashSavegamePath), pchar(GameExt.GameDir + '\' + CRASH_SAVEGAME_PATH), false);
+    end;
+  end;
+end;
+
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
   if EraSettings.GetOpt('Debug.CaptureScreenshotOnCrash').Bool(true) then begin
     CaptureCrashScreenshot;
+  end;
+
+  if EraSettings.GetOpt('Debug.CopySavegameOnCrash').Bool(true) then begin
+    CopyCrashSavegameToDebugDir;
   end;
 
   DumpWinPeModuleList;
@@ -2293,6 +2314,21 @@ begin
   Windows.SetUnhandledExceptionFilter(@UnhandledExceptionFilter);
 end;
 
+procedure OnBeforeErmInstructions (Event: GameExt.PEvent); stdcall;
+begin
+  CrashSavegameName := '';
+end;
+
+procedure OnBeforeLoadGame (Event: GameExt.PEvent); stdcall;
+begin
+  CrashSavegameName := EventLib.POnBeforeLoadGameEvent(Event.Data).FileName;
+end;
+
+procedure OnBeforeSaveGame (Event: GameExt.PEvent); stdcall;
+begin
+  CrashSavegameName := pchar(Erm.x[1]);
+end;
+
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
 begin
   Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
@@ -2311,6 +2347,7 @@ begin
   Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
   ComputerName              := WinUtils.GetComputerNameW;
 
+
   EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
   EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
@@ -2318,6 +2355,9 @@ begin
   EventMan.GetInstance.On('OnBattleReplay', OnBattleReplay);
   EventMan.GetInstance.On('OnBeforeBattleReplay', OnBeforeBattleReplay);
   EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
+  EventMan.GetInstance.On('OnBeforeErmInstructions', OnBeforeErmInstructions);
+  EventMan.GetInstance.On('OnBeforeLoadGame', OnBeforeLoadGame);
+  EventMan.GetInstance.On('OnBeforeSaveGame', OnBeforeSaveGame);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 
   if FALSE then begin
