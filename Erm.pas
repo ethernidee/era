@@ -5942,7 +5942,7 @@ begin
   end;
 
   result := not Core.EXEC_DEF_CODE;
-end; // .function Hook_FindErm_BeforeMainLoop
+end;
 
 function Hook_FindErm_ZeroHeap (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
