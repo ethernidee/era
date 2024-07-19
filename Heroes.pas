@@ -1192,6 +1192,42 @@ type
     procedure Send (aDestPlayerId: integer);
   end;
 
+  PWogDlgItem = pointer;
+
+  TWogDlgAnimatedDef = packed record
+    FrameInd: integer;
+    Item:     PWogDlgItem;
+  end;
+
+  PWogDlgHint = ^TWogDlgHint;
+  TWogDlgHint = packed record
+      ItemId: integer;
+  {O} Text:   pchar; // not owned in original WoG, but owned in Era
+  end;
+
+  PWogDlgHints = ^TWogDlgHints;
+  TWogDlgHints = array [0..High(integer) div sizeof(TWogDlgHint) - 1] of TWogDlgHint;
+
+  PWogDialog = ^TWogDialog;
+  TWogDialog = packed record
+    NativeData:   array [1..96] of byte;
+    AnimatedDefs: array [1..10] of TWogDlgAnimatedDef;
+    VideoIndex:   integer; // or -1
+    VideoX:       integer;
+    VideoY:       integer;
+    HintItemInd:  integer;
+    Hints:        PWogDlgHints;
+    NumItems:     integer;
+    Id:           integer;
+  end;
+
+  PWogDialogLink = ^TWogDialogLink;
+  TWogDialogLink = packed record
+    {O}  Dlg:   PWogDialog;
+    {On} Next:  PWogDialogLink;
+         Flags: integer;
+  end;
+
 const
   MAlloc:      TMAlloc = Ptr($617492);
   MFree:       TMFree  = Ptr($60B0F0);
