@@ -761,12 +761,13 @@ const
 
 
 var
-{O} UniqueRng:       FastRand.TXoroshiro128Rng;
-{O} LoadedErsFiles:  {O} TList {of Heroes.TTextTable};
-{O} ErtStrings:      {O} AssocArrays.TObjArray {of Index => pchar}; // use H3 Alloc/Free
-{O} ScriptMan:       TScriptMan;
-{O} GlobalConsts:    DataLib.TDict {OF Value: integer};
-{O} PacketReader:    {U} Files.TFixedBuf; // Remote event data reader
+{O} UniqueRng:      FastRand.TXoroshiro128Rng;
+{O} LoadedErsFiles: {O} TList {of Heroes.TTextTable};
+{O} ErtStrings:     {O} AssocArrays.TObjArray {of Index => pchar}; // use H3 Alloc/Free
+{O} ScriptMan:      TScriptMan;
+{O} GlobalConsts:   TDict {OF Value: integer};
+{O} PacketReader:   {U} Files.TFixedBuf; // Remote event data reader
+
     ErmTriggerDepth: integer = 0;
 
     FreezedWogOptionWogify: integer = WOGIFY_ALL;
@@ -6967,7 +6968,68 @@ begin
   end else begin
     Context.RetAddr := Ptr($72B144);
   end;
-end; // .function Hook_DL_A
+end;
+
+function Hook_DL_H (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  SubCmd: PErmSubCmd;
+  Param:  PErmCmdParam;
+
+begin
+  result := false;
+  SubCmd := ppointer(Context.EBP + $14)^;
+  Param  := @SubCmd.Params[1];
+
+  ppointer(Context.EBP - $20)^ := GetInterpolatedZVarAddr(SubCmd.Nums[1]);
+  Context.RetAddr              := Ptr($72B007);
+end;
+
+function Hook_ZvsDlg_AddHint_Assign (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+{Un} DlgLink:     Heroes.PWogDialogLink;
+     ItemId:      integer;
+     ItemHintInd: integer;
+     OldHint:     pchar;
+     NewHint:     pchar;
+     NewHintCopy: pchar;
+     NewHintSize: integer;
+
+begin
+  DlgLink     := ppointer(Context.EBP - 12)^;
+  ItemId      := pinteger(Context.EBP + 8)^;
+  NewHint     := ppointer(Context.EBP + 12)^;
+  ItemHintInd := pinteger(Context.EBP - 4)^;
+  OldHint     := DlgLink.Dlg.Hints[ItemHintInd].Text;
+  NewHintSize := Windows.LStrLen(NewHint) + Length(#0);
+
+  if OldHint <> nil then begin
+    Heroes.MemFreeAndNil(OldHint);
+  end;
+
+  NewHintCopy := Heroes.MemAlloc(NewHintSize);
+  Utils.CopyMem(NewHintSize, NewHint, NewHintCopy);
+
+  DlgLink.Dlg.Hints[ItemHintInd].ItemId := ItemId;
+  DlgLink.Dlg.Hints[ItemHintInd].Text   := NewHintCopy;
+
+  Context.RetAddr := Ptr($72989C);
+  result          := false;
+end;
+
+function Hook_ZvsDlg_Delete_FreeHints (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  DlgLink: Heroes.PWogDialogLink;
+  i:       integer;
+
+begin
+  DlgLink := ppointer(Context.EBP - 16)^;
+
+  for i := 0 to DlgLink.Dlg.NumItems - 1 do begin
+    Heroes.MemFreeAndNil(DlgLink.Dlg.Hints[i].Text);
+  end;
+
+  result := true;
+end;
 
 function Hook_EA_E (Context: ApiJack.PHookContext): longbool; stdcall;
 const
@@ -8818,6 +8880,18 @@ begin
 
   (* Fix DL:A to allow all strings and assume 0 as the forth parameter value *)
   ApiJack.HookCode(Ptr($72B093), @Hook_DL_A);
+
+  (* Fix DL:H to allow all strings *)
+  ApiJack.HookCode(Ptr($72AF66), @Hook_DL_H);
+
+  (* Force WoG dialog to make hint copy during hint assignment *)
+  ApiJack.HookCode(Ptr($72986E), @Hook_ZvsDlg_AddHint_Assign);
+
+  (* Disable DL:H item hint interpolation during call to HDlg::GetHint *)
+  Core.p.WriteDataPatch(Ptr($729916), ['90909090909090909090909090909090909090']);
+
+  (* Force WoG dialog to free allocated hints memory on dialog destruction *)
+  ApiJack.HookCode(Ptr($72B897), @Hook_ZvsDlg_Delete_FreeHints);
 
   (* Fix HE(xxx) GetVarVal call to allow new variable types *)
   ApiJack.HookCode(Ptr($743A17), @Hook_HE);
