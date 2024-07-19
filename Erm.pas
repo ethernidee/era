@@ -51,6 +51,8 @@ const
   FUNC_NAMES_SECTION       = 'Era.FuncNames';
   ERM_SCRIPTS_PATH         = 'Data\s';
   ERS_FILES_PATH           = 'Data\s';
+  ERM_LIB_SCRIPTS_PATH     = 'Data\s\lib';
+  ERM_LIB_DIR_NAME         = 'lib';
   EXTRACTED_SCRIPTS_PATH   = EraSettings.DEBUG_DIR + '\Scripts';
   ERM_TRACKING_REPORT_PATH = DEBUG_DIR + '\erm tracking.erm';
 
@@ -324,6 +326,10 @@ const
   (* ERM command compilation flags *)
   ECF_PERSISTED = 1;
 
+  (* Scripts resource tags *)
+  RESOURCE_TAG_GLOBAL_SCRIPT = 1;
+  RESOURCE_TAG_MAP_SCRIPT    = 2;
+
 
 type
   TErmValType   = (ValNum, ValF, ValQuick, ValV, ValW, ValX, ValY, ValZ);
@@ -487,7 +493,7 @@ type
 
       procedure ClearScripts;
       procedure SaveScripts;
-      function  LoadScript (const ScriptPath: string; ScriptName: string = ''): boolean;
+      function  LoadScript (const ScriptPath: string; ScriptName: string = ''; ResourceTag: integer = RESOURCE_TAG_GLOBAL_SCRIPT): boolean;
       procedure LoadMapInternalScripts;
       procedure LoadScriptsFromSavedGame;
       procedure LoadScriptsFromDisk (IsFirstLoading: boolean);
@@ -2866,7 +2872,7 @@ begin
   Self.fScripts.Save(ERM_SCRIPTS_SECTION);
 end;
 
-function TScriptMan.LoadScript (const ScriptPath: string; ScriptName: string = ''): boolean;
+function TScriptMan.LoadScript (const ScriptPath: string; ScriptName: string = ''; ResourceTag: integer = RESOURCE_TAG_GLOBAL_SCRIPT): boolean;
 var
   ScriptContents:     string;
   PreprocessedScript: string;
@@ -2880,7 +2886,7 @@ begin
 
   if result then begin
     PreprocessedScript := PreprocessErm(ScriptName, ScriptContents);
-    fScripts.Add(TResource.Create(ScriptName, PreprocessedScript, Crypto.AnsiCrc32(ScriptContents)));
+    fScripts.Add(TResource.CreateWithCrc32(ScriptName, PreprocessedScript, Crypto.AnsiCrc32(ScriptContents), ResourceTag));
     LoadErtFile(ScriptName);
   end;
 end;
@@ -2941,7 +2947,7 @@ begin
     end;
 
     PreprocessedScript := PreprocessErm(ScriptName, GlobalEvent.Message.ToString);
-    fScripts.Add(TResource.Create(ScriptName, PreprocessedScript, Crypto.FastHash(GlobalEvent.Message.Value, GlobalEvent.Message.Len)));
+    fScripts.Add(TResource.CreateWithCrc32(ScriptName, PreprocessedScript, Crypto.FastHash(GlobalEvent.Message.Value, GlobalEvent.Message.Len), RESOURCE_TAG_MAP_SCRIPT));
   end; // .for
   // * * * * * //
   SysUtils.FreeAndNil(EventList);
@@ -2986,18 +2992,32 @@ begin
   GlobalConsts.Clear;
   RegisterStdGlobalConsts;
 
+  // Load global library scripts
+  ScriptsDir := GameExt.GameDir + '\' + ERM_LIB_SCRIPTS_PATH;
+  ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+  MapDirName := GameExt.GetMapDirName;
+
+  for i := 0 to ScriptList.Count - 1 do begin
+    Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ERM_LIB_DIR_NAME + '\' + ScriptList[i]);
+  end;
+
+  SysUtils.FreeAndNil(ScriptList);
+
+  // Load in-map scripts from time event texts
   Self.LoadMapInternalScripts;
 
+  // Load scripts from map directory
   ScriptsDir := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH);
   ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
   MapDirName := GameExt.GetMapDirName;
 
   for i := 0 to ScriptList.Count - 1 do begin
-    Self.LoadScript(ScriptsDir + '\' + ScriptList[i], MapDirName + '\' + ScriptList[i]);
+    Self.LoadScript(ScriptsDir + '\' + ScriptList[i], MapDirName + '\' + ScriptList[i], RESOURCE_TAG_MAP_SCRIPT);
   end;
 
   SysUtils.FreeAndNil(ScriptList);
 
+  // Determine fixed scripts white list
   LoadFixedScriptsSet := Files.ReadFileContents(GameExt.GetMapResourcePath(SCRIPTS_LIST_FILEPATH), FileContents);
 
   // Map maker forces fixed set of scripts
@@ -3008,14 +3028,14 @@ begin
   LoadFixedScriptsSet := LoadFixedScriptsSet or Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents);
 
   if LoadFixedScriptsSet then begin
-    ScriptsDir    := GameDir + '\' + ERM_SCRIPTS_PATH;
+    ScriptsDir    := GameExt.GameDir + '\' + ERM_SCRIPTS_PATH;
     ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
 
     for i := 0 to High(ForcedScripts) do begin
       Self.LoadScript(ScriptsDir + '\' + ForcedScripts[i]);
     end;
   end else begin
-    ScriptsDir := GameDir + '\' + ERM_SCRIPTS_PATH;
+    ScriptsDir := GameExt.GameDir + '\' + ERM_SCRIPTS_PATH;
     ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
 
     for i := 0 to ScriptList.Count - 1 do begin
@@ -3089,7 +3109,7 @@ end; // .function TScriptMan.AddrToScriptNameAndLine
 
 function TScriptMan.IsMapScript (ScriptInd: integer): boolean;
 begin
-  result := (ScriptInd >= 0) and (ScriptInd < Self.fScripts.Count) and (System.Pos('\', RscLists.TResource(Self.fScripts[ScriptInd]).Name) > 0);
+  result := (ScriptInd >= 0) and (ScriptInd < Self.fScripts.Count) and (RscLists.TResource(Self.fScripts[ScriptInd]).Tag = RESOURCE_TAG_MAP_SCRIPT);
 end;
 
 procedure ReloadErm;
