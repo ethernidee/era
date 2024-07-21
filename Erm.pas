@@ -6984,6 +6984,35 @@ begin
   Context.RetAddr              := Ptr($72B007);
 end;
 
+function Hook_HE_B0 (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  Hero:         Heroes.PHero;
+  SubCmd:       PErmSubCmd;
+  Param:        PErmCmdParam;
+  ParamValType: integer;
+  NewValue:     pchar;
+
+begin
+  Hero   := ppointer(Context.EBP - $380)^;
+  SubCmd := pointer(Context.EBP - $300);
+  Param  := @SubCmd.Params[1];
+
+  if Param.GetCheckType = PARAM_CHECK_GET then begin
+    SetErmParamValue(Param, integer(@Hero.Name), FLAG_ASSIGNABLE_STRINGS);
+  end else begin
+    NewValue := pchar(GetErmParamValue(Param, ParamValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX));
+
+    if ParamValType <> VALTYPE_STR then begin
+      ShowErmError('HE:B0 expects string value for the second parameter');
+    end else begin
+      Utils.SetPcharValue(pchar(@Hero.Name), NewValue, sizeof(Hero.Name));
+    end;
+  end;
+
+  Context.RetAddr := Ptr($7465F7);
+  result          := false;
+end;
+
 function Hook_ZvsDlg_AddHint_Assign (Context: ApiJack.PHookContext): longbool; stdcall;
 var
 {Un} DlgLink:     Heroes.PWogDialogLink;
@@ -8883,6 +8912,9 @@ begin
 
   (* Fix DL:H to allow all strings *)
   ApiJack.HookCode(Ptr($72AF66), @Hook_DL_H);
+
+  (* Fix HE:B0 to allow all strings *)
+  ApiJack.HookCode(Ptr($74646E), @Hook_HE_B0);
 
   (* Force WoG dialog to make hint copy during hint assignment *)
   ApiJack.HookCode(Ptr($72986E), @Hook_ZvsDlg_AddHint_Assign);
