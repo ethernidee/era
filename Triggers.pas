@@ -515,6 +515,14 @@ var
         Dec(MainGameLoopDepth);
 
         if MainGameLoopDepth = 0 then begin
+          if Heroes.IsGameEnd^ then begin
+            if Heroes.GameEndKind^ <> 0 then begin
+              Erm.FireErmEvent(Erm.TRIGGER_WIN_GAME);
+            end else begin
+              Erm.FireErmEvent(Erm.TRIGGER_LOSE_GAME);
+            end;
+          end;
+
           Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
           EventMan.GetInstance.Fire('OnGameLeft');
         end;
@@ -1041,20 +1049,6 @@ begin
   result := true;
 end;
 
-function Hook_ScenarioEnd (Context: ApiJack.PHookContext): longbool; stdcall;
-const
-  IS_GAME_WON_GLOBAL_ADDR = $699560; // boolean
-
-begin
-  if pbyte(IS_GAME_WON_GLOBAL_ADDR)^ <> 0 then begin
-    Erm.FireErmEvent(Erm.TRIGGER_WIN_GAME);
-  end else begin
-    Erm.FireErmEvent(Erm.TRIGGER_LOSE_GAME);
-  end;
-
-  result := true;
-end;
-
 function Hook_MarkTransferedCampaignHero (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   TRANSFERRED_HERO_GLOBAL_ADDR      = $280761C; // int
@@ -1135,13 +1129,13 @@ begin
   ApiJack.HookCode(Ptr($402298), @Hook_LeaveChat);
   ApiJack.HookCode(Ptr($402240), @Hook_LeaveChat);
 
-  (* Main game cycle (AdvMgr, CombatMgr): OnEnterGame, OnLeaveGame and MapFolder settings*)
+  (* Main game cycle (AdvMgr, CombatMgr): OnGameEnter, OnGameLeave, OnWinGame, OnLoseGamer and MapFolder settings*)
   ApiJack.StdSplice(Ptr($4B0BA0), @Hook_ExecuteManager, ApiJack.CONV_THISCALL, 1);
 
-  (* Hook LoadSavegame to trigger OnEnterGame and OnLeaveGame if game loading is performed inside ExecuteManager function *)
+  (* Hook LoadSavegame to trigger OnGameEnter and OnGameLeave if game loading is performed inside ExecuteManager function *)
   ApiJack.StdSplice(Ptr($4BEFF0), @Hook_LoadSavegame, ApiJack.CONV_THISCALL, 4);
 
-  (* Set top level main loop exception handler *)
+  (* Set top level main loop exception handle *)
   ApiJack.HookCode(Ptr($4F824A), @Hook_MainGameLoop);
 
   (* Kingdom Overview mouse click *)
@@ -1194,9 +1188,6 @@ begin
   (* OnBeforeLocalEvent, OnAfterLocalEvent *)
   ApiJack.HookCode(Ptr($74DB1D), @Hook_BeforeHumanLocalEvent);
   ApiJack.HookCode(Ptr($74DC24), @Hook_AfterHumanLocalEvent);
-
-  (* OnWinGame, OnLoseGame *)
-  ApiJack.HookCode(Ptr($4EFEEA), @Hook_ScenarioEnd);
 
   (* OnTransferHero *)
   // Disable WoG call from CarryOverHero to _CarryOverHero. _CarryOverHero will be called in Hook_MarkTransferedCampaignHero
