@@ -2280,6 +2280,9 @@ begin
   (* Fix Blood Dragons aging change from 20% to 40% *)
   Core.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
 
+  (* Fix CheckForCompleteAI function, checking gosolo mode only if timer <> 0, while it's 0 in modern game with HD mod *)
+  Core.p.WriteDataPatch(Ptr($75ADC1), ['9090']);
+
   (* Use click coords to show popup dialogs almost everywhere *)
   ApiJack.HookCode(Ptr($4F6D54), @Hook_Show3PicDlg_PrepareDialogStruct);
   ApiJack.StdSplice(Ptr($5FF3A0), @Hook_Dlg_SendMsg, ApiJack.CONV_THISCALL, 2);
