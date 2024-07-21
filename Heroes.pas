@@ -1248,6 +1248,8 @@ const
   ThisPcHumanPlayerId: pinteger   = Ptr($6995A4);
   CurrentPlayerId:     pinteger   = Ptr($69CCF4);
   GameDate:            ^PGameDate = Ptr($840CE0);
+  IsGameEnd:           pboolean   = Ptr($697308);
+  GameEndKind:         pbyte      = Ptr($699560);
 
   BytesPerPixelPtr:           pbyte = Ptr($5FA228 + 3);
   Color16GreenChannelMaskPtr: pword = Ptr($694DB0);
