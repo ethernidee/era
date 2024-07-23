@@ -433,6 +433,9 @@ type
   PSecSkillTexts = ^TSecSkillTexts;
   TSecSkillTexts = array [0..MAX_SECONDARY_SKILLS - 1] of TSecSkillText;
 
+  PHeroBiographiesTable = ^THeroBiographiesTable;
+  THeroBiographiesTable = array [0..High(integer) div sizeof(pchar) - 1] of pchar;
+
   PCurrentMp3Track = ^TCurrentMp3Track;
   TCurrentMp3Track = array [0..255] of char;
 
@@ -1279,9 +1282,10 @@ const
   MapItemToCoords:  TMapItemToCoords  = Ptr($711EC6);
   CoordsToMixedPos: TCoordsToMixedPos = Ptr($711E7F);
 
-  SecSkillNames: PSecSkillNames = Ptr($698BC4);
-  SecSkillDescs: PSecSkillDescs = Ptr($698C34);
-  SecSkillTexts: PSecSkillTexts = Ptr($698D88);
+  SecSkillNames:   PSecSkillNames = Ptr($698BC4);
+  SecSkillDescs:   PSecSkillDescs = Ptr($698C34);
+  SecSkillTexts:   PSecSkillTexts = Ptr($698D88);
+  HeroBiographies: PHeroBiographiesTable = Ptr($778820); // Original biographies copy from txt by WoG
 
   Spells:       PSpells  = Ptr($7BD2C0);
   NumSpellsPtr: pinteger = Ptr($7751ED + 3);
@@ -2496,6 +2500,7 @@ begin
   SecSkillNames         := ppointer($4E6C00)^;
   SecSkillDescs         := ppointer($4E6C10)^;
   SecSkillTexts         := ppointer($4E6C1A)^;
+  HeroBiographies       := ppointer($7466D4)^;
   MonInfos              := ppointer($6747B0)^;
   MonAssignmentsPerTown := ppointer($428605)^;
   ArtInfos              := ppointer($660B68)^;
