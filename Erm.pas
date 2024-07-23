@@ -372,15 +372,31 @@ type
     procedure SetCanBeFastIntEvaled (Value: boolean); inline;
   end; // .record TErmCmdParam
 
-  TErmString = packed record
-    Value:  pchar;
-    Len:    integer;
+  PSizedString = ^TSizedString;
+  TSizedString = packed record
+    Value: pchar;
+    Len:   integer;
+  end;
+
+  PGameString = ^TGameString;
+
+  PAllocatedString = ^TAllocatedString;
+  TAllocatedString = packed record
+    Value:    pchar;
+    Len:      integer;
+    Capacity: integer;
+
+    function AsGameString: PGameString; inline;
   end;
 
   TGameString = packed record
-    Value:  pchar;
-    Len:    integer;
-    Dummy:  integer;
+    IsAllocated: boolean;
+    Align:       array [1..3] of byte;
+    Value:       pchar; // pshort(Value) - 1 is ^RefCount, which is -1 for const
+    Len:         integer;
+    Capacity:    integer; // for long strings always |31 + 2 (#0 and refcount), len <= 31 is not reallocated if capacity is enough
+
+    procedure Assign (Value: pchar);
   end;
 
   PErmCmdConditions = ^TErmCmdConditions;
@@ -404,8 +420,8 @@ type
     Structure:    pointer;
     Params:       TErmCmdParams;
     NumParams:    integer;
-    CmdHeader:    TErmString; // ##:...
-    CmdBody:      TErmString; // #^...^/...
+    CmdHeader:    TSizedString; // ##:...
+    CmdBody:      TSizedString; // #^...^/...
 
     procedure SetIsPersisted (NewValue: boolean); inline;
 
@@ -432,7 +448,7 @@ type
   PErmSubCmd = ^TErmSubCmd;
   TErmSubCmd = packed record
     Pos:        integer;
-    Code:       TErmString;
+    Code:       TSizedString;
     Conditions: TErmCmdConditions;
     Params:     TErmCmdParams;
     Chars:      array [0..15] of char;
@@ -736,6 +752,7 @@ const
   ZvsGetErtStr:       function (StrInd: integer): pchar cdecl = Ptr($776620);
   ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
   ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): integer cdecl = Ptr($74195D);
+  ZvsApplyString:     function (SubCmd: PErmSubCmd; ParamInd: integer; Str: PAllocatedString): integer cdecl = Ptr($73DFD9);
   ZvsGetVarValIndex:  function (Param: PErmCmdParam): integer cdecl = Ptr($72DCB0);
   ZvsGetVarVal:       function (Param: PErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsSetVarVal:       function (Param: PErmCmdParam; NewValue: integer): integer cdecl = Ptr($72E301);
@@ -952,6 +969,19 @@ var
     FastIntVarSets:  array [0..15] of TFastIntVarSet;
     FastIntVarAddrs: array [0..15] of Utils.PEndlessIntArr;
 
+
+function TAllocatedString.AsGameString: PGameString;
+begin
+  result := pointer(integer(@Self) + (sizeof(Self) - sizeof(TGameString)));
+end;
+
+procedure TGameString.Assign (Value: pchar);
+type
+  TAssignProc = procedure (_1, _2: integer; Self: PGameString; StrLen: integer; Value: pchar) register;
+
+begin
+  TAssignProc($404180)(0, 0, @Self, Windows.LStrLen(Value), Value);
+end;
 
 function TErmCmdParam.GetType: integer;
 begin
@@ -5405,6 +5435,29 @@ begin
   end; // .if
 end; // .function Hook_ZvsApply
 
+function Hook_ZvsApplyString (SubCmd: PErmSubCmd; ParamInd: integer; Str: PAllocatedString): integer; cdecl;
+var
+  Param:        PErmCmdParam;
+  NewValue:     integer;
+  ParamValType: integer;
+
+begin
+  Param  := @SubCmd.Params[ParamInd];
+  result := 0;
+
+  if Param.GetCheckType = PARAM_CHECK_GET then begin
+    result := ord(SetErmParamValue(Param, integer(Str.Value), FLAG_ASSIGNABLE_STRINGS));
+  end else begin
+    NewValue := GetErmParamValue(Param, ParamValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
+
+    if ParamValType = VALTYPE_STR then begin
+      Str.AsGameString.Assign(pchar(NewValue));
+    end else begin
+      ShowErmError('ApplyString: cannot assign non-string value');
+    end;
+  end;
+end;
+
 (*
   Many in-game events are generated as ERM events in WoG code. ProcessERM generates additionally human readable event for Era and plugins.
   This its crucial to handle events even if ERM/scripting is disabled.
@@ -8986,6 +9039,9 @@ begin
 
   // Replace Apply with own implementation, capable to process named global variables
   Core.Hook(@ZvsApply, Core.HOOKTYPE_JUMP, @Hook_ZvsApply);
+
+  // Replace ApplyString with own implementation, capable to process all strings
+  Core.Hook(@ZvsApplyString, Core.HOOKTYPE_JUMP, @Hook_ZvsApplyString);
 
   // Replace ZvsGetVarVal with GetErmParamValue
   Core.Hook(@ZvsGetVarVal, Core.HOOKTYPE_JUMP, @Hook_ZvsGetVarVal);
