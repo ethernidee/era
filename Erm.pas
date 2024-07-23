@@ -7062,7 +7062,28 @@ begin
     end;
   end;
 
-  Context.RetAddr := Ptr($7465F7);
+  Context.RetAddr := Ptr($74943B);
+  result          := false;
+end;
+
+function Hook_HE_B3 (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  Hero:   Heroes.PHero;
+  SubCmd: PErmSubCmd;
+  Param:  PErmCmdParam;
+
+begin
+  Hero   := ppointer(Context.EBP - $380)^;
+  SubCmd := pointer(Context.EBP - $300);
+  Param  := @SubCmd.Params[1];
+
+  if Param.GetCheckType = PARAM_CHECK_GET then begin
+    SetErmParamValue(Param, integer(Heroes.HeroBiographies[Hero.Id]), FLAG_ASSIGNABLE_STRINGS);
+  end else begin
+    ShowErmError('HE:B3 does not support SET syntax');
+  end;
+
+  Context.RetAddr := Ptr($74943B);
   result          := false;
 end;
 
@@ -8968,6 +8989,9 @@ begin
 
   (* Fix HE:B0 to allow all strings *)
   ApiJack.HookCode(Ptr($74646E), @Hook_HE_B0);
+
+  (* Fix HE:B3 to allow all strings *)
+  ApiJack.HookCode(Ptr($74665E), @Hook_HE_B3);
 
   (* Force WoG dialog to make hint copy during hint assignment *)
   ApiJack.HookCode(Ptr($72986E), @Hook_ZvsDlg_AddHint_Assign);
