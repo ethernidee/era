@@ -396,7 +396,7 @@ type
     Len:         integer;
     Capacity:    integer; // for long strings always |31 + 2 (#0 and refcount), len <= 31 is not reallocated if capacity is enough
 
-    procedure Assign (Value: pchar);
+    procedure Assign ({n} Value: pchar);
   end;
 
   PErmCmdConditions = ^TErmCmdConditions;
@@ -753,6 +753,7 @@ const
   ZvsInterpolateStr:  function (Str: pchar): pchar cdecl = Ptr($73D4CD);
   ZvsApply:           function (Dest: pinteger; Size: integer; Cmd: PErmSubCmd; ParamInd: integer): integer cdecl = Ptr($74195D);
   ZvsApplyString:     function (SubCmd: PErmSubCmd; ParamInd: integer; Str: PAllocatedString): integer cdecl = Ptr($73DFD9);
+  ZvsNewMesMan:       function (SubCmd: PErmSubCmd; Str: PAllocatedString; ParamInd: integer): integer cdecl = Ptr($74086B);
   ZvsGetVarValIndex:  function (Param: PErmCmdParam): integer cdecl = Ptr($72DCB0);
   ZvsGetVarVal:       function (Param: PErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsSetVarVal:       function (Param: PErmCmdParam; NewValue: integer): integer cdecl = Ptr($72E301);
@@ -975,12 +976,17 @@ begin
   result := pointer(integer(@Self) + (sizeof(Self) - sizeof(TGameString)));
 end;
 
-procedure TGameString.Assign (Value: pchar);
+procedure TGameString.Assign ({n} Value: pchar);
 type
-  TAssignProc = procedure (_1, _2: integer; Self: PGameString; StrLen: integer; Value: pchar) register;
+  TAssignProc        = procedure (_1, _2: integer; Self: PGameString; StrLen: integer; Value: pchar) register;
+  TDeleteOrClearProc = procedure (_1, _2: integer; Self: PGameString; IsDelete: boolean) register;
 
 begin
-  TAssignProc($404180)(0, 0, @Self, Windows.LStrLen(Value), Value);
+  if (Value = nil) or (Value^ = #0) then begin
+    TDeleteOrClearProc($404130)(0, 0, @Self, true);
+  end else begin
+    TAssignProc($404180)(0, 0, @Self, Windows.LStrLen(Value), Value);
+  end;
 end;
 
 function TErmCmdParam.GetType: integer;
@@ -5458,6 +5464,31 @@ begin
   end;
 end;
 
+function Hook_ZvsNewMesMan (SubCmd: PErmSubCmd; Str: PAllocatedString; ParamInd: integer): integer; cdecl;
+var
+  Param:        PErmCmdParam;
+  NewValue:     integer;
+  ParamValType: integer;
+
+begin
+  Param  := @SubCmd.Params[ParamInd];
+  result := 0;
+
+  if Param.GetCheckType = PARAM_CHECK_GET then begin
+    result := -ord(not SetErmParamValue(Param, integer(Str.Value), FLAG_ASSIGNABLE_STRINGS));
+  end else begin
+    NewValue := GetErmParamValue(Param, ParamValType, FLAG_STR_EVALS_TO_ADDR_NOT_INDEX);
+
+    if ParamValType = VALTYPE_STR then begin
+      Str.AsGameString.Assign(pchar(NewValue));
+    end else if NewValue = -1 then begin
+      Str.AsGameString.Assign(nil);
+    end else begin
+      ShowErmError('NewMesMan: cannot assign non-string value');
+    end;
+  end;
+end;
+
 (*
   Many in-game events are generated as ERM events in WoG code. ProcessERM generates additionally human readable event for Era and plugins.
   This its crucial to handle events even if ERM/scripting is disabled.
@@ -9066,6 +9097,9 @@ begin
 
   // Replace ApplyString with own implementation, capable to process all strings
   Core.Hook(@ZvsApplyString, Core.HOOKTYPE_JUMP, @Hook_ZvsApplyString);
+
+  // Replace ApplyString with own implementation, capable to process all strings
+  Core.Hook(@ZvsNewMesMan, Core.HOOKTYPE_JUMP, @Hook_ZvsNewMesMan);
 
   // Replace ZvsGetVarVal with GetErmParamValue
   Core.Hook(@ZvsGetVarVal, Core.HOOKTYPE_JUMP, @Hook_ZvsGetVarVal);
