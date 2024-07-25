@@ -325,7 +325,7 @@ end;
 
 function Hook_WriteIntIni (Value: integer; Key, SectionName, FileName: pchar): integer; cdecl;
 begin
-  result  :=  0;
+  result := 0;
 
   if Ini.WriteStrToIni(Key, SysUtils.IntToStr(Value), SectionName, FileName) then begin
     Ini.SaveIni(FileName);
@@ -334,14 +334,16 @@ end;
 
 function Hook_ZvsGetWindowWidth (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
-  Context.ECX :=  WndManagerPtr^.ScreenPcx16.Width;
-  result      :=  not Core.EXEC_DEF_CODE;
+  Context.ECX     := WndManagerPtr^.ScreenPcx16.Width;
+  Context.RetAddr := Ptr($729C5F);
+  result          := false;
 end;
 
 function Hook_ZvsGetWindowHeight (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
-  Context.EDX :=  WndManagerPtr^.ScreenPcx16.Height;
-  result      :=  not Core.EXEC_DEF_CODE;
+  Context.EDX     := WndManagerPtr^.ScreenPcx16.Height;
+  Context.RetAddr := Ptr($729C72);
+  result          := false;
 end;
 
 procedure MarkFreshestSavegame;
@@ -384,24 +386,24 @@ end; // .procedure MarkFreshestSavegame
 
 function Hook_SetHotseatHeroName (Context: ApiJack.PHookContext): longbool; stdcall;
 var
-  PlayerName:     string;
-  NewPlayerName:  string;
-  EcxReg:         integer;
+  PlayerName:    string;
+  NewPlayerName: string;
+  EcxReg:        integer;
 
 begin
-  PlayerName    :=  pchar(Context.EAX);
-  NewPlayerName :=  PlayerName + ' 1';
-  EcxReg        :=  Context.ECX;
+  PlayerName    := pchar(Context.EAX);
+  NewPlayerName := PlayerName + ' 1';
+  EcxReg        := Context.ECX;
 
   asm
     MOV ECX, EcxReg
     PUSH NewPlayerName
     MOV EDX, [ECX]
     CALL [EDX + $34]
-  end; // .asm
+  end;
 
-  NewPlayerName :=  PlayerName + ' 2';
-  EcxReg        :=  Context.EBX;
+  NewPlayerName := PlayerName + ' 2';
+  EcxReg        := Context.EBX;
 
   asm
     MOV ECX, EcxReg
@@ -409,10 +411,11 @@ begin
     PUSH NewPlayerName
     MOV EDX, [ECX]
     CALL [EDX + $34]
-  end; // .asm
+  end;
 
-  result := not Core.EXEC_DEF_CODE;
-end; // .function Hook_SetHotseatHeroName
+  Context.RetAddr := Ptr($5125B6);
+  result          := false;
+end;
 
 function Hook_PeekMessageA (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
@@ -774,7 +777,8 @@ const
 begin
   pinteger(Context.EBP - $0C)^ := NEW_WOG_VERSION;
   pinteger(Context.EBP - $24)^ := GameExt.ERA_VERSION_INT;
-  result                       := not Core.EXEC_DEF_CODE;
+  Context.RetAddr              := Ptr($73227A);
+  result                       := false;
 end;
 
 function Hook_ZvsLib_ExtractDef (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -820,8 +824,8 @@ begin
 
   PPCHAR(Context.EBP - EBP_LOCAL_GAME_PATH)^ :=  pchar(ZvsLibGamePath);
   Context.RetAddr := Utils.PtrOfs(Context.RetAddr, 486);
-  result          := not Core.EXEC_DEF_CODE;
-end; // .function Hook_ZvsLib_ExtractDef_GetGamePath
+  result          := false;
+end;
 
 function Hook_ZvsPlaceMapObject (Hook: PatchApi.THiHook; x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; stdcall;
 begin
@@ -861,8 +865,8 @@ begin
   pinteger(Context.EBP + ARG_MIXED_POS)^ := MixedPos;
 
   Context.RetAddr := Ptr($7577B2);
-  result          := not Core.EXEC_DEF_CODE;
-end; // .function Hook_ZvsEnter2Monster
+  result          := false;
+end;
 
 function Hook_ZvsEnter2Monster2 (Context: ApiJack.PHookContext): longbool; stdcall;
 const
@@ -881,8 +885,8 @@ begin
   pinteger(Context.EBP + ARG_MIXED_POS)^ := MixedPos;
 
   Context.RetAddr := Ptr($757A87);
-  result          := not Core.EXEC_DEF_CODE;
-end; // .function Hook_ZvsEnter2Monster2
+  result          := false;
+end;
 
 function Hook_WoGMouseClick3 (OrigFunc: pointer; AdvMan: pointer; MouseEvent: Heroes.PMouseEventInfo; Arg3: integer; Arg4: integer): integer; stdcall;
 const
@@ -987,7 +991,7 @@ begin
   Erm.FireErmEvent(TRIGGER_BG1);
 
   Context.RetAddr := Ptr($75D317);
-  result          := not Core.EXEC_DEF_CODE;
+  result          := false;
 end;
 
 function Hook_SendBattleAction_CopyActionParams (Context: ApiJack.PHookContext): longbool; stdcall;
