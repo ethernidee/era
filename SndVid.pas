@@ -450,10 +450,10 @@ end;
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* Setup snd/vid hooks *)
-  ApiJack.HookCode(Ptr($598510), @Hook_LoadVideoHeaders);
-  ApiJack.HookCode(Ptr($598A90), @Hook_OpenSmack);
-  ApiJack.HookCode(Ptr($44D270), @Hook_OpenBik);
-  ApiJack.HookCode(Ptr($5987A0), @Hook_LoadSndHeaders);
+  ApiJack.HookCode(Ptr($598510), @Hook_LoadVideoHeaders, nil, 6);
+  ApiJack.HookCode(Ptr($598A90), @Hook_OpenSmack, nil, 6);
+  ApiJack.HookCode(Ptr($44D270), @Hook_OpenBik, nil, 6);
+  ApiJack.HookCode(Ptr($5987A0), @Hook_LoadSndHeaders, nil, 6);
   ApiJack.HookCode(Ptr($55C340), @Hook_LoadSnd);
 
   (* Disable CloseSndHandles function *)

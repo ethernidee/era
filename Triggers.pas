@@ -1124,27 +1124,27 @@ end;
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
-  ApiJack.HookCode(Ptr($492409), @Hook_BattleHint_GetAttacker);
-  ApiJack.HookCode(Ptr($492442), @Hook_BattleHint_GetDefender);
+  ApiJack.HookCode(Ptr($492409), @Hook_BattleHint_GetAttacker, nil, 7);
+  ApiJack.HookCode(Ptr($492442), @Hook_BattleHint_GetDefender, nil, 7);
   ApiJack.HookCode(Ptr($493053), @Hook_BattleHint_CalcMinMaxDamage);
 
   (* Key handling trigger *)
-  ApiJack.HookCode(Ptr($4F8226), @Hook_AfterCreateWindow);
+  ApiJack.HookCode(Ptr($4F8226), @Hook_AfterCreateWindow, nil, 6);
 
   (* Stack to stack damage calculation *)
-  ApiJack.HookCode(Ptr($443C88), @Hook_StartCalcDamage);
+  ApiJack.HookCode(Ptr($443C88), @Hook_StartCalcDamage, nil, 6);
   ApiJack.HookCode(Ptr($443CA1), @Hook_CalcDamage_GetDamageBonus);
   ApiJack.HookCode(Ptr($443DA7), @Hook_EndCalcDamage);
 
   (* AI Target attack effect *)
-  ApiJack.HookCode(Ptr($4357E0), @Hook_AI_CalcStackAttackEffect_Start);
+  ApiJack.HookCode(Ptr($4357E0), @Hook_AI_CalcStackAttackEffect_Start, nil, 6);
   ApiJack.HookCode(Ptr($4358AA), @Hook_AI_CalcStackAttackEffect_End);
 
   (* OnChat trigger *)
   ApiJack.HookCode(Ptr($4022B0), @Hook_EnterChat);
-  ApiJack.HookCode(Ptr($554780), @Hook_ChatInput);
-  ApiJack.HookCode(Ptr($402298), @Hook_LeaveChat);
-  ApiJack.HookCode(Ptr($402240), @Hook_LeaveChat);
+  ApiJack.HookCode(Ptr($554780), @Hook_ChatInput, nil, 6);
+  ApiJack.HookCode(Ptr($402298), @Hook_LeaveChat, nil, 6);
+  ApiJack.HookCode(Ptr($402240), @Hook_LeaveChat, nil, 6);
 
   (* Main game cycle (AdvMgr, CombatMgr): OnGameEnter, OnGameLeave, OnWinGame, OnLoseGamer and MapFolder settings*)
   ApiJack.StdSplice(Ptr($4B0BA0), @Hook_ExecuteManager, ApiJack.CONV_THISCALL, 1);

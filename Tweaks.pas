@@ -2074,7 +2074,7 @@ begin
   end;
 
   (* Fix HotSeat second hero name *)
-  ApiJack.HookCode(Ptr($5125B0), @Hook_SetHotseatHeroName);
+  ApiJack.HookCode(Ptr($5125B0), @Hook_SetHotseatHeroName, nil, 6);
   Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
 
   (* Universal CPU patch *)
@@ -2134,7 +2134,7 @@ begin
   Core.p.WriteDataPatch(Ptr($4B53E6), ['B6']);
 
   (* Fix WoG/ERM versions *)
-  ApiJack.HookCode(Ptr($73226C), @Hook_GetWoGAndErmVersions);
+  ApiJack.HookCode(Ptr($73226C), @Hook_GetWoGAndErmVersions, nil, 14);
 
   (*  Fix zvslib1.dll ExtractDef function to support mods  *)
   ApiJack.HookCode(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + 3), @Hook_ZvsLib_ExtractDef);

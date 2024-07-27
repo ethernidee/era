@@ -8884,14 +8884,14 @@ begin
   Core.Hook(Ptr($74C816), Core.HOOKTYPE_JUMP, @ProcessErm);
 
   (* Fix ERM CA:B3 bug *)
-  Core.Hook(Ptr($70E8A2), Core.HOOKTYPE_JUMP, @Hook_ErmCastleBuilding);
+  Core.Hook(Ptr($70E8A2), Core.HOOKTYPE_JUMP, @Hook_ErmCastleBuilding, 7);
 
   (* Fix HE:A art get syntax bug *)
-  ApiJack.HookCode(Ptr($744B13), @Hook_ErmHeroArt);
+  ApiJack.HookCode(Ptr($744B13), @Hook_ErmHeroArt, nil, 9);
 
   (* Fix HE:A# - set flag 1 as success *)
-  ApiJack.HookCode(Ptr($7454B2), @Hook_ErmHeroArt_FindFreeSlot);
-  ApiJack.HookCode(Ptr($7454EC), @Hook_ErmHeroArt_FoundFreeSlot);
+  ApiJack.HookCode(Ptr($7454B2), @Hook_ErmHeroArt_FindFreeSlot, nil, 10);
+  ApiJack.HookCode(Ptr($7454EC), @Hook_ErmHeroArt_FoundFreeSlot, nil, 6);
 
   (* Fix HE:A3 artifacts delete - update art number *)
   ApiJack.HookCode(Ptr($745051), @Hook_ErmHeroArt_DeleteFromBag);
@@ -8933,7 +8933,7 @@ begin
   Core.p.WriteDataPatch(Ptr($76FC71), ['0F8DDD0A']);
 
   (* Fix DL:C close all dialogs bug *)
-  ApiJack.HookCode(Ptr($729774), @Hook_DlgCallback);
+  ApiJack.HookCode(Ptr($729774), @Hook_DlgCallback, nil, 6);
 
   (* Fully rewrite VR command *)
   AdvErm.RegisterErmReceiver('VR', @New_VR_Receiver, CMD_PARAMS_CONFIG_SINGLE_INT);

@@ -670,8 +670,8 @@ end;
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   ApiJack.HookCode(Ptr($4BEB65), @Hook_SaveGame);
-  ApiJack.HookCode(Ptr($704EEC), @Hook_SaveGameWrite);
-  ApiJack.HookCode(Ptr($7051B8), @Hook_SaveGameRead);
+  ApiJack.HookCode(Ptr($704EEC), @Hook_SaveGameWrite, nil, 6);
+  ApiJack.HookCode(Ptr($7051B8), @Hook_SaveGameRead, nil, 6);
 
   (* Remove Erm trigger "BeforeSaveGame" call *)
   Core.p.WriteDataPatch(Ptr($7051F5), ['9090909090']);
