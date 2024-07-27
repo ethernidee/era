@@ -8,6 +8,7 @@ unit Triggers;
 
 uses
   Math,
+  Messages,
   SysUtils,
   Windows,
 
@@ -16,8 +17,10 @@ uses
   Core,
   DataLib,
   DlgMes,
+  Log,
   PatchApi,
   Utils,
+  WindowMessages,
 
   EraSettings,
   Erm,
@@ -99,6 +102,8 @@ var
   (* Controlling OnGameEnter and OnGameLeave events *)
   MainGameLoopDepth: integer = 0;
 
+  LogWindowMessagesOpt: boolean;
+
 
 constructor TRegenerationAbility.Create (Chance: integer; HitPoints: integer; HpPercents: integer);
 begin
@@ -154,6 +159,13 @@ var
 
 begin
   result := false;
+
+  if
+    LogWindowMessagesOpt     and (Msg <> WM_MOUSEMOVE)  and (Msg <> WM_TIMER)        and (Msg <> WM_SETCURSOR)  and (Msg <> WM_NCHITTEST) and (Msg <> WM_NCMOUSEMOVE) and
+    (Msg <> WM_NCMOUSEHOVER) and (Msg <> WM_MOUSEHOVER) and (Msg <> WM_NCMOUSELEAVE) and (Msg <> WM_MOUSELEAVE) and (Msg <> WM_PAINT)     and (Msg <> WM_GETICON)
+  then begin
+    Log.Write('WndProc', 'HandleMessage', SysUtils.Format('%s %d %d', [WindowMessages.MessageIdToStr(Msg), wParam, lParam]));
+  end;
 
   // Disable ALT + KEY menu shortcuts to allow scripts to use ALT for their own needs.
   if (Msg = WM_SYSCOMMAND) and (wParam = SC_KEYMENU) then begin
@@ -1094,6 +1106,11 @@ begin
   Erm.SetErmCurrHero(PrevHero);
 end;
 
+procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
+begin
+  LogWindowMessagesOpt := EraSettings.GetDebugBoolOpt('Debug.LogWindowMessages', false);
+end;
+
 procedure OnGameLeave (Event: GameExt.PEvent); stdcall;
 begin
   GameExt.SetMapDir('');
@@ -1213,7 +1230,8 @@ begin
   WogEvo.SetIsElixirOfLifeStackFunc(@ImplIsElixirOfLifeStack);
   InitializeMonsWithRegeneration;
 
+  EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
+  EventMan.GetInstance.On('OnAbnormalGameLeave', OnAbnormalGameLeave);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnGameLeave', OnGameLeave);
-  EventMan.GetInstance.On('OnAbnormalGameLeave', OnAbnormalGameLeave);
 end.
