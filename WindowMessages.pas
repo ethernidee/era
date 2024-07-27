@@ -177,9 +177,7 @@ begin
   MessagesMap[Ptr($00F6)]     := TString.Create('BM_GETIMAGE');
   MessagesMap[Ptr($00F7)]     := TString.Create('BM_SETIMAGE');
   MessagesMap[Ptr($00FF)]     := TString.Create('WM_INPUT');
-  MessagesMap[Ptr($0100)]     := TString.Create('EN_SETFOCUS');
   MessagesMap[Ptr($0100)]     := TString.Create('WM_KEYDOWN');
-  MessagesMap[Ptr($0100)]     := TString.Create('WM_KEYFIRST');
   MessagesMap[Ptr($0101)]     := TString.Create('WM_KEYUP');
   MessagesMap[Ptr($0102)]     := TString.Create('WM_CHAR');
   MessagesMap[Ptr($0103)]     := TString.Create('WM_DEADCHAR');
@@ -187,12 +185,10 @@ begin
   MessagesMap[Ptr($0105)]     := TString.Create('WM_SYSKEYUP');
   MessagesMap[Ptr($0106)]     := TString.Create('WM_SYSCHAR');
   MessagesMap[Ptr($0107)]     := TString.Create('WM_SYSDEADCHAR');
-  MessagesMap[Ptr($0109)]     := TString.Create('WM_KEYLAST');
   MessagesMap[Ptr($0109)]     := TString.Create('WM_UNICHAR');
   MessagesMap[Ptr($010D)]     := TString.Create('WM_IME_STARTCOMPOSITION');
   MessagesMap[Ptr($010E)]     := TString.Create('WM_IME_ENDCOMPOSITION');
   MessagesMap[Ptr($010F)]     := TString.Create('WM_IME_COMPOSITION');
-  MessagesMap[Ptr($010F)]     := TString.Create('WM_IME_KEYLAST');
   MessagesMap[Ptr($0110)]     := TString.Create('WM_INITDIALOG');
   MessagesMap[Ptr($0111)]     := TString.Create('WM_COMMAND');
   MessagesMap[Ptr($0112)]     := TString.Create('WM_SYSCOMMAND');
