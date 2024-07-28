@@ -216,6 +216,11 @@ const
   (* Internal structures *)
   H3STR_CONST_REF_COUNT = -1;
 
+  (* Input manager keyboard events *)
+  INPUT_MES_OTHER   = 0;
+  INPUT_MES_KEYDOWN = 1;
+  INPUT_MES_KEYUP   = 2;
+
 type
   TInt32Bool = integer;
 
@@ -444,7 +449,7 @@ type
 
   TGzipWrite  = procedure (Data: pointer; DataSize: integer); cdecl;
   TGzipRead   = function (Dest: pointer; DataSize: integer): integer; cdecl;
-  TWndProc    = function (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
+  TWndProc    = function (hWnd, Msg, wParam, lParam: integer): integer; stdcall;
 
   TGetAdvMapTileVisibility = function (x, y, z: integer): integer; cdecl;
   TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
@@ -1163,8 +1168,51 @@ type
     field_78:            Windows._RTL_CRITICAL_SECTION; // 00000078
   end;
 
+  PKeyboardInputMessage = ^TKeyboardInputMessage;
+  TKeyboardInputMessage = packed record
+    KeyCode:      integer;    // Scancode or ANSI character code if IsTranslated field is TRUE
+    Zero_1:       integer;
+    Modifiers:    integer;    // Modifier key flags
+    IsTranslated: TInt32Bool; // ERA new field. If true, KeyCode is ANSI char code and should not be translated
+    Zero_2:       integer;
+    Zero_3:       integer;
+    Zero_4:       integer;
+  end;
+
+  PInputMessage = ^TInputMessage;
+  TInputMessage = packed record
+    MsgType: integer; // One of INPUT_MES_XXX constants
+
+    case byte of
+      0: (Key:   TKeyboardInputMessage);
+      1: (Other: packed array [0..27] of byte);
+  end;
+
+  // Circular buffer
+  PInputMessageQueue = ^TInputMessageQueue;
+  TInputMessageQueue = packed record
+    IsEnabled:   TInt32Bool;
+    Messages:    array [0..63] of TInputMessage;
+    ReadPosInd:  integer;
+    WritePosInd: integer;
+
+    procedure Enqueue (InputMsg: PInputMessage);
+    procedure AddTranslatedKeyInputMsg (KeyCode: integer; Modifiers: integer = 0);
+  end;
+
   PInputManager = ^TInputManager;
   TInputManager = packed record
+    VTable: pointer;
+    Unk1:   array [5..52] of byte;
+    Queue:  TInputMessageQueue;
+    Unk2:   integer;
+    f844:   array [1..260] of byte;
+    f948:   integer;
+    f94C:   integer;
+    PreventAutoKeyTranslation: TInt32Bool;
+    f954:   integer;
+    f958:   integer;
+    f95C:   integer;
   end;
 
   PPWndManager = ^PWndManager;
@@ -1482,6 +1530,34 @@ Type
 
 begin
   result := TGetActiveStackMethod(Ptr($75AF06))(@Self);
+end;
+
+procedure TInputMessageQueue.Enqueue (InputMsg: PInputMessage);
+begin
+  if Self.IsEnabled = 0 then begin
+    exit;
+  end;
+
+  Self.Messages[Self.WritePosInd] := InputMsg^;
+  Self.WritePosInd                := (Self.WritePosInd + 1) mod Length(Self.Messages);
+
+  if Self.WritePosInd = Self.ReadPosInd then begin
+    Self.ReadPosInd := (Self.ReadPosInd + 1) mod Length(Self.Messages);
+  end;
+end;
+
+procedure TInputMessageQueue.AddTranslatedKeyInputMsg (KeyCode: integer; Modifiers: integer = 0);
+var
+  InputMessage: TInputMessage;
+
+begin
+  System.FillChar(InputMessage, sizeof(InputMessage), #0);
+  InputMessage.MsgType          := INPUT_MES_KEYDOWN;
+  InputMessage.Key.KeyCode      := KeyCode;
+  InputMessage.Key.Modifiers    := Modifiers;
+  InputMessage.Key.IsTranslated := ord(true);
+
+  Self.Enqueue(@InputMessage);
 end;
 
 procedure SendNetData (DestPlayerId, MsgId: integer; {n} Data: pointer; DataSize: integer);
