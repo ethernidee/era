@@ -7,6 +7,7 @@ unit Triggers;
 (***)  interface  (***)
 
 uses
+  Imm,
   Math,
   Messages,
   SysUtils,
@@ -103,6 +104,7 @@ var
   MainGameLoopDepth: integer = 0;
 
   LogWindowMessagesOpt: boolean;
+  IsImeCompositionMode: boolean = false;
 
 
 constructor TRegenerationAbility.Create (Chance: integer; HitPoints: integer; HpPercents: integer);
@@ -140,7 +142,64 @@ begin
   result                         := Core.EXEC_DEF_CODE;
 end;
 
-function MainWndProc (hWnd, Msg, wParam, lParam: integer): longbool; stdcall;
+procedure LogWindowMessage (Msg, wParam, lParam: integer);
+begin
+  if
+    LogWindowMessagesOpt     and (Msg <> WM_MOUSEMOVE)  and (Msg <> WM_TIMER)        and (Msg <> WM_SETCURSOR)  and (Msg <> WM_NCHITTEST) and (Msg <> WM_NCMOUSEMOVE) and
+    (Msg <> WM_NCMOUSEHOVER) and (Msg <> WM_MOUSEHOVER) and (Msg <> WM_NCMOUSELEAVE) and (Msg <> WM_MOUSELEAVE) and (Msg <> WM_PAINT)     and (Msg <> WM_GETICON)
+  then begin
+    Log.Write('WndProc', 'HandleMessage', SysUtils.Format('%s %d %d', [WindowMessages.MessageIdToStr(Msg), wParam, lParam]));
+  end;
+end;
+
+function HandleImeInput (hWnd, Msg, wParam, lParam: integer): boolean;
+const
+  COMPOSITION_WND_WIDTH = 350;
+  COMPOSITION_WND_TOP   = 150;
+
+var
+  CompositionForm: Imm.TCompositionForm;
+  ImeContext:      Imm.HIMC;
+
+begin
+  result := false;
+
+  if Heroes.InputManagerPtr^ <> nil then begin
+    // IME replace regular WM_KEYDOWN wParam with VK_PROCESSKEY when IME input takes place
+    if (Msg = WM_KEYDOWN) and (wParam = VK_PROCESSKEY) then begin
+      result               := true;
+      IsImeCompositionMode := true;
+
+      // Move composition window to a fixed position. Better solution would be moving to ingame input control
+      ImeContext                     := Imm.ImmGetContext(hWnd);
+      CompositionForm.dwStyle        := CFS_FORCE_POSITION;
+      CompositionForm.ptCurrentPos.x := (Heroes.ScreenWidth^ - COMPOSITION_WND_WIDTH) div 2;
+      CompositionForm.ptCurrentPos.y := COMPOSITION_WND_TOP;
+      ImmSetCompositionWindow(ImeContext, @CompositionForm);
+      ImmReleaseContext(hWnd, ImeContext);
+    end else if Msg = WM_IME_CHAR then begin
+      result               := true;
+      IsImeCompositionMode := false;
+
+      if wParam <= high(byte) then begin
+        Heroes.InputManagerPtr^.Queue.AddTranslatedKeyInputMsg(wParam);
+      end else begin
+        Heroes.InputManagerPtr^.Queue.AddTranslatedKeyInputMsg((wParam shr 8) and $FF);
+        Heroes.InputManagerPtr^.Queue.AddTranslatedKeyInputMsg(wParam and $FF);
+      end;
+    end else if ((Msg = WM_KEYDOWN) or (Msg = WM_KEYUP)) and IsImeCompositionMode then begin
+      // Disallow normal input and text manipulation during IME composition
+      result := true;
+    end else if Msg = WM_IME_ENDCOMPOSITION then begin
+      IsImeCompositionMode := false;
+    end;
+  end;
+end;
+
+function MainWndProc (hWnd, Msg, wParam, lParam: integer): integer; stdcall;
+type
+  TParseKeyUpDownFunc = function (_1, Msg, hWnd: integer; lParam, wParam: integer): integer register;
+
 const
   WM_KEYDOWN          = $100;
   WM_KEYUP            = $101;
@@ -158,17 +217,16 @@ var
   SavedZ:    Erm.TErmZVar;
 
 begin
-  result := false;
+  result := 0;
 
-  if
-    LogWindowMessagesOpt     and (Msg <> WM_MOUSEMOVE)  and (Msg <> WM_TIMER)        and (Msg <> WM_SETCURSOR)  and (Msg <> WM_NCHITTEST) and (Msg <> WM_NCMOUSEMOVE) and
-    (Msg <> WM_NCMOUSEHOVER) and (Msg <> WM_MOUSEHOVER) and (Msg <> WM_NCMOUSELEAVE) and (Msg <> WM_MOUSELEAVE) and (Msg <> WM_PAINT)     and (Msg <> WM_GETICON)
-  then begin
-    Log.Write('WndProc', 'HandleMessage', SysUtils.Format('%s %d %d', [WindowMessages.MessageIdToStr(Msg), wParam, lParam]));
-  end;
+  LogWindowMessage(Msg, wParam, lParam);
 
   // Disable ALT + KEY menu shortcuts to allow scripts to use ALT for their own needs.
   if (Msg = WM_SYSCOMMAND) and (wParam = SC_KEYMENU) then begin
+    exit;
+  end;
+
+  if HandleImeInput(hWnd, Msg, wParam, lParam) then begin
     exit;
   end;
 
@@ -200,10 +258,10 @@ begin
         Erm.RetXVars[2] := ENABLE_DEF_REACTION;
       end;
 
-      result := Erm.RetXVars[2] = ENABLE_DEF_REACTION;
+      result := ord(Erm.RetXVars[2] = ENABLE_DEF_REACTION);
 
-      if result then begin
-        PrevWndProc(hWnd, Msg, wParam, lParam);
+      if result <> 0 then begin
+        result := PrevWndProc(hWnd, Msg, wParam, lParam);
       end;
     end; // .else
   end else if (Msg = WM_KEYUP) or (Msg = WM_SYSKEYUP) then begin
@@ -225,15 +283,24 @@ begin
       Erm.RetXVars[2] := ENABLE_DEF_REACTION;
     end;
 
-    result := Erm.RetXVars[2] = ENABLE_DEF_REACTION;
+    result := ord(Erm.RetXVars[2] = ENABLE_DEF_REACTION);
 
-    if result then begin
-      PrevWndProc(hWnd, Msg, wParam, lParam);
+    if result <> 0 then begin
+      result := PrevWndProc(hWnd, Msg, wParam, lParam);
     end;
   end else begin
     result := PrevWndProc(hWnd, Msg, wParam, lParam);
   end; // .else
 end; // .function MainWndProc
+
+function Splice_InputManager_TranslateKey (OrigFunc: pointer; Self: pointer; InputMessage: Heroes.PInputMessage): Heroes.PInputMessage; stdcall;
+begin
+  result := InputMessage;
+
+  if (InputMessage.MsgType <> Heroes.INPUT_MES_KEYDOWN) or (InputMessage.Key.IsTranslated = 0) then begin
+    result := Heroes.PInputMessage(PatchApi.Call(THISCALL_, OrigFunc, [Self, InputMessage]));
+  end;
+end;
 
 function Hook_AfterCreateWindow (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
@@ -1121,6 +1188,11 @@ begin
   Core.FatalError('Not supported. Use ERA API for fast quit to game menu');
 end;
 
+procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
+begin
+  ApiJack.StdSplice(Ptr($4EC7C0), @Splice_InputManager_TranslateKey, CONV_THISCALL, 2);
+end;
+
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
@@ -1232,6 +1304,7 @@ begin
 
   EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAbnormalGameLeave', OnAbnormalGameLeave);
+  EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
   EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
   EventMan.GetInstance.On('OnGameLeave', OnGameLeave);
 end.
