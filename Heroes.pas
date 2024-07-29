@@ -154,6 +154,9 @@ const
   DLG_ACTION_INDLG_CLICK         = 512;
   DLG_ACTION_SCROLL_WHEEL        = 522;
 
+  (* Dialog items *)
+  NO_DLG_ITEM = -1;
+
   LOAD_TXT_FUNC   = $55C2B0;  // F (Name: pchar); FASTCALL;
   UNLOAD_TXT_FUNC = $55D300;  // F (PTxtFile); FASTCALL;
   { F ( Name: PCHAR; AddExt: LONGBOOL; ShowDialog: LONGBOOL; Compress: INTBOOL; SaveToData: LONGBOOL); THISCALL ([GAME_MANAGER]); }
