@@ -105,6 +105,7 @@ var
 
   LogWindowMessagesOpt: boolean;
   IsImeCompositionMode: boolean = false;
+  IsImeWindowOpened:    boolean = true; // By default IME window is opened, but invisible
 
 
 constructor TRegenerationAbility.Create (Chance: integer; HitPoints: integer; HpPercents: integer);
@@ -152,34 +153,75 @@ begin
   end;
 end;
 
-function HandleImeInput (hWnd, Msg, wParam, lParam: integer): boolean;
+(* Opened means tracking event and ready to be drawn. Opened window may be hidden/invisible *)
+function SetImeWindowOpen (hWnd: integer; Opened: boolean): boolean;
+var
+  ImeContext: Imm.HIMC;
+
+begin
+  ImeContext        := Imm.ImmGetContext(hWnd);
+  result            := ImmGetOpenStatus(ImeContext);
+  IsImeWindowOpened := Opened;
+  ImmSetOpenStatus(ImeContext, Opened);
+  ImmReleaseContext(hWnd, ImeContext);
+end;
+
+procedure SetImeWindowPos (hWnd, x, y: integer);
+var
+  ImeContext:      Imm.HIMC;
+  CompositionForm: Imm.TCompositionForm;
+
+begin
+  ImeContext                     := Imm.ImmGetContext(hWnd);
+  CompositionForm.dwStyle        := CFS_FORCE_POSITION;
+  CompositionForm.ptCurrentPos.x := x;
+  CompositionForm.ptCurrentPos.y := y;
+  ImmSetCompositionWindow(ImeContext, @CompositionForm);
+  ImmReleaseContext(hWnd, ImeContext);
+end;
+
+(*
+  We Assume, that when IME status window is closed, IME does not change wParam of WM_KEYDOWN to VK_PROCESSKEY and does not send other IME events.
+*)
+function HandleImeInput (hWnd, Msg, wParam, lParam: integer; var Res: integer): boolean;
 const
   COMPOSITION_WND_WIDTH = 350;
   COMPOSITION_WND_TOP   = 150;
 
 var
-  CompositionForm: Imm.TCompositionForm;
-  ImeContext:      Imm.HIMC;
+  HasTextFocus: boolean;
 
 begin
   result := false;
 
   if Heroes.InputManagerPtr^ <> nil then begin
-    // IME replace regular WM_KEYDOWN wParam with VK_PROCESSKEY when IME input takes place
-    if (Msg = WM_KEYDOWN) and (wParam = VK_PROCESSKEY) then begin
-      result               := true;
-      IsImeCompositionMode := true;
+    HasTextFocus := (Heroes.WndManagerPtr^.CurrentDlg <> nil) and (Heroes.WndManagerPtr^.CurrentDlg.FocusedItemId <> Heroes.NO_DLG_ITEM);
 
-      // Move composition window to a fixed position. Better solution would be moving to ingame input control
-      ImeContext                     := Imm.ImmGetContext(hWnd);
-      CompositionForm.dwStyle        := CFS_FORCE_POSITION;
-      CompositionForm.ptCurrentPos.x := (Heroes.ScreenWidth^ - COMPOSITION_WND_WIDTH) div 2;
-      CompositionForm.ptCurrentPos.y := COMPOSITION_WND_TOP;
-      ImmSetCompositionWindow(ImeContext, @CompositionForm);
-      ImmReleaseContext(hWnd, ImeContext);
-    end else if Msg = WM_IME_CHAR then begin
+    if Msg = WM_IME_STARTCOMPOSITION then begin
       result               := true;
-      IsImeCompositionMode := false;
+      IsImeCompositionMode := HasTextFocus;
+
+      if not IsImeCompositionMode then begin
+        SetImeWindowOpen(hWnd, false);
+      end;
+    end else if (Msg = WM_KEYDOWN) and (wParam = VK_PROCESSKEY) then begin
+      // PRECONDITIONS:
+      // - Composition window IS OPENED (tracks input)
+      // - Composition window MAY BE VISIBLE (autohiding feature after each composed sentence is used by IME editors)
+      //
+      // NOTE: Active IME replaces regular composable WM_KEYDOWN wParam with VK_PROCESSKEY
+      //       when composable input takes place. This event fires just before WM_IME_STARTCOMPOSITION event.
+      //       Service keys like ESCAPE are not replaced with VK_PROCESSKEY and thus not handled here.
+      if HasTextFocus then begin
+        result := true;
+        SetImeWindowPos(hWnd, (Heroes.ScreenWidth^ - COMPOSITION_WND_WIDTH) div 2, COMPOSITION_WND_TOP);
+      end else begin
+        result := SetImeWindowOpen(hWnd, false) and IsImeCompositionMode;
+      end;
+
+      IsImeCompositionMode := HasTextFocus;
+    end else if Msg = WM_IME_CHAR then begin
+      result := true;
 
       if wParam <= high(byte) then begin
         Heroes.InputManagerPtr^.Queue.AddTranslatedKeyInputMsg(wParam);
@@ -188,13 +230,23 @@ begin
         Heroes.InputManagerPtr^.Queue.AddTranslatedKeyInputMsg(wParam and $FF);
       end;
     end else if ((Msg = WM_KEYDOWN) or (Msg = WM_KEYUP)) and IsImeCompositionMode then begin
-      // Disallow normal input and text manipulation during IME composition
+      // We ignore all input during composition until composition window is closed
       result := true;
     end else if Msg = WM_IME_ENDCOMPOSITION then begin
+      result               := true;
       IsImeCompositionMode := false;
+    end else if
+      HasTextFocus and
+      (
+        not IsImeWindowOpened                         or
+        Alg.InRange(Msg, WM_MOUSEFIRST, WM_MOUSELAST) or
+        Alg.InRange(Msg, WM_KEYFIRST, WM_KEYLAST)
+      )
+    then begin
+      SetImeWindowOpen(hWnd, true);
     end;
-  end;
-end;
+  end; // .if
+end; // .function HandleImeInput
 
 function MainWndProc (hWnd, Msg, wParam, lParam: integer): integer; stdcall;
 type
@@ -226,7 +278,7 @@ begin
     exit;
   end;
 
-  if HandleImeInput(hWnd, Msg, wParam, lParam) then begin
+  if HandleImeInput(hWnd, Msg, wParam, lParam, result) then begin
     exit;
   end;
 
