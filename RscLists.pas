@@ -182,17 +182,19 @@ begin
     for i := 0 to Self.fItems.Count - 1 do begin
       Item := TResource(Self.fItems[i]);
       WriteStr(Item.Name);
+      WriteInt(Item.Tag);
       WriteInt(Item.Crc32);
       WriteStr(Item.Contents);
     end;
   end;
-end; // .procedure TResourceList.SaveItems
+end;
 
 procedure TResourceList.LoadFromSavedGame (const SectionName: string);
 var
   NumItems:     integer;
   ItemContents: string;
   ItemName:     string;
+  ItemTag:      integer;
   ItemCrc32:    integer;
   i:            integer;
 
@@ -202,12 +204,13 @@ begin
 
     for i := 1 to NumItems do begin
       ItemName     := ReadStr;
+      ItemTag      := ReadInt;
       ItemCrc32    := ReadInt;
       ItemContents := ReadStr;
       Self.Add(TResource.Create(ItemName, ItemContents, ItemCrc32));
     end;
   end;
-end; // .procedure TResourceList.LoadFromSavedGame
+end;
 
 function TResourceList.Export (const DestDir: string): string;
 var
