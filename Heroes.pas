@@ -164,8 +164,6 @@ const
   LOAD_LOD          = $559420;  // F (Name: pchar); THISCALL (PLod);
   LOAD_LODS         = $559390;
   LOAD_DEF_SETTINGS = $50B420;  // F();
-  SMACK_OPEN        = $63A464;  // F(FileName: pchar; BufSize, BufMask: int): HANDLE or 0; stdcall;
-  BINK_OPEN         = $63A390;  // F(hFile, BufMask or $8000000: int): HANDLE or 0; stdcall;
 
   (* Limits *)
   MAX_MONS_IN_STACK = 32767;
@@ -1323,6 +1321,19 @@ const
   ZvsRedrawMap:   procedure = Ptr($7126EA);
   a2i:            function (Str: pchar): int cdecl = Ptr($6184D9);
   a2f:            function (Str: pchar): single cdecl = Ptr($619366);
+
+type
+  TOpenSmackApiFunc = function (FileHandle: Windows.THandle; BufSize, MinusOne: int): {n} pointer stdcall;
+  TOpenBinkApiFunc  = function (FileHandle: Windows.THandle; BufMask: integer): {n} pointer stdcall; // BufMask must be ORed with $8000000
+
+const
+  Video: record
+    OpenSmack: ^TOpenSmackApiFunc;
+    OpenBink:  ^TOpenBinkApiFunc;
+  end = (
+    OpenSmack: Ptr($63A464);
+    OpenBink:  Ptr($63A390);
+  );
 
   GetAdvMapTileVisibility: TGetAdvMapTileVisibility = Ptr($715A7E);
   GetBattleCellByPos:  TGetBattleCellByPos = Ptr($715872);
