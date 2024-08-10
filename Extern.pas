@@ -13,12 +13,19 @@ uses
   SysUtils,
   Windows,
 
-  AdvErm,
   Alg,
   ApiJack,
   Core,
   Crypto,
   DataLib,
+  DlgMes,
+  Ini,
+  StrLib,
+  TypeWrappers,
+  Utils,
+  WinUtils,
+
+  AdvErm,
   EraButtons,
   EraUtils,
   Erm,
@@ -26,19 +33,14 @@ uses
   GameExt,
   Graph,
   Heroes,
-  Ini,
   Lodman,
   Memory,
   Network,
   Rainbow,
   Stores,
-  StrLib,
   Trans,
   Triggers,
-  Tweaks,
-  TypeWrappers,
-  Utils,
-  WinUtils;
+  Tweaks;
 
 type
   (* Import *)
@@ -49,7 +51,7 @@ type
   PErmXVars = ^TErmXVars;
   TErmXVars = array [1..16] of integer;
 
-  TDwordBool = integer; // 0 or 1
+  TIn32Bool = integer; // 0 or 1
 
   PAppliedPatch = ^TAppliedPatch;
   TAppliedPatch = packed record
@@ -113,23 +115,23 @@ begin
   Ini.ClearIniCache(FileName);
 end;
 
-function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): TDwordBool; stdcall;
+function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): TIn32Bool; stdcall;
 var
   ResStr: string;
 
 begin
-  result := TDwordBool(ord(Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr)));
+  result := TIn32Bool(ord(Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr)));
   Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
 end;
 
-function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): TDwordBool; stdcall;
+function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): TIn32Bool; stdcall;
 begin
-  result := TDwordBool(ord(Ini.WriteStrToIni(Key, Value, SectionName, FilePath)));
+  result := TIn32Bool(ord(Ini.WriteStrToIni(Key, Value, SectionName, FilePath)));
 end;
 
-function SaveIni (FilePath: pchar): TDwordBool; stdcall;
+function SaveIni (FilePath: pchar): TIn32Bool; stdcall;
 begin
-  result := TDwordBool(ord(Ini.SaveIni(FilePath)));
+  result := TIn32Bool(ord(Ini.SaveIni(FilePath)));
 end;
 
 procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
@@ -190,14 +192,14 @@ begin
   result := EraButtons.GetButtonID(ButtonName);
 end;
 
-function PatchExists (PatchName: pchar): TDwordBool; stdcall;
+function PatchExists (PatchName: pchar): TIn32Bool; stdcall;
 begin
-  result := TDwordBool(ord(GameExt.PatchExists(PatchName)));
+  result := TIn32Bool(ord(GameExt.PatchExists(PatchName)));
 end;
 
-function PluginExists (PluginName: pchar): TDwordBool; stdcall;
+function PluginExists (PluginName: pchar): TIn32Bool; stdcall;
 begin
-  result := TDwordBool(ord(GameExt.PluginExists(PluginName)));
+  result := TIn32Bool(ord(GameExt.PluginExists(PluginName)));
 end;
 
 procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
@@ -210,7 +212,7 @@ begin
   Lodman.GlobalRedirectFile(OldFileName, NewFileName);
 end;
 
-function TakeScreenshot (FilePath: pchar; Quality: integer; Flags: integer): TDwordBool; stdcall;
+function TakeScreenshot (FilePath: pchar; Quality: integer; Flags: integer): TIn32Bool; stdcall;
 begin
   result := ord(Graph.TakeScreenshot(FilePath, Quality, Flags));
 end;
@@ -256,7 +258,7 @@ begin
   result := Memory.UniqueStrings[pchar(Trans.tr(Key, []))];
 end;
 
-function SetLanguage (NewLanguage: pchar): TDwordBool; stdcall;
+function SetLanguage (NewLanguage: pchar): TIn32Bool; stdcall;
 begin
   result := ord(Trans.SetLanguage(NewLanguage));
 end;
@@ -284,9 +286,9 @@ begin
   Heroes.ShowMessage(Mes);
 end;
 
-function Ask (Question: pchar): TDwordBool; stdcall;
+function Ask (Question: pchar): TIn32Bool; stdcall;
 begin
-  result := TDwordBool(ord(Heroes.Ask(Question)));
+  result := TIn32Bool(ord(Heroes.Ask(Question)));
 end;
 
 procedure ReportPluginVersion (const VersionLine: pchar); stdcall;
@@ -586,9 +588,9 @@ begin
   Erm.ZvsErmError(nil, 0, Error);
 end;
 
-function AllocErmFunc (FuncName: pchar; {i} out FuncId: integer): TDwordBool; stdcall;
+function AllocErmFunc (FuncName: pchar; {i} out FuncId: integer): TIn32Bool; stdcall;
 begin
-  result := TDwordBool(ord(Erm.AllocErmFunc(FuncName, FuncId)));
+  result := TIn32Bool(ord(Erm.AllocErmFunc(FuncName, FuncId)));
 end;
 
 function FindNextObject (ObjType, ObjSubtype: integer; var x, y, z: integer; Direction: integer): integer; stdcall;
@@ -644,9 +646,9 @@ begin
   result := pchar(ProcessGuid);
 end;
 
-function IsCampaign: TDwordBool; stdcall;
+function IsCampaign: TIn32Bool; stdcall;
 begin
-  result := TDwordBool(ord(Heroes.IsCampaign));
+  result := TIn32Bool(ord(Heroes.IsCampaign));
 end;
 
 procedure GetCampaignFileName (Buf: pchar); stdcall;
@@ -727,13 +729,13 @@ begin
   StrRegistry[Key] := TString.Create(NewValue);
 end;
 
-function PcxPngExists (const PcxName: pchar): TDwordBool; stdcall;
+function PcxPngExists (const PcxName: pchar): TIn32Bool; stdcall;
 begin
   result := ord(Graph.PcxPngExists(PcxName));
 end;
 
 function FireRemoteEvent (DestPlayerId: integer; EventName: pchar; {n} Data: pointer; DataSize: integer; {n} ProgressHandler: Network.TNetworkStreamProgressHandler;
-                                 {n} ProgressHandlerCustomParam: pointer): TDwordBool; stdcall;
+                                 {n} ProgressHandlerCustomParam: pointer): TIn32Bool; stdcall;
 begin
   result := ord(Network.FireRemoteEvent(DestPlayerId, EventName, Data, DataSize, ProgressHandler, ProgressHandlerCustomParam));
 end;
