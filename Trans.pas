@@ -43,7 +43,8 @@ const
 
 function SetLanguage (const NewLanguage: string): boolean;
 procedure ReloadLanguageData; stdcall;
-function  tr (const Key: string; const Params: array of string): string;
+function tr (const Key: string; const Params: array of string): string;
+function trDef (const Key: string; const Params: array of string; const DefValue: string): string;
 
 
 var
