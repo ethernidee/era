@@ -120,7 +120,7 @@ begin
   if Translation <> nil then begin
     result := StrLib.BuildStr(Translation.Value, Params, TEMPL_CHAR);
   end else begin
-    result := DefValue;
+    result := StrLib.BuildStr(DefValue, Params, TEMPL_CHAR);
   end;
 end;
 
