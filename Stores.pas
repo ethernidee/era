@@ -106,7 +106,9 @@ var
 (***) implementation (***)
 
 
-uses Erm;
+uses
+  Erm,
+  Trans;
 
 
 type
@@ -639,10 +641,7 @@ begin
       end;
 
       DumpSavegameSectionsOpt := true;
-
-      Heroes.ShowMessage('{~F01111}(!) Game saving was aborted. Game memory is probably corrupted. Restart the game and load older savegame if you are a regular player.' +
-                         ' You may try to save game again for debug purposes. DumpSavegameSections option is activated for further saving attempts.' +
-                         ' Additional saving attempts may help engine authors to investigate the bug.{~}');
+      Heroes.ShowMessage(Trans.tr('era.debug.game_saving_exception_warning', []));
     end; // .on Exception
   end; // .except
 
