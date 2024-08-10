@@ -53,6 +53,8 @@ const
   ERS_FILES_PATH           = 'Data\s';
   ERM_LIB_SCRIPTS_PATH     = 'Data\s\lib';
   ERM_LIB_DIR_NAME         = 'lib';
+  ERM_END_LIB_SCRIPTS_PATH = 'Data\s\lib_end';
+  ERM_END_LIB_DIR_NAME     = 'lib_end';
   EXTRACTED_SCRIPTS_PATH   = EraSettings.DEBUG_DIR + '\Scripts';
   ERM_TRACKING_REPORT_PATH = DEBUG_DIR + '\erm tracking.erm';
 
@@ -496,30 +498,37 @@ type
   end;
 
   TScriptMan = class
-     private
-      {O} fScripts: RscLists.TResourceList;
+   private
+    {O} fScripts: RscLists.TResourceList;
 
-     public const
-       IS_FIRST_LOADING = true;
-       IS_RELOADING     = false;
+   protected
+    procedure LoadScriptsFromDir (const ScriptsDir: string; {On} ScriptList: TStrList = nil; const ScriptNamePrefix: string = ''; ResourceTag: integer = 0);
+    procedure LoadGlobalLibScripts;
+    procedure LoadGlobalEndLibScripts;
+    procedure LoadMapInternalScripts;
+    procedure LoadMapDirScripts;
+    function  LoadFixedScriptSet: boolean;
+    procedure LoadGlobalScripts;
 
-     public
-      constructor Create;
-      destructor  Destroy; override;
+   public const
+    UNTIL_GLOBAL_SCRIPTS = 1;
 
-      procedure ClearScripts;
-      procedure SaveScripts;
-      function  LoadScript (const ScriptPath: string; ScriptName: string = ''; ResourceTag: integer = RESOURCE_TAG_GLOBAL_SCRIPT): boolean;
-      procedure LoadMapInternalScripts;
-      procedure LoadScriptsFromSavedGame;
-      procedure LoadScriptsFromDisk (IsFirstLoading: boolean);
-      procedure ReloadScriptsFromDisk;
-      procedure ExtractScripts;
-      function  AddrToScriptNameAndLine ({n} Addr: pchar; var {out} ScriptName: string; out LineN: integer; out LinePos: integer): boolean;
-      function  IsMapScript (ScriptInd: integer): boolean;
+   public
+    constructor Create;
+    destructor  Destroy; override;
 
-      property Scripts: RscLists.TResourceList read fScripts;
-    end; // .class TScriptMan
+    procedure ClearScripts;
+    procedure SaveScripts;
+    function  LoadScript (const ScriptPath: string; ScriptName: string = ''; ResourceTag: integer = RESOURCE_TAG_GLOBAL_SCRIPT): boolean;
+    procedure LoadScriptsFromSavedGame;
+    procedure LoadScriptsFromDisk (Flags: integer = 0);
+    procedure ReloadScriptsFromDisk;
+    procedure ExtractScripts;
+    function  AddrToScriptNameAndLine ({n} Addr: pchar; var {out} ScriptName: string; out LineN: integer; out LinePos: integer): boolean;
+    function  IsMapScript (ScriptInd: integer): boolean;
+
+    property Scripts: RscLists.TResourceList read fScripts;
+  end; // .class TScriptMan
 
   PErmVVars      = ^TErmVVars;
   TErmVVars      = array [1..10000] of integer;
@@ -900,7 +909,11 @@ procedure SetDialog8TextAlignment (Alignment: integer); stdcall;
 
 (***) implementation (***)
 
-uses PatchApi, Stores, AdvErm, ErmTracking;
+uses
+  AdvErm,
+  ErmTracking,
+  PatchApi,
+  Stores;
 
 const
   ERM_CMD_CACHE_LIMIT = 30000;
@@ -1556,7 +1569,7 @@ begin
 
   Context.RetAddr := Ptr($72C760);
   result          := not Core.EXEC_DEF_CODE;
-end; // .function Hook_LoadErtFile
+end;
 
 procedure LoadErtFile (const ErmScriptName: string);
 var
@@ -1591,7 +1604,7 @@ begin
   result          := false;
   // * * * * * //
   SysUtils.FreeAndNil(TextTable);
-end; // .function Hook_LoadErsFiles
+end;
 
 function Hook_ApplyErsOptions (Context: ApiJack.PHookContext): longbool; stdcall;
 var
@@ -1623,8 +1636,6 @@ begin
   Context.RetAddr := Ptr($778613);
   result          := false;
 end; // .function Hook_ApplyErsOptions
-
-
 
 function AddrToLineAndPos (Document: pchar; DocSize: integer; CharPos: pchar; var LineN: integer; var LinePos: integer): boolean;
 var
@@ -2899,9 +2910,13 @@ end;
 procedure TScriptMan.ClearScripts;
 begin
   EventMan.GetInstance.Fire('OnBeforeClearErmScripts');
-  fScripts.Clear;
   EventTracker.Reset;
   DoRestoreErmTracking;
+  Self.fScripts.Clear;
+  ZvsClearErtStrings;
+  GlobalConsts.Clear;
+  RegisterStdGlobalConsts;
+  WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_AFTER_ASKING;
 end;
 
 procedure TScriptMan.SaveScripts;
@@ -2935,6 +2950,23 @@ begin
   if result = 0 then begin
     result := integer(a) - integer(b);
   end;
+end;
+
+procedure TScriptMan.LoadScriptsFromSavedGame;
+var
+{O} LoadedScripts: RscLists.TResourceList;
+
+begin
+  LoadedScripts := RscLists.TResourceList.Create;
+  // * * * * * //
+  LoadedScripts.LoadFromSavedGame(ERM_SCRIPTS_SECTION);
+
+  if not LoadedScripts.FastCompare(Self.fScripts) then begin
+    Utils.Exchange(int(LoadedScripts), int(Self.fScripts));
+    ZvsFindErm;
+  end;
+  // * * * * * //
+  SysUtils.FreeAndNil(LoadedScripts);
 end;
 
 procedure TScriptMan.LoadMapInternalScripts;
@@ -2990,105 +3022,94 @@ begin
   SysUtils.FreeAndNil(EventList);
 end; // .procedure TScriptMan.LoadMapInternalScripts
 
-procedure TScriptMan.LoadScriptsFromSavedGame;
+procedure TScriptMan.LoadScriptsFromDir (const ScriptsDir: string; {On} ScriptList: TStrList = nil; const ScriptNamePrefix: string = ''; ResourceTag: integer = 0);
 var
-{O} LoadedScripts: RscLists.TResourceList;
+  i: integer;
 
 begin
-  LoadedScripts := RscLists.TResourceList.Create;
-  // * * * * * //
-  LoadedScripts.LoadFromSavedGame(ERM_SCRIPTS_SECTION);
+  if ScriptList = nil then begin
+    ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
+  end;
 
-  if not LoadedScripts.FastCompare(Self.fScripts) then begin
-    Utils.Exchange(int(LoadedScripts), int(Self.fScripts));
-    ZvsFindErm;
+  for i := 0 to ScriptList.Count - 1 do begin
+    if ScriptList[i] <> '' then begin
+      Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ScriptNamePrefix + ScriptList[i], ResourceTag);
+    end;
   end;
   // * * * * * //
-  SysUtils.FreeAndNil(LoadedScripts);
+  SysUtils.FreeAndNil(ScriptList);
 end;
 
-procedure TScriptMan.LoadScriptsFromDisk (IsFirstLoading: boolean);
+procedure TScriptMan.LoadGlobalLibScripts;
+begin
+  Self.LoadScriptsFromDir(GameExt.GameDir + '\' + ERM_LIB_SCRIPTS_PATH, nil, ERM_LIB_DIR_NAME + '\');
+end;
+
+procedure TScriptMan.LoadGlobalEndLibScripts;
+begin
+  Self.LoadScriptsFromDir(GameExt.GameDir + '\' + ERM_END_LIB_SCRIPTS_PATH, nil, ERM_END_LIB_DIR_NAME + '\');
+end;
+
+procedure TScriptMan.LoadMapDirScripts;
+begin
+  Self.LoadScriptsFromDir(GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH), nil, GameExt.GetMapDirName + '\', RESOURCE_TAG_MAP_SCRIPT);
+end;
+
+function TScriptMan.LoadFixedScriptSet: boolean;
 const
-  SCRIPTS_LIST_FILEPATH = ERM_SCRIPTS_PATH + '\load only these scripts.txt';
+  SCRIPT_LIST_FILEPATH = ERM_SCRIPTS_PATH + '\load only these scripts.txt';
 
 var
-{O} ScriptList:          TStrList;
-    ScriptsDir:          string;
-    MapDirName:          string;
-    ForcedScripts:       Utils.TArrayOfStr;
-    LoadFixedScriptsSet: boolean;
-    FileContents:        string;
-    i:                   integer;
+  FileContents:  string;
+  ForcedScripts: Utils.TArrayOfStr;
+  i:             integer;
 
 begin
-  ForcedScripts := nil;
-  ScriptList    := nil;
-  // * * * * * //
-  Self.ClearScripts;
-  ZvsClearErtStrings;
-  GlobalConsts.Clear;
-  RegisterStdGlobalConsts;
-
-  // Load global library scripts
-  ScriptsDir := GameExt.GameDir + '\' + ERM_LIB_SCRIPTS_PATH;
-  ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
-  MapDirName := GameExt.GetMapDirName;
-
-  for i := 0 to ScriptList.Count - 1 do begin
-    Self.LoadScript(ScriptsDir + '\' + ScriptList[i], ERM_LIB_DIR_NAME + '\' + ScriptList[i]);
-  end;
-
-  SysUtils.FreeAndNil(ScriptList);
-
-  // Load in-map scripts from time event texts
-  Self.LoadMapInternalScripts;
-
-  // Load scripts from map directory
-  ScriptsDir := GameExt.GetMapResourcePath(ERM_SCRIPTS_PATH);
-  ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
-  MapDirName := GameExt.GetMapDirName;
-
-  for i := 0 to ScriptList.Count - 1 do begin
-    Self.LoadScript(ScriptsDir + '\' + ScriptList[i], MapDirName + '\' + ScriptList[i], RESOURCE_TAG_MAP_SCRIPT);
-  end;
-
-  SysUtils.FreeAndNil(ScriptList);
-
   // Determine fixed scripts white list
-  LoadFixedScriptsSet := Files.ReadFileContents(GameExt.GetMapResourcePath(SCRIPTS_LIST_FILEPATH), FileContents);
+  result := Files.ReadFileContents(GameExt.GetMapResourcePath(SCRIPT_LIST_FILEPATH), FileContents) or
+            Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPT_LIST_FILEPATH,     FileContents);
 
-  // Map maker forces fixed set of scripts
-  if LoadFixedScriptsSet then begin
-    WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL;
-  end;
-
-  LoadFixedScriptsSet := LoadFixedScriptsSet or Files.ReadFileContents(GameExt.GameDir + '\' + SCRIPTS_LIST_FILEPATH, FileContents);
-
-  if LoadFixedScriptsSet then begin
-    ScriptsDir    := GameExt.GameDir + '\' + ERM_SCRIPTS_PATH;
-    ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
+  if result then begin
+    ForcedScripts := StrLib.Explode(SysUtils.Trim(FileContents), #10);
 
     for i := 0 to High(ForcedScripts) do begin
-      Self.LoadScript(ScriptsDir + '\' + ForcedScripts[i]);
+      ForcedScripts[i] := SysUtils.Trim(ForcedScripts[i]);
     end;
-  end else begin
-    ScriptsDir := GameExt.GameDir + '\' + ERM_SCRIPTS_PATH;
-    ScriptList := GetOrderedPrioritizedFileList([ScriptsDir + '\*.erm']);
 
-    for i := 0 to ScriptList.Count - 1 do begin
-      Self.LoadScript(ScriptsDir + '\' + ScriptList[i]);
-    end;
+    Self.LoadScriptsFromDir(
+      GameExt.GameDir + '\' + ERM_SCRIPTS_PATH,
+      DataLib.NewStrListFromStrArr(ForcedScripts, not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE, DataLib.FLAG_IGNORE_DUPLICATES)
+    );
   end;
-  // * * * * * //
-  SysUtils.FreeAndNil(ScriptList);
-end; // .procedure TScriptMan.LoadScriptsFromDisk
+end;
+
+procedure TScriptMan.LoadGlobalScripts;
+begin
+  Self.LoadScriptsFromDir(GameExt.GameDir + '\' + ERM_SCRIPTS_PATH);
+end;
+
+procedure TScriptMan.LoadScriptsFromDisk (Flags: integer = 0);
+begin
+  Self.ClearScripts;
+  Self.LoadGlobalLibScripts;
+  Self.LoadMapInternalScripts;
+  Self.LoadMapDirScripts;
+
+  if (Flags and UNTIL_GLOBAL_SCRIPTS) = 0 then begin
+    if not Self.LoadFixedScriptSet then begin
+      Self.LoadGlobalScripts;
+    end;
+
+    Self.LoadGlobalEndLibScripts;
+  end;
+end;
 
 procedure TScriptMan.ReloadScriptsFromDisk;
 begin
   if ErmTriggerDepth = 0 then begin
     EventMan.GetInstance.Fire('OnBeforeScriptsReload');
     ErmEnabled^       := false;
-    Self.LoadScriptsFromDisk(TScriptMan.IS_RELOADING);
+    Self.LoadScriptsFromDisk(Self.UNTIL_GLOBAL_SCRIPTS);
     ErmEnabled^       := true;
     ZvsIsGameLoading^ := true;
     ZvsFindErm;
@@ -3200,7 +3221,7 @@ begin
 
     result := StrLib.ExtractFromPchar(StartPos, EndPos - StartPos);
   end; // .if
-end; // .function GrabErmCmd
+end;
 
 function GrabErmCmdContext ({n} CmdPtr: pchar): string;
 const
@@ -3269,7 +3290,7 @@ begin
     Question := Format('%s'#10'Location: %s:%d:%d', [Question, ScriptName, Line, LinePos]);
   end;
 
-  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10'Save debug information?';
+  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10 + Trans.tr('era.debug.debug_dump_confirmation', []);
 
   if Ask(Question) then begin
     ZvsDumpErmVars(pchar(Error), ErrCmd);
@@ -6068,8 +6089,8 @@ begin
 end;
 
 var
-  _NumMapScripts:    integer;
-  _NumGlobalScripts: integer;
+  _GlobalScriptsPermissionChecked: boolean;
+  _NumMapScripts:                  integer;
 
 function Hook_FindErm_AfterMapScripts (Context: ApiJack.PHookContext): longbool; stdcall;
 const
@@ -6088,34 +6109,40 @@ begin
     FuncNames.Clear;
     FuncAutoId := INITIAL_FUNC_AUTO_ID;
     RegisterErmEventNames;
-    ScriptMan.LoadScriptsFromDisk(TScriptMan.IS_FIRST_LOADING);
+    ScriptMan.LoadScriptsFromDisk(ScriptMan.UNTIL_GLOBAL_SCRIPTS);
   end;
 
   if ScriptIndPtr^ = 0 then begin
-    _NumMapScripts    := 0;
-    _NumGlobalScripts := 0;
+    _GlobalScriptsPermissionChecked := false;
+    _NumMapScripts                  := 0;
   end;
 
-  if (ScriptIndPtr^ < ScriptMan.Scripts.Count) and (_NumGlobalScripts = 0) then begin
-    if ScriptMan.IsMapScript(ScriptIndPtr^) then begin
-      Inc(_NumMapScripts);
+  if (ScriptIndPtr^ >= ScriptMan.Scripts.Count) and not _GlobalScriptsPermissionChecked then begin
+    _GlobalScriptsPermissionChecked := true;
+
+    if
+      ScriptMan.LoadFixedScriptSet                                       or
+      (WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] = DONT_WOGIFY) or
+      (
+        (_NumMapScripts > 0)                                                       and
+        (WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] = WOGIFY_AFTER_ASKING) and
+         not Heroes.Ask(Trans.tr('era.global_scripts_vs_map_scripts_warning', []))
+      )
+    then begin
+      WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := DONT_WOGIFY;
     end else begin
-      Inc(_NumGlobalScripts);
+      WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL;
+      ScriptMan.LoadGlobalScripts;
     end;
 
-    if (_NumMapScripts > 0) and (_NumGlobalScripts > 0) then begin
-      if (WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] = DONT_WOGIFY) or
-         ((WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] = WOGIFY_AFTER_ASKING) and Heroes.Ask(Trans.tr('era.global_scripts_vs_map_scripts_warning', [])))
-      then begin
-        WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := DONT_WOGIFY;
-        ScriptMan.Scripts.Truncate(ScriptIndPtr^);
-      end else begin
-        WoGOptions[CURRENT_WOG_OPTIONS][WOG_OPTION_WOGIFY] := WOGIFY_ALL;
-      end;
-    end;
-  end; // .if
+    ScriptMan.LoadGlobalEndLibScripts;
+  end;
 
   if ScriptIndPtr^ < ScriptMan.Scripts.Count then begin
+    if ScriptMan.IsMapScript(ScriptIndPtr^) then begin
+      Inc(_NumMapScripts);
+    end;
+
     // M.m.i = 0
     pinteger(Context.EBP - $318)^ := 0;
     // M.m.s = ErmScript
@@ -6130,7 +6157,7 @@ begin
   end else begin
     // Jump right after loop end
     Context.RetAddr := Ptr($74C5A7);
-  end; // .else
+  end;
 
   result := not Core.EXEC_DEF_CODE;
 end; // .function Hook_FindErm_AfterMapScripts
@@ -6895,7 +6922,7 @@ begin
   end else begin
     Context.RetAddr := Ptr($749165);
   end;
-end; // .function Hook_IF_N_ShowDialog_DecideSetupOrShow
+end;
 
 function Hook_Request3Pic (Context: ApiJack.PHookContext): longbool; stdcall;
 const
