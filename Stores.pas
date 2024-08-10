@@ -27,7 +27,10 @@ uses
   Heroes;
 
 const
-  DUMP_SAVEGAME_SECTIONS_DIR = EraSettings.DEBUG_DIR + '\Savegame Sections';
+  DUMP_SAVEGAME_SECTIONS_DIR   = EraSettings.DEBUG_DIR + '\Savegame Sections';
+  ERA_SAVEGAME_VERSION_SECTION = 'Era.SavegameVersion';
+  SAVEGAME_MIN_VERSION         = 3916;
+  COLOR_TAG_RED                = '{~F01111}';
 
 type
   (* Import *)
@@ -601,6 +604,12 @@ begin
 
   try
     WritingStorage.Clear;
+
+    with NewRider(ERA_SAVEGAME_VERSION_SECTION) do begin
+      WriteInt(GameExt.ERA_VERSION_INT);
+      Flush;
+    end;
+
     Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_WRITE, []);
     EventMan.GetInstance.Fire('$OnEraSaveScripts', GameExt.NO_EVENT_DATA, 0);
 
@@ -641,7 +650,7 @@ begin
       end;
 
       DumpSavegameSectionsOpt := true;
-      Heroes.ShowMessage(Trans.tr('era.debug.game_saving_exception_warning', []));
+      Heroes.ShowMessage(COLOR_TAG_RED + Trans.tr('era.debug.game_saving_exception_warning', []) + '{~}');
     end; // .on Exception
   end; // .except
 
@@ -657,14 +666,15 @@ end; // .function Hook_SaveGameWrite
 
 function Hook_SaveGameRead (Context: ApiJack.PHookContext): longbool; stdcall;
 var
-{U} StoredData:     TStoredData;
-    BytesRead:      integer;
-    NumSections:    integer;
-    SectionNameLen: integer;
-    SectionName:    string;
-    DataLen:        integer;
-    SectionData:    string;
-    i:              integer;
+{U} StoredData:      TStoredData;
+    BytesRead:       integer;
+    NumSections:     integer;
+    SectionNameLen:  integer;
+    SectionName:     string;
+    DataLen:         integer;
+    SectionData:     string;
+    SavegameVersion: integer;
+    i:               integer;
 
   procedure ForceGzipRead (Count: integer; {n} Addr: pointer);
   begin
@@ -697,8 +707,18 @@ begin
     ReadingStorage[SectionName] := StoredData;
   end; // .for
 
-  EventMan.GetInstance.Fire('$OnEraLoadScripts', GameExt.NO_EVENT_DATA, 0);
-  Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_READ, []);
+  with NewRider(ERA_SAVEGAME_VERSION_SECTION) do begin
+    SavegameVersion := ReadInt;
+
+    if SavegameVersion < SAVEGAME_MIN_VERSION then begin
+      Heroes.ShowMessage(COLOR_TAG_RED + Trans.tr('era.incompatible_savegame_version_warning', [
+        'old_version', SysUtils.IntToStr(SavegameVersion), 'current_version', SysUtils.IntToStr(GameExt.ERA_VERSION_INT)
+      ]) + '{~}');
+    end else begin
+      EventMan.GetInstance.Fire('$OnEraLoadScripts', GameExt.NO_EVENT_DATA, 0);
+      Erm.FireErmEventEx(Erm.TRIGGER_SAVEGAME_READ, []);
+    end;
+  end;
 
   // default code
   if pinteger(Context.EBP - $14)^ = 0 then begin
