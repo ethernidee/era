@@ -293,7 +293,7 @@ begin
 
   if ItemInfo <> nil then begin
     SysUtils.FileSeek(ItemInfo.hFile, ItemInfo.Offset, SET_POSITION);
-    result := Heroes.VideoUtils.OpenSmack^(ItemInfo.hFile, BufSize, -1);
+    result := Heroes.Video.OpenSmack^(ItemInfo.hFile, BufSize, -1);
   end else begin
     result := nil;
   end;
@@ -317,7 +317,7 @@ begin
 
   if ItemInfo <> nil then begin
     SysUtils.FileSeek(ItemInfo.hFile, ItemInfo.Offset, SET_POSITION);
-    result := Heroes.VideoUtils.OpenBink^(ItemInfo.hFile, BufSizeMask or $8000000);
+    result := Heroes.Video.OpenBink^(ItemInfo.hFile, BufSizeMask or $8000000);
   end else begin
     result := nil;
   end;
