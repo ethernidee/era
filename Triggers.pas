@@ -259,6 +259,7 @@ const
   WM_SYSKEYUP         = $105;
   WM_SYSCOMMAND       = $112;
   SC_KEYMENU          = $F100;
+  MAPVK_VSC_TO_VK_EX  = 3;
   KEY_F11             = 122;
   KEY_F12             = 123;
   ENABLE_DEF_REACTION = 0;
@@ -283,6 +284,11 @@ begin
   end;
 
   if (Msg = WM_KEYDOWN) or (Msg = WM_SYSKEYDOWN) then begin
+    // IME input changed real key code to VK_PROCESSKEY, we need to restore it from scancode
+    if wParam = VK_PROCESSKEY then begin
+      wParam := Windows.MapVirtualKeyA((lParam shr 16) and $FF, MAPVK_VSC_TO_VK_EX);
+    end;
+
     RootDlgId := Heroes.WndManagerPtr^.GetRootDlgId;
 
     if wParam = KEY_F11 then begin
