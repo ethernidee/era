@@ -677,6 +677,57 @@ type
   TZvsProcessCmd = procedure (Cmd: PErmCmd; Dummy: integer = 0; IsPostInstr: longbool = false) cdecl;
 
 const
+  MULTI_PURPOSE_DLG_CUSTOM_DATA_ID = 846251802; // Unique ZVS custom data ID for exported multipurpose dialog ID
+
+type
+
+  PZvsCustomDlgData = ^TZvsCustomDlgData;
+  TZvsCustomDlgData = packed record
+    ItemType:     integer;
+    SubType:      integer;
+    Id:           integer;
+    HasCancelBtn: boolean;
+    _Align1:      array [1..3] of byte;
+    Nums:         array [0..3] of integer;
+    Texts:        array [0..3] of pchar;
+    Pics:         array [0..3] of pchar;
+    PicHints:     array [0..3] of pchar;
+    Buttons:      array [0..3] of pchar;
+    BtnHints:     array [0..3] of pchar;
+  end;
+
+  PZvsCustomDlgDataArr = ^TZvsCustomDlgDataArr;
+  TZvsCustomDlgDataArr = packed array [0..1000] of TZvsCustomDlgData;
+
+  TZvsSphinxDlgInput = packed array [0..1023] of char;
+
+  PZvsSphinxDlgSetup = ^TZvsSphinxDlgSetup;
+  TZvsSphinxDlgSetup = packed record
+    Title:            pchar;
+    LeftSideCaption:  pchar;
+    RightSideCaption: pchar;
+    InputBuf:         ^TZvsSphinxDlgInput; // External buffer to write user input string to, must be set
+    SelectedItem:     integer;             // Field to write selected item index to (1-4 for buttons, -1 for Cancel)
+    Pic1Path:         pchar;
+    Pic2Path:         pchar;
+    Pic3Path:         pchar;
+    Pic4Path:         pchar;
+    Pic1Hint:         pchar;
+    Pic2Hint:         pchar;
+    Pic3Hint:         pchar;
+    Pic4Hint:         pchar;
+    Btn1Text:         pchar;
+    Btn2Text:         pchar;
+    Btn3Text:         pchar;
+    Btn4Text:         pchar;
+    Btn1Hint:         pchar;
+    Btn2Hint:         pchar;
+    Btn3Hint:         pchar;
+    Btn4Hint:         pchar;
+    ShowCancelBtn:    TInt32Bool;
+  end;
+
+const
   (* WoG vars *)
   QuickVars: PErmQuickVars = Ptr($27718D0);
   v:  PErmVVars = Ptr($887668);
@@ -707,6 +758,7 @@ const
   ZvsEventZ:                  pinteger               = Ptr($27F996C);
   ZvsDestPlayer:              pinteger               = Ptr($7A1B24);
   ZvsWHero:                   pinteger               = Ptr($27F9988);
+  ZvsCustomDlgData:           PZvsCustomDlgDataArr   = Ptr($28809B8);
   IsWoG:                      plongbool              = Ptr($803288);
   WoGOptions:                 ^TWoGOptions           = Ptr($2771920);
   ErmEnabled:                 plongbool              = Ptr($27F995C);
@@ -767,6 +819,10 @@ const
   ZvsGetVarVal:       function (Param: PErmCmdParam): integer cdecl = Ptr($72DEA5);
   ZvsSetVarVal:       function (Param: PErmCmdParam; NewValue: integer): integer cdecl = Ptr($72E301);
   ZvsReparseParam:    function (var Param: TErmCmdParam): integer cdecl = Ptr($72D573);
+  ZvsFindCustomData:  function (Id: integer): integer cdecl = Ptr($771A13); // -1 on failure
+  ZvsFindFreeCustomData: function (): integer = Ptr($7719B4);               // -1 on failure
+  ZvsEmptyStrOrNull:  function (Str: pchar): {n} pchar cdecl = Ptr($771AFC);
+  ZvsShowCustomDialog: function (CustomDataId: integer; Dummy: integer; {n} UserInput: ppchar): integer cdecl = Ptr($7729DA); // return 1-4 or -1
 
   ZvsCrExpoSet_GetExpM: function (ItemType, ItemId, Modifier: integer): integer cdecl = Ptr($718D34);
   ZvsCrExpoSet_Find:    function (ItemType, ItemId: integer): pointer {*CrExpo} cdecl = Ptr($718617);
@@ -913,7 +969,8 @@ uses
   AdvErm,
   ErmTracking,
   PatchApi,
-  Stores;
+  Stores,
+  WogEvo;
 
 const
   ERM_CMD_CACHE_LIMIT = 30000;
@@ -1568,7 +1625,7 @@ begin
   Utils.CopyMem(SysUtils.StrLen(FileName) + 1, FileName, Ptr(Context.EBP - $410));
 
   Context.RetAddr := Ptr($72C760);
-  result          := not Core.EXEC_DEF_CODE;
+  result          := false;
 end;
 
 procedure LoadErtFile (const ErmScriptName: string);
@@ -3303,7 +3360,7 @@ function Hook_MError (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   ReportErmError(ppchar(Context.EBP + 16)^, ErmErrCmdPtr^);
   Context.RetAddr := Ptr($712483);
-  result          := not Core.EXEC_DEF_CODE;
+  result          := false;
 end;
 
 procedure Hook_ErmMess (OrigFunc: pointer; SubCmd: PErmSubCmd); stdcall;
@@ -6067,7 +6124,7 @@ begin
     EventMan.GetInstance.Fire('OnBeforeErmInstructions');
   end;
 
-  result := not Core.EXEC_DEF_CODE;
+  result := false;
 end;
 
 function Hook_FindErm_ZeroHeap (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -6077,7 +6134,7 @@ begin
   Windows.VirtualAlloc(ZvsErmHeapPtr^, ZvsErmHeapSize^, Windows.MEM_COMMIT, Windows.PAGE_READWRITE);
 
   Context.RetAddr := Ptr($7499ED);
-  result          := not Core.EXEC_DEF_CODE;
+  result          := false;
 end;
 
 function Hook_FindErm_OutOfMemory (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -6159,7 +6216,7 @@ begin
     Context.RetAddr := Ptr($74C5A7);
   end;
 
-  result := not Core.EXEC_DEF_CODE;
+  result := false;
 end; // .function Hook_FindErm_AfterMapScripts
 
 (* Loads WoG options from file for current map only (not global) *)
@@ -6237,7 +6294,7 @@ begin
     EnableCommanders;
   end;
 
-  result := not Core.EXEC_DEF_CODE;
+  result := false;
 end; // .function Hook_UN_J3_End
 
 function Hook_UN_J13 (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -6248,9 +6305,9 @@ begin
   if pinteger(Context.EBP - $E4)^ = SUBCMD_ID then begin
     ZvsResetCommanders;
     Context.RetAddr := Ptr($733F2E);
-    result          := not Core.EXEC_DEF_CODE;
+    result          := false;
   end else begin
-    result := Core.EXEC_DEF_CODE;
+    result := true;
   end;
 end;
 
@@ -6331,7 +6388,7 @@ begin
   end;
 
   Context.RetAddr := Ptr($732ED1);
-  result          := not Core.EXEC_DEF_CODE;
+  result          := false;
 end;
 
 {$W-}
@@ -6357,13 +6414,13 @@ end;
 function Hook_ErmHeroArt_FindFreeSlot (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   f[1]   := false;
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_ErmHeroArt_FoundFreeSlot (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   f[1]   := true;
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_ErmHeroArt_DeleteFromBag (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -6377,7 +6434,7 @@ var
 begin
   Hero := PPOINTER(Context.EBP + HERO_PTR_OFFSET)^;
   Dec(PBYTE(Utils.PtrOfs(Hero, NUM_BAG_ARTS_OFFSET))^);
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end; // .function Hook_ErmHeroArt_DeleteFromBag
 
 function Hook_HE_P (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -6730,7 +6787,7 @@ const
 
 begin
   ErmDlgCmd^ := NO_CMD;
-  result     := Core.EXEC_DEF_CODE;
+  result     := true;
 end;
 
 function Hook_CM3 (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -6758,14 +6815,14 @@ begin
   end; // .asm
 
   pinteger(Context.EDI + MOUSE_STRUCT_ITEM_OFS)^ := pinteger(CM3_RES_ADDR)^;
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end; // .function Hook_CM3
 
 function Hook_MR_N (c: ApiJack.PHookContext): longbool; stdcall;
 begin
   c.eax     := Heroes.GetVal(MrMonPtr^, STACK_SIDE).v * Heroes.NUM_BATTLE_STACKS_PER_SIDE + Heroes.GetVal(MrMonPtr^, STACK_IND).v;
   c.RetAddr := Ptr($75DC76);
-  result    := not Core.EXEC_DEF_CODE;
+  result    := false;
 end;
 
 function Hook_BM_U6 (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -6840,6 +6897,83 @@ procedure SetDialog8TextAlignment (Alignment: integer); stdcall;
 begin
   Dialog8TextAlignment := Alignment;
 end;
+
+function DefaultMultiPurposeDlgHandler (Setup: WogEvo.PMultiPurposeDlgSetup): integer; stdcall;
+const
+  CUSTOM_DATA_TYPE_EMPTY            = 0;
+  CUSTOM_DATA_TYPE_DIALOG           = 2;
+  CUSTOM_DATA_SUBTYPE_MULTI_PURPOSE = 2;
+
+var
+{Un} CustomData:       PZvsCustomDlgData;
+     CustomDataInd:    integer;
+     InputBufProvided: boolean;
+     ExtInputBuf:      pchar;
+     InputBufParam:    ppchar;
+
+begin
+  CustomData    := nil;
+  ExtInputBuf   := nil;
+  InputBufParam := nil;
+  // * * * * * //
+  result             := -1;
+  Setup.SelectedItem := -1;
+  InputBufProvided   := Utils.IsValidBuf(Setup.InputBuf, Setup.InputBufSize) and (Setup.InputBufSize > 0);
+
+  if InputBufProvided then begin
+    Setup.InputBuf^ := #0;
+    InputBufParam   := @ExtInputBuf;
+  end;
+
+  CustomDataInd := ZvsFindCustomData(MULTI_PURPOSE_DLG_CUSTOM_DATA_ID);
+
+  if CustomDataInd = -1 then begin
+    CustomDataInd := ZvsFindFreeCustomData;
+  end;
+
+  if CustomDataInd = -1 then begin
+    ShowErmError('DefaultMultiPurposeDlgHandler: all custom dialog (IF:D) data slots are occupied. Cannot show multipurpose dialog');
+    exit;
+  end;
+
+  CustomData := @ZvsCustomDlgData[CustomDataInd];
+
+  if (CustomData.ItemType = CUSTOM_DATA_TYPE_EMPTY) then begin
+    System.FillChar(CustomData^, sizeof(CustomData^), #0);
+    CustomData.ItemType := CUSTOM_DATA_TYPE_DIALOG;
+    CustomData.SubType  := CUSTOM_DATA_SUBTYPE_MULTI_PURPOSE;
+    CustomData.Id       := MULTI_PURPOSE_DLG_CUSTOM_DATA_ID;
+  end;
+
+  CustomData.Texts[0]     := ZvsEmptyStrOrNull(Setup.Title);
+  CustomData.Texts[1]     := ZvsEmptyStrOrNull(Setup.LeftSideCaption);
+  CustomData.Texts[2]     := ZvsEmptyStrOrNull(Setup.RightSideCaption);
+  CustomData.Pics[0]      := ZvsEmptyStrOrNull(Setup.Pic1Path);
+  CustomData.Pics[1]      := ZvsEmptyStrOrNull(Setup.Pic2Path);
+  CustomData.Pics[2]      := ZvsEmptyStrOrNull(Setup.Pic3Path);
+  CustomData.Pics[3]      := ZvsEmptyStrOrNull(Setup.Pic4Path);
+  CustomData.PicHints[0]  := ZvsEmptyStrOrNull(Setup.Pic1Hint);
+  CustomData.PicHints[1]  := ZvsEmptyStrOrNull(Setup.Pic2Hint);
+  CustomData.PicHints[2]  := ZvsEmptyStrOrNull(Setup.Pic3Hint);
+  CustomData.PicHints[3]  := ZvsEmptyStrOrNull(Setup.Pic4Hint);
+  CustomData.Buttons[0]   := ZvsEmptyStrOrNull(Setup.Btn1Text);
+  CustomData.Buttons[1]   := ZvsEmptyStrOrNull(Setup.Btn2Text);
+  CustomData.Buttons[2]   := ZvsEmptyStrOrNull(Setup.Btn3Text);
+  CustomData.Buttons[3]   := ZvsEmptyStrOrNull(Setup.Btn4Text);
+  CustomData.BtnHints[0]  := ZvsEmptyStrOrNull(Setup.Btn1Hint);
+  CustomData.BtnHints[1]  := ZvsEmptyStrOrNull(Setup.Btn2Hint);
+  CustomData.BtnHints[2]  := ZvsEmptyStrOrNull(Setup.Btn3Hint);
+  CustomData.BtnHints[3]  := ZvsEmptyStrOrNull(Setup.Btn4Hint);
+  CustomData.HasCancelBtn := Setup.ShowCancelBtn <> 0;
+
+  Setup.SelectedItem := ZvsShowCustomDialog(MULTI_PURPOSE_DLG_CUSTOM_DATA_ID, 0, InputBufParam);
+
+  if Setup.SelectedItem > 0 then begin
+    Dec(Setup.SelectedItem);
+  end;
+
+  result := Setup.SelectedItem;
+end; // .procedure DefaultMultiPurposeDlgHandler
 
 function Hook_IF_N (Context: ApiJack.PHookContext): longbool; stdcall;
 var
@@ -7172,6 +7306,7 @@ begin
 
   DlgLink.Dlg.Hints[ItemHintInd].ItemId := ItemId;
   DlgLink.Dlg.Hints[ItemHintInd].Text   := NewHintCopy;
+  VarDump(['Replaced', OldHint, NewHintCopy, ' for item with ID: ', ItemId]);
 
   Context.RetAddr := Ptr($72989C);
   result          := false;
@@ -8847,7 +8982,7 @@ begin
   Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', NewErmHeapSize]);
 
   (* Move not enough memory for ERM script compilation message to json *)
-  ApiJack.HookCode(Ptr($74C53A), @Hook_FindErm_OutOfMemory);
+  ApiJack.Hook(Ptr($74C53A), @Hook_FindErm_OutOfMemory);
 
   (* Register new code control receivers *)
   AdvErm.RegisterErmReceiver('re', nil, AdvErm.CMD_PARAMS_CONFIG_ONE_TO_FIVE_INTS);
@@ -8861,10 +8996,10 @@ begin
   Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
 
   (* Disable internal map scripts interpretation *)
-  ApiJack.HookCode(Ptr($749BBA), @Hook_FindErm_BeforeMainLoop);
+  ApiJack.Hook(Ptr($749BBA), @Hook_FindErm_BeforeMainLoop);
 
   (* Free ERM heap on scripts recompilation *)
-  ApiJack.HookCode(Ptr($7499A2), @Hook_FindErm_ZeroHeap);
+  ApiJack.Hook(Ptr($7499A2), @Hook_FindErm_ZeroHeap);
 
   (* Remove default mechanism of loading [mapname].erm *)
   Core.p.WriteDataPatch(Ptr($72CA8A), ['E90102000090909090']);
@@ -8889,7 +9024,7 @@ begin
   Core.p.WriteDataPatch(Ptr($74C6E1 + 6), ['01']);
 
   (* New way of iterating scripts in FindErm *)
-  ApiJack.HookCode(Ptr($749BF5), @Hook_FindErm_AfterMapScripts);
+  ApiJack.Hook(Ptr($749BF5), @Hook_FindErm_AfterMapScripts);
 
   (* Remove LoadERMTXT calls everywhere *)
   Core.p.WriteDataPatch(Ptr($749932 - 2), ['33C09090909090909090']);
@@ -8908,44 +9043,44 @@ begin
   Core.p.WriteDataPatch(Ptr($74C6FC), ['9090']);
 
   (* Reimplement ProcessErm *)
-  Core.Hook(Ptr($74C816), Core.HOOKTYPE_JUMP, @ProcessErm);
+  ApiJack.Hook(Ptr($74C816), @ProcessErm, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   (* Fix ERM CA:B3 bug *)
-  Core.Hook(Ptr($70E8A2), Core.HOOKTYPE_JUMP, @Hook_ErmCastleBuilding, 7);
+  ApiJack.Hook(Ptr($70E8A2), @Hook_ErmCastleBuilding, nil, 7, ApiJack.HOOKTYPE_JUMP);
 
   (* Fix HE:A art get syntax bug *)
-  ApiJack.HookCode(Ptr($744B13), @Hook_ErmHeroArt, nil, 9);
+  ApiJack.Hook(Ptr($744B13), @Hook_ErmHeroArt, nil, 9);
 
   (* Fix HE:A# - set flag 1 as success *)
-  ApiJack.HookCode(Ptr($7454B2), @Hook_ErmHeroArt_FindFreeSlot, nil, 10);
-  ApiJack.HookCode(Ptr($7454EC), @Hook_ErmHeroArt_FoundFreeSlot, nil, 6);
+  ApiJack.Hook(Ptr($7454B2), @Hook_ErmHeroArt_FindFreeSlot, nil, 10);
+  ApiJack.Hook(Ptr($7454EC), @Hook_ErmHeroArt_FoundFreeSlot, nil, 6);
 
   (* Fix HE:A3 artifacts delete - update art number *)
-  ApiJack.HookCode(Ptr($745051), @Hook_ErmHeroArt_DeleteFromBag);
-  ApiJack.HookCode(Ptr($7452F3), @Hook_ErmHeroArt_DeleteFromBag);
+  ApiJack.Hook(Ptr($745051), @Hook_ErmHeroArt_DeleteFromBag);
+  ApiJack.Hook(Ptr($7452F3), @Hook_ErmHeroArt_DeleteFromBag);
 
   (* Fix HE:P accept any d-modifiers, honor passed flags *)
-  ApiJack.HookCode(Ptr($743E2D), @Hook_HE_P);
+  ApiJack.Hook(Ptr($743E2D), @Hook_HE_P);
 
   (* Fix HE:C0 optimized and accept any d-modifiers. Magic -1/-2 constants are not used anymore *)
-  ApiJack.HookCode(Ptr($7442AC), @Hook_HE_C);
+  ApiJack.Hook(Ptr($7442AC), @Hook_HE_C);
 
   (* Rewrite HE:X to accept any d-modifiers *)
-  ApiJack.HookCode(Ptr($743F9F), @Hook_HE_X);
+  ApiJack.Hook(Ptr($743F9F), @Hook_HE_X);
 
   (* New HE:Z command to get hero structure address *)
-  ApiJack.HookCode(Ptr($746EE3), @Hook_HE_Z);
+  ApiJack.Hook(Ptr($746EE3), @Hook_HE_Z);
 
   (* Rewritten HE:L command to support all strings *)
-  ApiJack.HookCode(Ptr($745E76), @Hook_HE_L);
+  ApiJack.Hook(Ptr($745E76), @Hook_HE_L);
   // Remove HE:L0 command support at all
   Core.p.WriteDataPatch(Ptr($745E54), ['01']);
 
   (* New BM:Z command to get address of battle stack structure *)
-  ApiJack.HookCode(Ptr($75F840), @Hook_BM_Z);
+  ApiJack.Hook(Ptr($75F840), @Hook_BM_Z);
 
   (* Extended UN:C implementation with 4 parameters support *)
-  ApiJack.HookCode(Ptr($731FF0), @Hook_UN_C);
+  ApiJack.Hook(Ptr($731FF0), @Hook_UN_C);
 
   (* Fix missing final "break" keyword in CO:A case, leading to automatical CO:N execution in many branches *)
   Core.p.WriteDataPatch(Ptr($76F929), ['0F872A0E']);
@@ -8960,56 +9095,56 @@ begin
   Core.p.WriteDataPatch(Ptr($76FC71), ['0F8DDD0A']);
 
   (* Fix DL:C close all dialogs bug *)
-  ApiJack.HookCode(Ptr($729774), @Hook_DlgCallback, nil, 6);
+  ApiJack.Hook(Ptr($729774), @Hook_DlgCallback, nil, 6);
 
   (* Fully rewrite VR command *)
   AdvErm.RegisterErmReceiver('VR', @New_VR_Receiver, CMD_PARAMS_CONFIG_SINGLE_INT);
 
   (* Fix LoadErtFile to handle any relative pathes *)
-  ApiJack.HookCode(Ptr($72C660), @Hook_LoadErtFile);
+  ApiJack.Hook(Ptr($72C660), @Hook_LoadErtFile);
 
   (* Replace ERT files storage implementation entirely *)
-  Core.Hook(@ZvsStringSet_Clear, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Clear);
-  Core.Hook(@ZvsStringSet_Add, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Add);
-  Core.Hook(@ZvsStringSet_GetText, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_GetText);
-  Core.Hook(@ZvsStringSet_Load, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Load);
-  Core.Hook(@ZvsStringSet_Save, Core.HOOKTYPE_JUMP, @Hook_ZvsStringSet_Save);
+  ApiJack.Hook(@ZvsStringSet_Clear,   @Hook_ZvsStringSet_Clear,   nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(@ZvsStringSet_Add,     @Hook_ZvsStringSet_Add,     nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(@ZvsStringSet_GetText, @Hook_ZvsStringSet_GetText, nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(@ZvsStringSet_Load,    @Hook_ZvsStringSet_Load,    nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(@ZvsStringSet_Save,    @Hook_ZvsStringSet_Save,    nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   (* Disable connection between script number and option state in WoG options *)
   Core.p.WriteDataPatch(Ptr($777E48), ['E9180100009090909090']);
 
   (* Load all *.ers files without name/count limits *)
-  ApiJack.HookCode(Ptr($77938A), @Hook_LoadErsFiles);
-  ApiJack.HookCode(Ptr($77846B), @Hook_ApplyErsOptions);
+  ApiJack.Hook(Ptr($77938A), @Hook_LoadErsFiles);
+  ApiJack.Hook(Ptr($77846B), @Hook_ApplyErsOptions);
 
   (* Fix CM3 trigger allowing to handle all clicks *)
-  ApiJack.HookCode(Ptr($5B0255), @Hook_CM3);
+  ApiJack.Hook(Ptr($5B0255), @Hook_CM3);
   Core.p.WriteDataPatch(Ptr($5B02DD), ['8B47088D70FF']);
 
   (* UN:J3 does not reset commanders or load scripts. New: it can be used to reset wog options *)
   // Turned off because of side effects of NPC reset and not displaying wogification message some authors could rely on.
-  ApiJack.HookCode(Ptr($733A85), @Hook_UN_J3_End);
+  ApiJack.Hook(Ptr($733A85), @Hook_UN_J3_End);
 
   (* Add UN:J13 command: Reset Commanders *)
-  ApiJack.HookCode(Ptr($733F11), @Hook_UN_J13);
+  ApiJack.Hook(Ptr($733F11), @Hook_UN_J13);
 
   (* Improve UN:U: no error if objects is not found (x < 0 on error). UN:U(type)/(subType)/(direction)/(x)/(y)/(z) *)
-  ApiJack.HookCode(Ptr($732A55), @Hook_UN_U);
+  ApiJack.Hook(Ptr($732A55), @Hook_UN_U);
 
   (* Fix UN:P3 command: reset/enable commanders must disable/enable commander chests *)
-  ApiJack.HookCode(Ptr($732EA5), @Hook_UN_P3);
+  ApiJack.Hook(Ptr($732EA5), @Hook_UN_P3);
 
   (* Fix MR:N in !?MR1 !?MR2 *)
-  ApiJack.HookCode(Ptr($75DC67), @Hook_MR_N);
+  ApiJack.Hook(Ptr($75DC67), @Hook_MR_N);
 
   (* Add BM:U6/?$ command to get final stack speed, including slow effect *)
-  ApiJack.HookCode(Ptr($75F2B1), @Hook_BM_U6);
+  ApiJack.Hook(Ptr($75F2B1), @Hook_BM_U6);
 
   (* Fix IF:M# command: allow any string *)
-  ApiJack.HookCode(Ptr($74751A), @Hook_IF_M);
+  ApiJack.Hook(Ptr($74751A), @Hook_IF_M);
 
   (* Fix IF:L# command: allow any string and escape % with %% *)
-  ApiJack.HookCode(Ptr($749272), @Hook_IF_L);
+  ApiJack.Hook(Ptr($749272), @Hook_IF_L);
 
   (* Fix TR:T command: allow any number of arguments *)
   Core.p.WriteDataPatch(Ptr($73B771), ['EB']);
@@ -9022,59 +9157,59 @@ begin
   Core.p.WriteDataPatch(Ptr($7490CD), ['B0']);
 
   (* Fix IF:N to support any string *)
-  ApiJack.HookCode(Ptr($749116), @Hook_IF_N);
+  ApiJack.Hook(Ptr($749116), @Hook_IF_N);
 
   (* Fix IF:N to support new syntax: IF:N(msgType)/(text)/[?choice]/[textAlignment]/[preselectedPicId] and call ZvsDisplay8Dialog with 4 arguments *)
-  ApiJack.HookCode(Ptr($74914C), @Hook_IF_N_ShowDialog);
-  ApiJack.HookCode(Ptr($749077), @Hook_IF_N_ShowDialog_DecideSetupOrShow);
+  ApiJack.Hook(Ptr($74914C), @Hook_IF_N_ShowDialog);
+  ApiJack.Hook(Ptr($749077), @Hook_IF_N_ShowDialog_DecideSetupOrShow);
   Core.p.WriteDataPatch(Ptr($749086), ['8C']);
   Core.p.WriteDataPatch(Ptr($74908B), ['909090909090']);
 
   (* Fix dialog result parsing in Request3Pic to support 3 pictures selection *)
-  ApiJack.HookCode(Ptr($710352), @Hook_Request3Pic);
+  ApiJack.Hook(Ptr($710352), @Hook_Request3Pic);
 
   (* Fix BA:B to allow both numeric field ID and string as the only argument *)
-  ApiJack.HookCode(Ptr($76242B), @Hook_BA_B);
+  ApiJack.Hook(Ptr($76242B), @Hook_BA_B);
 
   (* Fix MM:M to allow all strings *)
-  ApiJack.HookCode(Ptr($74FD94), @Hook_MM_M);
+  ApiJack.Hook(Ptr($74FD94), @Hook_MM_M);
 
   (* Fix DL:A to allow all strings and assume 0 as the forth parameter value *)
-  ApiJack.HookCode(Ptr($72B093), @Hook_DL_A);
+  ApiJack.Hook(Ptr($72B093), @Hook_DL_A);
 
   (* Fix DL:H to allow all strings *)
-  ApiJack.HookCode(Ptr($72AF66), @Hook_DL_H);
+  ApiJack.Hook(Ptr($72AF66), @Hook_DL_H);
 
   (* Fix HE:B0 to allow all strings *)
-  ApiJack.HookCode(Ptr($74646E), @Hook_HE_B0);
+  ApiJack.Hook(Ptr($74646E), @Hook_HE_B0);
 
   (* Fix HE:B3 to allow all strings *)
-  ApiJack.HookCode(Ptr($74665E), @Hook_HE_B3);
+  ApiJack.Hook(Ptr($74665E), @Hook_HE_B3);
 
   (* Force WoG dialog to make hint copy during hint assignment *)
-  ApiJack.HookCode(Ptr($72986E), @Hook_ZvsDlg_AddHint_Assign);
+  ApiJack.Hook(Ptr($72986E), @Hook_ZvsDlg_AddHint_Assign);
 
   (* Disable DL:H item hint interpolation during call to HDlg::GetHint *)
   Core.p.WriteDataPatch(Ptr($729916), ['90909090909090909090909090909090909090']);
 
   (* Force WoG dialog to free allocated hints memory on dialog destruction *)
-  ApiJack.HookCode(Ptr($72B897), @Hook_ZvsDlg_Delete_FreeHints);
+  ApiJack.Hook(Ptr($72B897), @Hook_ZvsDlg_Delete_FreeHints);
 
   (* Fix HE(xxx) GetVarVal call to allow new variable types *)
-  ApiJack.HookCode(Ptr($743A17), @Hook_HE);
+  ApiJack.Hook(Ptr($743A17), @Hook_HE);
 
   (* Fix EA:E to not return on first GET-parameter, but evaluate all 4 parameters first. And still No assignment is performed with any GET parameter. *)
-  ApiJack.HookCode(Ptr($726CFA), @Hook_EA_E);
+  ApiJack.Hook(Ptr($726CFA), @Hook_EA_E);
 
   (* Detailed ERM error reporting *)
   // Replace simple message with detailed message with location and context
-  ApiJack.HookCode(Ptr($71236A), @Hook_MError);
+  ApiJack.Hook(Ptr($71236A), @Hook_MError);
   // Disallow repeated message, display detailed message with location otherwise
   ApiJack.StdSplice(Ptr($73DE8A), @Hook_ErmMess, ApiJack.CONV_CDECL, 1);
   // Disable double reporting of error location in ProcessCmd
   Core.p.WriteDataPatch(Ptr($749421), ['E9BF0200009090']);
   // Track ERM errors location during FindErm
-  Core.Hook(Ptr($74A14A), Core.HOOKTYPE_CALL, @Hook_FindErm_SkipUntil2);
+  ApiJack.Hook(Ptr($74A14A), @Hook_FindErm_SkipUntil2, nil, 0, ApiJack.HOOKTYPE_CALL);
 
   (* Implement universal !?FU(OnEveryDay) event, like !?TM-1 occuring every day for every color before other !?TM triggers *)
   ApiJack.StdSplice(Ptr($74DC74), @Hook_RunTimer, ApiJack.CONV_CDECL, 1);
@@ -9083,53 +9218,53 @@ begin
   Core.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);
 
   (* Prepare for ERM parsing *)
-  ApiJack.HookCode(Ptr($749974), @Hook_FindErm_Start);
+  ApiJack.Hook(Ptr($749974), @Hook_FindErm_Start);
 
   (* Optimize compiled ERM by storing direct address of command handler in command itself *)
-  ApiJack.HookCode(Ptr($74C5A7), @Hook_FindErm_SuccessEnd);
+  ApiJack.Hook(Ptr($74C5A7), @Hook_FindErm_SuccessEnd);
 
   // Rewrite FU:P implementation
-  ApiJack.HookCode(Ptr($72CD1A), @Hook_FU_P);
+  ApiJack.Hook(Ptr($72CD1A), @Hook_FU_P);
 
   // Rewrite FU:D implementation
-  ApiJack.HookCode(Ptr($72D0F7), @Hook_FU_D);
+  ApiJack.Hook(Ptr($72D0F7), @Hook_FU_D);
 
   // Add FU:A/G commands
-  ApiJack.HookCode(Ptr($72D181), @Hook_FU_EXT);
+  ApiJack.Hook(Ptr($72D181), @Hook_FU_EXT);
 
   // Add IP:M/S commands
-  ApiJack.HookCode(Ptr($768B32), @Hook_IP_EXT);
+  ApiJack.Hook(Ptr($768B32), @Hook_IP_EXT);
 
   // Add extended OW:C?(currentPlayer)/?(uiPlayer) syntax
-  ApiJack.HookCode(Ptr($737BCE), @Hook_OW_C);
+  ApiJack.Hook(Ptr($737BCE), @Hook_OW_C);
 
   // Fix HE:V#1/#2/#3 to allow #2 to be any positive object ID, applying mod 32 to it.
   // This fix allows to play XXL maps without scripts fixing.
   Core.p.WriteDataPatch(Ptr($746319), ['8365B01FEB19']);
 
   // Rewrite DO:P implementation
-  Core.Hook(Ptr($72D79C), Core.HOOKTYPE_JUMP, @Hook_DO_P);
+  ApiJack.Hook(Ptr($72D79C), @Hook_DO_P, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   // Replace ZvsCheckFlags with own implementation, free from e-variables issues
-  Core.Hook(@ZvsGetFlags, Core.HOOKTYPE_JUMP, @Hook_ZvsGetFlags);
+  ApiJack.Hook(@ZvsGetFlags, @Hook_ZvsGetFlags, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   // Replace ZvsCheckFlags with own implementation, free from e-variables issues
-  Core.Hook(@ZvsCheckFlags, Core.HOOKTYPE_JUMP, @Hook_ZvsCheckFlags);
+  ApiJack.Hook(@ZvsCheckFlags, @Hook_ZvsCheckFlags, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   // Replace GetNum with own implementation, capable to process named global variables
-  Core.Hook(@ZvsGetNum, Core.HOOKTYPE_JUMP, @Hook_ZvsGetNum);
+  ApiJack.Hook(@ZvsGetNum, @Hook_ZvsGetNum, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   // Replace Apply with own implementation, capable to process named global variables
-  Core.Hook(@ZvsApply, Core.HOOKTYPE_JUMP, @Hook_ZvsApply);
+  ApiJack.Hook(@ZvsApply, @Hook_ZvsApply, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   // Replace ApplyString with own implementation, capable to process all strings
-  Core.Hook(@ZvsApplyString, Core.HOOKTYPE_JUMP, @Hook_ZvsApplyString);
+  ApiJack.Hook(@ZvsApplyString, @Hook_ZvsApplyString, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   // Replace ApplyString with own implementation, capable to process all strings
-  Core.Hook(@ZvsNewMesMan, Core.HOOKTYPE_JUMP, @Hook_ZvsNewMesMan);
+  ApiJack.Hook(@ZvsNewMesMan, @Hook_ZvsNewMesMan, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   // Replace ZvsGetVarVal with GetErmParamValue
-  Core.Hook(@ZvsGetVarVal, Core.HOOKTYPE_JUMP, @Hook_ZvsGetVarVal);
+  ApiJack.Hook(@ZvsGetVarVal, @Hook_ZvsGetVarVal, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
   Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF909090890D0C0E84008885' +
@@ -9139,17 +9274,17 @@ begin
                                        '90909090909090909090909090']);
 
   (* Ovewrite GetNumAuto call from upper patch with Era filtering method *)
-  Core.Hook(Ptr($741EAE), Core.HOOKTYPE_CALL, @CustomGetNumAuto);
+  ApiJack.Hook(Ptr($741EAE), @CustomGetNumAuto, nil, 0, ApiJack.HOOKTYPE_CALL);
 
   (* Splice ProcessCmd for cmd local memory allocation/deallocation *)
   ApiJack.StdSplice(@ZvsProcessCmd, @Hook_ProcessCmd, ApiJack.CONV_CDECL, 3);
 
   (* Replace ERM interpolation function *)
-  Core.Hook(@ZvsInterpolateStr, Core.HOOKTYPE_JUMP, @InterpolateErmStr);
+  ApiJack.Hook(@ZvsInterpolateStr, @InterpolateErmStr, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   (* Replace ERM2String and ERM2String2 WoG functions *)
-  Core.Hook(Ptr($73DF05), Core.HOOKTYPE_JUMP, @Hook_ERM2String);
-  Core.Hook(Ptr($741D32), Core.HOOKTYPE_JUMP, @Hook_ERM2String2);
+  ApiJack.Hook(Ptr($73DF05), @Hook_ERM2String, nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(Ptr($741D32), @Hook_ERM2String2, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   (* Enable ERM tracking and pre-command initialization *)
   EventTracker := ErmTracking.TEventTracker.Create(TrackingOpts.MaxRecords)
@@ -9195,6 +9330,21 @@ begin
   SpellSettingsTable         := GameExt.GetRealAddr(SpellSettingsTable);
 end; // .procedure OnAfterStructRelocations
 
+procedure OnAfterErmInstructions (Event: PEvent); stdcall;
+var
+  Setup: WogEvo.TMultiPurposeDlgSetup;
+
+begin
+  // The code below is left to test purposes until updated multipurpose dialog API is ready
+  System.FillChar(Setup, sizeof(Setup), #0);
+  Setup.Title            := 'hello, world!';
+  Setup.RightSideCaption := 'select one';
+  Setup.Btn1Text         := 'choose me';
+  Setup.Btn2Text         := 'better choose me';
+  WogEvo.ShowMultiPurposeDlg(@Setup);
+  VarDump([Setup.SelectedItem]);
+end;
+
 begin
   UniqueRng       := FastRand.TXoroshiro128Rng.Create(FastRand.GenerateSecureSeed);
   LoadedErsFiles  := DataLib.NewList(Utils.OWNS_ITEMS);
@@ -9213,6 +9363,8 @@ begin
 
   InitFastIntOptimizationStructs;
 
+  WogEvo.SetMultiPurposeDlgHandler(DefaultMultiPurposeDlgHandler);
+
   EventMan.GetInstance.On('$OnEraLoadScripts',        OnEraLoadScripts);
   EventMan.GetInstance.On('$OnEraSaveScripts',        OnEraSaveScripts);
   EventMan.GetInstance.On('$OnLoadEraSettings',       OnLoadEraSettings);
@@ -9225,4 +9377,5 @@ begin
   EventMan.GetInstance.On('OnRemoteErmFuncCall',      OnRemoteErmFuncCall);
   EventMan.GetInstance.On('OnSavegameRead',           OnSavegameRead);
   EventMan.GetInstance.On('OnSavegameWrite',          OnSavegameWrite);
+  // EventMan.GetInstance.On('OnAfterErmInstructions',   OnAfterErmInstructions); // FIXME in next versions, once patcher_x86.dll is fixed
 end.

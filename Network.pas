@@ -402,10 +402,10 @@ begin
      Additionally new FU:D implementation allows to transfer strings and always compresses the data *)
   // Splice NetworkProcessOtherData
   ApiJack.StdSplice(Ptr($557CC0), @Hook_NetworkProcessOtherData, ApiJack.CONV_THISCALL, 2);
-  ApiJack.HookCode(Ptr($768809), @Hook_NetworkProcessBattleData);
+  ApiJack.Hook(Ptr($768809), @Hook_NetworkProcessBattleData);
 
   // Allow processing Era network events in a dialog, waiting for defender hero updated data after battle
-  ApiJack.HookCode(Ptr($557055), @Hook_NetworkProcessHeroesDataFromDefender);
+  ApiJack.Hook(Ptr($557055), @Hook_NetworkProcessHeroesDataFromDefender);
 
   // Remove WoG hook for ReceiveNetAMCommand
   Core.p.WriteDataPatch(Ptr($557E07), ['E5320B00']);

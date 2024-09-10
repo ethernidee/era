@@ -127,20 +127,20 @@ begin
   Erm.ArgXVars[MIN_DAMAGE_PARAM]       := -1;
   Erm.ArgXVars[MAX_DAMAGE_PARAM]       := -1;
 
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_BattleHint_GetDefender (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.ArgXVars[DEFENDER_STACK_N_PARAM] := Context.EAX;
-  result                               := Core.EXEC_DEF_CODE;
+  result                               := true;
 end;
 
 function Hook_BattleHint_CalcMinMaxDamage (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.ArgXVars[MIN_DAMAGE_PARAM] := Context.EDI;
   Erm.ArgXVars[MAX_DAMAGE_PARAM] := Context.EAX;
-  result                         := Core.EXEC_DEF_CODE;
+  result                         := true;
 end;
 
 procedure LogWindowMessage (Msg, wParam, lParam: integer);
@@ -379,7 +379,7 @@ begin
   IsTheoreticalAttack := pinteger(Context.EBP + 20)^;
   Distance            := pinteger(Context.EBP + 24)^;
 
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end; // .function Hook_StartCalcDamage
 
 function Hook_CalcDamage_GetDamageBonus (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -414,7 +414,7 @@ begin
   Erm.FireErmEvent(Erm.TRIGGER_ONSTACKTOSTACKDAMAGE);
 
   Context.EAX := Erm.RetXVars[FINAL_DAMAGE];
-  result      := Core.EXEC_DEF_CODE;
+  result      := true;
 end; // .function Hook_EndCalcDamage
 
 function Hook_AI_CalcStackAttackEffect_Start (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -443,27 +443,23 @@ begin
   result      := true;
 end; // .function Hook_AI_CalcStackAttackEffect_End
 
-function Hook_EnterChat (Context: ApiJack.PHookContext): longbool; stdcall;
+type
+  TEnterChatFunc = function (Dummy1, Dummy2: integer; Self: pointer): integer register;
+
+function Splice_EnterChat (OrigFunc: TEnterChatFunc; Self: pointer): integer; stdcall;
 const
-  NUM_ARGS = 0;
-
-  (* Event parameters *)
-  EVENT_SUBTYPE = 1;
-  BLOCK_CHAT    = 2;
-
-  ON_ENTER_CHAT = 0;
+  EVENT_SUBTYPE_ON_ENTER_CHAT = 0;
+  BLOCK_CHAT_ARG_IND          = 2;
 
 begin
-  Erm.ArgXVars[EVENT_SUBTYPE] := ON_ENTER_CHAT;
-  Erm.ArgXVars[BLOCK_CHAT]    := 0;
+  result := 0;
 
-  Erm.FireErmEvent(Erm.TRIGGER_ONCHAT);
-  result := not longbool(Erm.RetXVars[BLOCK_CHAT]);
+  Erm.FireErmEventEx(Erm.TRIGGER_ONCHAT, [EVENT_SUBTYPE_ON_ENTER_CHAT, ord(false)]);
 
-  if not result then begin
-    Context.RetAddr := Core.Ret(NUM_ARGS);
+  if Erm.RetXVars[BLOCK_CHAT_ARG_IND] = 0 then begin
+    result := OrigFunc(0, 0, Self);
   end;
-end; // .function Hook_EnterChat
+end;
 
 procedure ClearChatBox; assembler;
 asm
@@ -1254,27 +1250,27 @@ end;
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   (* extended MM Trigger *)
-  ApiJack.HookCode(Ptr($492409), @Hook_BattleHint_GetAttacker, nil, 7);
-  ApiJack.HookCode(Ptr($492442), @Hook_BattleHint_GetDefender, nil, 7);
-  ApiJack.HookCode(Ptr($493053), @Hook_BattleHint_CalcMinMaxDamage);
+  ApiJack.Hook(Ptr($492409), @Hook_BattleHint_GetAttacker, nil, 7);
+  ApiJack.Hook(Ptr($492442), @Hook_BattleHint_GetDefender, nil, 7);
+  ApiJack.Hook(Ptr($493053), @Hook_BattleHint_CalcMinMaxDamage);
 
   (* Key handling trigger *)
-  ApiJack.HookCode(Ptr($4F8226), @Hook_AfterCreateWindow, nil, 6);
+  ApiJack.Hook(Ptr($4F8226), @Hook_AfterCreateWindow, nil, 6);
 
   (* Stack to stack damage calculation *)
-  ApiJack.HookCode(Ptr($443C88), @Hook_StartCalcDamage, nil, 6);
-  ApiJack.HookCode(Ptr($443CA1), @Hook_CalcDamage_GetDamageBonus);
-  ApiJack.HookCode(Ptr($443DA7), @Hook_EndCalcDamage);
+  ApiJack.Hook(Ptr($443C88), @Hook_StartCalcDamage, nil, 6);
+  ApiJack.Hook(Ptr($443CA1), @Hook_CalcDamage_GetDamageBonus);
+  ApiJack.Hook(Ptr($443DA7), @Hook_EndCalcDamage);
 
   (* AI Target attack effect *)
-  ApiJack.HookCode(Ptr($4357E0), @Hook_AI_CalcStackAttackEffect_Start, nil, 6);
-  ApiJack.HookCode(Ptr($4358AA), @Hook_AI_CalcStackAttackEffect_End);
+  ApiJack.Hook(Ptr($4357E0), @Hook_AI_CalcStackAttackEffect_Start, nil, 6);
+  ApiJack.Hook(Ptr($4358AA), @Hook_AI_CalcStackAttackEffect_End);
 
   (* OnChat trigger *)
-  ApiJack.HookCode(Ptr($4022B0), @Hook_EnterChat);
-  ApiJack.HookCode(Ptr($554780), @Hook_ChatInput, nil, 6);
-  ApiJack.HookCode(Ptr($402298), @Hook_LeaveChat, nil, 6);
-  ApiJack.HookCode(Ptr($402240), @Hook_LeaveChat, nil, 6);
+  ApiJack.StdSplice(Ptr($4022B0), @Splice_EnterChat, CONV_THISCALL, 1);
+  ApiJack.Hook(Ptr($554780), @Hook_ChatInput, nil, 6);
+  ApiJack.Hook(Ptr($402298), @Hook_LeaveChat, nil, 6);
+  ApiJack.Hook(Ptr($402240), @Hook_LeaveChat, nil, 6);
 
   (* Main game cycle (AdvMgr, CombatMgr): OnGameEnter, OnGameLeave, OnWinGame, OnLoseGamer and MapFolder settings*)
   ApiJack.StdSplice(Ptr($4B0BA0), @Hook_ExecuteManager, ApiJack.CONV_THISCALL, 1);
@@ -1283,33 +1279,33 @@ begin
   ApiJack.StdSplice(Ptr($4BEFF0), @Hook_LoadSavegame, ApiJack.CONV_THISCALL, 4);
 
   (* Set top level main loop exception handle *)
-  ApiJack.HookCode(Ptr($4F824A), @Hook_MainGameLoop);
+  ApiJack.Hook(Ptr($4F824A), @Hook_MainGameLoop);
 
   (* Kingdom Overview mouse click *)
-  ApiJack.HookCode(Ptr($521E50), @Hook_KingdomOverviewMouseClick);
+  ApiJack.Hook(Ptr($521E50), @Hook_KingdomOverviewMouseClick);
 
   (* OnBeforeHeroInteraction trigger *)
   ApiJack.StdSplice(Ptr($4A2470), @Hook_OnHeroesInteraction, ApiJack.CONV_THISCALL, 5);
 
   (* OnAfterSaveGame trigger *)
-  ApiJack.HookCode(Ptr($4BEDBE), @Hook_SaveGame_After);
+  ApiJack.Hook(Ptr($4BEDBE), @Hook_SaveGame_After);
 
   (* Hero screen Enter/Exit triggers *)
   ApiJack.StdSplice(Ptr($4E1A70), @Hook_ShowHeroScreen, ApiJack.CONV_FASTCALL, 4);
 
   (* Add OnLoadHeroScreen event *)
-  ApiJack.HookCode(Ptr($4E1CC0), @Hook_UpdateHeroScreen);
+  ApiJack.Hook(Ptr($4E1CC0), @Hook_UpdateHeroScreen);
 
   (* OnBattleStackObtainsTurn event *)
-  ApiJack.HookCode(Ptr($464DF1), @Hook_BeforeBattleStackTurn);
+  ApiJack.Hook(Ptr($464DF1), @Hook_BeforeBattleStackTurn);
   ApiJack.StdSplice(Ptr($464F10), @Hook_Battle_StackObtainsTurn, ApiJack.CONV_THISCALL, 3);
 
   (* OnBattleRegeneratePhase event *)
-  ApiJack.HookCode(Ptr($446B50), @Hook_BattleRegeneratePhase);
-  ApiJack.HookCode(Ptr($446BD6), @Hook_BattleDoRegenerate);
+  ApiJack.Hook(Ptr($446B50), @Hook_BattleRegeneratePhase);
+  ApiJack.Hook(Ptr($446BD6), @Hook_BattleDoRegenerate);
 
   (* OnBattleActionEnd event *)
-  ApiJack.HookCode(Ptr($479508), @Hook_BattleActionEnd);
+  ApiJack.Hook(Ptr($479508), @Hook_BattleActionEnd);
 
   (* OnBuildTownBuilding event *)
   ApiJack.StdSplice(Ptr($5BF1E0), @Hook_BuildTownBuilding, ApiJack.CONV_THISCALL, 4);
@@ -1318,10 +1314,10 @@ begin
   ApiJack.StdSplice(Ptr($4B09D0), @Hook_EnterTownScreen, ApiJack.CONV_THISCALL, 2);
 
   (* OnEnterTownScreen event *)
-  ApiJack.HookCode(Ptr($5D4709), @Hook_SwitchTownScreen);
+  ApiJack.Hook(Ptr($5D4709), @Hook_SwitchTownScreen);
 
   (* OnDetermineMonInfoDlgUpgrade *)
-  ApiJack.HookCode(Ptr($4C6B1C), @Hook_InitMonInfoDlg);
+  ApiJack.Hook(Ptr($4C6B1C), @Hook_InitMonInfoDlg);
 
   (* OnCalculateTownIncome + widen result from int16 to int32 *)
   Core.p.WriteDataPatch(Ptr($4C76AD), ['909090']);
@@ -1333,18 +1329,18 @@ begin
   ApiJack.StdSplice(Ptr($5BFA00), @Hook_CalculateTownIncome, ApiJack.CONV_THISCALL, 1);
 
   (* OnBeforeLocalEvent, OnAfterLocalEvent *)
-  ApiJack.HookCode(Ptr($74DB1D), @Hook_BeforeHumanLocalEvent);
-  ApiJack.HookCode(Ptr($74DC24), @Hook_AfterHumanLocalEvent);
+  ApiJack.Hook(Ptr($74DB1D), @Hook_BeforeHumanLocalEvent);
+  ApiJack.Hook(Ptr($74DC24), @Hook_AfterHumanLocalEvent);
 
   (* OnTransferHero *)
   // Disable WoG call from CarryOverHero to _CarryOverHero. _CarryOverHero will be called in Hook_MarkTransferedCampaignHero
   Core.p.WriteDataPatch(Ptr($755E17), ['9090909090']);
 
   // Provide handling of all transferred campaign heroes, even inactive ones in transition zones
-  ApiJack.HookCode(Ptr($486069), @Hook_MarkTransferedCampaignHero);
+  ApiJack.Hook(Ptr($486069), @Hook_MarkTransferedCampaignHero);
 
   (* OnAfterHeroGainLevel *)
-  ApiJack.HookCode(Ptr($4DAF06), @Hook_AfterHeroGainLevel);
+  ApiJack.Hook(Ptr($4DAF06), @Hook_AfterHeroGainLevel);
 end; // .procedure OnAfterWoG
 
 procedure InitializeMonsWithRegeneration;

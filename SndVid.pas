@@ -12,7 +12,6 @@ uses
 
   ApiJack,
   AssocArrays,
-  Core,
   Crypto,
   DataLib,
   DlgMes,
@@ -378,6 +377,11 @@ begin
   end;
 end;
 
+procedure Splice_SavePointersToSndHandles (OrigFunc: pointer); stdcall;
+begin
+  // Dummy
+end;
+
 procedure OnLoadEraSettings (Event: PEvent); stdcall;
 begin
   LoadCDOpt := EraSettings.GetOpt('LoadCD').Bool(false);
@@ -397,7 +401,7 @@ begin
   pinteger($4F3DFE)^ := integer($90909090);
 
   (* Disable SavePointersToSndHandles function *)
-  Core.Hook(Ptr($5594F0), Core.HOOKTYPE_JUMP, Core.Ret(0));
+  ApiJack.StdSplice(Ptr($5594F0), @Splice_SavePointersToSndHandles, CONV_STDCALL, 0);
 
   (* Find game CD *)
   if LoadCDOpt then begin

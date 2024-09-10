@@ -2894,7 +2894,7 @@ begin
   z           := pinteger(C.EBP - 24)^;
 
   if ((1 shl GetThisPcHumanPlayerId) and GetAdvMapTileVisibility(x, y, z)) = 0 then begin
-    result := Core.EXEC_DEF_CODE;
+    result := true;
     exit;
   end;
 
@@ -2934,9 +2934,9 @@ begin
   if StrValue <> nil then begin
     Utils.SetPcharValue(ppointer(C.EBP + 12)^, StrValue.Value, sizeof(Erm.z[1]));
     C.RetAddr := Ptr($74DFFB);
-    result    := not Core.EXEC_DEF_CODE;
+    result    := false;
   end else begin
-    result := Core.EXEC_DEF_CODE;
+    result := true;
   end;
 
   SetLength(OldHint, Windows.LStrLen(pchar(Heroes.TextBuf)) + 1);
@@ -2948,7 +2948,7 @@ begin
 
   if result and (Windows.LStrCmp(pchar(Heroes.TextBuf), pchar(OldHint)) <> 0) then begin
     C.RetAddr := Ptr($74DFFB);
-    result    := not Core.EXEC_DEF_CODE;
+    result    := false;
   end;
 end; // .function Hook_ZvsCheckObjHint
 
@@ -3380,11 +3380,9 @@ begin
   SysUtils.FreeAndNil(Buf);
 end; // .procedure DumpErmMemory
 
-function Hook_DumpErmVars (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Splice_DumpErmVars (OrigFunc: pointer; Text1, Text2: pchar): longbool; stdcall;
 begin
   GameExt.GenerateDebugInfo;
-  Context.RetAddr := Core.Ret(0);
-  result          := not Core.EXEC_DEF_CODE;
 end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
@@ -3555,7 +3553,7 @@ end;
 procedure OnBeforeWoG (Event: PEvent); stdcall;
 begin
   (* Custom ERM memory dump *)
-  ApiJack.HookCode(@Erm.ZvsDumpErmVars, @Hook_DumpErmVars);
+  ApiJack.StdSplice(@Erm.ZvsDumpErmVars, @Splice_DumpErmVars, CONV_CDECL, 2);
 
   (* ERM direct call by hanlder instead of cmd linear scan implementation *)
   // Allocate additional local variable for FindErm. CmdHandler: TErmCmdHandler; absolute (EBP - $6C8)
@@ -3594,7 +3592,7 @@ end;
 procedure OnAfterWoG (Event: PEvent); stdcall;
 begin
   (* SN:H and new events for adventure map tile hints *)
-  ApiJack.HookCode(Ptr($74DE9D), @Hook_ZvsCheckObjHint);
+  ApiJack.Hook(Ptr($74DE9D), @Hook_ZvsCheckObjHint);
   ApiJack.StdSplice(Ptr($74E007), @Hook_ZvsHintControl0, ApiJack.CONV_THISCALL, 4);
   ApiJack.StdSplice(Ptr($74E179), @Hook_ZvsHintWindow, ApiJack.CONV_THISCALL, 4);
 
@@ -3615,7 +3613,7 @@ begin
   ApiJack.StdSplice(Ptr($59A890), @Hook_PlaySound, ApiJack.CONV_FASTCALL, 3);
 
   (* Allow SN:W variables interpolation *)
-  ApiJack.HookCode(Ptr($73DD82), @Hook_InterpolateErmString);
+  ApiJack.Hook(Ptr($73DD82), @Hook_InterpolateErmString);
 end; // .procedure OnAfterWoG
 
 procedure OnBeforeErmInstructions (Event: PEvent); stdcall;

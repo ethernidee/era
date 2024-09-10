@@ -606,21 +606,21 @@ function Hook_OpenTownDwelling (Context: ApiJack.PHookContext): longbool; stdcal
 begin
   NextRecruitMonsDlgOpenEventTownId     := (pcardinal(Context.EBX + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.EDI;
-  result                                := Core.EXEC_DEF_CODE;
+  result                                := true;
 end;
 
 function Hook_OpenTownHallDwelling (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := (pcardinal(pcardinal(Heroes.TOWN_MANAGER)^ + $38)^ - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.ESI;
-  result                                := Core.EXEC_DEF_CODE;
+  result                                := true;
 end;
 
 function Hook_OpenTownHordeDwelling (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   NextRecruitMonsDlgOpenEventTownId     := Heroes.GetTownManager.Town.Id;
   NextRecruitMonsDlgOpenEventDwellingId := pbyte(Heroes.GetTownManager.Town.TownType * 2 + Context.EDI + integer(GameExt.GetRealAddr(Ptr($68A3A2))))^;
-  result                                := Core.EXEC_DEF_CODE;
+  result                                := true;
 end;
 
 function Hook_OpenTownDwellingFromKingdomOverview (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -628,7 +628,7 @@ begin
   NextRecruitMonsDlgOpenEventTownId     := (cardinal(Context.EAX) - cardinal(@Heroes.ZvsGetTowns()[0])) div sizeof(Heroes.TTown);
   NextRecruitMonsDlgOpenEventDwellingId := Context.EDI;
   Context.EAX                           := Context.ESI;
-  result                                := Core.EXEC_DEF_CODE;
+  result                                := true;
 end;
 
 function Hook_UpdateAdvMapInRecruitMonsDlg (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -1165,25 +1165,25 @@ end;
 procedure OnAfterWoG (Event: EventMan.PEvent); stdcall;
 begin
   ApiJack.StdSplice(Ptr($4B0770), @Hook_OpenRecruitMonsDlg, ApiJack.CONV_THISCALL, 1);
-  ApiJack.HookCode(Ptr($70DD4A), @Hook_OpenTownDwelling);
+  ApiJack.Hook(Ptr($70DD4A), @Hook_OpenTownDwelling);
 
   // Prevent ESI (PTown) := EAX override. Exchange ESI, EAX instead
   Core.p.WriteDataPatch(Ptr($51FB9F), ['9690']);
-  ApiJack.HookCode(Ptr($51FBB5), @Hook_OpenTownDwellingFromKingdomOverview);
+  ApiJack.Hook(Ptr($51FBB5), @Hook_OpenTownDwellingFromKingdomOverview);
 
-  ApiJack.HookCode(Ptr($5DD2FC), @Hook_OpenTownHallDwelling);
-  ApiJack.HookCode(Ptr($5D4271), @Hook_OpenTownHordeDwelling);
-  ApiJack.HookCode(Ptr($5510D2), @Hook_UpdateAdvMapInRecruitMonsDlg);
-  ApiJack.HookCode(Ptr($550EB7), @Hook_RecruitMonsDlgMouseClick);
-  ApiJack.HookCode(Ptr($5DD3C8), @Hook_TownHallMouseClick);
-  ApiJack.HookCode(Ptr($550860), @Hook_RecruitDlgRecalc);
-  ApiJack.HookCode(Ptr($551089), @Hook_RecruitDlgAction);
-  ApiJack.HookCode(Ptr($550989), @Hook_AllowZeroCost);
-  ApiJack.HookCode(Ptr($5509A4), @Hook_AllowZeroResourceCost);
+  ApiJack.Hook(Ptr($5DD2FC), @Hook_OpenTownHallDwelling);
+  ApiJack.Hook(Ptr($5D4271), @Hook_OpenTownHordeDwelling);
+  ApiJack.Hook(Ptr($5510D2), @Hook_UpdateAdvMapInRecruitMonsDlg);
+  ApiJack.Hook(Ptr($550EB7), @Hook_RecruitMonsDlgMouseClick);
+  ApiJack.Hook(Ptr($5DD3C8), @Hook_TownHallMouseClick);
+  ApiJack.Hook(Ptr($550860), @Hook_RecruitDlgRecalc);
+  ApiJack.Hook(Ptr($551089), @Hook_RecruitDlgAction);
+  ApiJack.Hook(Ptr($550989), @Hook_AllowZeroCost);
+  ApiJack.Hook(Ptr($5509A4), @Hook_AllowZeroResourceCost);
 
   // Move close on buy logics down the code after update adv map logics
   Core.p.WriteDataPatch(Ptr($5510B1), ['9090909090909090909090909090909090909090']);
-  ApiJack.HookCode(Ptr($5510FA), @Hook_RecruitDlgCloseOnBuy);
+  ApiJack.Hook(Ptr($5510FA), @Hook_RecruitDlgCloseOnBuy);
 
   AdvErm.RegisterErmReceiver('RD', @Receiver_RD, AdvErm.CMD_PARAMS_CONFIG_NONE);
 end; // .procedure OnAfterWoG

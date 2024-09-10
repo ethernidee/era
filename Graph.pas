@@ -2175,11 +2175,11 @@ begin
   ApiJack.StdSplice(Ptr($55AE50), @Hook_LoadPcx16, ApiJack.CONV_THISCALL, 1);
 
   ApiJack.StdSplice(Ptr($47B680), @Hook_DrawBattleMonDefFrame, ApiJack.CONV_THISCALL, 15);
-  ApiJack.HookCode(Ptr($43E013),  @Hook_ApplyBloodLustToDefPalette);
-  ApiJack.HookCode(Ptr($43E0B9),  @Hook_ApplyPetrificationToDefPalette);
-  ApiJack.HookCode(Ptr($43E12E),  @Hook_ApplyGrayscaleToDefPalette);
-  ApiJack.HookCode(Ptr($43E1BA),  @Hook_ApplyCloningToDefPalette);
-  ApiJack.HookCode(Ptr($43E288),  @Hook_AfterBattleDefPaletteEffects);
+  ApiJack.Hook(Ptr($43E013),  @Hook_ApplyBloodLustToDefPalette);
+  ApiJack.Hook(Ptr($43E0B9),  @Hook_ApplyPetrificationToDefPalette);
+  ApiJack.Hook(Ptr($43E12E),  @Hook_ApplyGrayscaleToDefPalette);
+  ApiJack.Hook(Ptr($43E1BA),  @Hook_ApplyCloningToDefPalette);
+  ApiJack.Hook(Ptr($43E288),  @Hook_AfterBattleDefPaletteEffects);
 end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;

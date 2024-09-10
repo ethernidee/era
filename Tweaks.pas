@@ -427,7 +427,7 @@ begin
     Windows.WaitForSingleObject(hTimerEvent, 1);
   end;
 
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function New_Zvslib_GetPrivateProfileStringA
@@ -717,57 +717,57 @@ end; // .function Hook_GetHostByName
 function Hook_ApplyDamage_Ebx (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.EBX := ZvsAppliedDamage^;
-  result      := Core.EXEC_DEF_CODE;
+  result      := true;
 end;
 
 function Hook_ApplyDamage_Esi (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.ESI := ZvsAppliedDamage^;
-  result      := Core.EXEC_DEF_CODE;
+  result      := true;
 end;
 
 function Hook_ApplyDamage_Esi_Arg1 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.ESI                 := ZvsAppliedDamage^;
   pinteger(Context.EBP + $8)^ := ZvsAppliedDamage^;
-  result                      := Core.EXEC_DEF_CODE;
+  result                      := true;
 end;
 
 function Hook_ApplyDamage_Arg1 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP + $8)^ :=  ZvsAppliedDamage^;
-  result                      :=  Core.EXEC_DEF_CODE;
+  result                      :=  true;
 end;
 
 function Hook_ApplyDamage_Ebx_Local7 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Context.EBX                    := ZvsAppliedDamage^;
   pinteger(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
-  result                         := Core.EXEC_DEF_CODE;
+  result                         := true;
 end;
 
 function Hook_ApplyDamage_Local7 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 7 * 4)^ := ZvsAppliedDamage^;
-  result                         := Core.EXEC_DEF_CODE;
+  result                         := true;
 end;
 
 function Hook_ApplyDamage_Local4 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 4 * 4)^ := ZvsAppliedDamage^;
-  result                         := Core.EXEC_DEF_CODE;
+  result                         := true;
 end;
 
 function Hook_ApplyDamage_Local8 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 8 * 4)^ := ZvsAppliedDamage^;
-  result                         := Core.EXEC_DEF_CODE;
+  result                         := true;
 end;
 
 function Hook_ApplyDamage_Local13 (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - 13 * 4)^ := ZvsAppliedDamage^;
-  result                          := Core.EXEC_DEF_CODE;
+  result                          := true;
 end;
 
 function Hook_GetWoGAndErmVersions (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -809,7 +809,7 @@ begin
 
   //fatalerror(PPCHAR(Context.EBP + EBP_ARG_IMAGE_TEMPLATE)^);
 
-  result  :=  Core.EXEC_DEF_CODE;
+  result  :=  true;
 end; // .function Hook_ZvsLib_ExtractDef
 
 function Hook_ZvsLib_ExtractDef_GetGamePath (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -964,7 +964,7 @@ begin
   CombatOrigStackActionInfo.TargetPos    := BattleMgr.TargetPos;
   CombatOrigStackActionInfo.ActionParam2 := BattleMgr.ActionParam2;
 
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_WoGBeforeBattleAction_HandleEnchantress (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -982,7 +982,7 @@ begin
   // Monster type could be changed by script, use the one from combat manager
   pinteger(Context.EBP + LOCAL_ACTING_MON_TYPE)^ := BattleMgr.GetActiveStack().MonType;
 
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_WoGCallAfterBattleAction (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -1001,13 +1001,13 @@ begin
   Context.EDX := CombatOrigStackActionInfo.Spell;
   Context.EBX := CombatOrigStackActionInfo.Action;
 
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_OnBeforeBattlefieldVisible (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.FireErmEvent(Erm.TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE);
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_OnBattlefieldVisible (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -1037,7 +1037,7 @@ begin
     Erm.FireErmEvent(Erm.TRIGGER_BR);
   end;
 
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_OnCombatRound_Start (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -1046,14 +1046,14 @@ begin
     Inc(CombatRound);
   end;
 
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 function Hook_OnCombatRound_End (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   Erm.v[997] := CombatRound;
   Erm.FireErmEvent(Erm.TRIGGER_BR);
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 var
@@ -2057,13 +2057,13 @@ begin
   end;
 
   (* Ini handling *)
-  Core.Hook(ZvsReadStrIni, Core.HOOKTYPE_JUMP, @Hook_ReadStrIni);
-  Core.Hook(ZvsWriteStrIni, Core.HOOKTYPE_JUMP, @Hook_WriteStrIni);
-  Core.Hook(ZvsWriteIntIni, Core.HOOKTYPE_JUMP, @Hook_WriteIntIni);
+  ApiJack.Hook(ZvsReadStrIni,  @Hook_ReadStrIni,  nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(ZvsWriteStrIni, @Hook_WriteStrIni, nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(ZvsWriteIntIni, @Hook_WriteIntIni, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   (* DL dialogs centering *)
-  ApiJack.HookCode(Ptr($729C5A), @Hook_ZvsGetWindowWidth);
-  ApiJack.HookCode(Ptr($729C6D), @Hook_ZvsGetWindowHeight);
+  ApiJack.Hook(Ptr($729C5A), @Hook_ZvsGetWindowWidth);
+  ApiJack.Hook(Ptr($729C6D), @Hook_ZvsGetWindowHeight);
 
   (* Mark the freshest savegame *)
   MarkFreshestSavegame;
@@ -2074,7 +2074,7 @@ begin
   end;
 
   (* Fix HotSeat second hero name *)
-  ApiJack.HookCode(Ptr($5125B0), @Hook_SetHotseatHeroName, nil, 6);
+  ApiJack.Hook(Ptr($5125B0), @Hook_SetHotseatHeroName, nil, 6);
   Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
 
   (* Universal CPU patch *)
@@ -2085,7 +2085,7 @@ begin
     end;
 
     hTimerEvent := Windows.CreateEvent(nil, true, false, nil);
-    Core.Hook(Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'), Core.HOOKTYPE_BRIDGE, @Hook_PeekMessageA);
+    ApiJack.Hook(Windows.GetProcAddress(GetModuleHandle('user32.dll'), 'PeekMessageA'), @Hook_PeekMessageA, nil, 0, ApiJack.HOOKTYPE_BRIDGE);
   end;
 
   (* Remove duplicate ResetAll call *)
@@ -2115,31 +2115,31 @@ begin
   ApiJack.StdSplice(Windows.GetProcAddress(Windows.GetModuleHandle('ws2_32.dll'), 'gethostbyname'), @Hook_GetHostByName, ApiJack.CONV_STDCALL, 1);
 
   (* Fix ApplyDamage calls, so that !?MF1 damage is displayed correctly in log *)
-  ApiJack.HookCode(Ptr($43F95B + 5), @Hook_ApplyDamage_Ebx_Local7);
-  ApiJack.HookCode(Ptr($43FA5E + 5), @Hook_ApplyDamage_Ebx);
-  ApiJack.HookCode(Ptr($43FD3D + 5), @Hook_ApplyDamage_Local7);
-  ApiJack.HookCode(Ptr($4400DF + 5), @Hook_ApplyDamage_Ebx);
-  ApiJack.HookCode(Ptr($440858 + 5), @Hook_ApplyDamage_Esi_Arg1);
-  ApiJack.HookCode(Ptr($440E70 + 5), @Hook_ApplyDamage_Ebx);
-  ApiJack.HookCode(Ptr($441048 + 5), @Hook_ApplyDamage_Arg1);
-  ApiJack.HookCode(Ptr($44124C + 5), @Hook_ApplyDamage_Esi);
-  ApiJack.HookCode(Ptr($441739 + 5), @Hook_ApplyDamage_Local4);
-  ApiJack.HookCode(Ptr($44178A + 5), @Hook_ApplyDamage_Local8);
-  ApiJack.HookCode(Ptr($46595F + 5), @Hook_ApplyDamage_Arg1);
-  ApiJack.HookCode(Ptr($469A93 + 5), @Hook_ApplyDamage_Ebx);
-  ApiJack.HookCode(Ptr($5A1065 + 5), @Hook_ApplyDamage_Local13);
+  ApiJack.Hook(Ptr($43F95B + 5), @Hook_ApplyDamage_Ebx_Local7);
+  ApiJack.Hook(Ptr($43FA5E + 5), @Hook_ApplyDamage_Ebx);
+  ApiJack.Hook(Ptr($43FD3D + 5), @Hook_ApplyDamage_Local7);
+  ApiJack.Hook(Ptr($4400DF + 5), @Hook_ApplyDamage_Ebx);
+  ApiJack.Hook(Ptr($440858 + 5), @Hook_ApplyDamage_Esi_Arg1);
+  ApiJack.Hook(Ptr($440E70 + 5), @Hook_ApplyDamage_Ebx);
+  ApiJack.Hook(Ptr($441048 + 5), @Hook_ApplyDamage_Arg1);
+  ApiJack.Hook(Ptr($44124C + 5), @Hook_ApplyDamage_Esi);
+  ApiJack.Hook(Ptr($441739 + 5), @Hook_ApplyDamage_Local4);
+  ApiJack.Hook(Ptr($44178A + 5), @Hook_ApplyDamage_Local8);
+  ApiJack.Hook(Ptr($46595F + 5), @Hook_ApplyDamage_Arg1);
+  ApiJack.Hook(Ptr($469A93 + 5), @Hook_ApplyDamage_Ebx);
+  ApiJack.Hook(Ptr($5A1065 + 5), @Hook_ApplyDamage_Local13);
 
   (* Fix negative offsets handling in fonts *)
   Core.p.WriteDataPatch(Ptr($4B534A), ['B6']);
   Core.p.WriteDataPatch(Ptr($4B53E6), ['B6']);
 
   (* Fix WoG/ERM versions *)
-  ApiJack.HookCode(Ptr($73226C), @Hook_GetWoGAndErmVersions, nil, 14);
+  ApiJack.Hook(Ptr($73226C), @Hook_GetWoGAndErmVersions, nil, 14);
 
   (*  Fix zvslib1.dll ExtractDef function to support mods  *)
-  ApiJack.HookCode(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + 3), @Hook_ZvsLib_ExtractDef);
+  ApiJack.Hook(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + 3), @Hook_ZvsLib_ExtractDef);
 
-  ApiJack.HookCode(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS), @Hook_ZvsLib_ExtractDef_GetGamePath);
+  ApiJack.Hook(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS), @Hook_ZvsLib_ExtractDef_GetGamePath);
 
   Core.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
 
@@ -2160,13 +2160,13 @@ begin
 
   (* Fix battle round counting: no !?BR before battlefield is shown, negative FIRST_TACTICS_ROUND incrementing for the whole tactics phase, the
      first real round always starts from 0 *)
-  ApiJack.HookCode(Ptr($75EAEA), @Hook_OnBeforeBattlefieldVisible);
-  ApiJack.HookCode(Ptr($462E2B), @Hook_OnBattlefieldVisible);
-  ApiJack.HookCode(Ptr($75D137), @Hook_OnAfterTacticsPhase);
+  ApiJack.Hook(Ptr($75EAEA), @Hook_OnBeforeBattlefieldVisible);
+  ApiJack.Hook(Ptr($462E2B), @Hook_OnBattlefieldVisible);
+  ApiJack.Hook(Ptr($75D137), @Hook_OnAfterTacticsPhase);
   // Call ZvsNoMoreTactic1 in network game for the opposite side
-  Core.Hook(Ptr($473E89), Core.HOOKTYPE_CALL, ZvsNoMoreTactic1);
-  ApiJack.HookCode(Ptr($76065B), @Hook_OnCombatRound_Start);
-  ApiJack.HookCode(Ptr($7609A3), @Hook_OnCombatRound_End);
+  ApiJack.Hook(Ptr($473E89), ZvsNoMoreTactic1, nil, 0, ApiJack.HOOKTYPE_CALL);
+  ApiJack.Hook(Ptr($76065B), @Hook_OnCombatRound_Start);
+  ApiJack.Hook(Ptr($7609A3), @Hook_OnCombatRound_End);
 
   // Disable BACall2 function, generating !?BR event, because !?BR will be the same as OnCombatRound now
   Core.p.WriteDataPatch(Ptr($74D1AB), ['C3']);
@@ -2188,7 +2188,7 @@ begin
   Core.p.WriteDataPatch(Ptr($762604), ['C5']);
 
   // Fix creature experience overflow after battle
-  ApiJack.HookCode(Ptr($719225), @Hook_PostBattle_OnAddCreaturesExp);
+  ApiJack.Hook(Ptr($719225), @Hook_PostBattle_OnAddCreaturesExp);
 
   // Fix DisplayComplexDialog to overload the last argument
   // closeTimeoutMsec is now TComplexDialogOpts
@@ -2196,24 +2196,24 @@ begin
   //  4 bits for msgType (1 - ok, 2 - question, 4 - popup, etc), 0 is treated as 1.
   //  4 bits for text alignment + 1.
   //  8 bits for H3 string internal purposes (0 mostly).
-  ApiJack.HookCode(Ptr($4F7D83), @Hook_DisplayComplexDialog_GetTimeout);
+  ApiJack.Hook(Ptr($4F7D83), @Hook_DisplayComplexDialog_GetTimeout);
   // Nop dlg.closeTimeoutMsec := closeTimeoutMsec
   Core.p.WriteDataPatch(Ptr($4F7E19), ['909090']);
   // Nop dlg.msgType := MSG_TYPE_MES
   Core.p.WriteDataPatch(Ptr($4F7E4A), ['90909090909090']);
 
   (* Fix ShowParsedDlg8Items function to allow custom text alignment and preselected item *)
-  ApiJack.HookCode(Ptr($4F72B5), @Hook_ShowParsedDlg8Items_CreateTextField);
-  ApiJack.HookCode(Ptr($4F7136), @Hook_ShowParsedDlg8Items_Init);
+  ApiJack.Hook(Ptr($4F72B5), @Hook_ShowParsedDlg8Items_CreateTextField);
+  ApiJack.Hook(Ptr($4F7136), @Hook_ShowParsedDlg8Items_Init);
 
   (* Fix ZvsDisplay8Dialog to 2 extra arguments (msgType, alignment) and return -1 or 0..7 for chosen picture or 0/1 for question *)
-  ApiJack.HookCode(Ptr($7169EB), @Hook_ZvsDisplay8Dialog_BeforeShow);
+  ApiJack.Hook(Ptr($7169EB), @Hook_ZvsDisplay8Dialog_BeforeShow);
 
   (* Patch ParsePicture function to allow "0 something" values in generic h3 dialogs *)
   // Allocate new local variables EBP - $0B4
   Core.p.WriteDataPatch(Ptr($4F555A), ['B4000000']);
   // Unpack highest bit of Type parameter as "display 0 quantities" flag into new local variable
-  ApiJack.HookCode(Ptr($4F5564), @Hook_ParsePicture_Start);
+  ApiJack.Hook(Ptr($4F5564), @Hook_ParsePicture_Start);
 
   (* Fix WoG HDlg::BuildPcx to allow .pcx16 virtual file extension to load image as pcx16 *)
   ApiJack.StdSplice(Ptr($7287FB), @Hook_HDlg_BuildPcx, ApiJack.CONV_STDCALL, 7);
@@ -2222,7 +2222,7 @@ begin
   // Remove WoG FairePower hook
   Core.p.WriteDataPatch(Ptr($44836D), ['8B464C8D0480']);
   // Add new FairePower hook
-  ApiJack.HookCode(Ptr($44836D), @Hook_HandleMonsterCast_End);
+  ApiJack.Hook(Ptr($44836D), @Hook_HandleMonsterCast_End);
   // Disable Santa's every day growth
   Core.p.WriteDataPatch(Ptr($760D6D), ['EB']);
   // Restore Santa's normal growth
@@ -2247,19 +2247,19 @@ begin
   ApiJack.StdSplice(Ptr($75ADD9), @Hook_StartBattle, ApiJack.CONV_THISCALL, 11);
 
   (* Always send original (unmodified) battle stack action info to remote side in PvP battles  *)
-  ApiJack.HookCode(Ptr($75C69E), @Hook_WoGBeforeBattleAction);
-  ApiJack.HookCode(Ptr($47883B), @Hook_SendBattleAction_CopyActionParams);
+  ApiJack.Hook(Ptr($75C69E), @Hook_WoGBeforeBattleAction);
+  ApiJack.Hook(Ptr($47883B), @Hook_SendBattleAction_CopyActionParams);
 
   (* Trigger OnBeforeBattleAction before Enchantress, Hell Steed and creature experience mass spell processing *)
-  ApiJack.HookCode(Ptr($75C96C), @Hook_WoGBeforeBattleAction_HandleEnchantress);
+  ApiJack.Hook(Ptr($75C96C), @Hook_WoGBeforeBattleAction_HandleEnchantress);
   Core.p.WriteDataPatch(Ptr($75CB26), ['9090909090909090909090']);
 
   (* Use CombatRound in OnAfterBattleAction trigger for v997 *)
-  ApiJack.HookCode(Ptr($75D306), @Hook_WoGCallAfterBattleAction);
+  ApiJack.Hook(Ptr($75D306), @Hook_WoGCallAfterBattleAction);
 
   (* Send and receive unique identifier for each battle to use in deterministic PRNG in multiplayer *)
-  ApiJack.HookCode(Ptr($763796), @Hook_ZvsAdd2Send);
-  ApiJack.HookCode(Ptr($763BA4), @Hook_ZvsGet4Receive);
+  ApiJack.Hook(Ptr($763796), @Hook_ZvsAdd2Send);
+  ApiJack.Hook(Ptr($763BA4), @Hook_ZvsGet4Receive);
 
   (* Introduce new internal triggers $OnBeforeBattleBeforeDataSend and $OnAfterBattleBeforeDataSend *)
   ApiJack.StdSplice(Ptr($74D160), @Hook_ZvsTriggerIp, ApiJack.CONV_CDECL, 1);
@@ -2271,15 +2271,15 @@ begin
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_RandomRange, ApiJack.CONV_FASTCALL, 2);
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
-  ApiJack.HookCode(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
+  ApiJack.Hook(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
 
   (* Add up to 10 animated DEFs support in DL-dialogs by restoring commented ZVS code *)
-  ApiJack.HookCode(Ptr($72A1F6), @Hook_DL_D_ItemCreation);
-  ApiJack.HookCode(Ptr($729513), @Hook_ErmDlgFunction_HandleAnimatedDef);
+  ApiJack.Hook(Ptr($72A1F6), @Hook_DL_D_ItemCreation);
+  ApiJack.Hook(Ptr($729513), @Hook_ErmDlgFunction_HandleAnimatedDef);
 
   (* Move acredits.smk video positon to json config and treat out-of-bounds coordinates as video switch-off *)
-  ApiJack.HookCode(Ptr($706609), @Hook_ShowMainMenuVideo);
-  ApiJack.HookCode(Ptr($4EEEE8), @Hook_OpenMainMenuVideo);
+  ApiJack.Hook(Ptr($706609), @Hook_ShowMainMenuVideo);
+  ApiJack.Hook(Ptr($4EEEE8), @Hook_OpenMainMenuVideo);
 
   (* Fix Blood Dragons aging change from 20% to 40% *)
   Core.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
@@ -2288,12 +2288,12 @@ begin
   Core.p.WriteDataPatch(Ptr($75ADC1), ['9090']);
 
   (* Use click coords to show popup dialogs almost everywhere *)
-  ApiJack.HookCode(Ptr($4F6D54), @Hook_Show3PicDlg_PrepareDialogStruct);
+  ApiJack.Hook(Ptr($4F6D54), @Hook_Show3PicDlg_PrepareDialogStruct);
   ApiJack.StdSplice(Ptr($5FF3A0), @Hook_Dlg_SendMsg, ApiJack.CONV_THISCALL, 2);
 
   if FALSE then begin
     // Disabled, the patch simply restores SOD behavior on adventure map
-    ApiJack.HookCode(Ptr($7575A3), @Hook_ZvsPlaceCreature_End);
+    ApiJack.Hook(Ptr($7575A3), @Hook_ZvsPlaceCreature_End);
   end;
 
   (* Fix PrepareDialog3Struct inner width calculation: dlgWidth - 50 => dlgWidth - 40, centering the text *)

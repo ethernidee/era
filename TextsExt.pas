@@ -71,7 +71,7 @@ end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent);
 begin
-  ApiJack.HookCode(Ptr($55C106), @Hook_LoadTextFromFile);
+  ApiJack.Hook(Ptr($55C106), @Hook_LoadTextFromFile);
 end;
 
 begin

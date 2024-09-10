@@ -327,12 +327,7 @@ begin
     AppliedPatch := AppliedPatch^;
   end;
 
-  result := ApiJack.HookCode(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch));
-end;
-
-function CalcHookPatchSize (Addr: pointer): integer; stdcall;
-begin
-  result := ApiJack.CalcHookPatchSize(Addr);
+  result := ApiJack.Hook(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch));
 end;
 
 (* The patch will be rollback and internal memory and freed. Do not use it anymore *)
@@ -354,7 +349,7 @@ end;
 (* Deprecated legacy. Use HookCode instead *)
 function ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer): {n} pointer; stdcall;
 begin
-  result := Core.Hook(CodeAddr, HookType, HandlerAddr);
+  result := ApiJack.Hook(CodeAddr, HandlerAddr, nil, 0, ApiJack.THookType(HookType));
 end;
 
 procedure Hook (HandlerAddr: pointer; HookType: integer; PatchSize: integer; CodeAddr: pointer); stdcall;
@@ -791,7 +786,6 @@ exports
   AllocErmFunc,
   ApiHook,
   Ask,
-  CalcHookPatchSize,
   ClearIniCache,
   Core.WriteAtCode,
   DecorateInt,

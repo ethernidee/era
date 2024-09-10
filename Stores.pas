@@ -30,7 +30,7 @@ const
   DUMP_SAVEGAME_SECTIONS_DIR   = EraSettings.DEBUG_DIR + '\Savegame Sections';
   ERA_SAVEGAME_VERSION_SECTION = 'Era.SavegameVersion';
   SAVEGAME_MIN_VERSION         = 3916;
-  COLOR_TAG_RED                = '{~F01111}';
+  COLOR_TAG_RED                = '{~F03333}';
 
 type
   (* Import *)
@@ -661,7 +661,7 @@ begin
     Context.RetAddr := Ptr($704F10);
   end;
 
-  result := not Core.EXEC_DEF_CODE;
+  result := false;
 end; // .function Hook_SaveGameWrite
 
 function Hook_SaveGameRead (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -727,7 +727,7 @@ begin
     Context.RetAddr := Ptr($7051DC);
   end;
 
-  result := not Core.EXEC_DEF_CODE;
+  result := false;
 end; // .function Hook_SaveGameRead
 
 procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
@@ -737,9 +737,9 @@ end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
-  ApiJack.HookCode(Ptr($4BEB65), @Hook_SaveGame);
-  ApiJack.HookCode(Ptr($704EEC), @Hook_SaveGameWrite, nil, 6);
-  ApiJack.HookCode(Ptr($7051B8), @Hook_SaveGameRead, nil, 6);
+  ApiJack.Hook(Ptr($4BEB65), @Hook_SaveGame);
+  ApiJack.Hook(Ptr($704EEC), @Hook_SaveGameWrite, nil, 6);
+  ApiJack.Hook(Ptr($7051B8), @Hook_SaveGameRead, nil, 6);
 
   (* Remove Erm trigger "BeforeSaveGame" call *)
   Core.p.WriteDataPatch(Ptr($7051F5), ['9090909090']);

@@ -102,10 +102,10 @@ begin
   PINTEGER($752B33)^ := MapSize;
 end; // .procedure PatchSquaresRefs
 
-function Hook_BeforeResetErmFunc (Context: ApiJack.PHookContext): LONGBOOL; stdcall;
+function Hook_BeforeResetErmFunc (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   EventMan.GetInstance.Fire('$OnBeforeResetErmFunc');
-  result := Core.EXEC_DEF_CODE;
+  result := true;
 end;
 
 procedure OnSavegameWrite (Event: GameExt.PEvent); stdcall;
@@ -141,7 +141,7 @@ begin
   PBYTE($752470)^    := byte($90);
 
   // $OnBeforeResetErmFunc event for patching PO code before being inited by ERM
-  ApiJack.HookCode(Ptr($75259E), @Hook_BeforeResetErmFunc);
+  ApiJack.Hook(Ptr($75259E), @Hook_BeforeResetErmFunc);
 end; // .procedure OnAfterWoG
 
 begin

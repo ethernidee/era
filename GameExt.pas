@@ -59,8 +59,8 @@ const
 
   NO_EVENT_DATA = nil;
 
-  ERA_VERSION_STR = '3.9.15';
-  ERA_VERSION_INT = 3915;
+  ERA_VERSION_STR = '3.9.16';
+  ERA_VERSION_INT = 3916;
 
   FALLBACK_TO_ORIGINAL      = true;
   DONT_FALLBACK_TO_ORIGINAL = false;
@@ -396,7 +396,7 @@ var
     i:               integer;
 
 begin
-  FileLines := Lists.NewSimpleStrList();;
+  FileLines := Lists.NewSimpleStrList();
   result    := Lists.NewSimpleStrList();
   // * * * * * //
   result.CaseInsensitive := true;
