@@ -318,16 +318,16 @@ begin
   result := ApiJack.StdSplice(OrigFunc, HandlerFunc, ApiJack.TCallingConv(CallingConv), NumArgs, CustomParam, ApiJack.PAppliedPatch(AppliedPatch));
 end;
 
-(* Installs new hook at specified address. Returns pointer to bridge with original code. Optionally specify address of a pointer to write applied patch structure pointer to.
-   It will allow to rollback the patch later. *)
-function HookCode (Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer): pointer; stdcall;
+(* Installs new hook at specified address. Returns pointer to bridge with original code if any. Optionally specify address of a pointer to write applied patch structure
+   pointer to. It will allow to rollback the patch later. MinCodeSize specifies original code size to be erased (nopped). Use 0 in most cases. *)
+function Hook (Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer; MinCodeSize, HookType: integer): {n} pointer; stdcall;
 begin
   if AppliedPatch <> nil then begin
     New(ApiJack.PAppliedPatch(AppliedPatch^));
     AppliedPatch := AppliedPatch^;
   end;
 
-  result := ApiJack.Hook(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch));
+  result := ApiJack.Hook(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch), MinCodeSize, ApiJack.THookType(HookType));
 end;
 
 (* The patch will be rollback and internal memory and freed. Do not use it anymore *)
@@ -344,17 +344,6 @@ begin
   if AppliedPatch <> nil then begin
     Dispose(AppliedPatch);
   end;
-end;
-
-(* Deprecated legacy. Use HookCode instead *)
-function ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer): {n} pointer; stdcall;
-begin
-  result := ApiJack.Hook(CodeAddr, HandlerAddr, nil, 0, ApiJack.THookType(HookType));
-end;
-
-procedure Hook (HandlerAddr: pointer; HookType: integer; PatchSize: integer; CodeAddr: pointer); stdcall;
-begin
-  Heroes.ShowMessage('"Hook" function is not supported anymore. Use "HookCode" instead');
 end;
 
 function GetArgXVars: PErmXVars; stdcall;
@@ -784,7 +773,6 @@ end;
 exports
   AdvErm.ExtendArrayLifetime,
   AllocErmFunc,
-  ApiHook,
   Ask,
   ClearIniCache,
   Core.WriteAtCode,
@@ -845,7 +833,6 @@ exports
   Heroes.GetGameState,
   Heroes.LoadTxt,
   Hook,
-  HookCode,
   Ini.ClearAllIniCache,
   IsCampaign,
   LoadImageAsPcx16,
