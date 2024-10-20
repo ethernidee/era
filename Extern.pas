@@ -20,6 +20,7 @@ uses
   DataLib,
   DlgMes,
   Ini,
+  PatchApi,
   StrLib,
   TypeWrappers,
   Utils,
@@ -63,9 +64,36 @@ type
 (***) implementation (***)
 
 
+type
+  TPlugin = class
+   protected
+        fName:    string;
+   {OI} fPatcher: PatchApi.TPatcherInstance; // external dll memory ownage
+
+   public
+    constructor Create (const Name: string);
+    destructor Destroy; override;
+
+    property Name:    string read fName;
+    property Patcher: PatchApi.TPatcherInstance read fPatcher;
+  end;
+
+  TPluginManager = class
+   protected
+   {O} fPlugins: {O} TDict {of TPlugin};
+
+   public
+    constructor Create;
+    destructor Destroy; override;
+
+    function FindPlugin (const Name: string): {n} TPlugin;
+    function RegisterPlugin ({O} Plugin: TPlugin): boolean;
+  end;
+
 var
-{O} IntRegistry: {U} TDict {of Ptr(integer)};
-{O} StrRegistry: {O} TDict {of TString};
+{O} IntRegistry:   {U} TDict {of Ptr(integer)};
+{O} StrRegistry:   {O} TDict {of TString};
+{O} PluginManager: TPluginManager;
 
 
 const
@@ -306,32 +334,58 @@ begin
   result := GameExt.ERA_VERSION_INT;
 end;
 
-function Splice (OrigFunc, HandlerFunc: pointer; CallingConv: integer; NumArgs: integer; {n} CustomParam: pinteger; {n} AppliedPatch: ppointer): pointer; stdcall;
+function Splice (Plugin: TPlugin; OrigFunc, HandlerFunc: pointer; CallingConv: integer; NumArgs: integer; {n} CustomParam: pinteger; {n} AppliedPatch: ppointer): pointer; stdcall;
 begin
+  {!} Assert(Plugin <> nil);
   {!} Assert((CallingConv >= ord(ApiJack.CONV_FIRST)) and (CallingConv <= ord(ApiJack.CONV_LAST)), Format('Splice: Invalid calling convention: %d', [CallingConv]));
-  {!} Assert(NumArgs >= 0, Format('Splice>> Invalid arguments number: %d', [NumArgs]));
+  {!} Assert(NumArgs >= 0, Format('Splice: Invalid arguments number: %d', [NumArgs]));
+
   if AppliedPatch <> nil then begin
     New(ApiJack.PAppliedPatch(AppliedPatch^));
     AppliedPatch := AppliedPatch^;
   end;
 
+  PatchApi.SetMainPatcherInstance(Plugin.Patcher);
   result := ApiJack.StdSplice(OrigFunc, HandlerFunc, ApiJack.TCallingConv(CallingConv), NumArgs, CustomParam, ApiJack.PAppliedPatch(AppliedPatch));
+  PatchApi.RestoreMainPatcherInstance;
 end;
 
 (* Installs new hook at specified address. Returns pointer to bridge with original code if any. Optionally specify address of a pointer to write applied patch structure
    pointer to. It will allow to rollback the patch later. MinCodeSize specifies original code size to be erased (nopped). Use 0 in most cases. *)
-function Hook (Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer; MinCodeSize, HookType: integer): {n} pointer; stdcall;
+function Hook (Plugin: TPlugin; Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer; MinCodeSize, HookType: integer): {n} pointer; stdcall;
+
+
 begin
+  {!} Assert(Plugin <> nil);
+
   if AppliedPatch <> nil then begin
     New(ApiJack.PAppliedPatch(AppliedPatch^));
     AppliedPatch := AppliedPatch^;
   end;
 
+  PatchApi.SetMainPatcherInstance(Plugin.Patcher);
   result := ApiJack.Hook(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch), MinCodeSize, ApiJack.THookType(HookType));
+  PatchApi.RestoreMainPatcherInstance;
+end;
+
+function WriteAtCode (Plugin: TPlugin; NumBytes: integer; {n} Src, {n} Dst: pointer): boolean; stdcall;
+begin
+  {!} Assert(Plugin <> nil);
+
+  PatchApi.SetMainPatcherInstance(Plugin.Patcher);
+  result := ApiJack.WriteAtCode(NumBytes, Src, Dst);
+  PatchApi.RestoreMainPatcherInstance;
 end;
 
 (* The patch will be rollback and internal memory and freed. Do not use it anymore *)
 procedure RollbackAppliedPatch ({O} AppliedPatch: pointer); stdcall;
+begin
+  {!} Assert(AppliedPatch <> nil);
+  ApiJack.PAppliedPatch(AppliedPatch).Rollback;
+  Dispose(AppliedPatch);
+end;
+
+function IsPatchOverwritten (AppliedPatch: pointer): TInt32Bool; stdcall;
 begin
   {!} Assert(AppliedPatch <> nil);
   ApiJack.PAppliedPatch(AppliedPatch).Rollback;
@@ -344,6 +398,12 @@ begin
   if AppliedPatch <> nil then begin
     Dispose(AppliedPatch);
   end;
+end;
+
+function GetAppliedPatchSize (AppliedPatch: pointer): integer; stdcall;
+begin
+  {!} Assert(AppliedPatch <> nil);
+  result := Length(ApiJack.PAppliedPatch(AppliedPatch).OldBytes);
 end;
 
 function GetArgXVars: PErmXVars; stdcall;
@@ -770,12 +830,69 @@ begin
   result := MinValue + integer(cardinal(result) mod RangeLen);
 end;
 
+function CreatePlugin (Name: pchar) : {On} TPlugin; stdcall;
+var
+  PluginName: string;
+
+begin
+  result     := nil;
+  PluginName := Name;
+
+  if PluginManager.FindPlugin(PluginName) = nil then begin
+    result := TPlugin.Create(PluginName);
+    PluginManager.RegisterPlugin(result);
+  end;
+end;
+
+constructor TPlugin.Create (const Name: string);
+begin
+  inherited Create;
+  Self.fName    := Name;
+  Self.fPatcher := PatchApi.GetPatcher.GetInstance(pchar(Name));
+
+  if Self.fPatcher = nil then begin
+    Self.fPatcher := PatchApi.GetPatcher.CreateInstance(pchar(Name));
+  end;
+end;
+
+destructor TPlugin.Destroy;
+begin
+  // do nothing
+  inherited;
+end;
+
+constructor TPluginManager.Create;
+begin
+  inherited;
+  Self.fPlugins := DataLib.NewDict(Utils.OWNS_ITEMS, not DataLib.CASE_SENSITIVE);
+end;
+
+destructor TPluginManager.Destroy;
+begin
+  SysUtils.FreeAndNil(Self.fPlugins);
+  inherited;
+end;
+
+function TPluginManager.FindPlugin (const Name: string): {n} TPlugin;
+begin
+  result := Self.fPlugins[Name];
+end;
+
+function TPluginManager.RegisterPlugin ({O} Plugin: TPlugin): boolean;
+begin
+  result := Self.fPlugins[Plugin.Name] = nil;
+
+  if result then begin
+    Self.fPlugins[Plugin.Name] := Plugin;
+  end;
+end;
+
 exports
   AdvErm.ExtendArrayLifetime,
   AllocErmFunc,
   Ask,
   ClearIniCache,
-  Core.WriteAtCode,
+  CreatePlugin,
   DecorateInt,
   Erm.DisableErmTracking,
   Erm.EnableErmTracking,
@@ -813,6 +930,7 @@ exports
   GameExt.GenerateDebugInfo,
   GameExt.GetRealAddr,
   GameExt.RedirectMemoryBlock,
+  GetAppliedPatchSize,
   GetArgXVars,
   GetAssocVarIntValue,
   GetAssocVarStrValue,
@@ -835,6 +953,7 @@ exports
   Hook,
   Ini.ClearAllIniCache,
   IsCampaign,
+  IsPatchOverwritten,
   LoadImageAsPcx16,
   MemFree,
   NameColor,
@@ -871,10 +990,12 @@ exports
   trStatic,
   trTemp,
   Tweaks.RandomRangeWithFreeParam,
+  WriteAtCode,
   WriteSavegameSection,
   WriteStrToIni;
 
 begin
-  IntRegistry := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
-  StrRegistry := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  IntRegistry   := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  StrRegistry   := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  PluginManager := TPluginManager.Create;
 end.
