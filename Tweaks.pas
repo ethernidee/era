@@ -2075,7 +2075,7 @@ begin
 
   (* Fix HotSeat second hero name *)
   ApiJack.Hook(Ptr($5125B0), @Hook_SetHotseatHeroName, nil, 6);
-  Core.WriteAtCode(Length(NOP7), pointer(NOP7), Ptr($5125F9));
+  Core.p.WriteDataPatch(Ptr($5125F9), ['90909090909090']);
 
   (* Universal CPU patch *)
   if CpuTargetLevel < 100 then begin
@@ -2097,7 +2097,7 @@ begin
   Addr            :=  Zvslib1Handle + 1666469;
   Addr            :=  pinteger(Addr + pinteger(Addr)^ + 6)^;
   NewAddr         :=  @New_Zvslib_GetPrivateProfileStringA;
-  Core.WriteAtCode(sizeof(NewAddr), @NewAddr, pointer(Addr));
+  Core.p.WriteDword(@NewAddr, integer(Addr));
 
   (* Redirect reading/writing game settings to ini *)
   // No saving settings after reading them

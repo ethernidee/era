@@ -10,6 +10,7 @@ uses
   SysUtils,
   Windows,
 
+  ApiJack,
   BinPatching,
   CmdApp,
   Core,
@@ -534,4 +535,5 @@ begin
   Core.SetDebugMapsDir(GameDir + '\' + DEBUG_MAPS_DIR);
 
   Windows.GetSystemTime(ProcessStartTime);
+  ApiJack.SetCodeWriter(WriteAtCode);
 end.
