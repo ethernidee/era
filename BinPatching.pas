@@ -1,11 +1,20 @@
 unit BinPatching;
-{
-DESCRIPTION:  Unit allows to load and apply binary patches in Era *.bin and *.json formats
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Unit allows to load and apply binary patches in Era *.bin and *.json formats.
+  Author:      Alexander Shostak aka Berserker
+*)
 
-interface
-uses SysUtils, Utils, PatchApi, Core, DataLib, Files;
+(***)  interface  (***)
+
+uses
+  SysUtils,
+
+  DataLib,
+  Debug,
+  Files,
+  Utils,
+
+  PatchApi;
 
 type
   (* Import *)
@@ -37,7 +46,7 @@ var
 procedure ApplyPatches (const DirPath: string);
 
 
-implementation
+(***)  implementation  (***)
 
 
 function GetUniquePatchName (const BasePatchName: string): string;
@@ -55,8 +64,8 @@ var
 {U} Patch:      PBinPatch;
     PatchName:  string;
     NumPatches: integer;
-    i:          integer;  
-  
+    i:          integer;
+
 begin
   {!} Assert(BinPatchFile <> nil);
   Patch := @BinPatchFile.Patches;
@@ -65,18 +74,18 @@ begin
   PatchName  := GetUniquePatchName(BinPatchSource);
 
   try
-    Patcher := Core.GlobalPatcher.CreateInstance(pchar(PatchName));
+    Patcher := PatchApi.GetPatcher.CreateInstance(pchar(PatchName));
 
     for i := 1 to NumPatches do begin
       if not Patcher.Write(Patch.Addr, @Patch.Bytes, Patch.NumBytes, IS_CODE_PATCH).IsApplied() then begin
-        Core.FatalError('Failed to write binary patch data at address '
+        Debug.FatalError('Failed to write binary patch data at address '
                         + IntToHex(integer(Patch.Addr), 8));
       end;
 
       Patch := Utils.PtrOfs(Patch, sizeof(Patch^) + Patch.NumBytes);
     end;
   except
-    Core.FatalError('Failed to apply binary patch "' + PatchName + '"');
+    Debug.FatalError('Failed to apply binary patch "' + PatchName + '"');
   end; // .try
 end; // .procedure ApplyBinPatch
 
@@ -96,7 +105,7 @@ end; // .function LoadBinPatch
 procedure ApplyPatches (const DirPath: string);
 var
   FileContents: string;
-  
+
 begin
   with Files.Locate(DirPath + '\*.bin', Files.ONLY_FILES) do begin
     while FindNext do begin

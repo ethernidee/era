@@ -15,9 +15,9 @@ uses
 
   Alg,
   ApiJack,
-  Core,
   Crypto,
   DataLib,
+  Debug,
   DlgMes,
   Ini,
   PatchApi,
@@ -207,12 +207,12 @@ end;
 
 procedure FatalError (Err: pchar); stdcall;
 begin
-  Core.FatalError(Err);
+  Debug.FatalError(Err);
 end;
 
 procedure NotifyError (Err: pchar); stdcall;
 begin
-  Core.NotifyError(Err);
+  Debug.NotifyError(Err);
 end;
 
 function GetButtonID (ButtonName: pchar): integer; stdcall;
@@ -302,7 +302,7 @@ begin
   end;
 
   if (ResizeAlg < ord(Low(Graph.TResizeAlg))) or (ResizeAlg > ord(High(Graph.TResizeAlg))) then begin
-    Core.NotifyError('Invalid ResizeAlg argument for LoadImageAsPcx16: ' + SysUtils.IntToStr(ResizeAlg));
+    Debug.NotifyError('Invalid ResizeAlg argument for LoadImageAsPcx16: ' + SysUtils.IntToStr(ResizeAlg));
     ResizeAlg := ord(Graph.ALG_DOWNSCALE);
   end;
 
@@ -388,8 +388,7 @@ end;
 function IsPatchOverwritten (AppliedPatch: pointer): TInt32Bool; stdcall;
 begin
   {!} Assert(AppliedPatch <> nil);
-  ApiJack.PAppliedPatch(AppliedPatch).Rollback;
-  Dispose(AppliedPatch);
+  result := ord(ApiJack.PAppliedPatch(AppliedPatch).IsOverwritten);
 end;
 
 (* Frees applied patch structure. Use it if you don't plan to rollback it anymore *)

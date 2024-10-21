@@ -1,14 +1,34 @@
 unit Lodman;
-{
-DESCRIPTION:  LOD archives manager. Includes resource redirection support
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-BASED ON:     "Lods" plugin by Sav, WoG Sources by ZVS
-}
+(*
+  Description: LOD archives manager. Includes resource redirection support.
+  Author:      Alexander Shostak aka Berserker
+  Based on:    "Lods" plugin by Sav, WoG Sources by ZVS
+*)
 
 (***)  interface  (***)
+
 uses
-  Windows, SysUtils, Math, Utils, Files, Core, Lists, AssocArrays, TypeWrappers, DataLib, Log, Json,
-  StrUtils, ApiJack, GameExt, Heroes, Stores, EventMan, DlgMes;
+  Math,
+  SysUtils,
+  Windows,
+
+  ApiJack,
+  AssocArrays,
+  DataLib,
+  Debug,
+  DlgMes,
+  Files,
+  Lists,
+  StrUtils,
+  TypeWrappers,
+  Utils,
+
+  EventMan,
+  GameExt,
+  Heroes,
+  Json,
+  Log,
+  Stores;
 
 const
   MAX_NUM_LODS = 100;
@@ -287,7 +307,7 @@ begin
             end; // .if
           end; // .for
         end else begin
-          Core.NotifyError('Invalid json config: "' + ConfigDir + '\' + FoundName + '"');
+          Debug.NotifyError('Invalid json config: "' + ConfigDir + '\' + FoundName + '"');
         end; // .else
       end; // .if
     end; // .while

@@ -10,8 +10,8 @@ uses
   Windows,
   SysUtils,
 
-  Core,
   DataLib,
+  Debug,
   DlgMes,
   Files,
   Json,
@@ -221,7 +221,7 @@ begin
   if LangData <> nil then begin
     ProcessBox(LangData, '');
   end else begin
-    Core.NotifyError('Invalid language json file: "' + ItemName + '"');
+    Debug.NotifyError('Invalid language json file: "' + ItemName + '"');
   end;
   // * * * * * //
   FreeAndNil(LangData);

@@ -17,9 +17,9 @@ uses
   CFiles,
   Concur,
   ConsoleApi,
-  Core,
   Crypto,
   DataLib,
+  Debug,
   DlgMes,
   FastRand,
   Files,
@@ -1858,19 +1858,19 @@ var
   i: integer;
 
 begin
-  {!} Core.ModuleContext.Lock;
-  Core.ModuleContext.UpdateModuleList;
+  {!} Debug.ModuleContext.Lock;
+  Debug.ModuleContext.UpdateModuleList;
 
   with FilesEx.WriteFormattedOutput(GameExt.GameDir + '\' + DEBUG_WINPE_MODULE_LIST_PATH) do begin
     Line('> Win32 executable modules');
     EmptyLine;
 
-    for i := 0 to Core.ModuleContext.ModuleList.Count - 1 do begin
-      Line(Core.ModuleContext.ModuleInfo[i].ToStr);
+    for i := 0 to Debug.ModuleContext.ModuleList.Count - 1 do begin
+      Line(Debug.ModuleContext.ModuleInfo[i].ToStr);
     end;
   end;
 
-  {!} Core.ModuleContext.Unlock;
+  {!} Debug.ModuleContext.Unlock;
 end; // .procedure DumpWinPeModuleList
 
 procedure DumpExceptionContext (ExcRec: Windows.PExceptionRecord; Context: Windows.PContext);
@@ -1886,8 +1886,8 @@ var
   i:             integer;
 
 begin
-  {!} Core.ModuleContext.Lock;
-  Core.ModuleContext.UpdateModuleList;
+  {!} Debug.ModuleContext.Lock;
+  Debug.ModuleContext.UpdateModuleList;
 
   with FilesEx.WriteFormattedOutput(GameExt.GameDir + '\' + DEBUG_EXCEPTION_CONTEXT_PATH) do begin
     case ExcRec.ExceptionCode of
@@ -1922,18 +1922,18 @@ begin
     end; // .switch ExcRec.ExceptionCode
 
     Line(ExceptionText + '.');
-    Line(Format('EIP: %s. Code: %x', [Core.ModuleContext.AddrToStr(Ptr(Context.Eip)), ExcRec.ExceptionCode]));
+    Line(Format('EIP: %s. Code: %x', [Debug.ModuleContext.AddrToStr(Ptr(Context.Eip)), ExcRec.ExceptionCode]));
     EmptyLine;
     Line('> Registers');
 
-    Line('EAX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Eax), Core.ANALYZE_DATA));
-    Line('ECX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ecx), Core.ANALYZE_DATA));
-    Line('EDX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edx), Core.ANALYZE_DATA));
-    Line('EBX: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebx), Core.ANALYZE_DATA));
-    Line('ESP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esp), Core.ANALYZE_DATA));
-    Line('EBP: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Ebp), Core.ANALYZE_DATA));
-    Line('ESI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Esi), Core.ANALYZE_DATA));
-    Line('EDI: ' + Core.ModuleContext.AddrToStr(Ptr(Context.Edi), Core.ANALYZE_DATA));
+    Line('EAX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Eax), Debug.ANALYZE_DATA));
+    Line('ECX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ecx), Debug.ANALYZE_DATA));
+    Line('EDX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Edx), Debug.ANALYZE_DATA));
+    Line('EBX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ebx), Debug.ANALYZE_DATA));
+    Line('ESP: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Esp), Debug.ANALYZE_DATA));
+    Line('EBP: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ebp), Debug.ANALYZE_DATA));
+    Line('ESI: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Esi), Debug.ANALYZE_DATA));
+    Line('EDI: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Edi), Debug.ANALYZE_DATA));
 
     EmptyLine;
     Line('> Callstack');
@@ -1945,7 +1945,7 @@ begin
         RetAddr := pinteger(Ebp + 4)^;
 
         if RetAddr <> 0 then begin
-          Line(Core.ModuleContext.AddrToStr(Ptr(RetAddr)));
+          Line(Debug.ModuleContext.AddrToStr(Ptr(RetAddr)));
           Ebp := pinteger(Ebp)^;
         end;
       end;
@@ -1965,7 +1965,7 @@ begin
           LineText := LineText + '*';
         end;
 
-        LineText := LineText + ': ' + Core.ModuleContext.AddrToStr(ppointer(Esp)^, Core.ANALYZE_DATA);
+        LineText := LineText + ': ' + Debug.ModuleContext.AddrToStr(ppointer(Esp)^, Debug.ANALYZE_DATA);
         Inc(Esp, sizeof(integer));
         Line(LineText);
       end; // .for
@@ -1974,7 +1974,7 @@ begin
     end; // .try
   end; // .with
 
-  {!} Core.ModuleContext.Unlock;
+  {!} Debug.ModuleContext.Unlock;
 end; // .procedure DumpExceptionContext
 
 procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; Context: Windows.PContext);
@@ -1988,7 +1988,7 @@ begin
     DumpExceptionContext(ExceptionRecord, Context);
     EventMan.GetInstance.Fire('OnGenerateDebugInfo');
     Windows.MessageBoxA(Heroes.hWnd^, pchar(Trans.Tr('era.game_crash_message', ['debug_dir', DEBUG_DIR])), '', Windows.MB_OK);
-    Core.KillThisProcess;
+    Debug.KillThisProcess;
   end;
 
   {!} ExceptionsCritSection.Leave;
@@ -2075,7 +2075,7 @@ begin
 
   (* Fix HotSeat second hero name *)
   ApiJack.Hook(Ptr($5125B0), @Hook_SetHotseatHeroName, nil, 6);
-  Core.p.WriteDataPatch(Ptr($5125F9), ['90909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($5125F9), ['90909090909090']);
 
   (* Universal CPU patch *)
   if CpuTargetLevel < 100 then begin
@@ -2097,7 +2097,7 @@ begin
   Addr            :=  Zvslib1Handle + 1666469;
   Addr            :=  pinteger(Addr + pinteger(Addr)^ + 6)^;
   NewAddr         :=  @New_Zvslib_GetPrivateProfileStringA;
-  Core.p.WriteDword(@NewAddr, integer(Addr));
+  PatchApi.p.WriteDword(@NewAddr, integer(Addr));
 
   (* Redirect reading/writing game settings to ini *)
   // No saving settings after reading them
@@ -2130,8 +2130,8 @@ begin
   ApiJack.Hook(Ptr($5A1065 + 5), @Hook_ApplyDamage_Local13);
 
   (* Fix negative offsets handling in fonts *)
-  Core.p.WriteDataPatch(Ptr($4B534A), ['B6']);
-  Core.p.WriteDataPatch(Ptr($4B53E6), ['B6']);
+  PatchApi.p.WriteDataPatch(Ptr($4B534A), ['B6']);
+  PatchApi.p.WriteDataPatch(Ptr($4B53E6), ['B6']);
 
   (* Fix WoG/ERM versions *)
   ApiJack.Hook(Ptr($73226C), @Hook_GetWoGAndErmVersions, nil, 14);
@@ -2141,19 +2141,19 @@ begin
 
   ApiJack.Hook(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS), @Hook_ZvsLib_ExtractDef_GetGamePath);
 
-  Core.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
+  PatchApi.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
 
   (* Syncronise object creation at local and remote PC *)
   EventMan.GetInstance.On('OnTrigger ' + IntToStr(Erm.TRIGGER_ONREMOTEEVENT), OnRemoteMapObjectPlace);
 
   (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
-  Core.p.WriteDataPatch(Ptr($4DC358), ['A0']);
+  PatchApi.p.WriteDataPatch(Ptr($4DC358), ['A0']);
 
   (* Fix MixedPos to not drop higher order bits and not treat them as underground flag *)
-  Core.p.WriteDataPatch(Ptr($711F4F), ['8B451425FFFFFF048945149090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($711F4F), ['8B451425FFFFFF048945149090909090909090']);
 
   (* Fix WoG bug: double !?OB54 event generation when attacking without moving due to Enter2Object + Enter2Monster2 calling *)
-  Core.p.WriteDataPatch(Ptr($757AA0), ['EB2C90909090']);
+  PatchApi.p.WriteDataPatch(Ptr($757AA0), ['EB2C90909090']);
 
   (* Fixe WoG adventure map mouse click handler: chat input produces left click event *)
   ApiJack.StdSplice(Ptr($74EF37), @Hook_WoGMouseClick3, CONV_THISCALL, 4);
@@ -2169,23 +2169,23 @@ begin
   ApiJack.Hook(Ptr($7609A3), @Hook_OnCombatRound_End);
 
   // Disable BACall2 function, generating !?BR event, because !?BR will be the same as OnCombatRound now
-  Core.p.WriteDataPatch(Ptr($74D1AB), ['C3']);
+  PatchApi.p.WriteDataPatch(Ptr($74D1AB), ['C3']);
 
   // Disable WoG AppearAfterTactics hook. We will call BR0 manually a bit after to reduce crashing probability
-  Core.p.WriteDataPatch(Ptr($462C19), ['E8F2051A00']);
+  PatchApi.p.WriteDataPatch(Ptr($462C19), ['E8F2051A00']);
 
   // Use CombatRound instead of combat manager field to summon creatures every nth turn via creature experience system
-  Core.p.WriteDataPatch(Ptr($71DFBE), ['8B15 %d', @CombatRound]);
+  PatchApi.p.WriteDataPatch(Ptr($71DFBE), ['8B15 %d', @CombatRound]);
 
   // Apply battle RNG seed right before placing obstacles, so that rand() calls in !?BF trigger would not influence battle obstacles
   ApiJack.StdSplice(Ptr($465E70), @Hook_PlaceBattleObstacles, ApiJack.CONV_THISCALL, 1);
 
   // Restore Nagash and Jeddite specialties
-  Core.p.WriteDataPatch(Ptr($753E0B), ['E9990000009090']); // PrepareSpecWoG => ignore new WoG settings
-  Core.p.WriteDataPatch(Ptr($79C3D8), ['FFFFFFFF']);       // HeroSpecWoG[0].Ind = -1
+  PatchApi.p.WriteDataPatch(Ptr($753E0B), ['E9990000009090']); // PrepareSpecWoG => ignore new WoG settings
+  PatchApi.p.WriteDataPatch(Ptr($79C3D8), ['FFFFFFFF']);       // HeroSpecWoG[0].Ind = -1
 
   // Fix check for multiplayer in attack type selection dialog, causing wrong "This feature does not work in Human vs Human network baced battle" message
-  Core.p.WriteDataPatch(Ptr($762604), ['C5']);
+  PatchApi.p.WriteDataPatch(Ptr($762604), ['C5']);
 
   // Fix creature experience overflow after battle
   ApiJack.Hook(Ptr($719225), @Hook_PostBattle_OnAddCreaturesExp);
@@ -2198,9 +2198,9 @@ begin
   //  8 bits for H3 string internal purposes (0 mostly).
   ApiJack.Hook(Ptr($4F7D83), @Hook_DisplayComplexDialog_GetTimeout);
   // Nop dlg.closeTimeoutMsec := closeTimeoutMsec
-  Core.p.WriteDataPatch(Ptr($4F7E19), ['909090']);
+  PatchApi.p.WriteDataPatch(Ptr($4F7E19), ['909090']);
   // Nop dlg.msgType := MSG_TYPE_MES
-  Core.p.WriteDataPatch(Ptr($4F7E4A), ['90909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($4F7E4A), ['90909090909090']);
 
   (* Fix ShowParsedDlg8Items function to allow custom text alignment and preselected item *)
   ApiJack.Hook(Ptr($4F72B5), @Hook_ShowParsedDlg8Items_CreateTextField);
@@ -2211,7 +2211,7 @@ begin
 
   (* Patch ParsePicture function to allow "0 something" values in generic h3 dialogs *)
   // Allocate new local variables EBP - $0B4
-  Core.p.WriteDataPatch(Ptr($4F555A), ['B4000000']);
+  PatchApi.p.WriteDataPatch(Ptr($4F555A), ['B4000000']);
   // Unpack highest bit of Type parameter as "display 0 quantities" flag into new local variable
   ApiJack.Hook(Ptr($4F5564), @Hook_ParsePicture_Start);
 
@@ -2220,28 +2220,28 @@ begin
 
   (* Fix Santa-Gremlins *)
   // Remove WoG FairePower hook
-  Core.p.WriteDataPatch(Ptr($44836D), ['8B464C8D0480']);
+  PatchApi.p.WriteDataPatch(Ptr($44836D), ['8B464C8D0480']);
   // Add new FairePower hook
   ApiJack.Hook(Ptr($44836D), @Hook_HandleMonsterCast_End);
   // Disable Santa's every day growth
-  Core.p.WriteDataPatch(Ptr($760D6D), ['EB']);
+  PatchApi.p.WriteDataPatch(Ptr($760D6D), ['EB']);
   // Restore Santa's normal growth
-  Core.p.WriteDataPatch(Ptr($760C56), ['909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($760C56), ['909090909090']);
   // Disable Santa's gifts
-  Core.p.WriteDataPatch(Ptr($75A964), ['9090']);
+  PatchApi.p.WriteDataPatch(Ptr($75A964), ['9090']);
 
   (* Fix multiplayer crashes: disable orig/diff.dat generation, always send packed whole savegames *)
-  Core.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
-  Core.p.WriteDataPatch(Ptr($6067E2), ['E809000000']);       // Disable WoG GZ functions hooks
-  Core.p.WriteDataPatch(Ptr($4D6FCC), ['E8AF001300']);       // ...
-  Core.p.WriteDataPatch(Ptr($4D700D), ['E8DEFE1200']);       // ...
-  Core.p.WriteDataPatch(Ptr($4CAF32), ['EB']);               // do not create orig.dat on send
-  if false then Core.p.WriteDataPatch(Ptr($4CAF37), ['01']); // save orig.dat on send compressed
-  Core.p.WriteDataPatch(Ptr($4CAD91), ['E99701000090']);     // do not perform savegame diffs
-  Core.p.WriteDataPatch(Ptr($41A0D1), ['EB']);               // do not create orig.dat on receive
-  if false then Core.p.WriteDataPatch(Ptr($41A0DC), ['01']); // save orig.dat on receive compressed
-  Core.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
-  Core.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
+  PatchApi.p.WriteDataPatch(Ptr($4CAE51), ['E86A5EFCFF']);       // Disable WoG BuildAllDiff hook
+  PatchApi.p.WriteDataPatch(Ptr($6067E2), ['E809000000']);       // Disable WoG GZ functions hooks
+  PatchApi.p.WriteDataPatch(Ptr($4D6FCC), ['E8AF001300']);       // ...
+  PatchApi.p.WriteDataPatch(Ptr($4D700D), ['E8DEFE1200']);       // ...
+  PatchApi.p.WriteDataPatch(Ptr($4CAF32), ['EB']);               // do not create orig.dat on send
+  if false then PatchApi.p.WriteDataPatch(Ptr($4CAF37), ['01']); // save orig.dat on send compressed
+  PatchApi.p.WriteDataPatch(Ptr($4CAD91), ['E99701000090']);     // do not perform savegame diffs
+  PatchApi.p.WriteDataPatch(Ptr($41A0D1), ['EB']);               // do not create orig.dat on receive
+  if false then PatchApi.p.WriteDataPatch(Ptr($41A0DC), ['01']); // save orig.dat on receive compressed
+  PatchApi.p.WriteDataPatch(Ptr($4CAD5A), ['31C040']);           // Always gzip the data to be sent
+  PatchApi.p.WriteDataPatch(Ptr($589EA4), ['EB10']);             // Do not create orig on first savegame receive from server
 
   (* Splice WoG Get2Battle function, handling any battle *)
   ApiJack.StdSplice(Ptr($75ADD9), @Hook_StartBattle, ApiJack.CONV_THISCALL, 11);
@@ -2252,7 +2252,7 @@ begin
 
   (* Trigger OnBeforeBattleAction before Enchantress, Hell Steed and creature experience mass spell processing *)
   ApiJack.Hook(Ptr($75C96C), @Hook_WoGBeforeBattleAction_HandleEnchantress);
-  Core.p.WriteDataPatch(Ptr($75CB26), ['9090909090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($75CB26), ['9090909090909090909090']);
 
   (* Use CombatRound in OnAfterBattleAction trigger for v997 *)
   ApiJack.Hook(Ptr($75D306), @Hook_WoGCallAfterBattleAction);
@@ -2282,10 +2282,10 @@ begin
   ApiJack.Hook(Ptr($4EEEE8), @Hook_OpenMainMenuVideo);
 
   (* Fix Blood Dragons aging change from 20% to 40% *)
-  Core.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
+  PatchApi.p.WriteDataPatch(Ptr($75DE31), ['7509C6055402440028EB07C6055402440064']);
 
   (* Fix CheckForCompleteAI function, checking gosolo mode only if timer <> 0, while it's 0 in modern game with HD mod *)
-  Core.p.WriteDataPatch(Ptr($75ADC1), ['9090']);
+  PatchApi.p.WriteDataPatch(Ptr($75ADC1), ['9090']);
 
   (* Use click coords to show popup dialogs almost everywhere *)
   ApiJack.Hook(Ptr($4F6D54), @Hook_Show3PicDlg_PrepareDialogStruct);
@@ -2297,13 +2297,13 @@ begin
   end;
 
   (* Fix PrepareDialog3Struct inner width calculation: dlgWidth - 50 => dlgWidth - 40, centering the text *)
-  Core.p.WriteDataPatch(Ptr($4F6696), ['D7']);
+  PatchApi.p.WriteDataPatch(Ptr($4F6696), ['D7']);
 
   (* Increase number of quick battle rounds before fast finish from 30 to 100 *)
-  Core.p.WriteDataPatch(Ptr($475C35), ['64']);
+  PatchApi.p.WriteDataPatch(Ptr($475C35), ['64']);
 
   (* Remove WoG Service_SetExcFilter call, preventing SetUnhandledExceptionFilter *)
-  Core.p.WriteDataPatch(Ptr($77180E), ['90909090909090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($77180E), ['90909090909090909090909090']);
 end; // .procedure OnAfterWoG
 
 procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
@@ -2353,7 +2353,6 @@ begin
   IsMainThread              := true;
   Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
   ComputerName              := WinUtils.GetComputerNameW;
-
 
   EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);

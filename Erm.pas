@@ -14,7 +14,6 @@ uses
   ApiJack,
   AssocArrays,
   CFiles,
-  Core,
   Crypto,
   DataLib,
   DlgMes,
@@ -8971,15 +8970,15 @@ var
 
 begin
   (* Remove WoG CM3 trigger *)
-  Core.p.WriteDword(Ptr($78C210), $887668);
+  PatchApi.p.WriteDword(Ptr($78C210), $887668);
 
   (* Extend compiled ERM memory limit *)
   NewErmHeapSize  := Math.Max(MIN_ERM_HEAP_SIZE, EraSettings.GetOpt('CompiledErmBufSize').Int(DEFAULT_ERM_HEAP_SIZE));
   ZvsErmHeapSize^ := NewErmHeapSize;
   NewErmHeap      := Windows.VirtualAlloc(nil, NewErmHeapSize, Windows.MEM_RESERVE or Windows.MEM_COMMIT, Windows.PAGE_READWRITE);
   {!} Assert(NewErmHeap <> nil, SysUtils.Format('Failed to allocate %d MB memory block for new ERM heap', [NewErmHeapSize div 1000000]));
-  Core.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
-  Core.p.WriteDataPatch(Ptr($73E1E8), ['%d', NewErmHeapSize]);
+  PatchApi.p.WriteDataPatch(Ptr($73E1DE), ['%d', integer(NewErmHeap)]);
+  PatchApi.p.WriteDataPatch(Ptr($73E1E8), ['%d', NewErmHeapSize]);
 
   (* Move not enough memory for ERM script compilation message to json *)
   ApiJack.Hook(Ptr($74C53A), @Hook_FindErm_OutOfMemory);
@@ -8993,7 +8992,7 @@ end;
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
   // Patch WoG FindErm to allow functions with arbitrary positive IDs
-  Core.p.WriteDataPatch(Ptr($74A724), ['EB']);
+  PatchApi.p.WriteDataPatch(Ptr($74A724), ['EB']);
 
   (* Disable internal map scripts interpretation *)
   ApiJack.Hook(Ptr($749BBA), @Hook_FindErm_BeforeMainLoop);
@@ -9002,45 +9001,45 @@ begin
   ApiJack.Hook(Ptr($7499A2), @Hook_FindErm_ZeroHeap);
 
   (* Remove default mechanism of loading [mapname].erm *)
-  Core.p.WriteDataPatch(Ptr($72CA8A), ['E90102000090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($72CA8A), ['E90102000090909090']);
 
   (* Never load [mapname].cmd file *)
-  Core.p.WriteDataPatch(Ptr($771CA8), ['E9C2070000']);
+  PatchApi.p.WriteDataPatch(Ptr($771CA8), ['E9C2070000']);
 
   (* Replace all points of wog option 5 (Wogify) access with FreezedWogOptionWogify *)
-  Core.p.WriteDword(Ptr($705601 + 2), integer(@FreezedWogOptionWogify));
-  Core.p.WriteDword(Ptr($72CA2F + 2), integer(@FreezedWogOptionWogify));
-  Core.p.WriteDword(Ptr($749BFE + 2), integer(@FreezedWogOptionWogify));
-  Core.p.WriteDword(Ptr($749CAF + 2), integer(@FreezedWogOptionWogify));
-  Core.p.WriteDword(Ptr($749D91 + 2), integer(@FreezedWogOptionWogify));
-  Core.p.WriteDword(Ptr($749E2D + 2), integer(@FreezedWogOptionWogify));
-  Core.p.WriteDword(Ptr($749E9D + 2), integer(@FreezedWogOptionWogify));
-  Core.p.WriteDword(Ptr($74C6F5 + 2), integer(@FreezedWogOptionWogify));
-  Core.p.WriteDword(Ptr($753F07 + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($705601 + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($72CA2F + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($749BFE + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($749CAF + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($749D91 + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($749E2D + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($749E9D + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($74C6F5 + 2), integer(@FreezedWogOptionWogify));
+  PatchApi.p.WriteDword(Ptr($753F07 + 2), integer(@FreezedWogOptionWogify));
 
   (* Force all maps to be treated as WoG format *)
   // Replace MOV WoG, 0 with MOV WoG, 1
-  Core.p.WriteDataPatch(Ptr($704F48 + 6), ['01']);
-  Core.p.WriteDataPatch(Ptr($74C6E1 + 6), ['01']);
+  PatchApi.p.WriteDataPatch(Ptr($704F48 + 6), ['01']);
+  PatchApi.p.WriteDataPatch(Ptr($74C6E1 + 6), ['01']);
 
   (* New way of iterating scripts in FindErm *)
   ApiJack.Hook(Ptr($749BF5), @Hook_FindErm_AfterMapScripts);
 
   (* Remove LoadERMTXT calls everywhere *)
-  Core.p.WriteDataPatch(Ptr($749932 - 2), ['33C09090909090909090']);
-  Core.p.WriteDataPatch(Ptr($749C24 - 2), ['33C09090909090909090']);
-  Core.p.WriteDataPatch(Ptr($74C7DD - 2), ['33C09090909090909090']);
-  Core.p.WriteDataPatch(Ptr($7518CC - 2), ['33C09090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($749932 - 2), ['33C09090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($749C24 - 2), ['33C09090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($74C7DD - 2), ['33C09090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($7518CC - 2), ['33C09090909090909090']);
 
   (* Remove call to FindErm from _B1.cpp::LoadManager *)
-  Core.p.WriteDataPatch(Ptr($7051A2), ['9090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($7051A2), ['9090909090']);
 
   (* Remove saving and loading old ERM scripts array *)
-  Core.p.WriteDataPatch(Ptr($75139D), ['EB7D909090']);
-  Core.p.WriteDataPatch(Ptr($751EED), ['E99C000000']);
+  PatchApi.p.WriteDataPatch(Ptr($75139D), ['EB7D909090']);
+  PatchApi.p.WriteDataPatch(Ptr($751EED), ['E99C000000']);
 
   (* InitErm always sets IsWoG to true *)
-  Core.p.WriteDataPatch(Ptr($74C6FC), ['9090']);
+  PatchApi.p.WriteDataPatch(Ptr($74C6FC), ['9090']);
 
   (* Reimplement ProcessErm *)
   ApiJack.Hook(Ptr($74C816), @ProcessErm, nil, 0, ApiJack.HOOKTYPE_JUMP);
@@ -9074,7 +9073,7 @@ begin
   (* Rewritten HE:L command to support all strings *)
   ApiJack.Hook(Ptr($745E76), @Hook_HE_L);
   // Remove HE:L0 command support at all
-  Core.p.WriteDataPatch(Ptr($745E54), ['01']);
+  PatchApi.p.WriteDataPatch(Ptr($745E54), ['01']);
 
   (* New BM:Z command to get address of battle stack structure *)
   ApiJack.Hook(Ptr($75F840), @Hook_BM_Z);
@@ -9083,16 +9082,16 @@ begin
   ApiJack.Hook(Ptr($731FF0), @Hook_UN_C);
 
   (* Fix missing final "break" keyword in CO:A case, leading to automatical CO:N execution in many branches *)
-  Core.p.WriteDataPatch(Ptr($76F929), ['0F872A0E']);
-  Core.p.WriteDataPatch(Ptr($76F9E9), ['E9660D']);
-  Core.p.WriteDataPatch(Ptr($76FA08), ['E9470D']);
-  Core.p.WriteDataPatch(Ptr($76FA27), ['E9280D']);
-  Core.p.WriteDataPatch(Ptr($76FA4B), ['E9040D']);
-  Core.p.WriteDataPatch(Ptr($76FA74), ['E9DB0C']);
-  Core.p.WriteDataPatch(Ptr($76FAF6), ['E9590C']);
-  Core.p.WriteDataPatch(Ptr($76FB2B), ['E9240C']);
-  Core.p.WriteDataPatch(Ptr($76FC30), ['E91F0B']);
-  Core.p.WriteDataPatch(Ptr($76FC71), ['0F8DDD0A']);
+  PatchApi.p.WriteDataPatch(Ptr($76F929), ['0F872A0E']);
+  PatchApi.p.WriteDataPatch(Ptr($76F9E9), ['E9660D']);
+  PatchApi.p.WriteDataPatch(Ptr($76FA08), ['E9470D']);
+  PatchApi.p.WriteDataPatch(Ptr($76FA27), ['E9280D']);
+  PatchApi.p.WriteDataPatch(Ptr($76FA4B), ['E9040D']);
+  PatchApi.p.WriteDataPatch(Ptr($76FA74), ['E9DB0C']);
+  PatchApi.p.WriteDataPatch(Ptr($76FAF6), ['E9590C']);
+  PatchApi.p.WriteDataPatch(Ptr($76FB2B), ['E9240C']);
+  PatchApi.p.WriteDataPatch(Ptr($76FC30), ['E91F0B']);
+  PatchApi.p.WriteDataPatch(Ptr($76FC71), ['0F8DDD0A']);
 
   (* Fix DL:C close all dialogs bug *)
   ApiJack.Hook(Ptr($729774), @Hook_DlgCallback, nil, 6);
@@ -9111,7 +9110,7 @@ begin
   ApiJack.Hook(@ZvsStringSet_Save,    @Hook_ZvsStringSet_Save,    nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   (* Disable connection between script number and option state in WoG options *)
-  Core.p.WriteDataPatch(Ptr($777E48), ['E9180100009090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($777E48), ['E9180100009090909090']);
 
   (* Load all *.ers files without name/count limits *)
   ApiJack.Hook(Ptr($77938A), @Hook_LoadErsFiles);
@@ -9119,7 +9118,7 @@ begin
 
   (* Fix CM3 trigger allowing to handle all clicks *)
   ApiJack.Hook(Ptr($5B0255), @Hook_CM3);
-  Core.p.WriteDataPatch(Ptr($5B02DD), ['8B47088D70FF']);
+  PatchApi.p.WriteDataPatch(Ptr($5B02DD), ['8B47088D70FF']);
 
   (* UN:J3 does not reset commanders or load scripts. New: it can be used to reset wog options *)
   // Turned off because of side effects of NPC reset and not displaying wogification message some authors could rely on.
@@ -9147,14 +9146,14 @@ begin
   ApiJack.Hook(Ptr($749272), @Hook_IF_L);
 
   (* Fix TR:T command: allow any number of arguments *)
-  Core.p.WriteDataPatch(Ptr($73B771), ['EB']);
+  PatchApi.p.WriteDataPatch(Ptr($73B771), ['EB']);
 
   (* Fix ERM bug: IF:N worked with z1 only *)
-  Core.p.WriteDataPatch(Ptr($749093), ['B0']);
-  Core.p.WriteDataPatch(Ptr($74909C), ['B0']);
-  Core.p.WriteDataPatch(Ptr($7490B0), ['B0']);
-  Core.p.WriteDataPatch(Ptr($7490B6), ['B0']);
-  Core.p.WriteDataPatch(Ptr($7490CD), ['B0']);
+  PatchApi.p.WriteDataPatch(Ptr($749093), ['B0']);
+  PatchApi.p.WriteDataPatch(Ptr($74909C), ['B0']);
+  PatchApi.p.WriteDataPatch(Ptr($7490B0), ['B0']);
+  PatchApi.p.WriteDataPatch(Ptr($7490B6), ['B0']);
+  PatchApi.p.WriteDataPatch(Ptr($7490CD), ['B0']);
 
   (* Fix IF:N to support any string *)
   ApiJack.Hook(Ptr($749116), @Hook_IF_N);
@@ -9162,8 +9161,8 @@ begin
   (* Fix IF:N to support new syntax: IF:N(msgType)/(text)/[?choice]/[textAlignment]/[preselectedPicId] and call ZvsDisplay8Dialog with 4 arguments *)
   ApiJack.Hook(Ptr($74914C), @Hook_IF_N_ShowDialog);
   ApiJack.Hook(Ptr($749077), @Hook_IF_N_ShowDialog_DecideSetupOrShow);
-  Core.p.WriteDataPatch(Ptr($749086), ['8C']);
-  Core.p.WriteDataPatch(Ptr($74908B), ['909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($749086), ['8C']);
+  PatchApi.p.WriteDataPatch(Ptr($74908B), ['909090909090']);
 
   (* Fix dialog result parsing in Request3Pic to support 3 pictures selection *)
   ApiJack.Hook(Ptr($710352), @Hook_Request3Pic);
@@ -9190,7 +9189,7 @@ begin
   ApiJack.Hook(Ptr($72986E), @Hook_ZvsDlg_AddHint_Assign);
 
   (* Disable DL:H item hint interpolation during call to HDlg::GetHint *)
-  Core.p.WriteDataPatch(Ptr($729916), ['90909090909090909090909090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($729916), ['90909090909090909090909090909090909090']);
 
   (* Force WoG dialog to free allocated hints memory on dialog destruction *)
   ApiJack.Hook(Ptr($72B897), @Hook_ZvsDlg_Delete_FreeHints);
@@ -9207,7 +9206,7 @@ begin
   // Disallow repeated message, display detailed message with location otherwise
   ApiJack.StdSplice(Ptr($73DE8A), @Hook_ErmMess, ApiJack.CONV_CDECL, 1);
   // Disable double reporting of error location in ProcessCmd
-  Core.p.WriteDataPatch(Ptr($749421), ['E9BF0200009090']);
+  PatchApi.p.WriteDataPatch(Ptr($749421), ['E9BF0200009090']);
   // Track ERM errors location during FindErm
   ApiJack.Hook(Ptr($74A14A), @Hook_FindErm_SkipUntil2, nil, 0, ApiJack.HOOKTYPE_CALL);
 
@@ -9215,7 +9214,7 @@ begin
   ApiJack.StdSplice(Ptr($74DC74), @Hook_RunTimer, ApiJack.CONV_CDECL, 1);
 
   (* Disable default tracing of last ERM command *)
-  Core.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($741E34), ['9090909090909090909090']);
 
   (* Prepare for ERM parsing *)
   ApiJack.Hook(Ptr($749974), @Hook_FindErm_Start);
@@ -9240,7 +9239,7 @@ begin
 
   // Fix HE:V#1/#2/#3 to allow #2 to be any positive object ID, applying mod 32 to it.
   // This fix allows to play XXL maps without scripts fixing.
-  Core.p.WriteDataPatch(Ptr($746319), ['8365B01FEB19']);
+  PatchApi.p.WriteDataPatch(Ptr($746319), ['8365B01FEB19']);
 
   // Rewrite DO:P implementation
   ApiJack.Hook(Ptr($72D79C), @Hook_DO_P, nil, 0, ApiJack.HOOKTYPE_JUMP);
@@ -9267,7 +9266,7 @@ begin
   ApiJack.Hook(@ZvsGetVarVal, @Hook_ZvsGetVarVal, nil, 0, ApiJack.HOOKTYPE_JUMP);
 
   (* Skip spaces before commands in ProcessCmd and disable XX:Z subcomand at all *)
-  Core.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF909090890D0C0E84008885' +
+  PatchApi.p.WriteDataPatch(Ptr($741E5E), ['8B8D04FDFFFF01D18A013C2077044142EBF63C3B7505E989780000899500FDFFFF8995E4FCFFFF909090890D0C0E84008885' +
                                        'E3FCFFFF42899500FDFFFFC6458C018D9500FDFFFF528B45089090909050E8C537C01190908945F0837DF0007D75E9167800' +
                                        '0090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +
                                        '9090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090' +

@@ -1,13 +1,12 @@
 unit PoTweak;
-{
-DESCRIPTION:  Fixing Erm PO command to support maps of any size
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Fixing Erm PO command to support maps of any size.
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
 
 uses
-  Core,
   ApiJack,
 
   EventMan,

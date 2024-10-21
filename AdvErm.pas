@@ -14,9 +14,9 @@ uses
   Alg,
   ApiJack,
   AssocArrays,
-  Core,
   Crypto,
   DataLib,
+  Debug,
   DlgMes,
   Files,
   PatchApi,
@@ -3383,6 +3383,7 @@ end; // .procedure DumpErmMemory
 function Splice_DumpErmVars (OrigFunc: pointer; Text1, Text2: pchar): longbool; stdcall;
 begin
   GameExt.GenerateDebugInfo;
+  result := true;
 end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
@@ -3557,33 +3558,33 @@ begin
 
   (* ERM direct call by hanlder instead of cmd linear scan implementation *)
   // Allocate additional local variable for FindErm. CmdHandler: TErmCmdHandler; absolute (EBP - $6C8)
-  Core.p.WriteDataPatch(Ptr($74995A), ['%d', $6C4 + 4]);
+  PatchApi.p.WriteDataPatch(Ptr($74995A), ['%d', $6C4 + 4]);
 
   // ParSet := 0  =>  CmdHandler := nil
-  Core.p.WriteDataPatch(Ptr($74B69D), ['%d', -$6C8]);
+  PatchApi.p.WriteDataPatch(Ptr($74B69D), ['%d', -$6C8]);
 
   // LogERMAnyReceiver => CmdHandler := ErmAdditions[i].Handler
-  Core.p.WriteDataPatch(Ptr($74C1A5), ['8B8DCCFCFFFF6BC90A8B817E8D7900898538F9FFFF9090909090909090909090909090909090909090909090909090909090909090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($74C1A5), ['8B8DCCFCFFFF6BC90A8B817E8D7900898538F9FFFF9090909090909090909090909090909090909090909090909090909090909090909090909090']);
 
   // ZeroMem (Cmd.Params[ParSet..14]); Cmd.Params[15] := CmdHandler
-  Core.p.WriteDataPatch(Ptr($74C3A6), ['B80F0000002B859CFCFFFF6BC0086A00508B8D9CFCFFFF8B95C8FCFFFF8D84CA08020000508D82800200008B8D38F9FFFF8908E8454BFCFF83C40C90']);
+  PatchApi.p.WriteDataPatch(Ptr($74C3A6), ['B80F0000002B859CFCFFFF6BC0086A00508B8D9CFCFFFF8B95C8FCFFFF8D84CA08020000508D82800200008B8D38F9FFFF8908E8454BFCFF83C40C90']);
 
   // Use direct handler address from Cmd.Params[15] instead of linear scanning
-  Core.p.WriteDataPatch(Ptr($7493A3), ['8B4D088B898002000085C90F84310300008D8500FDFFFF508B4508508B45F0508A85E3FCFFFF50FFD183C41085C00F8498000000EB6290909090909090' +
+  PatchApi.p.WriteDataPatch(Ptr($7493A3), ['8B4D088B898002000085C90F84310300008D8500FDFFFF508B4508508B45F0508A85E3FCFFFF50FFD183C41085C00F8498000000EB6290909090909090' +
                                        '90909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090909090']);
 
   (* Relocate ERM_Additions list *)
   Utils.CopyMem(NumAdditionalCmds * sizeof(TErmAdditionalCmd), Ptr($798AD8), @AdditionalCmds);
   AdditionalCmds[NumAdditionalCmds].Id.Id := 0;
   GameExt.RedirectMemoryBlock(Ptr($798AD8), (NumAdditionalCmds + 1) * sizeof(TErmAdditionalCmd), @AdditionalCmds);
-  // [OFF] Core.p.WriteDataPatch(Ptr($7493C7 + 3), ['%d', @AdditionalCmds]); Overwritten by patch
-  // [OFF] Core.p.WriteDataPatch(Ptr($7493DD + 3), ['%d', @AdditionalCmds]); Overwritten by patch
-  Core.p.WriteDataPatch(Ptr($74BC8E + 3), ['%d', @AdditionalCmds]);
-  Core.p.WriteDataPatch(Ptr($74BCA4 + 3), ['%d', @AdditionalCmds]);
-  // [OFF] Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
-  // [OFF] Core.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
-  Core.p.WriteDataPatch(Ptr($74BCE9 + 2), ['%d', @AdditionalCmds[0].ParamsConfig]);
-  Core.p.WriteDataPatch(Ptr($74C1AE + 2), ['%d', @@AdditionalCmds[0].Handler]); // Patched command
+  // [OFF] PatchApi.p.WriteDataPatch(Ptr($7493C7 + 3), ['%d', @AdditionalCmds]); Overwritten by patch
+  // [OFF] PatchApi.p.WriteDataPatch(Ptr($7493DD + 3), ['%d', @AdditionalCmds]); Overwritten by patch
+  PatchApi.p.WriteDataPatch(Ptr($74BC8E + 3), ['%d', @AdditionalCmds]);
+  PatchApi.p.WriteDataPatch(Ptr($74BCA4 + 3), ['%d', @AdditionalCmds]);
+  // [OFF] PatchApi.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
+  // [OFF] PatchApi.p.WriteDataPatch(Ptr($749410 + 2), ['%d', @@AdditionalCmds[0].Handler]); Overwritten by patch
+  PatchApi.p.WriteDataPatch(Ptr($74BCE9 + 2), ['%d', @AdditionalCmds[0].ParamsConfig]);
+  PatchApi.p.WriteDataPatch(Ptr($74C1AE + 2), ['%d', @@AdditionalCmds[0].Handler]); // Patched command
 
   (* Register/overwrite ERM receivers *)
   RegisterCommands;
@@ -3598,18 +3599,18 @@ begin
 
   (* ERM MP3 trigger/receivers remade *)
   // Make WoG ResetMP3, SaveMP3, LoadMP3 doing nothing
-  Core.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
+  PatchApi.p.WriteDataPatch(Ptr($7746E0), ['31C0C3']);
   ApiJack.StdSplice(Ptr($774756), @New_ZvsSaveMP3, CONV_CDECL, 0);
   ApiJack.StdSplice(Ptr($7747E7), @New_ZvsLoadMP3, CONV_CDECL, 0);
 
   // Disable MP3Start WoG hook
-  Core.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
+  PatchApi.p.WriteDataPatch(Ptr($59AC51), ['BFF4336A00']);
 
   // Add new !?MP trigger
   ApiJack.StdSplice(Ptr($59AFB0), @New_Mp3_Trigger, CONV_THISCALL, 3);
 
   (* Make !?SN use always new unique buffer *)
-  Core.p.WriteDataPatch(Ptr($59A893), ['A1E0926900']);
+  PatchApi.p.WriteDataPatch(Ptr($59A893), ['A1E0926900']);
   ApiJack.StdSplice(Ptr($59A890), @Hook_PlaySound, ApiJack.CONV_FASTCALL, 3);
 
   (* Allow SN:W variables interpolation *)

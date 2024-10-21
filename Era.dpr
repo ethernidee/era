@@ -7,14 +7,33 @@ library Era;
 {$R *.RES}
 
 uses Math,
-  Core, GameExt, Erm, Tweaks, SysUtils,
+  SysUtils,
+
+  (* Forced order, do not regroup or mix with other units: order dependent hooks/patches *)
+  GameExt,
+  Erm,
+
+  AdvErm,
+  Debug,
   DebugMaps,
-  VfsImport in '..\Vfs\VfsImport.pas',
-  Lua in 'Lua\Lua.pas',
-  Trans, Rainbow, Triggers, Stores, Lodman, Graph,
-  AdvErm, Scripts, ErmTracking, PoTweak, SndVid, EraButtons,
   Dwellings,
-  EraSettings, WogEvo, Extern;
+  EraButtons,
+  EraSettings,
+  ErmTracking,
+  Extern,
+  Graph,
+  Lodman,
+  Lua in 'Lua\Lua.pas',
+  PoTweak,
+  Rainbow,
+  Scripts,
+  SndVid,
+  Stores,
+  Trans,
+  Triggers,
+  Tweaks,
+  VfsImport in '..\Vfs\VfsImport.pas',
+  WogEvo;
 
 begin
   SysUtils.DecimalSeparator := '.';

@@ -13,9 +13,9 @@ uses
   ApiJack,
   BinPatching,
   CmdApp,
-  Core,
   Crypto,
   DataLib,
+  Debug,
   DlgMes,
   Files,
   FilesEx,
@@ -266,7 +266,7 @@ begin
     MemRedirections.Insert(NewRedirection, BlockInd); NewRedirection := nil;
   end else begin
     OldRedirection := MemRedirections[BlockInd];
-    Core.FatalError
+    Debug.FatalError
     (
       'Cannot redirect block at address $' +
       SysUtils.Format('%x', [integer(OldAddr)]) +
@@ -532,7 +532,7 @@ begin
   {!} Assert(GameDir <> '', 'Failed to obtain game directory path');
   SysUtils.SetCurrentDir(GameDir);
 
-  Core.SetDebugMapsDir(GameDir + '\' + DEBUG_MAPS_DIR);
+  Debug.SetDebugMapsDir(GameDir + '\' + DEBUG_MAPS_DIR);
 
   Windows.GetSystemTime(ProcessStartTime);
   ApiJack.SetCodeWriter(WriteAtCode);

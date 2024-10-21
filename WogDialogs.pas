@@ -13,7 +13,6 @@ uses
   PngImage,
 
   ApiJack,
-  Core,
   DataLib,
   DlgMes,
   EventMan,

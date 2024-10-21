@@ -9,7 +9,6 @@ unit ErmTracking;
 uses
   SysUtils,
 
-  Core,
   FilesEx,
   StrLib,
   Utils,

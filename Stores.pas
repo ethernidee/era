@@ -13,7 +13,6 @@ uses
 
   ApiJack,
   AssocArrays,
-  Core,
   Crypto,
   DataLib,
   Files,
@@ -24,7 +23,8 @@ uses
   EraSettings,
   EventMan,
   GameExt,
-  Heroes;
+  Heroes,
+  PatchApi;
 
 const
   DUMP_SAVEGAME_SECTIONS_DIR   = EraSettings.DEBUG_DIR + '\Savegame Sections';
@@ -742,7 +742,7 @@ begin
   ApiJack.Hook(Ptr($7051B8), @Hook_SaveGameRead, nil, 6);
 
   (* Remove Erm trigger "BeforeSaveGame" call *)
-  Core.p.WriteDataPatch(Ptr($7051F5), ['9090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($7051F5), ['9090909090']);
 end;
 
 begin

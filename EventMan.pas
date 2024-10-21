@@ -8,8 +8,8 @@ unit EventMan;
 uses
   SysUtils,
 
-  Core,
   DataLib,
+  Debug,
   FilesEx,
   Utils;
 
@@ -69,6 +69,7 @@ type
 
   (* Returns globally shared event manager instance *)
   function GetInstance: {U} TEventManager;
+
 
 (***)  implementation  (***)
 
@@ -181,7 +182,7 @@ begin
   EventList := nil;
   EventInfo := nil;
   // * * * * * //
-  {!} Core.ModuleContext.Lock;
+  {!} Debug.ModuleContext.Lock;
 
   with FilesEx.WriteFormattedOutput(FilePath) do begin
     Line('> Format: [Event name] ([Number of handlers], [Fired N times])');
@@ -209,14 +210,14 @@ begin
       Indent;
 
       for j := 0 to EventInfo.NumHandlers - 1 do begin
-        Line(Core.ModuleContext.AddrToStr(EventInfo.Handlers[j]));
+        Line(Debug.ModuleContext.AddrToStr(EventInfo.Handlers[j]));
       end;
 
       Unindent;
     end; // .for
   end; // .with
 
-  {!} Core.ModuleContext.Unlock;
+  {!} Debug.ModuleContext.Unlock;
   // * * * * * //
   FreeAndNil(EventList);
 end; // .procedure TEventManager.DumpEventList

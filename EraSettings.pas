@@ -9,7 +9,7 @@ uses
   Math,
   SysUtils,
 
-  Core,
+  Debug,
   Ini,
   Log;
 
@@ -128,7 +128,7 @@ begin
 
   DebugOpt           := GetOpt('Debug').Bool(true);
   DebugEverythingOpt := GetOpt('Debug.Everything').Bool(false);
-  Core.AbortOnError  := GetDebugBoolOpt('Debug.AbortOnError', false);
+  Debug.AbortOnError := GetDebugBoolOpt('Debug.AbortOnError', false);
 end;
 
 end.

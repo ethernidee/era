@@ -15,8 +15,8 @@ uses
 
   Alg,
   ApiJack,
-  Core,
   DataLib,
+  Debug,
   DlgMes,
   Log,
   PatchApi,
@@ -1239,7 +1239,7 @@ end;
 
 procedure OnAbnormalGameLeave (Event: GameExt.PEvent); stdcall;
 begin
-  Core.FatalError('Not supported. Use ERA API for fast quit to game menu');
+  Debug.FatalError('Not supported. Use ERA API for fast quit to game menu');
 end;
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
@@ -1320,12 +1320,12 @@ begin
   ApiJack.Hook(Ptr($4C6B1C), @Hook_InitMonInfoDlg);
 
   (* OnCalculateTownIncome + widen result from int16 to int32 *)
-  Core.p.WriteDataPatch(Ptr($4C76AD), ['909090']);
-  Core.p.WriteDataPatch(Ptr($45246F), ['8BD090']);
-  Core.p.WriteDataPatch(Ptr($51C858), ['909090']);
-  Core.p.WriteDataPatch(Ptr($52A20E), ['8BD090']);
-  Core.p.WriteDataPatch(Ptr($530AE6), ['909090']);
-  Core.p.WriteDataPatch(Ptr($5C6C19), ['909090']);
+  PatchApi.p.WriteDataPatch(Ptr($4C76AD), ['909090']);
+  PatchApi.p.WriteDataPatch(Ptr($45246F), ['8BD090']);
+  PatchApi.p.WriteDataPatch(Ptr($51C858), ['909090']);
+  PatchApi.p.WriteDataPatch(Ptr($52A20E), ['8BD090']);
+  PatchApi.p.WriteDataPatch(Ptr($530AE6), ['909090']);
+  PatchApi.p.WriteDataPatch(Ptr($5C6C19), ['909090']);
   ApiJack.StdSplice(Ptr($5BFA00), @Hook_CalculateTownIncome, ApiJack.CONV_THISCALL, 1);
 
   (* OnBeforeLocalEvent, OnAfterLocalEvent *)
@@ -1334,7 +1334,7 @@ begin
 
   (* OnTransferHero *)
   // Disable WoG call from CarryOverHero to _CarryOverHero. _CarryOverHero will be called in Hook_MarkTransferedCampaignHero
-  Core.p.WriteDataPatch(Ptr($755E17), ['9090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($755E17), ['9090909090']);
 
   // Provide handling of all transferred campaign heroes, even inactive ones in transition zones
   ApiJack.Hook(Ptr($486069), @Hook_MarkTransferedCampaignHero);

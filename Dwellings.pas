@@ -7,9 +7,20 @@ unit Dwellings;
 (***)  interface  (***)
 
 uses
-  SysUtils, Math, Utils, Alg, DataLib,
-  PatchApi, Core, ApiJack, EventMan, GameExt, Erm,
-  Heroes, AdvErm;
+  Math,
+  SysUtils,
+
+  Alg,
+  ApiJack,
+  DataLib,
+  Utils,
+
+  AdvErm,
+  Erm,
+  EventMan,
+  GameExt,
+  Heroes,
+  PatchApi;
 
 
 (***)  implementation  (***)
@@ -1168,7 +1179,7 @@ begin
   ApiJack.Hook(Ptr($70DD4A), @Hook_OpenTownDwelling);
 
   // Prevent ESI (PTown) := EAX override. Exchange ESI, EAX instead
-  Core.p.WriteDataPatch(Ptr($51FB9F), ['9690']);
+  PatchApi.p.WriteDataPatch(Ptr($51FB9F), ['9690']);
   ApiJack.Hook(Ptr($51FBB5), @Hook_OpenTownDwellingFromKingdomOverview);
 
   ApiJack.Hook(Ptr($5DD2FC), @Hook_OpenTownHallDwelling);
@@ -1182,7 +1193,7 @@ begin
   ApiJack.Hook(Ptr($5509A4), @Hook_AllowZeroResourceCost);
 
   // Move close on buy logics down the code after update adv map logics
-  Core.p.WriteDataPatch(Ptr($5510B1), ['9090909090909090909090909090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($5510B1), ['9090909090909090909090909090909090909090']);
   ApiJack.Hook(Ptr($5510FA), @Hook_RecruitDlgCloseOnBuy);
 
   AdvErm.RegisterErmReceiver('RD', @Receiver_RD, AdvErm.CMD_PARAMS_CONFIG_NONE);

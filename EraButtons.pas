@@ -1,19 +1,31 @@
 unit EraButtons;
-{
-DESCRIPTION:  Adds custom buttons support using modified Buttons plugin by MoP 
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Adds custom buttons support using modified Buttons plugin by MoP.
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
+
 uses
-  Windows, SysUtils, Crypto, StrLib, Files, AssocArrays, DlgMes,
-  Core, GameExt, Trans, EventMan;
+  SysUtils,
+  Windows,
+
+  AssocArrays,
+  Crypto,
+  Debug,
+  DlgMes,
+  Files,
+  StrLib,
+
+  EventMan,
+  GameExt,
+  Trans;
 
 const
   BUTTONS_PATH  = 'Data\Buttons';
-  
+
   NUM_BUTTON_COLUMNS  = 10;
-  
+
   (* Columns *)
   COL_TYPE      = 0;
   COL_NAME      = 1;
@@ -25,7 +37,7 @@ const
   COL_LONGHINT  = 7;
   COL_SHORTHINT = 8;
   COL_HOTKEY    = 9;
-  
+
   (* Button screen *)
   TYPENAME_ADVMAP = 'advmap';
   TYPENAME_TOWN   = 'town';
@@ -33,18 +45,18 @@ const
   TYPENAME_HEROES = 'heroes';
   TYPENAME_BATTLE = 'battle';
   TYPENAME_DUMMY  = 'dummy';  // Button is not shown
-  
+
   TYPE_ADVMAP = '0';
   TYPE_TOWN   = '1';
   TYPE_HERO   = '2';
   TYPE_HEROES = '3';
   TYPE_BATTLE = '4';
   TYPE_DUMMY  = '9';
-  
+
 
 function GetButtonID (const ButtonName: string): integer; stdcall;
-  
-  
+
+
 (***) implementation (***)
 
 
@@ -55,16 +67,16 @@ const
 
 type
   TButtonsTable = array of StrLib.TArrayOfStr;
-  
-  
+
+
 var
 {O} ButtonNames:  AssocArrays.TAssocArray {OF INTEGER};
 
   hButtons: integer;
-  
+
   ExtButtonsTable:  PPOINTER;
   ExtNumButtons:    PINTEGER;
-  
+
   ButtonsTable: TButtonsTable;
   ButtonID:     integer = 400;
   NumButtons:   integer;
@@ -79,29 +91,29 @@ var
   ButtonName:   string;
   i:            integer;
   y:            integer;
-   
-begin 
+
+begin
   with Files.Locate(GameExt.GameDir + '\' + BUTTONS_PATH + '\*.btn', Files.ONLY_FILES) do begin
     while FindNext do begin
       if FoundRec.Rec.Size > 0 then begin
         {!} Assert(Files.ReadFileContents(FoundPath, FileContents), Format('Failed to load button config file at "%s"', [FoundPath]));
         Lines    := StrLib.Explode(SysUtils.Trim(FileContents), #13#10);
         NumLines := Length(Lines);
-        
+
         for i := 0 to NumLines - 1 do begin
           Line := StrLib.Explode(SysUtils.Trim(Lines[i]), ';');
-          
+
           if Length(Line) < NUM_BUTTON_COLUMNS then begin
-            Core.NotifyError(Format('Invalid number of columns (%d) on line (%d) in file "%s".'#13#10'Expected %d columns', [Length(Line), i + 1, FoundPath, NUM_BUTTON_COLUMNS]));
+            Debug.NotifyError(Format('Invalid number of columns (%d) on line (%d) in file "%s".'#13#10'Expected %d columns', [Length(Line), i + 1, FoundPath, NUM_BUTTON_COLUMNS]));
           end else begin
             Line[COL_TYPE] := SysUtils.AnsiLowerCase(Line[COL_TYPE]);
-          
+
             for y := 0 to NUM_BUTTON_COLUMNS - 1 do begin
               if Line[y] = '' then begin
                 Line[y] := #0;
               end;
             end;
-            
+
             if Line[COL_TYPE] = TYPENAME_ADVMAP then begin
               Line[COL_TYPE] := TYPE_ADVMAP;
             end else if Line[COL_TYPE] = TYPENAME_TOWN then begin
@@ -115,13 +127,13 @@ begin
             end else if Line[COL_TYPE] = TYPENAME_DUMMY then begin
               Line[COL_TYPE] := TYPE_DUMMY;
             end else begin
-              Core.NotifyError(Format('Unknown button type ("%s") on line %d in file "%s"', [Line[COL_TYPE], i + 1, FoundPath]));
+              Debug.NotifyError(Format('Unknown button type ("%s") on line %d in file "%s"', [Line[COL_TYPE], i + 1, FoundPath]));
             end; // .else
-            
+
             ButtonName := Line[COL_NAME];
-            
+
             if ButtonNames[ButtonName] <> nil then begin
-              Core.NotifyError(Format('Duplicate button name ("%s") on line %d in file "%s"', [ButtonName, i + 1, FoundPath]));
+              Debug.NotifyError(Format('Duplicate button name ("%s") on line %d in file "%s"', [ButtonName, i + 1, FoundPath]));
             end else begin
               Line[COL_SHORTHINT]     := Trans.tr(Line[COL_SHORTHINT], []);
               Line[COL_LONGHINT]      := Trans.tr(Line[COL_LONGHINT], []);
@@ -132,7 +144,7 @@ begin
               if NumButtons + 1 >= Length(ButtonsTable) then begin
                 SetLength(ButtonsTable, NumButtons + BUTTONS_TABLE_GROWTH_STEP);
               end;
-              
+
               ButtonsTable[NumButtons] := Line;
               Inc(NumButtons);
             end; // .else
@@ -141,15 +153,15 @@ begin
       end; // .if
     end; // .while
   end; // .with
-  
+
   ExtButtonsTable^ := pointer(ButtonsTable);
   ExtNumButtons^   := NumButtons;
-end; // .procedure LoadButtons 
+end; // .procedure LoadButtons
 
 function GetButtonID (const ButtonName: string): integer; stdcall;
 begin
   result := integer(ButtonNames[ButtonName]);
-  
+
   if result = 0 then begin
     result := -1;
   end;
@@ -164,7 +176,7 @@ begin
   ExtNumButtons   := GetProcAddress(hButtons, 'NumButtons');
   {!} Assert(ExtButtonsTable <> nil);
   {!} Assert(ExtNumButtons <> nil);
-  
+
   LoadButtons;
 end; // .procedure OnAfterWoG
 

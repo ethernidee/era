@@ -1,10 +1,11 @@
 unit Rainbow;
 (*
-  DESCRIPTION: Adds markup language support to all Heroes texts (EML - Era Markup Language).
-  AUTHOR:      Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+  Description: Adds markup language support to all Heroes texts (EML - Era Markup Language).
+  Author:      Alexander Shostak aka Berserker
 *)
 
 (***)  interface  (***)
+
 uses
   Math,
   SysUtils,
@@ -14,7 +15,6 @@ uses
 
   ApiJack,
   AssocArrays,
-  Core,
   Crypto,
   DataLib,
   DlgMes,
@@ -1606,7 +1606,7 @@ begin
   ApiJack.StdSplice(Ptr($4B58F0), @New_Font_TextToLines, ApiJack.CONV_THISCALL, 4);
 
   // Fix TransformInputKey routine to allow entering "{" and "}"
-  Core.p.WriteDataPatch(Ptr($5BAFB5), ['EB08']);
+  PatchApi.p.WriteDataPatch(Ptr($5BAFB5), ['EB08']);
 end; // .procedure OnAfterWoG
 
 begin

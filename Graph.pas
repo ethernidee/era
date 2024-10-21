@@ -11,7 +11,6 @@ uses
 
   Alg,
   ApiJack,
-  Core,
   DataLib,
   DlgMes,
   EventMan,

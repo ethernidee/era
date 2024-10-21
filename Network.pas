@@ -14,7 +14,6 @@ uses
   PngImage,
 
   ApiJack,
-  Core,
   DataLib,
   DlgMes,
   EventMan,
@@ -408,11 +407,11 @@ begin
   ApiJack.Hook(Ptr($557055), @Hook_NetworkProcessHeroesDataFromDefender);
 
   // Remove WoG hook for ReceiveNetAMCommand
-  Core.p.WriteDataPatch(Ptr($557E07), ['E5320B00']);
+  PatchApi.p.WriteDataPatch(Ptr($557E07), ['E5320B00']);
 
   // WoG Hook must not free net data memory anymore. Leave it to original function/HD mod. Additionally convert its convention to thiscall.
-  Core.p.WriteDataPatch(Ptr($76884B), ['0D']);
-  Core.p.WriteDataPatch(Ptr($7688F6), ['90909090909090909090909090909090']);
+  PatchApi.p.WriteDataPatch(Ptr($76884B), ['0D']);
+  PatchApi.p.WriteDataPatch(Ptr($7688F6), ['90909090909090909090909090909090']);
 end;
 
 begin

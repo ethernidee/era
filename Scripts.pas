@@ -1,14 +1,26 @@
 unit Scripts;
-{
-DESCRIPTION:  Lua scripting support.
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Lua scripting support.
+  Author:      Alexander Shostak aka Berserker
+*)
 
 (***)  interface  (***)
 
 uses
-  SysUtils, StrUtils, Utils, DlgMes, Core, Log, Files, FilesEx, DataLib,
-  GameExt, EventMan, Lua;
+  StrUtils,
+  SysUtils,
+
+  DataLib,
+  Debug,
+  DlgMes,
+  Files,
+  FilesEx,
+  Utils,
+
+  EventMan,
+  GameExt,
+  Log,
+  Lua;
 
 
 const
@@ -33,7 +45,7 @@ var
 begin
   Error := lua_tostring(L, -1);
   Log.Write('Lua', 'Execution', Error);
-  Core.FatalError(Error);
+  Debug.FatalError(Error);
   result := 0;
 end;
 
@@ -93,7 +105,7 @@ begin
   lua_pushcfunction(L, OnLuaCallError);
 
   if luaL_loadfile(L, pchar(FilePath)) <> 0 then begin
-    Core.FatalError('Failed to load and compile Lua script.'#13#10 + lua_tostring(L, -1));
+    Debug.FatalError('Failed to load and compile Lua script.'#13#10 + lua_tostring(L, -1));
   end;
 
   ErrCode := lua_pcall(L, 0, 0, 1);
@@ -117,7 +129,7 @@ begin
 
   if ErrCode <> 0 then begin
     Log.Write('Lua', 'Execution', Error);
-    Core.FatalError(Error);
+    Debug.FatalError(Error);
   end;
 
   lua_pop(L, 1);
