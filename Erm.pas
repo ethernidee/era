@@ -946,6 +946,7 @@ uses
   ErmTracking,
   PatchApi,
   Stores,
+  Tweaks,
   WogEvo;
 
 const
@@ -8153,7 +8154,9 @@ begin
 
   case Cmd of
     'R': begin
-      if NumParams >= 3 then begin
+      if NumParams >= 4 then begin
+        result := ord(SetErmParamValue(VarParam, Tweaks.RandomRangeWithFreeParam(SubCmd.Nums[1], SubCmd.Nums[2], SubCmd.Nums[3])));
+      end else if NumParams >= 3 then begin
         result := ord(SetErmParamValue(VarParam, Heroes.RandomRange(SubCmd.Nums[1], SubCmd.Nums[2])));
       end else if NumParams >= 2 then begin
         Heroes.SRand(SubCmd.Nums[1]);
