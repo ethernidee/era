@@ -23,29 +23,16 @@ type
   *)
   PMultiPurposeDlgSetup = ^TMultiPurposeDlgSetup;
   TMultiPurposeDlgSetup = packed record
-    Title:            pchar;
-    LeftSideCaption:  pchar;
-    RightSideCaption: pchar;
-    InputBuf:         pchar;   // External buffer to write user input string to or null
-    InputBufSize:     integer; // Size of buffer to hold user input in bytes
-    SelectedItem:     integer; // Field to write selected item index to (0-3 for buttons, -1 for Cancel)
-    Pic1Path:         pchar;
-    Pic2Path:         pchar;
-    Pic3Path:         pchar;
-    Pic4Path:         pchar;
-    Pic1Hint:         pchar;
-    Pic2Hint:         pchar;
-    Pic3Hint:         pchar;
-    Pic4Hint:         pchar;
-    Btn1Text:         pchar;
-    Btn2Text:         pchar;
-    Btn3Text:         pchar;
-    Btn4Text:         pchar;
-    Btn1Hint:         pchar;
-    Btn2Hint:         pchar;
-    Btn3Hint:         pchar;
-    Btn4Hint:         pchar;
-    ShowCancelBtn:    TInt32Bool;
+    Title:             pchar;                 // Top dialog title
+    InputFieldLabel:   pchar;                 // If specified, user will be able to enter arbitrary text in input field
+    ButtonsGroupLabel: pchar;                 // If specified, right buttons group will be displayed
+    InputBuf:          pchar;                 // OUT. Field to write a pointer to a temporary buffer with user input. Copy this text to safe location immediately
+    SelectedItem:      integer;               // OUT. Field to write selected item index to (0-3 for buttons, -1 for Cancel)
+    ImagePaths:        array [0..3] of pchar; // All paths are relative to game root directory or custom absolute paths
+    ImageHints:        array [0..3] of pchar;
+    ButtonTexts:       array [0..3] of pchar;
+    ButtonHints:       array [0..3] of pchar;
+    ShowCancelBtn:     TInt32Bool;
   end;
 
   TShowMultiPurposeDlgFunc = function (Setup: PMultiPurposeDlgSetup): integer; stdcall;
@@ -108,12 +95,8 @@ end;
 function StubShowMultiPurposeDlg (Setup: PMultiPurposeDlgSetup): integer; stdcall;
 begin
   Setup.SelectedItem := -1;
-
-  if (Setup.InputBuf <> nil) and (Setup.InputBufSize > 0) then begin
-    Setup.InputBuf^ := #0;
-  end;
-
-  result := -1;
+  Setup.InputBuf     := '';
+  result             := -1;
 end;
 
 function SetMultiPurposeDlgHandler (NewImpl: TShowMultiPurposeDlgFunc): {n} TShowMultiPurposeDlgFunc; stdcall;
