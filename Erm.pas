@@ -9550,23 +9550,6 @@ begin
   SpellSettingsTable         := GameExt.GetRealAddr(SpellSettingsTable);
 end; // .procedure OnAfterStructRelocations
 
-procedure OnAfterErmInstructions (Event: PEvent); stdcall;
-var
-  Setup: WogEvo.TMultiPurposeDlgSetup;
-
-begin
-  // The code below is left to test purposes until updated multipurpose dialog API is ready
-  System.FillChar(Setup, sizeof(Setup), #0);
-  Setup.Title            := 'hello, world!';
-  Setup.ButtonsGroupLabel := 'select one';
-  Setup.ButtonTexts[0]   := 'choose me';
-  Setup.ButtonTexts[1]   := 'better choose me';
-  Setup.ImagePaths[0]    := 'Mods\TDS\Data\DrDoom.jpg';
-  Setup.InputFieldLabel  := 'Enter something';
-  WogEvo.ShowMultiPurposeDlg(@Setup);
-  VarDump([Setup.SelectedItem, Setup.InputBuf]);
-end;
-
 begin
   UniqueRng       := FastRand.TXoroshiro128Rng.Create(FastRand.GenerateSecureSeed);
   LoadedErsFiles  := DataLib.NewList(Utils.OWNS_ITEMS);
@@ -9599,5 +9582,4 @@ begin
   EventMan.GetInstance.On('OnRemoteErmFuncCall',      OnRemoteErmFuncCall);
   EventMan.GetInstance.On('OnSavegameRead',           OnSavegameRead);
   EventMan.GetInstance.On('OnSavegameWrite',          OnSavegameWrite);
-  EventMan.GetInstance.On('OnAfterErmInstructions',   OnAfterErmInstructions); // FIXME in next versions, once patcher_x86.dll is fixed
 end.
