@@ -1185,6 +1185,68 @@ begin
   result := _RandomRangeWithFreeParam(CallerAddr, MinValue, MaxValue, FreeParam);
 end;
 
+
+// ============================ NETWORK BATTLE SEQUENTIAL PRNG GENERATIONS FIX ============================ //
+(*
+  Ready-to use replacements for native code, using PRNG sequentially in combats (spell resistence, death stare, phoenixes, etc).
+  Sequential calls from the same address produce different results even in network PvP battles. Free parameter is used for this purpose.
+*)
+
+const
+  SEQ_RAND_UNIQUE_MASK = integer(-696336428);
+
+var
+  SequentialRandCurrCaller: pointer;
+  SequentialRandPrevCaller: pointer;
+  SequantialRandFreeParam:  integer;
+
+function SequantialRandomRange (MinValue, MaxValue: integer): integer;
+begin
+  if SequentialRandCurrCaller = SequentialRandPrevCaller then begin
+    SequantialRandFreeParam := ((SequantialRandFreeParam xor SEQ_RAND_UNIQUE_MASK) + 1) xor SEQ_RAND_UNIQUE_MASK;
+  end else begin
+    SequantialRandFreeParam  := 0 xor SEQ_RAND_UNIQUE_MASK;
+    SequentialRandPrevCaller := SequentialRandCurrCaller;
+  end;
+
+  result := _RandomRangeWithFreeParam(SequentialRandCurrCaller, MinValue, MaxValue, SequantialRandFreeParam);
+end;
+
+function SequentialRand: integer;
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov SequentialRandCurrCaller, eax
+  end;
+
+  result := SequantialRandomRange(0, High(integer));
+end;
+
+function SequentialRandomRangeFastcall (Dummy, MaxValue, MinValue: integer): integer; register;
+begin
+  asm
+    push eax
+    mov eax, [ebp + 4]
+    mov SequentialRandCurrCaller, eax
+    pop eax
+  end;
+
+  result := SequantialRandomRange(MinValue, MaxValue);
+end;
+
+function SequentialRandomRangeCdecl (MinValue, MaxValue: integer): integer; cdecl;
+begin
+  asm
+    mov eax, [ebp + 4]
+    mov SequentialRandCurrCaller, eax
+  end;
+
+  result := SequantialRandomRange(MinValue, MaxValue);
+end;
+
+// ========================== END NETWORK BATTLE SEQUENTIAL PRNG GENERATIONS FIX ========================== //
+
+
 function Hook_RandomRange (OrigFunc: pointer; MinValue, MaxValue: integer): integer; stdcall;
 type
   PCallerContext = ^TCallerContext;
@@ -2179,6 +2241,11 @@ begin
 
   // Apply battle RNG seed right before placing obstacles, so that rand() calls in !?BF trigger would not influence battle obstacles
   ApiJack.StdSplice(Ptr($465E70), @Hook_PlaceBattleObstacles, ApiJack.CONV_THISCALL, 1);
+
+  // Fix sequential PRNG calls in network PvP battles
+  ApiJack.Hook(Ptr($75D760), @SequentialRandomRangeFastcall, nil, 6, ApiJack.HOOKTYPE_CALL); // Death Stare WoG-native
+  ApiJack.Hook(Ptr($75D72E), @SequentialRandomRangeCdecl,    nil, 5, ApiJack.HOOKTYPE_CALL); // Death Stare WoG
+  ApiJack.Hook(Ptr($4690CA), @SequentialRand,                nil, 5, ApiJack.HOOKTYPE_CALL); // Phoenix Ressurection native
 
   // Restore Nagash and Jeddite specialties
   PatchApi.p.WriteDataPatch(Ptr($753E0B), ['E9990000009090']); // PrepareSpecWoG => ignore new WoG settings
