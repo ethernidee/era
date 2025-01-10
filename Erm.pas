@@ -324,6 +324,11 @@ const
   SPELL_TEXT_SOUND          = 6;
   SPELL_TEXT_LAST           = 6;
 
+  (* WoG Custom Dialog data types *)
+  CUSTOM_DATA_TYPE_EMPTY            = 0;
+  CUSTOM_DATA_TYPE_DIALOG           = 2;
+  CUSTOM_DATA_SUBTYPE_MULTI_PURPOSE = 2;
+
   (* ERM command compilation flags *)
   ECF_PERSISTED = 1;
 
@@ -682,49 +687,21 @@ type
 
   PZvsCustomDlgData = ^TZvsCustomDlgData;
   TZvsCustomDlgData = packed record
-    ItemType:     integer;
-    SubType:      integer;
-    Id:           integer;
-    HasCancelBtn: boolean;
-    _Align1:      array [1..3] of byte;
-    Nums:         array [0..3] of integer;
-    Texts:        array [0..3] of pchar;
-    Pics:         array [0..3] of pchar;
-    PicHints:     array [0..3] of pchar;
-    Buttons:      array [0..3] of pchar;
-    BtnHints:     array [0..3] of pchar;
+    ItemType:      integer;
+    SubType:       integer;
+    Id:            integer;
+    ShowCancelBtn: boolean;
+    _Align1:       array [1..3] of byte;
+    Nums:          array [0..3] of integer;
+    Texts:         array [0..3] of pchar;
+    ImagePaths:    array [0..3] of pchar;
+    ImageHints:    array [0..3] of pchar;
+    ButtonTexts:   array [0..3] of pchar;
+    ButtonHints:   array [0..3] of pchar;
   end;
 
   PZvsCustomDlgDataArr = ^TZvsCustomDlgDataArr;
   TZvsCustomDlgDataArr = packed array [0..1000] of TZvsCustomDlgData;
-
-  TZvsSphinxDlgInput = packed array [0..1023] of char;
-
-  PZvsSphinxDlgSetup = ^TZvsSphinxDlgSetup;
-  TZvsSphinxDlgSetup = packed record
-    Title:            pchar;
-    LeftSideCaption:  pchar;
-    RightSideCaption: pchar;
-    InputBuf:         ^TZvsSphinxDlgInput; // External buffer to write user input string to, must be set
-    SelectedItem:     integer;             // Field to write selected item index to (1-4 for buttons, -1 for Cancel)
-    Pic1Path:         pchar;
-    Pic2Path:         pchar;
-    Pic3Path:         pchar;
-    Pic4Path:         pchar;
-    Pic1Hint:         pchar;
-    Pic2Hint:         pchar;
-    Pic3Hint:         pchar;
-    Pic4Hint:         pchar;
-    Btn1Text:         pchar;
-    Btn2Text:         pchar;
-    Btn3Text:         pchar;
-    Btn4Text:         pchar;
-    Btn1Hint:         pchar;
-    Btn2Hint:         pchar;
-    Btn3Hint:         pchar;
-    Btn4Hint:         pchar;
-    ShowCancelBtn:    TInt32Bool;
-  end;
 
 const
   (* WoG vars *)
@@ -1397,6 +1374,15 @@ begin
   end else begin
     ShowErmError('Invalid z-var index: ' + SysUtils.IntToStr(Ind));
     result := 'STRING NOT FOUND';
+  end;
+end;
+
+function GetInterpolatedZeroableZVarAddr (Ind: integer): pchar;
+begin
+  result := '';
+
+  if Ind <> 0 then begin
+    result := GetInterpolatedZVarAddr(Ind);
   end;
 end;
 
@@ -6898,31 +6884,17 @@ begin
 end;
 
 function DefaultMultiPurposeDlgHandler (Setup: WogEvo.PMultiPurposeDlgSetup): integer; stdcall;
-const
-  CUSTOM_DATA_TYPE_EMPTY            = 0;
-  CUSTOM_DATA_TYPE_DIALOG           = 2;
-  CUSTOM_DATA_SUBTYPE_MULTI_PURPOSE = 2;
-
 var
-{Un} CustomData:       PZvsCustomDlgData;
-     CustomDataInd:    integer;
-     InputBufProvided: boolean;
-     ExtInputBuf:      pchar;
-     InputBufParam:    ppchar;
+{Un} CustomData:    PZvsCustomDlgData;
+     CustomDataInd: integer;
+     i:             integer;
 
 begin
-  CustomData    := nil;
-  ExtInputBuf   := nil;
-  InputBufParam := nil;
+  CustomData := nil;
   // * * * * * //
   result             := -1;
   Setup.SelectedItem := -1;
-  InputBufProvided   := Utils.IsValidBuf(Setup.InputBuf, Setup.InputBufSize) and (Setup.InputBufSize > 0);
-
-  if InputBufProvided then begin
-    Setup.InputBuf^ := #0;
-    InputBufParam   := @ExtInputBuf;
-  end;
+  Setup.InputBuf     := '';
 
   CustomDataInd := ZvsFindCustomData(MULTI_PURPOSE_DLG_CUSTOM_DATA_ID);
 
@@ -6945,27 +6917,28 @@ begin
   end;
 
   CustomData.Texts[0]     := ZvsEmptyStrOrNull(Setup.Title);
-  CustomData.Texts[1]     := ZvsEmptyStrOrNull(Setup.LeftSideCaption);
-  CustomData.Texts[2]     := ZvsEmptyStrOrNull(Setup.RightSideCaption);
-  CustomData.Pics[0]      := ZvsEmptyStrOrNull(Setup.Pic1Path);
-  CustomData.Pics[1]      := ZvsEmptyStrOrNull(Setup.Pic2Path);
-  CustomData.Pics[2]      := ZvsEmptyStrOrNull(Setup.Pic3Path);
-  CustomData.Pics[3]      := ZvsEmptyStrOrNull(Setup.Pic4Path);
-  CustomData.PicHints[0]  := ZvsEmptyStrOrNull(Setup.Pic1Hint);
-  CustomData.PicHints[1]  := ZvsEmptyStrOrNull(Setup.Pic2Hint);
-  CustomData.PicHints[2]  := ZvsEmptyStrOrNull(Setup.Pic3Hint);
-  CustomData.PicHints[3]  := ZvsEmptyStrOrNull(Setup.Pic4Hint);
-  CustomData.Buttons[0]   := ZvsEmptyStrOrNull(Setup.Btn1Text);
-  CustomData.Buttons[1]   := ZvsEmptyStrOrNull(Setup.Btn2Text);
-  CustomData.Buttons[2]   := ZvsEmptyStrOrNull(Setup.Btn3Text);
-  CustomData.Buttons[3]   := ZvsEmptyStrOrNull(Setup.Btn4Text);
-  CustomData.BtnHints[0]  := ZvsEmptyStrOrNull(Setup.Btn1Hint);
-  CustomData.BtnHints[1]  := ZvsEmptyStrOrNull(Setup.Btn2Hint);
-  CustomData.BtnHints[2]  := ZvsEmptyStrOrNull(Setup.Btn3Hint);
-  CustomData.BtnHints[3]  := ZvsEmptyStrOrNull(Setup.Btn4Hint);
-  CustomData.HasCancelBtn := Setup.ShowCancelBtn <> 0;
+  CustomData.Texts[1]     := ZvsEmptyStrOrNull(Setup.InputFieldLabel);
+  CustomData.Texts[2]     := ZvsEmptyStrOrNull(Setup.ButtonsGroupLabel);
 
-  Setup.SelectedItem := ZvsShowCustomDialog(MULTI_PURPOSE_DLG_CUSTOM_DATA_ID, 0, InputBufParam);
+  for i := 0 to High(Setup.ImagePaths) do begin
+    CustomData.ImagePaths[i] := ZvsEmptyStrOrNull(Setup.ImagePaths[i]);
+  end;
+
+  for i := 0 to High(Setup.ImageHints) do begin
+    CustomData.ImageHints[i] := ZvsEmptyStrOrNull(Setup.ImageHints[i]);
+  end;
+
+  for i := 0 to High(Setup.ButtonTexts) do begin
+    CustomData.ButtonTexts[i] := ZvsEmptyStrOrNull(Setup.ButtonTexts[i]);
+  end;
+
+  for i := 0 to High(Setup.ButtonHints) do begin
+    CustomData.ButtonHints[i] := ZvsEmptyStrOrNull(Setup.ButtonHints[i]);
+  end;
+
+  CustomData.ShowCancelBtn := Setup.ShowCancelBtn <> 0;
+
+  Setup.SelectedItem := ZvsShowCustomDialog(MULTI_PURPOSE_DLG_CUSTOM_DATA_ID, 0, @Setup.InputBuf);
 
   if Setup.SelectedItem > 0 then begin
     Dec(Setup.SelectedItem);
@@ -6985,7 +6958,7 @@ begin
 
   // txt = @z
   ppointer(Context.EBP - $520)^ := GetInterpolatedZVarAddr(SubCmd.Nums[0]);
-end; // .function Hook_IF_N
+end;
 
 function Hook_IF_N_ShowDialog (Context: ApiJack.PHookContext): longbool; stdcall;
 var
@@ -7102,6 +7075,241 @@ begin
   result          := false;
   Context.RetAddr := Ptr($7103CB);
 end; // .function Hook_Request3Pic
+
+type
+  TCustomReqDlgSetup = record
+    Title:            string;
+    InputFieldLabel:  string;
+    ButtonsGroupLabel: string;
+    ImagePaths:       array [0..3] of string;
+    ImageHints:       array [0..3] of string;
+    ButtonTexts:      array [0..3] of string;
+    ButtonHints:      array [0..3] of string;
+    ShowCancelBtn:    longbool;
+  end;
+
+var
+  CustomReqDlgSetup: TCustomReqDlgSetup;
+
+procedure ClearCustomReqDlgSetup;
+var
+  i: integer;
+
+begin
+  with CustomReqDlgSetup do begin
+    Title            := '';
+    InputFieldLabel  := '';
+    ButtonsGroupLabel := '';
+    ShowCancelBtn    := false;
+
+    for i := 0 to High(ImagePaths) do begin
+      ImagePaths[i] := '';
+    end;
+
+    for i := 0 to High(ImageHints) do begin
+      ImageHints[i] := '';
+    end;
+
+    for i := 0 to High(ButtonTexts) do begin
+      ButtonTexts[i] := '';
+    end;
+
+    for i := 0 to High(ButtonHints) do begin
+      ButtonHints[i] := '';
+    end;
+  end;
+end;
+
+function Hook_IF_D (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams: integer;
+  SubCmd:    PErmSubCmd;
+  Res:       longbool;
+  i:         integer;
+
+  function PrependMapsDirPath (const Path: string): string;
+  begin
+    result := '';
+
+    // Only for non-empty paths
+    if (Path <> '')  then begin
+      result := './Maps/' + Path;
+    end;
+  end;
+
+begin
+  NumParams := pinteger(Context.EBP - $10)^;
+  SubCmd    := pointer(Context.EBP - $300);
+  Res       := true;
+  result    := false;
+
+  ClearCustomReqDlgSetup;
+
+  for i := 0 to NumParams - 1 do begin
+    if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_NONE then begin
+      Res := false;
+      ShowErmError('"IF:D" - only SET syntax is supported for all parameters');
+    end;
+  end;
+
+  if Res then begin
+    // The first parameter, dialog ID is ignored, we don't use it anymore
+
+    if NumParams >= 2 then begin
+      CustomReqDlgSetup.Title := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[1]));
+    end;
+
+    if NumParams >= 3 then begin
+      CustomReqDlgSetup.ButtonsGroupLabel := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[2]));
+    end;
+
+    if NumParams >= 4 then begin
+      CustomReqDlgSetup.InputFieldLabel := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[3]));
+    end;
+
+    for i := 4 to Math.Min(NumParams - 1, 7) do begin
+      CustomReqDlgSetup.ImagePaths[i - 4] := PrependMapsDirPath(ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[i])));
+    end;
+
+    for i := 8 to Math.Min(NumParams - 1, 11) do begin
+      CustomReqDlgSetup.ImageHints[i - 8] := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[i]));
+    end;
+
+    for i := 12 to Math.Min(NumParams - 1, 15) do begin
+      CustomReqDlgSetup.ButtonTexts[i - 12] := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[i]));
+    end;
+  end;
+
+  if Res then begin
+    Context.RetAddr := Ptr($74943B);
+  end else begin
+    Context.RetAddr := Ptr($7496D9);
+  end;
+end; // .function Hook_IF_D
+
+function Hook_IF_F (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams: integer;
+  SubCmd:    PErmSubCmd;
+  Res:       longbool;
+  i:         integer;
+
+begin
+  NumParams       := pinteger(Context.EBP - $10)^;
+  SubCmd          := pointer(Context.EBP - $300);
+  result          := false;
+  Res             := true;
+
+  // The first parameter, dialog ID is ignored, we don't use it anymore
+
+  for i := 0 to NumParams - 1 do begin
+    if SubCmd.Params[i].GetCheckType() <> PARAM_CHECK_NONE then begin
+      Res := false;
+      ShowErmError('"IF:F" - only SET syntax is supported for all parameters');
+    end;
+  end;
+
+  if Res then begin
+    for i := 1 to Math.Min(NumParams - 1, 4) do begin
+      CustomReqDlgSetup.ButtonHints[i - 1] := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[i]));
+    end;
+
+    if NumParams >= 6 then begin
+      CustomReqDlgSetup.ShowCancelBtn := SubCmd.Nums[5] <> 0;
+    end;
+  end;
+
+  if Res then begin
+    Context.RetAddr := Ptr($74943B);
+  end else begin
+    Context.RetAddr := Ptr($7496D9);
+  end;
+end; // .function Hook_IF_F
+
+function Hook_IF_E (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  NumParams:   integer;
+  SubCmd:      PErmSubCmd;
+  Res:         longbool;
+  ResVarInd:   integer;
+  IsGetSyntax: longbool;
+  Setup:       WogEvo.TMultiPurposeDlgSetup;
+  i:           integer;
+
+  function StoreInTempMem (const Str: string): {n} pchar;
+  begin
+    result := nil;
+
+    if Str <> '' then begin
+      result := AdvErm.ServiceMemAllocator.StoreBuf(Length(Str) + 1, pchar(Str));
+    end;
+  end;
+
+begin
+  NumParams   := pinteger(Context.EBP - $10)^;
+  SubCmd      := pointer(Context.EBP - $300);
+  result      := false;
+  Res         := true;
+  ResVarInd   := 0;
+  IsGetSyntax := SubCmd.Params[0].GetCheckType() = PARAM_CHECK_GET;
+
+  if not IsGetSyntax then begin
+    ResVarInd := SubCmd.Nums[0];
+  end;
+
+  // The second parameter, dialog ID is ignored, we don't use it anymore
+
+  ServiceMemAllocator.AllocPage;
+
+  System.FillChar(Setup, sizeof(Setup), #0);
+
+  Setup.Title            := StoreInTempMem(CustomReqDlgSetup.Title);
+  Setup.InputFieldLabel  := StoreInTempMem(CustomReqDlgSetup.InputFieldLabel);
+  Setup.ButtonsGroupLabel := StoreInTempMem(CustomReqDlgSetup.ButtonsGroupLabel);
+  Setup.ShowCancelBtn    := ord(CustomReqDlgSetup.ShowCancelBtn);
+
+  for i := 0 to 3 do begin
+    Setup.ImagePaths[i]  := StoreInTempMem(CustomReqDlgSetup.ImagePaths[i]);
+    Setup.ImageHints[i]  := StoreInTempMem(CustomReqDlgSetup.ImageHints[i]);
+    Setup.ButtonTexts[i] := StoreInTempMem(CustomReqDlgSetup.ButtonTexts[i]);
+    Setup.ButtonHints[i] := StoreInTempMem(CustomReqDlgSetup.ButtonHints[i]);
+  end;
+
+  WogEvo.ShowMultiPurposeDlg(@Setup);
+
+  Utils.SetPcharValue(@z[1], Setup.InputBuf, sizeof(z[1]));
+
+  // IF:E is expected to return 1..4 for buttons, -1 for ESC
+  if Setup.SelectedItem <> -1 then begin
+    Inc(Setup.SelectedItem);
+  end;
+
+  ServiceMemAllocator.FreePage;
+
+  if IsGetSyntax then begin
+    Res := SetErmParamValue (@SubCmd.Params[0], Setup.SelectedItem);
+
+    if not Res then begin
+      ShowErmError('"IF:E" - invalid first parameter type, expected ?(intVar)');
+    end;
+  end else begin
+    Res := Alg.InRange(ResVarInd, Low(v^), High(v^));
+
+    if Res then begin
+      v[ResVarInd] := Setup.SelectedItem;
+    end else begin
+      ShowErmError('"IF:E" - invalid v-var index (the first parameter) = ' + SysUtils.IntToStr(ResVarInd));
+    end;
+  end;
+
+  ClearCustomReqDlgSetup;
+
+  if Res then begin
+    Context.RetAddr := Ptr($74943B);
+  end else begin
+    Context.RetAddr := Ptr($7496D9);
+  end;
+end; // .Hook_IF_E
 
 function Hook_BA_B (Context: ApiJack.PHookContext): longbool; stdcall;
 const
@@ -9164,6 +9372,19 @@ begin
   PatchApi.p.WriteDataPatch(Ptr($749086), ['8C']);
   PatchApi.p.WriteDataPatch(Ptr($74908B), ['909090909090']);
 
+  (* Fix ZvsCustomReq to not prepend '.\MAPS\' to all image paths *)
+  PatchApi.p.WriteDataPatch(Ptr($7A4D90), ['00']);
+  PatchApi.p.WriteDataPatch(Ptr($7A4D98), ['00']);
+
+  (* Fix IF:D to accept any string and hold settings globally in temporary memory *)
+  ApiJack.Hook(Ptr($74807D), @Hook_IF_D);
+
+  (* Fix IF:F to accept any string and hold settings globally in temporary memory *)
+  ApiJack.Hook(Ptr($74787B), @Hook_IF_F);
+
+  (* Fix IF:E to ignore dialog ID, use standardized custom dialog API and support syntax IF:E?(result) *)
+  ApiJack.Hook(Ptr($747705), @Hook_IF_E);
+
   (* Fix dialog result parsing in Request3Pic to support 3 pictures selection *)
   ApiJack.Hook(Ptr($710352), @Hook_Request3Pic);
 
@@ -9337,11 +9558,13 @@ begin
   // The code below is left to test purposes until updated multipurpose dialog API is ready
   System.FillChar(Setup, sizeof(Setup), #0);
   Setup.Title            := 'hello, world!';
-  Setup.RightSideCaption := 'select one';
-  Setup.Btn1Text         := 'choose me';
-  Setup.Btn2Text         := 'better choose me';
+  Setup.ButtonsGroupLabel := 'select one';
+  Setup.ButtonTexts[0]   := 'choose me';
+  Setup.ButtonTexts[1]   := 'better choose me';
+  Setup.ImagePaths[0]    := 'Mods\TDS\Data\DrDoom.jpg';
+  Setup.InputFieldLabel  := 'Enter something';
   WogEvo.ShowMultiPurposeDlg(@Setup);
-  VarDump([Setup.SelectedItem]);
+  VarDump([Setup.SelectedItem, Setup.InputBuf]);
 end;
 
 begin
@@ -9376,5 +9599,5 @@ begin
   EventMan.GetInstance.On('OnRemoteErmFuncCall',      OnRemoteErmFuncCall);
   EventMan.GetInstance.On('OnSavegameRead',           OnSavegameRead);
   EventMan.GetInstance.On('OnSavegameWrite',          OnSavegameWrite);
-  // EventMan.GetInstance.On('OnAfterErmInstructions',   OnAfterErmInstructions); // FIXME in next versions, once patcher_x86.dll is fixed
+  EventMan.GetInstance.On('OnAfterErmInstructions',   OnAfterErmInstructions); // FIXME in next versions, once patcher_x86.dll is fixed
 end.
