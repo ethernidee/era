@@ -173,6 +173,7 @@ type
     function  IsLastPage (): boolean;
     function  Alloc (Size: integer): pointer;
     function  AllocStr (StrLen: integer): pchar;
+    function  StoreBuf (BufSize: integer; {n} Buf: pointer): {n} pointer;
     procedure FreePage;
     function  OwnsPtr (Addr: pointer): boolean;
   end;
@@ -329,6 +330,17 @@ function TServiceMemAllocator.AllocStr (StrLen: integer): pchar;
 begin
   result         := Self.Alloc(StrLen + 1);
   result[StrLen] := #0;
+end;
+
+function TServiceMemAllocator.StoreBuf (BufSize: integer; {n} Buf: pointer): {n} pointer;
+begin
+  {!} Assert(Utils.IsValidBuf(Buf, BufSize));
+  result := nil;
+
+  if BufSize > 0 then begin
+    result := Self.Alloc(BufSize);
+    Utils.CopyMem(BufSize, Buf, result);
+  end;
 end;
 
 procedure TServiceMemAllocator.FreePage;
