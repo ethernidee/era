@@ -2247,6 +2247,9 @@ begin
   ApiJack.Hook(Ptr($75D72E), @SequentialRandomRangeCdecl,    nil, 5, ApiJack.HOOKTYPE_CALL); // Death Stare WoG
   ApiJack.Hook(Ptr($4690CA), @SequentialRand,                nil, 5, ApiJack.HOOKTYPE_CALL); // Phoenix Ressurection native
 
+  // Fix crash in network game in savegame dialog: RMB on some dialog items above savegame list, attempt to update ScreenLog without having valid textWidget field
+  PatchApi.p.WriteDataPatch(Ptr($58B15A), ['E98200000090']);
+
   // Restore Nagash and Jeddite specialties
   PatchApi.p.WriteDataPatch(Ptr($753E0B), ['E9990000009090']); // PrepareSpecWoG => ignore new WoG settings
   PatchApi.p.WriteDataPatch(Ptr($79C3D8), ['FFFFFFFF']);       // HeroSpecWoG[0].Ind = -1
