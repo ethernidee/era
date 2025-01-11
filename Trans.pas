@@ -20,6 +20,7 @@ uses
   Utils,
 
   EraSettings,
+  EraZip,
   EventMan,
   GameExt,
   Heroes,
@@ -232,20 +233,20 @@ var
   LangFileContents: string;
 
 begin
-  if Files.ReadFileContents(FilePath, LangFileContents) then begin
+  if EraZip.ReadFileContentsFromZipFs(FilePath, LangFileContents) then begin
     LoadLangData(FilePath, LangFileContents, OverrideExistingKeys);
   end;
 end;
 
 procedure LoadLangFiles (const Dir: string; OverrideKeys: boolean);
 begin
-  with Files.Locate(SysUtils.ExcludeTrailingPathDelimiter(Dir) + '\' + CurrentLanguage + '\*.json', Files.ONLY_FILES) do begin
+  with EraZip.LocateInZipFs(SysUtils.ExcludeTrailingPathDelimiter(Dir) + '\' + CurrentLanguage + '\*.json', Files.ONLY_FILES) do begin
     while FindNext do begin
       LoadLangFile(FoundPath, OverrideKeys);
     end;
   end;
 
-  with Files.Locate(SysUtils.ExcludeTrailingPathDelimiter(Dir) + '\*.json', Files.ONLY_FILES) do begin
+  with EraZip.LocateInZipFs(SysUtils.ExcludeTrailingPathDelimiter(Dir) + '\*.json', Files.ONLY_FILES) do begin
     while FindNext do begin
       LoadLangFile(FoundPath, OverrideKeys);
     end;
