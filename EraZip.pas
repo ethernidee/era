@@ -20,6 +20,10 @@ uses
   StrLib,
   Utils;
 
+const
+  ZIP_PATH_PREFIX           = 'zip:\';
+  ZIP_PATH_PREFIX_COLON_POS = 4;
+
 type
   (* Import *)
   TDict       = DataLib.TDict;
@@ -129,10 +133,10 @@ function LocateInZipFs (const MaskedPath: string; SearchSubj: TSearchSubj): ILoc
 function ReadFileContentsFromZipFs (const FilePath: string; var FileContents: string): boolean;
 
 (* Convers real FS or zip FS path into relative path or returns empty string. Any path in zip is considered relative *)
-function ToRelativePath (FilePath, BasePath: string): string;
+function ToRelativePath (const FilePath, BasePath: string): string;
 
 (* Convers real FS or zip FS path into relative path or returns original string. Any path in zip is considered relative *)
-function ToRelativePathIfPossible (FilePath, BasePath: string): string;
+function ToRelativePathIfPossible (const FilePath, BasePath: string): string;
 
 
 (***)  implementation  (***)
@@ -293,9 +297,9 @@ begin
   {!} Assert(Self.IsValidPos);
 
   if Self.fZipItem.Path <> '' then begin
-    result := 'zip:\' + Self.fZipItem.Path + '\' + Self.fFoundRec.Name;
+    result := ZIP_PATH_PREFIX + Self.fZipItem.Path + '\' + Self.fFoundRec.Name;
   end else begin
-    result := 'zip:\' + Self.fFoundRec.Name;
+    result := ZIP_PATH_PREFIX + Self.fFoundRec.Name;
   end;
 end;
 
@@ -529,19 +533,24 @@ begin
   result := Self.fZipItemsMap[RelPath];
 end;
 
-function ToRelativePath (FilePath, BasePath: string): string;
+function IsZipPathHeur (const FilePath: string): boolean;
 begin
-  if Copy(FilePath, 1, 5) = 'zip:\' then begin
-    result := Files.NormalizePathSeparators(Copy(FilePath, 6));
+  result := (Length(FilePath) > Length(ZIP_PATH_PREFIX)) and (FilePath[ZIP_PATH_PREFIX_COLON_POS] = ':');
+end;
+
+function ToRelativePath (const FilePath, BasePath: string): string;
+begin
+  if IsZipPathHeur(FilePath) then begin
+    result := Files.NormalizePathSeparators(Copy(FilePath, Length(ZIP_PATH_PREFIX) + 1));
   end else begin
     result := Files.ToRelativePath(FilePath, BasePath);
   end;
 end;
 
-function ToRelativePathIfPossible (FilePath, BasePath: string): string;
+function ToRelativePathIfPossible (const FilePath, BasePath: string): string;
 begin
-  if Copy(FilePath, 1, 5) = 'zip:\' then begin
-    result := Files.NormalizePathSeparators(Copy(FilePath, 6));
+  if IsZipPathHeur(FilePath) then begin
+    result := Files.NormalizePathSeparators(Copy(FilePath, Length(ZIP_PATH_PREFIX) + 1));
   end else begin
     result := Files.ToRelativePathIfPossible(FilePath, BasePath);
   end;
@@ -577,7 +586,7 @@ var
 begin
   ZipItem := nil;
   // * * * * * //
-  if Files.FileExists(FilePath) then begin
+  if not IsZipPathHeur(FilePath) and Files.FileExists(FilePath) then begin
     result := Files.ReadFileContents(FilePath, FileContents);
   end else begin
     RelPath := ToRelativePath(FilePath, GameExt.GameDir);
@@ -592,7 +601,7 @@ begin
       end;
     end;
   end; // .else
-end; // .function ReadFileContentsFromZipFs
+end;
 
 procedure OnAfterWoG (Event: GameExt.PEvent); stdcall;
 begin
