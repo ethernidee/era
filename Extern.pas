@@ -52,7 +52,7 @@ type
   PErmXVars = ^TErmXVars;
   TErmXVars = array [1..16] of integer;
 
-  TIn32Bool = integer; // 0 or 1
+  TInt32Bool = integer; // 0 or 1
 
   PAppliedPatch = ^TAppliedPatch;
   TAppliedPatch = packed record
@@ -143,23 +143,23 @@ begin
   Ini.ClearIniCache(FileName);
 end;
 
-function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): TIn32Bool; stdcall;
+function ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): TInt32Bool; stdcall;
 var
   ResStr: string;
 
 begin
-  result := TIn32Bool(ord(Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr)));
+  result := TInt32Bool(ord(Ini.ReadStrFromIni(Key, SectionName, FilePath, ResStr)));
   Utils.CopyMem(Length(ResStr) + 1, pchar(ResStr), Res);
 end;
 
-function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): TIn32Bool; stdcall;
+function WriteStrToIni (Key, Value, SectionName, FilePath: pchar): TInt32Bool; stdcall;
 begin
-  result := TIn32Bool(ord(Ini.WriteStrToIni(Key, Value, SectionName, FilePath)));
+  result := TInt32Bool(ord(Ini.WriteStrToIni(Key, Value, SectionName, FilePath)));
 end;
 
-function SaveIni (FilePath: pchar): TIn32Bool; stdcall;
+function SaveIni (FilePath: pchar): TInt32Bool; stdcall;
 begin
-  result := TIn32Bool(ord(Ini.SaveIni(FilePath)));
+  result := TInt32Bool(ord(Ini.SaveIni(FilePath)));
 end;
 
 procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall;
@@ -220,14 +220,14 @@ begin
   result := EraButtons.GetButtonID(ButtonName);
 end;
 
-function PatchExists (PatchName: pchar): TIn32Bool; stdcall;
+function PatchExists (PatchName: pchar): TInt32Bool; stdcall;
 begin
-  result := TIn32Bool(ord(GameExt.PatchExists(PatchName)));
+  result := TInt32Bool(ord(GameExt.PatchExists(PatchName)));
 end;
 
-function PluginExists (PluginName: pchar): TIn32Bool; stdcall;
+function PluginExists (PluginName: pchar): TInt32Bool; stdcall;
 begin
-  result := TIn32Bool(ord(GameExt.PluginExists(PluginName)));
+  result := TInt32Bool(ord(GameExt.PluginExists(PluginName)));
 end;
 
 procedure RedirectFile (OldFileName, NewFileName: pchar); stdcall;
@@ -240,7 +240,7 @@ begin
   Lodman.GlobalRedirectFile(OldFileName, NewFileName);
 end;
 
-function TakeScreenshot (FilePath: pchar; Quality: integer; Flags: integer): TIn32Bool; stdcall;
+function TakeScreenshot (FilePath: pchar; Quality: integer; Flags: integer): TInt32Bool; stdcall;
 begin
   result := ord(Graph.TakeScreenshot(FilePath, Quality, Flags));
 end;
@@ -286,7 +286,7 @@ begin
   result := Memory.UniqueStrings[pchar(Trans.tr(Key, []))];
 end;
 
-function SetLanguage (NewLanguage: pchar): TIn32Bool; stdcall;
+function SetLanguage (NewLanguage: pchar): TInt32Bool; stdcall;
 begin
   result := ord(Trans.SetLanguage(NewLanguage));
 end;
@@ -314,9 +314,9 @@ begin
   Heroes.ShowMessage(Mes);
 end;
 
-function Ask (Question: pchar): TIn32Bool; stdcall;
+function Ask (Question: pchar): TInt32Bool; stdcall;
 begin
-  result := TIn32Bool(ord(Heroes.Ask(Question)));
+  result := TInt32Bool(ord(Heroes.Ask(Question)));
 end;
 
 procedure ReportPluginVersion (const VersionLine: pchar); stdcall;
@@ -631,9 +631,9 @@ begin
   Erm.ZvsErmError(nil, 0, Error);
 end;
 
-function AllocErmFunc (FuncName: pchar; {i} out FuncId: integer): TIn32Bool; stdcall;
+function AllocErmFunc (FuncName: pchar; {i} out FuncId: integer): TInt32Bool; stdcall;
 begin
-  result := TIn32Bool(ord(Erm.AllocErmFunc(FuncName, FuncId)));
+  result := TInt32Bool(ord(Erm.AllocErmFunc(FuncName, FuncId)));
 end;
 
 function FindNextObject (ObjType, ObjSubtype: integer; var x, y, z: integer; Direction: integer): integer; stdcall;
@@ -689,9 +689,9 @@ begin
   result := pchar(ProcessGuid);
 end;
 
-function IsCampaign: TIn32Bool; stdcall;
+function IsCampaign: TInt32Bool; stdcall;
 begin
-  result := TIn32Bool(ord(Heroes.IsCampaign));
+  result := TInt32Bool(ord(Heroes.IsCampaign));
 end;
 
 procedure GetCampaignFileName (Buf: pchar); stdcall;
@@ -772,13 +772,13 @@ begin
   StrRegistry[Key] := TString.Create(NewValue);
 end;
 
-function PcxPngExists (const PcxName: pchar): TIn32Bool; stdcall;
+function PcxPngExists (const PcxName: pchar): TInt32Bool; stdcall;
 begin
   result := ord(Graph.PcxPngExists(PcxName));
 end;
 
 function FireRemoteEvent (DestPlayerId: integer; EventName: pchar; {n} Data: pointer; DataSize: integer; {n} ProgressHandler: Network.TNetworkStreamProgressHandler;
-                                 {n} ProgressHandlerCustomParam: pointer): TIn32Bool; stdcall;
+                                 {n} ProgressHandlerCustomParam: pointer): TInt32Bool; stdcall;
 begin
   result := ord(Network.FireRemoteEvent(DestPlayerId, EventName, Data, DataSize, ProgressHandler, ProgressHandlerCustomParam));
 end;
