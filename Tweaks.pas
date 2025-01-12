@@ -1339,7 +1339,7 @@ begin
 
   if SpellCasterType = CASTER_TYPE_MONSTER then begin
     ActiveStack           := CombatMan.GetActiveStack;
-    CombatMan.ControlSide := ActiveStack.Side xor ord(ActiveStack.SpellDurations[SPELL_HYPNOTIZE] > 0);
+    CombatMan.ControlSide := ActiveStack.Side xor ord(ActiveStack.SpellDurations[SPELL_HYPNOTIZE] <> 0);
   end;
 
   PatchApi.Call(THISCALL_, OrigFunc, [CombatMan, SpellId, TargetPos, SpellCasterType, SecondaryPos, SkillLevel, SpellPower]);
