@@ -1310,6 +1310,45 @@ begin
   Erm.FireErmEvent(Erm.TRIGGER_AFTER_BATTLE_PLACE_BATTLE_OBSTACLES);
 end;
 
+procedure Splice_CombatManager_CastSpell (
+  OrigFunc:        pointer;
+  CombatMan:       Heroes.PCombatManager;
+  SpellId:         integer;
+  TargetPos:       integer;
+  SpellCasterType: integer;
+  SecondaryPos:    integer;
+  SkillLevel:      integer;
+  SpellPower:      integer
+); stdcall;
+
+const
+  CASTER_TYPE_HERO     = 0;
+  CASTER_TYPE_MONSTER  = 1;
+  CASTER_TYPE_ARTIFACT = 2;
+
+var
+  ActiveStack:       Heroes.PBattleStack;
+  OrigCurrStackSide: integer;
+  OrigCurrStackInd:  integer;
+  OrigControlSide:   integer;
+
+begin
+  OrigCurrStackSide := CombatMan.CurrStackSide;
+  OrigCurrStackInd  := CombatMan.CurrStackInd;
+  OrigControlSide   := CombatMan.ControlSide;
+
+  if SpellCasterType = CASTER_TYPE_MONSTER then begin
+    ActiveStack           := CombatMan.GetActiveStack;
+    CombatMan.ControlSide := ActiveStack.Side xor ord(ActiveStack.SpellDurations[SPELL_HYPNOTIZE] > 0);
+  end;
+
+  PatchApi.Call(THISCALL_, OrigFunc, [CombatMan, SpellId, TargetPos, SpellCasterType, SecondaryPos, SkillLevel, SpellPower]);
+
+  CombatMan.CurrStackSide := OrigCurrStackSide;
+  CombatMan.CurrStackInd  := OrigCurrStackInd;
+  CombatMan.ControlSide   := OrigControlSide;
+end;
+
 function Hook_ZvsAdd2Send (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   BUF_ADDR                = $2846C60;
@@ -1444,7 +1483,7 @@ begin
 
   Context.RetAddr := Ptr($71922D);
   result          := false;
-end; // .function Hook_PostBattle_OnAddCreaturesExp
+end;
 
 function Hook_DisplayComplexDialog_GetTimeout (Context: ApiJack.PHookContext): longbool; stdcall;
 var
@@ -2246,6 +2285,10 @@ begin
   ApiJack.Hook(Ptr($75D760), @SequentialRandomRangeFastcall, nil, 6, ApiJack.HOOKTYPE_CALL); // Death Stare WoG-native
   ApiJack.Hook(Ptr($75D72E), @SequentialRandomRangeCdecl,    nil, 5, ApiJack.HOOKTYPE_CALL); // Death Stare WoG
   ApiJack.Hook(Ptr($4690CA), @SequentialRand,                nil, 5, ApiJack.HOOKTYPE_CALL); // Phoenix Ressurection native
+
+  // Fix combatManager::CastSpell function by temporarily setting CombatManager->ControlSide to the side, controlling casting stack.
+  // "Fire wall", "land mines", "quick sands" and many other spells rely on which side is considered friendly for spell.
+  ApiJack.StdSplice(Ptr($5A0140), @Splice_CombatManager_CastSpell, ApiJack.CONV_THISCALL, 7);
 
   // Fix crash in network game in savegame dialog: RMB on some dialog items above savegame list, attempt to update ScreenLog without having valid textWidget field
   PatchApi.p.WriteDataPatch(Ptr($58B15A), ['E98200000090']);
