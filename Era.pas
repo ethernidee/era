@@ -60,14 +60,29 @@ type
     CurrentDlgId: integer;
   end;
 
-  TDwordBool = integer; // 0 or 1
+  TInt32Bool = integer; // 0 or 1
 
   (* Stubs *)
   PPcx16Item   = pointer;
   PBattleStack = pointer;
 
-  TIsCommanderIdFunc       = function (MonId: integer): TDwordBool stdcall;
-  TIsElixirOfLifeStackFunc = function (Stack: PBattleStack): TDwordBool stdcall;
+  PMultiPurposeDlgSetup = ^TMultiPurposeDlgSetup;
+  TMultiPurposeDlgSetup = packed record
+    Title:             pchar;                 // Top dialog title
+    InputFieldLabel:   pchar;                 // If specified, user will be able to enter arbitrary text in input field
+    ButtonsGroupLabel: pchar;                 // If specified, right buttons group will be displayed
+    InputBuf:          pchar;                 // OUT. Field to write a pointer to a temporary buffer with user input. Copy this text to safe location immediately
+    SelectedItem:      integer;               // OUT. Field to write selected item index to (0-3 for buttons, -1 for Cancel)
+    ImagePaths:        array [0..3] of pchar; // All paths are relative to game root directory or custom absolute paths
+    ImageHints:        array [0..3] of pchar;
+    ButtonTexts:       array [0..3] of pchar;
+    ButtonHints:       array [0..3] of pchar;
+    ShowCancelBtn:     TInt32Bool;
+  end;
+
+  TIsCommanderIdFunc       = function (MonId: integer): TInt32Bool stdcall;
+  TIsElixirOfLifeStackFunc = function (Stack: PBattleStack): TInt32Bool stdcall;
+  TShowMultiPurposeDlgFunc = procedure (Setup: PMultiPurposeDlgSetup); stdcall;
 
 
 {$IFDEF FPC}
@@ -94,6 +109,8 @@ var
 {O} Plugin: TPlugin;
 
 
+function  _Hook (Plugin: TPlugin; Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer = nil; MinCodeSize: integer = 0; HookType: integer = HOOKTYPE_BRIDGE): {n} pointer; stdcall; external 'era.dll' name 'Hook';
+function  _Splice (Plugin: TPlugin; OrigFunc, HandlerFunc: pointer; CallingConv: integer; NumArgs: integer; {n} CustomParam: pinteger; {n} AppliedPatch: ppointer): pointer; stdcall; external 'era.dll' name 'Splice';
 function  AllocErmFunc (FuncName: pchar; {i} out FuncId: integer): boolean; stdcall; external 'era.dll' name 'AllocErmFunc';
 function  CreatePlugin (Name: pchar) : {On} TPlugin; stdcall; external 'era.dll' name 'CreatePlugin';
 function  DecorateInt (Value: integer; Buf: pchar; IgnoreSmallNumbers: integer): integer; stdcall; external 'era.dll' name 'DecorateInt';
@@ -113,7 +130,6 @@ function  GetTriggerReadableName (EventId: integer): {O} pchar; stdcall; externa
 function  GetVersion: pchar; stdcall; external 'era.dll' name 'GetVersion';
 function  GetVersionNum: integer; stdcall; external 'era.dll' name 'GetVersionNum';
 function  Hash32 (Data: pchar; DataSize: integer): integer; stdcall; external 'era.dll' name 'Hash32';
-function  _Hook (Plugin: TPlugin; Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer = nil; MinCodeSize: integer = 0; HookType: integer = HOOKTYPE_BRIDGE): {n} pointer; stdcall; external 'era.dll' name 'Hook';
 function  IsCampaign: boolean; stdcall; external 'era.dll' name 'IsCampaign';
 function  IsCommanderId (MonId: integer): boolean; stdcall; external 'era.dll' name 'IsCommanderId';
 function  IsElixirOfLifeStack (Stack: PBattleStack): boolean; stdcall; external 'era.dll' name 'IsElixirOfLifeStack';
@@ -123,13 +139,14 @@ function  PatchExists (PatchName: pchar): boolean; stdcall; external 'era.dll' n
 function  PcxPngExists (const PcxName: pchar): boolean; stdcall; external 'era.dll' name 'PcxPngExists';
 function  PersistErmCmd (CmdStr: pchar): {n} pointer; stdcall; external 'era.dll' name 'PersistErmCmd';
 function  PluginExists (PluginName: pchar): boolean; stdcall; external 'era.dll' name 'PluginExists';
+function  RandomRangeWithFreeParam (MinValue, MaxValue, FreeParam: integer): integer; stdcall; external 'era.dll' name 'RandomRangeWithFreeParam';
 function  ReadSavegameSection (DataSize: integer; {n} Dest: pointer; SectionName: pchar ): integer; stdcall; external 'era.dll' name 'ReadSavegameSection';
 function  ReadStrFromIni (Key, SectionName, FilePath, Res: pchar): boolean; stdcall; external 'era.dll' name 'ReadStrFromIni';
 function  SaveIni (FilePath: pchar): boolean; stdcall; external 'era.dll' name 'SaveIni';
 function  SetIsCommanderIdFunc (NewImpl: TIsCommanderIdFunc): {n} TIsCommanderIdFunc; stdcall; external 'era.dll' name 'SetIsCommanderIdFunc';
 function  SetIsElixirOfLifeStackFunc (NewImpl: TIsElixirOfLifeStackFunc): {n} TIsElixirOfLifeStackFunc; stdcall; external 'era.dll' name 'SetIsElixirOfLifeStackFunc';
 function  SetLanguage (NewLanguage: pchar): boolean; stdcall; external 'era.dll' name 'SetLanguage';
-function  _Splice (Plugin: TPlugin; OrigFunc, HandlerFunc: pointer; CallingConv: integer; NumArgs: integer; {n} CustomParam: pinteger; {n} AppliedPatch: ppointer): pointer; stdcall; external 'era.dll' name 'Splice';
+function  SetMultiPurposeDlgHandler (NewImpl: TShowMultiPurposeDlgFunc): {n} TShowMultiPurposeDlgFunc; stdcall; external 'era.dll' name 'SetMultiPurposeDlgHandler';
 function  SplitMix32 (var Seed: integer; MinValue, MaxValue: integer): integer; stdcall; external 'era.dll' name 'SplitMix32';
 function  TakeScreenshot (FilePath: pchar; Quality: integer; Flags: integer): boolean; stdcall; external 'era.dll' name 'TakeScreenshot';
 function  ToStaticStr ({n} Str: pchar): {n} pchar; stdcall; external 'era.dll' name 'ToStaticStr';
@@ -170,6 +187,7 @@ procedure SetEraRegistryIntValue (const Key: pchar; NewValue: integer); stdcall;
 procedure SetEraRegistryStrValue (const Key: pchar; NewValue: pchar); stdcall; external 'era.dll' name 'SetEraRegistryStrValue';
 procedure ShowErmError (Error: pchar); stdcall; external 'era.dll' name 'ShowErmError';
 procedure ShowMessage (Mes: pchar); stdcall; external 'era.dll' name 'ShowMessage';
+procedure ShowMultiPurposeDlg (Setup: PMultiPurposeDlgSetup); stdcall; external 'era.dll' name 'ShowMultiPurposeDlg';
 procedure WriteSavegameSection (DataSize: integer; {n} Data: pointer; SectionName: pchar); stdcall; external 'era.dll' name 'WriteSavegameSection';
 
 
