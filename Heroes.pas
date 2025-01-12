@@ -1074,35 +1074,42 @@ type
 
   PBattleStack = ^TBattleStack;
   TBattleStack = packed record
-    Unk1:      array [0..$34 - 1] of byte;
-    MonType:   integer; // +0x34
-    Pos:       integer; // +0x38
-    Unk2:      array [$3C..$58 - 1] of byte;
-    HpLost:    integer;
-    Unk3:      array [$5C..$84 - 1] of byte;
-    Flags:     integer;
-    Unk4:      array [$88..$C0 - 1] of byte;
-    HitPoints: integer;
-    Unk5:      array [$C4..$F4 - 1] of byte;
-    Side:      integer;
-    Index:     integer; // 0..21
-    Unk6:      array [$FC..$548 - 1] of byte;
+    Unk1:           array [0..$34 - 1] of byte;
+    MonType:        integer; // +0x34
+    Pos:            integer; // +0x38
+    Unk2:           array [$3C..$58 - 1] of byte;
+    HpLost:         integer;
+    Unk3:           array [$5C..$84 - 1] of byte;
+    Flags:          integer;
+    Unk4:           array [$88..$C0 - 1] of byte;
+    HitPoints:      integer;
+    Unk5:           array [$C4..$F4 - 1] of byte;
+    Side:           integer;
+    Index:          integer; // 0..21
+    Unk6:           array [$FC..$2DC - 1] of byte;
+    SpellDurations: array [0..80] of integer; // spellID => duration
+    Unk7:           array [$420..$548 - 1] of byte;
   end; // .record TBattleStack
 
   PPCombatManager = ^PCombatManager;
   PCombatManager  = ^TCombatManager;
   TCombatManager  = packed record
-    Unk1:         array [0..$3C - 1] of byte;
-    Action:       integer; // +0x3C
-    Spell:        integer; // +0x40
-    TargetPos:    integer; // +0x44
-    ActionParam2: integer; // +0x48
-    Unk2:         array [$4C..$53CC - 1] of byte;
-    Heroes:       array [0..1] of PHero; // +0x53CC
-    Unk3:         array [$53CC + 4 * 2..$13D68 - 1] of byte;
-    IsTactics:    boolean; // 0x13D68
-    Align1:       array [1..3] of byte;
-    Round:        integer;
+    Unk1:          array [0..$3C - 1] of byte;
+    Action:        integer; // +0x3C
+    Spell:         integer; // +0x40
+    TargetPos:     integer; // +0x44
+    ActionParam2:  integer; // +0x48
+    Unk2:          array [$4C..$53CC - 1] of byte;
+    Heroes:        array [0..1] of PHero; // +0x53CC
+    Unk3:          array [$53CC + sizeof(pointer) * 2..$132B8 - 1] of byte;
+    CurrStackSide: integer; // 0x132B8
+    CurrStackInd:  integer; // 0x132BC
+    ControlSide:   integer; // 0x132C0, the side, which is really controlling current stack
+    Unk4:          array [$132C0 + 4..$13D68 - 1] of byte;
+    IsTactics:     boolean; // 0x13D68
+    Align1:        array [1..3] of byte;
+    Round:         integer; // 0x13D6C
+
     // _byte_ field_0[452]; // + 0 ?
     // _BattleHex_ hex[187]; // + 0x1c4 187=17*11
     // _byte_ field_5394[56]; //?
