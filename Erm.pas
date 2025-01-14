@@ -6917,9 +6917,9 @@ begin
     CustomData.Id       := MULTI_PURPOSE_DLG_CUSTOM_DATA_ID;
   end;
 
-  CustomData.Texts[0]     := ZvsEmptyStrOrNull(Setup.Title);
-  CustomData.Texts[1]     := ZvsEmptyStrOrNull(Setup.InputFieldLabel);
-  CustomData.Texts[2]     := ZvsEmptyStrOrNull(Setup.ButtonsGroupLabel);
+  CustomData.Texts[0] := ZvsEmptyStrOrNull(Setup.Title);
+  CustomData.Texts[1] := ZvsEmptyStrOrNull(Setup.InputFieldLabel);
+  CustomData.Texts[2] := ZvsEmptyStrOrNull(Setup.ButtonsGroupLabel);
 
   for i := 0 to High(Setup.ImagePaths) do begin
     CustomData.ImagePaths[i] := ZvsEmptyStrOrNull(Setup.ImagePaths[i]);
@@ -7079,14 +7079,14 @@ end; // .function Hook_Request3Pic
 
 type
   TCustomReqDlgSetup = record
-    Title:            string;
-    InputFieldLabel:  string;
+    Title:             string;
+    InputFieldLabel:   string;
     ButtonsGroupLabel: string;
-    ImagePaths:       array [0..3] of string;
-    ImageHints:       array [0..3] of string;
-    ButtonTexts:      array [0..3] of string;
-    ButtonHints:      array [0..3] of string;
-    ShowCancelBtn:    longbool;
+    ImagePaths:        array [0..3] of string;
+    ImageHints:        array [0..3] of string;
+    ButtonTexts:       array [0..3] of string;
+    ButtonHints:       array [0..3] of string;
+    ShowCancelBtn:     longbool;
   end;
 
 var
@@ -7098,10 +7098,10 @@ var
 
 begin
   with CustomReqDlgSetup do begin
-    Title            := '';
-    InputFieldLabel  := '';
+    Title             := '';
+    InputFieldLabel   := '';
     ButtonsGroupLabel := '';
-    ShowCancelBtn    := false;
+    ShowCancelBtn     := false;
 
     for i := 0 to High(ImagePaths) do begin
       ImagePaths[i] := '';
@@ -7161,11 +7161,11 @@ begin
     end;
 
     if NumParams >= 3 then begin
-      CustomReqDlgSetup.ButtonsGroupLabel := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[2]));
+      CustomReqDlgSetup.InputFieldLabel := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[2]));
     end;
 
     if NumParams >= 4 then begin
-      CustomReqDlgSetup.InputFieldLabel := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[3]));
+      CustomReqDlgSetup.ButtonsGroupLabel := ZvsEmptyStrOrNull(GetInterpolatedZeroableZVarAddr(SubCmd.Nums[3]));
     end;
 
     for i := 4 to Math.Min(NumParams - 1, 7) do begin
