@@ -94,6 +94,7 @@ var
 {O} IntRegistry:   {U} TDict {of Ptr(integer)};
 {O} StrRegistry:   {O} TDict {of TString};
 {O} PluginManager: TPluginManager;
+{O} LegacyPlugin:  TPlugin;
 
 
 const
@@ -365,6 +366,43 @@ begin
 
   PatchApi.SetMainPatcherInstance(Plugin.Patcher);
   result := ApiJack.Hook(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch), MinCodeSize, ApiJack.THookType(HookType));
+  PatchApi.RestoreMainPatcherInstance;
+end;
+
+(* Deprecated legacy *)
+function HookCode (Addr: pointer; HandlerFunc: THookHandler; {n} AppliedPatch: ppointer): pointer; stdcall;
+begin
+  if AppliedPatch <> nil then begin
+    New(ApiJack.PAppliedPatch(AppliedPatch^));
+    AppliedPatch := AppliedPatch^;
+  end;
+
+  PatchApi.SetMainPatcherInstance(LegacyPlugin.Patcher);
+  result := ApiJack.Hook(Addr, HandlerFunc, ApiJack.PAppliedPatch(AppliedPatch), 0, ApiJack.HOOKTYPE_BRIDGE);
+  PatchApi.RestoreMainPatcherInstance;
+end;
+
+(* Deprecated legacy *)
+function ApiHook (HandlerAddr: pointer; HookType: integer; CodeAddr: pointer): {n} pointer; stdcall;
+const
+  OLD_HOOKTYPE_JUMP   = 0;
+  OLD_HOOKTYPE_CALL   = 1;
+  OLD_HOOKTYPE_BRIDGE = 2;
+
+var
+  NewHookType: ApiJack.THookType;
+
+begin
+  NewHookType := ApiJack.HOOKTYPE_BRIDGE;
+
+  if HookType = OLD_HOOKTYPE_JUMP then begin
+    NewHookType := ApiJack.HOOKTYPE_JUMP;
+  end else if HookType = OLD_HOOKTYPE_CALL then begin
+    NewHookType := ApiJack.HOOKTYPE_CALL;
+  end;
+
+  PatchApi.SetMainPatcherInstance(LegacyPlugin.Patcher);
+  result := ApiJack.Hook(CodeAddr, HandlerAddr, nil, 0, NewHookType);
   PatchApi.RestoreMainPatcherInstance;
 end;
 
@@ -889,6 +927,7 @@ end;
 exports
   AdvErm.ExtendArrayLifetime,
   AllocErmFunc,
+  ApiHook,
   Ask,
   ClearIniCache,
   CreatePlugin,
@@ -950,6 +989,7 @@ exports
   Heroes.GetGameState,
   Heroes.LoadTxt,
   Hook,
+  HookCode,
   Ini.ClearAllIniCache,
   IsCampaign,
   IsPatchOverwritten,
@@ -997,4 +1037,6 @@ begin
   IntRegistry   := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   StrRegistry   := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   PluginManager := TPluginManager.Create;
+  LegacyPlugin  := TPlugin.Create('__ERA_Legacy__');
+  PluginManager.RegisterPlugin(LegacyPlugin);
 end.
