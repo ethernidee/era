@@ -7514,7 +7514,6 @@ begin
 
   DlgLink.Dlg.Hints[ItemHintInd].ItemId := ItemId;
   DlgLink.Dlg.Hints[ItemHintInd].Text   := NewHintCopy;
-  VarDump(['Replaced', OldHint, NewHintCopy, ' for item with ID: ', ItemId]);
 
   Context.RetAddr := Ptr($72989C);
   result          := false;
