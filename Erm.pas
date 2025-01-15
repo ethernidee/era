@@ -6705,6 +6705,34 @@ begin
   Context.RetAddr               := Ptr($743A2F);
 end; // .function Hook_HE
 
+function Hook_BM_C_End (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  CombatMan:      Heroes.PCombatManager;
+  PrevStackSide:  integer;
+  PrevStackInd:   integer;
+  NeedsRedrawing: longbool;
+
+type
+  ZvsCastSpell = procedure (SpellId, TargetType, Pos, SkillLevel, Power: integer); cdecl;
+
+begin
+  result          := false;
+  Context.RetAddr := Ptr($75F85D);
+
+  ZvsCastSpell(Ptr($7157F6))(pinteger(Context.EBP - $24)^, 1, pinteger(Context.EBP - $38)^, pinteger(Context.EBP - $2C)^, pinteger(Context.EBP - $1C)^);
+
+  CombatMan               := Heroes.CombatManagerPtr^;
+  PrevStackSide           := pinteger(Context.EBP - $34)^;
+  PrevStackInd            := pinteger(Context.EBP - $30)^;
+  NeedsRedrawing          := (CombatMan.CurrStackSide <> PrevStackSide) or (CombatMan.CurrStackInd <> PrevStackInd);
+  CombatMan.CurrStackSide := PrevStackSide;
+  CombatMan.CurrStackInd  := PrevStackInd;
+
+  if NeedsRedrawing then begin
+    PatchApi.Call(THISCALL_, Ptr($4773F0), [CombatMan]); // CombatManager::ChangeUpdateSelector
+  end;
+end;
+
 function Hook_BM_Z (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   SubCmd:      PErmSubCmd;
@@ -6719,7 +6747,7 @@ begin
     ZvsApply(@BattleStack, sizeof(BattleStack), SubCmd, 0);
     Context.RetAddr := Ptr($75F85D);
   end;
-end; // .function Hook_BM_Z
+end;
 
 function Hook_UN_C (Context: ApiJack.PHookContext): longbool; stdcall;
 var
@@ -9293,6 +9321,9 @@ begin
   ApiJack.Hook(Ptr($745E76), @Hook_HE_L);
   // Remove HE:L0 command support at all
   PatchApi.p.WriteDataPatch(Ptr($745E54), ['01']);
+
+  (* Fix BM:C command to redraw battlefield (including selection border) after casting with non-active stack *)
+  ApiJack.Hook(Ptr($75F594), @Hook_BM_C_End);
 
   (* New BM:Z command to get address of battle stack structure *)
   ApiJack.Hook(Ptr($75F840), @Hook_BM_Z);
