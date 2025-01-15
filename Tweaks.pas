@@ -1203,13 +1203,14 @@ var
 function SequantialRandomRange (MinValue, MaxValue: integer): integer;
 begin
   if SequentialRandCurrCaller = SequentialRandPrevCaller then begin
-    SequantialRandFreeParam := ((SequantialRandFreeParam xor SEQ_RAND_UNIQUE_MASK) + 1) xor SEQ_RAND_UNIQUE_MASK;
+    Inc(SequantialRandFreeParam);
   end else begin
-    SequantialRandFreeParam  := 0 xor SEQ_RAND_UNIQUE_MASK;
+    // впихнуть сюда xor CallerAddr и для обоих сперва вызвать EncodeInt32
+    SequantialRandFreeParam  := 0;
     SequentialRandPrevCaller := SequentialRandCurrCaller;
   end;
 
-  result := _RandomRangeWithFreeParam(SequentialRandCurrCaller, MinValue, MaxValue, SequantialRandFreeParam);
+  result := _RandomRangeWithFreeParam(SequentialRandCurrCaller, MinValue, MaxValue, Crypto.Tm32Encode(SequantialRandFreeParam) xor SEQ_RAND_UNIQUE_MASK);
 end;
 
 function SequentialRand: integer;
