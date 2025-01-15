@@ -941,6 +941,7 @@ procedure SetDialog8TextAlignment (Alignment: integer); stdcall;
 
 (***) implementation (***)
 
+
 uses
   AdvErm,
   ErmTracking,
@@ -1003,6 +1004,7 @@ var
 {O} EventTracker:      ErmTracking.TEventTracker;
     ErmErrReported:    boolean = false;
     LocalErtAutoIndex: integer = FIRST_LOCAL_ERT_INDEX;
+    IsScriptReloading: boolean = false;
 
     (* Binary tree in array. Fast search for first trigger with given ID *)
     TriggerFastAccessList: PTriggerFastAccessList = nil;
@@ -3155,7 +3157,14 @@ begin
     Self.LoadScriptsFromDisk(Self.UNTIL_GLOBAL_SCRIPTS);
     ErmEnabled^       := true;
     ZvsIsGameLoading^ := true;
-    ZvsFindErm;
+    IsScriptReloading := true;
+
+    try
+      ZvsFindErm;
+    finally
+      IsScriptReloading := false;
+    end;
+
     EventMan.GetInstance.Fire('OnAfterScriptsReload');
     Heroes.PrintChatMsg('{~white}ERM and language data were reloaded{~}');
   end;
@@ -6095,24 +6104,6 @@ begin
   end;
 end;
 
-function Hook_FindErm_BeforeMainLoop (Context: ApiJack.PHookContext): longbool; stdcall;
-const
-  GLOBAL_EVENT_SIZE = 52;
-
-begin
-  // Skip internal map events: GEp_ = GEp1 - [sizeof(_GlbEvent_) = 52]
-  pinteger(Context.EBP - $3F4)^ := pinteger(pinteger(Context.EBP - $24)^ + $88)^ - GLOBAL_EVENT_SIZE;
-  ErmErrReported                := false;
-
-  EventMan.GetInstance.Fire('OnBeforeErm');
-
-  if not ZvsIsGameLoading^ then begin
-    EventMan.GetInstance.Fire('OnBeforeErmInstructions');
-  end;
-
-  result := false;
-end;
-
 function Hook_FindErm_ZeroHeap (Context: ApiJack.PHookContext): longbool; stdcall;
 begin
   pinteger(Context.EBP - $354)^ := ZvsErmHeapSize^;
@@ -6131,6 +6122,34 @@ begin
   result          := false;
 end;
 
+function Hook_FindErm_BeforeMainLoop (Context: ApiJack.PHookContext): longbool; stdcall;
+const
+  GLOBAL_EVENT_SIZE = 52;
+
+begin
+  // Skip internal map events: GEp_ = GEp1 - [sizeof(_GlbEvent_) = 52]
+  pinteger(Context.EBP - $3F4)^ := pinteger(pinteger(Context.EBP - $24)^ + $88)^ - GLOBAL_EVENT_SIZE;
+  ErmErrReported                := false;
+
+  if not ZvsIsGameLoading^ then begin
+    ZvsResetCommanders;
+    AdvErm.ResetMemory;
+    FuncNames.Clear;
+    FuncAutoId := INITIAL_FUNC_AUTO_ID;
+    RegisterErmEventNames;
+  end;
+
+  EventMan.GetInstance.Fire('OnBeforeErm');
+
+  if not ZvsIsGameLoading^ then begin
+    EventMan.GetInstance.Fire('OnBeforeErmInstructions');
+    EventMan.GetInstance.Fire('$OnEraMapStart');
+    ScriptMan.LoadScriptsFromDisk(ScriptMan.UNTIL_GLOBAL_SCRIPTS);
+  end;
+
+  result := false;
+end;
+
 var
   _GlobalScriptsPermissionChecked: boolean;
   _NumMapScripts:                  integer;
@@ -6145,22 +6164,12 @@ var
 begin
   ScriptIndPtr := Ptr(Context.EBP - $18);
   // * * * * * //
-  if not ZvsIsGameLoading^ and (ScriptIndPtr^ = 0) then begin
-    EventMan.GetInstance.Fire('$OnEraMapStart');
-    ZvsResetCommanders;
-    AdvErm.ResetMemory;
-    FuncNames.Clear;
-    FuncAutoId := INITIAL_FUNC_AUTO_ID;
-    RegisterErmEventNames;
-    ScriptMan.LoadScriptsFromDisk(ScriptMan.UNTIL_GLOBAL_SCRIPTS);
-  end;
-
   if ScriptIndPtr^ = 0 then begin
     _GlobalScriptsPermissionChecked := false;
     _NumMapScripts                  := 0;
   end;
 
-  if (ScriptIndPtr^ >= ScriptMan.Scripts.Count) and not _GlobalScriptsPermissionChecked then begin
+  if (not ZvsIsGameLoading^ or IsScriptReloading) and (ScriptIndPtr^ >= ScriptMan.Scripts.Count) and not _GlobalScriptsPermissionChecked then begin
     _GlobalScriptsPermissionChecked := true;
 
     if
@@ -9204,11 +9213,14 @@ begin
   // Patch WoG FindErm to allow functions with arbitrary positive IDs
   PatchApi.p.WriteDataPatch(Ptr($74A724), ['EB']);
 
+  (* Free ERM heap on scripts recompilation *)
+  ApiJack.Hook(Ptr($7499A2), @Hook_FindErm_ZeroHeap);
+
   (* Disable internal map scripts interpretation *)
   ApiJack.Hook(Ptr($749BBA), @Hook_FindErm_BeforeMainLoop);
 
-  (* Free ERM heap on scripts recompilation *)
-  ApiJack.Hook(Ptr($7499A2), @Hook_FindErm_ZeroHeap);
+  (* New way of iterating scripts in FindErm *)
+  ApiJack.Hook(Ptr($749BF5), @Hook_FindErm_AfterMapScripts);
 
   (* Remove default mechanism of loading [mapname].erm *)
   PatchApi.p.WriteDataPatch(Ptr($72CA8A), ['E90102000090909090']);
@@ -9231,9 +9243,6 @@ begin
   // Replace MOV WoG, 0 with MOV WoG, 1
   PatchApi.p.WriteDataPatch(Ptr($704F48 + 6), ['01']);
   PatchApi.p.WriteDataPatch(Ptr($74C6E1 + 6), ['01']);
-
-  (* New way of iterating scripts in FindErm *)
-  ApiJack.Hook(Ptr($749BF5), @Hook_FindErm_AfterMapScripts);
 
   (* Remove LoadERMTXT calls everywhere *)
   PatchApi.p.WriteDataPatch(Ptr($749932 - 2), ['33C09090909090909090']);
