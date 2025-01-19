@@ -1350,6 +1350,30 @@ begin
   CombatMan.ControlSide   := OrigControlSide;
 end;
 
+function Splice_ZvsQuickSandOrLandMine (OrigFunc: pointer; SpellCasterType, StackId, Pos, Redraw: integer): integer; stdcall;
+const
+  CASTER_TYPE_HERO     = 0;
+  CASTER_TYPE_MONSTER  = 1;
+  CASTER_TYPE_ARTIFACT = 2;
+
+type
+  TQuickSandOrLandMine = function (SpellCasterType, StackId, Pos, Redraw: integer): integer; cdecl;
+
+var
+  CombatMan:   Heroes.PCombatManager;
+  OrigStackId: integer;
+
+begin
+  CombatMan   := Heroes.CombatManagerPtr^;
+  OrigStackId := CombatMan.CurrStackSide * NUM_BATTLE_STACKS_PER_SIDE + CombatMan.CurrStackInd;
+
+  result := TQuickSandOrLandMine(OrigFunc)(SpellCasterType, StackId, Pos, Redraw);
+
+  if (SpellCasterType = CASTER_TYPE_MONSTER) and (OrigStackId <> StackId) then begin
+    CombatMan.RedrawGridAndSelection;
+  end;
+end;
+
 function Hook_ZvsAdd2Send (Context: ApiJack.PHookContext): longbool; stdcall;
 const
   BUF_ADDR                = $2846C60;
@@ -2290,6 +2314,10 @@ begin
   // Fix combatManager::CastSpell function by temporarily setting CombatManager->ControlSide to the side, controlling casting stack.
   // "Fire wall", "land mines", "quick sands" and many other spells rely on which side is considered friendly for spell.
   ApiJack.StdSplice(Ptr($5A0140), @Splice_CombatManager_CastSpell, ApiJack.CONV_THISCALL, 7);
+
+  // Fix WoG QuickSand and LandMine functions: redraw battlefield if spell is casted by inactive stack
+  ApiJack.StdSplice(Ptr($75EBBA), @Splice_ZvsQuickSandOrLandMine, ApiJack.CONV_CDECL, 4);
+  ApiJack.StdSplice(Ptr($75ED82), @Splice_ZvsQuickSandOrLandMine, ApiJack.CONV_CDECL, 4);
 
   // Fix crash in network game in savegame dialog: RMB on some dialog items above savegame list, attempt to update ScreenLog without having valid textWidget field
   PatchApi.p.WriteDataPatch(Ptr($58B15A), ['E98200000090']);
