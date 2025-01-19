@@ -1140,6 +1140,7 @@ type
     // _byte_ field_13300[3564];
 
     function GetActiveStack: PBattleStack;
+    procedure RedrawGridAndSelection;
   end; // .record TCombatManager
 
   PMouseManager = ^TMouseManager;
@@ -1551,6 +1552,14 @@ Type
 
 begin
   result := TGetActiveStackMethod(Ptr($75AF06))(@Self);
+end;
+
+procedure TCombatManager.RedrawGridAndSelection;
+Type
+  TRedrawGridAndSelection = procedure (Dummy1, Dummy2: integer; CombatMgr: PCombatManager); register;
+
+begin
+  TRedrawGridAndSelection(Ptr($4773F0))(0, 0, @Self);
 end;
 
 procedure TInputMessageQueue.Enqueue (InputMsg: PInputMessage);
