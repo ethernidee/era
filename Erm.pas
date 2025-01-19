@@ -222,7 +222,7 @@ const
   TRIGGER_ONCHAT                         = 77014;
   TRIGGER_ONGAMEENTER                    = 77015;
   TRIGGER_ONGAMELEAVE                    = 77016;
-  TRIGGER_ONREMOTEEVENT                  = 77017;
+  // TRIGGER_ONREMOTEEVENT               = 77017; DELETED, Era uses Network.FireRemoteEvent API now
   TRIGGER_DAILY_TIMER                    = 77018;
   TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE   = 77019;
   TRIGGER_BATTLEFIELD_VISIBLE            = 77020;
@@ -3872,7 +3872,6 @@ begin
   NameTrigger(TRIGGER_ONCHAT,                       'OnChat');
   NameTrigger(TRIGGER_ONGAMEENTER,                  'OnGameEnter');
   NameTrigger(TRIGGER_ONGAMELEAVE,                  'OnGameLeave');
-  NameTrigger(TRIGGER_ONREMOTEEVENT,                'OnRemoteEvent');
   NameTrigger(TRIGGER_DAILY_TIMER,                  'OnEveryDay');
   NameTrigger(TRIGGER_ONBEFORE_BATTLEFIELD_VISIBLE, 'OnBeforeBattlefieldVisible');
   NameTrigger(TRIGGER_BATTLEFIELD_VISIBLE,          'OnBattlefieldVisible');

@@ -39,6 +39,7 @@ uses
   Graph,
   Heroes,
   Lodman,
+  Network,
   Stores,
   Trans,
   WogDialogs;
@@ -828,25 +829,40 @@ begin
 end;
 
 function Hook_ZvsPlaceMapObject (Hook: PatchApi.THiHook; x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain: integer): integer; stdcall;
+var
+  Params: packed array [0..7] of integer;
+
 begin
   if IsLocalPlaceObject then begin
-    Erm.FireRemoteErmEvent(Erm.TRIGGER_ONREMOTEEVENT, [Erm.REMOTE_EVENT_PLACE_OBJECT, x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain]);
+    Params[0] := x;
+    Params[1] := y;
+    Params[2] := Level;
+    Params[3] := ObjType;
+    Params[4] := ObjSubtype;
+    Params[5] := ObjType2;
+    Params[6] := ObjSubtype2;
+    Params[7] := Terrain;
+
+    FireRemoteEvent(Network.DEST_ALL_PLAYERS, 'OnRemoteCreateAdvMapObject', @Params, sizeof(Params));
   end;
 
   result := PatchApi.Call(PatchApi.CDECL_, Hook.GetOriginalFunc(), [x, y, Level, ObjType, ObjSubtype, ObjType2, ObjSubtype2, Terrain]);
 end;
 
-procedure OnRemoteMapObjectPlace (Event: GameExt.PEvent); stdcall;
+procedure OnRemoteCreateAdvMapObject (Event: GameExt.PEvent); stdcall;
+type
+  TParams = packed array [0..7] of integer;
+  PParams = ^TParams;
+
+var
+  Params: PParams;
+
 begin
-  // Switch Network event
-  case Erm.x[1] of
-    Erm.REMOTE_EVENT_PLACE_OBJECT: begin
-      IsLocalPlaceObject := false;
-      Erm.ZvsPlaceMapObject(Erm.x[2], Erm.x[3], Erm.x[4], Erm.x[5], Erm.x[6], Erm.x[7], Erm.x[8], Erm.x[9]);
-      IsLocalPlaceObject := true;
-    end;
-  end;
-end; // .procedure OnRemoteMapObjectPlace
+  Params             := Event.Data;
+  IsLocalPlaceObject := false;
+  Erm.ZvsPlaceMapObject(Params[0], Params[1], Params[2], Params[3], Params[4], Params[5], Params[6], Params[7]);
+  IsLocalPlaceObject := true;
+end;
 
 function Hook_ZvsEnter2Monster (Context: ApiJack.PHookContext): longbool; stdcall;
 const
@@ -2267,10 +2283,9 @@ begin
 
   ApiJack.Hook(Ptr(Zvslib1Handle + ZVSLIB_EXTRACTDEF_OFS + ZVSLIB_EXTRACTDEF_GETGAMEPATH_OFS), @Hook_ZvsLib_ExtractDef_GetGamePath);
 
-  PatchApi.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
-
   (* Syncronise object creation at local and remote PC *)
-  EventMan.GetInstance.On('OnTrigger ' + IntToStr(Erm.TRIGGER_ONREMOTEEVENT), OnRemoteMapObjectPlace);
+  PatchApi.p.WriteHiHook(Ptr($71299E), PatchApi.SPLICE_, PatchApi.EXTENDED_, PatchApi.CDECL_, @Hook_ZvsPlaceMapObject);
+  EventMan.GetInstance.On('OnRemoteCreateAdvMapObject', OnRemoteCreateAdvMapObject);
 
   (* Fixed bug with combined artifact (# > 143) dismounting in heroes meeting screen *)
   PatchApi.p.WriteDataPatch(Ptr($4DC358), ['A0']);
