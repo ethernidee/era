@@ -1383,6 +1383,7 @@ begin
 
   if SpellCasterType = CASTER_TYPE_MONSTER then begin
     ActiveStack           := CombatMan.GetActiveStack;
+    Writeln(ActiveStack.SpellDurations[SPELL_HYPNOTIZE], ' ', ActiveStack.Side, ' ', ActiveStack.Index, ' ', ActiveStack.MonType);
     CombatMan.ControlSide := ActiveStack.Side xor ord(ActiveStack.SpellDurations[SPELL_HYPNOTIZE] <> 0);
   end;
 

@@ -1086,8 +1086,9 @@ type
     Unk5:           array [$C4..$F4 - 1] of byte;
     Side:           integer;
     Index:          integer; // 0..21
-    Unk6:           array [$FC..$2DC - 1] of byte;
-    SpellDurations: array [0..80] of integer; // spellID => duration
+    Unk6:           array [$FC..$198 - 1] of byte;
+    SpellDurations: array [0..80] of integer; // +0x198 spellID => duration
+    SpellLevels:    array [0..80] of integer; // +0x2DC spellID => magic skill level (0..3)
     Unk7:           array [$420..$548 - 1] of byte;
   end; // .record TBattleStack
 
