@@ -238,12 +238,14 @@ end;
 destructor TRider.Destroy;
 begin
   Self.Flush;
+
   inherited Destroy;
 end;
 
 procedure TRider.Write (Size: integer; {n} Addr: pbyte);
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Size));
+
   if Size > 0 then begin
     // if no more space in cache - flush the cache
     if sizeof(Self.fWritingBuf) - Self.fWritingBufPos < Size then begin
@@ -259,8 +261,8 @@ begin
     else begin
       WriteSavegameSection(Size, Addr, Self.fSectionName);
     end;
-  end; // .if
-end; // .procedure TRider.Write
+  end;
+end;
 
 procedure TRider.WriteByte (Value: byte);
 begin
