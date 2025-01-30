@@ -103,7 +103,9 @@ function  GetMapDirName: string;
 procedure SetMapDir (const NewMapDir: string);
 function  GetMapResourcePath (const RelResourcePath: string): string;
 function  LoadMapRscFile (const RelResourcePath: string; out FileContents: string): boolean;
+procedure ClearDebugDir;
 procedure GenerateDebugInfo;
+procedure GenerateDebugInfoWithoutCleanup;
 procedure ReportPluginVersion (const VersionLine: string);
 
 procedure Init (hDll: integer);
@@ -335,9 +337,25 @@ begin
   result := Files.ReadFileContents(GetMapResourcePath(RelResourcePath), FileContents);
 end;
 
+function ClearDebugDirFilter (const FileName, RelPath, FilePath: string; IsDirectory: boolean): boolean;
+begin
+  result := RelPath <> EraSettings.LOG_FILE_NAME;
+end;
+
+procedure ClearDebugDir;
+begin
+  Files.ClearDir(GameDir + '\' + EraSettings.DEBUG_DIR, ClearDebugDirFilter);
+end;
+
+procedure GenerateDebugInfoWithoutCleanup;
+begin
+  EventMan.GetInstance.Fire('OnGenerateDebugInfo');
+end;
+
 procedure GenerateDebugInfo;
 begin
-  EventMan.GetInstance.Fire('OnGenerateDebugInfo', nil, 0);
+  ClearDebugDir;
+  GenerateDebugInfoWithoutCleanup;
 end;
 
 procedure DumpEventList;

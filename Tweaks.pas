@@ -946,9 +946,9 @@ begin
     AttackerPlayerId := AttackerHero.Owner;
   end;
 
-  if Heroes.IsNetworkGame and
-     Heroes.IsValidPlayerId(AttackerPlayerId) and
-     Heroes.IsValidPlayerId(DefenderPlayerId) and
+  if Heroes.IsNetworkGame                       and
+     Heroes.IsValidPlayerId(AttackerPlayerId)   and
+     Heroes.IsValidPlayerId(DefenderPlayerId)   and
      Heroes.GetPlayer(AttackerPlayerId).IsHuman and
      Heroes.GetPlayer(DefenderPlayerId).IsHuman
   then begin
@@ -2154,9 +2154,9 @@ begin
   if not IsCrashing then begin
     IsCrashing      := true;
     Erm.ErmEnabled^ := false;
-    Files.ClearDir(GameExt.GameDir + '\' + EraSettings.DEBUG_DIR);
+    GameExt.ClearDebugDir;
     DumpExceptionContext(ExceptionRecord, Context);
-    EventMan.GetInstance.Fire('OnGenerateDebugInfo');
+    GameExt.GenerateDebugInfoWithoutCleanup;
     Windows.MessageBoxA(Heroes.hWnd^, pchar(Trans.Tr('era.game_crash_message', ['debug_dir', DEBUG_DIR])), '', Windows.MB_OK);
     Debug.KillThisProcess;
   end;
@@ -2346,14 +2346,6 @@ begin
   // Use CombatRound instead of combat manager field to summon creatures every nth turn via creature experience system
   PatchApi.p.WriteDataPatch(Ptr($71DFBE), ['8B15 %d', @CombatRound]);
 
-  // Apply battle RNG seed right before placing obstacles, so that rand() calls in !?BF trigger would not influence battle obstacles
-  ApiJack.StdSplice(Ptr($465E70), @Hook_PlaceBattleObstacles, ApiJack.CONV_THISCALL, 1);
-
-  // Fix sequential PRNG calls in network PvP battles
-  ApiJack.Hook(Ptr($75D760), @SequentialRandomRangeFastcall, nil, 6, ApiJack.HOOKTYPE_CALL); // Death Stare WoG-native
-  ApiJack.Hook(Ptr($75D72E), @SequentialRandomRangeCdecl,    nil, 5, ApiJack.HOOKTYPE_CALL); // Death Stare WoG
-  ApiJack.Hook(Ptr($4690CA), @SequentialRand,                nil, 5, ApiJack.HOOKTYPE_CALL); // Phoenix Ressurection native
-
   // Fix combatManager::CastSpell function by temporarily setting CombatManager->ControlSide to the side, controlling casting stack.
   // "Fire wall", "land mines", "quick sands" and many other spells rely on which side is considered friendly for spell.
   ApiJack.StdSplice(Ptr($5A0140), @Splice_CombatManager_CastSpell, ApiJack.CONV_THISCALL, 7);
@@ -2454,6 +2446,14 @@ begin
   ApiJack.StdSplice(Ptr($61842C), @Hook_Rand, ApiJack.CONV_STDCALL, 0);
   ApiJack.StdSplice(Ptr($50C7B0), @Hook_Tracking_SRand, ApiJack.CONV_THISCALL, 1);
   ApiJack.StdSplice(Ptr($50C7C0), @Hook_RandomRange, ApiJack.CONV_FASTCALL, 2);
+
+  // Apply battle RNG seed right before placing obstacles, so that rand() calls in !?BF trigger would not influence battle obstacles
+  ApiJack.StdSplice(Ptr($465E70), @Hook_PlaceBattleObstacles, ApiJack.CONV_THISCALL, 1);
+
+  // Fix sequential PRNG calls in network PvP battles
+  ApiJack.Hook(Ptr($75D760), @SequentialRandomRangeFastcall, nil, 6, ApiJack.HOOKTYPE_CALL); // Death Stare WoG-native
+  ApiJack.Hook(Ptr($75D72E), @SequentialRandomRangeCdecl,    nil, 5, ApiJack.HOOKTYPE_CALL); // Death Stare WoG
+  ApiJack.Hook(Ptr($4690CA), @SequentialRand,                nil, 5, ApiJack.HOOKTYPE_CALL); // Phoenix Ressurection native
 
   (* Allow to handle dialog outer clicks and provide full mouse info for event *)
   ApiJack.Hook(Ptr($7295F1), @Hook_ErmDlgFunctionActionSwitch);
