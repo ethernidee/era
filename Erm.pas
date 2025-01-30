@@ -7137,7 +7137,7 @@ begin
     Title             := '';
     InputFieldLabel   := '';
     ButtonsGroupLabel := '';
-    ShowCancelBtn     := false;
+    ShowCancelBtn     := true;
 
     for i := 0 to High(ImagePaths) do begin
       ImagePaths[i] := '';
