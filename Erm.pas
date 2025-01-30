@@ -7170,7 +7170,7 @@ var
 
     // Only for non-empty paths
     if (Path <> '')  then begin
-      result := './Maps/' + Path;
+      result := '.\Maps\' + Path;
     end;
   end;
 
