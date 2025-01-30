@@ -1,10 +1,11 @@
 unit EraSettings;
 (*
-DESCRIPTION:  Settings management
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
+  Description: Settings management
+  Author:      Alexander Shostak aka Berserker
 *)
 
 (***)  interface  (***)
+
 uses
   Math,
   SysUtils,
@@ -14,8 +15,9 @@ uses
   Log;
 
 const
-  (* Globally used common directories *)
-  DEBUG_DIR = 'Debug\Era';
+  (* Globally used common directories and files *)
+  DEBUG_DIR     = 'Debug\Era';
+  LOG_FILE_NAME = 'log.txt';
 
   (* Game settings *)
   DEFAULT_GAME_SETTINGS_FILE = 'default heroes3.ini';

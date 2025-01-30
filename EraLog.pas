@@ -72,8 +72,6 @@ procedure InstallLoggers (const GameDir: string);
 
 
 const
-  LOG_FILE_NAME = 'log.txt';
-
   BR                     = #13#10;
   RECORD_BEGIN_SEPARATOR = '>> ';
   RECORD_END_SEPARATOR   = BR + BR;
@@ -197,6 +195,8 @@ begin
     pchar(FilePath), Windows.GENERIC_WRITE, Windows.FILE_SHARE_READ or Windows.FILE_SHARE_DELETE, nil, Windows.CREATE_ALWAYS,
     Windows.FILE_ATTRIBUTE_NORMAL, 0
   );
+
+  {!} Assert(Self.fFile <> Windows.INVALID_HANDLE_VALUE, 'Failed to create main log file: ' + FilePath);
 end;
 
 destructor TFileLogger.Destroy;
@@ -248,7 +248,7 @@ procedure InstallLoggers (const GameDir: string);
 begin
   if EraSettings.IsDebug then begin
     if SysUtils.AnsiLowerCase(EraSettings.GetOpt('Debug.LogDestination').Str('File')) = 'file' then begin
-      Log.InstallLogger(EraLog.TFileLogger.Create(GameDir + '\' + EraSettings.DEBUG_DIR + '\' + LOG_FILE_NAME), true);
+      Log.InstallLogger(EraLog.TFileLogger.Create(GameDir + '\' + EraSettings.DEBUG_DIR + '\' + EraSettings.LOG_FILE_NAME), true);
     end else begin
       Log.InstallLogger(EraLog.TConsoleLogger.Create('Era Log'), true);
     end;
