@@ -586,6 +586,7 @@ var
     DataLen:        integer;
     BuiltData:      string;
     TotalWritten:   integer; // Trying to fix game diff algorithm in online games
+    IsException:    longbool;
 
   procedure GzipWrite (Count: integer; {n} Addr: pointer);
   begin
@@ -603,6 +604,7 @@ begin
 
   TotalWritten := 0;
   NumSections  := 0;
+  IsException  := true;
 
   try
     WritingStorage.Clear;
@@ -634,27 +636,30 @@ begin
         end;
       end; // .while
     end; // .with
-  except
-    on e: SysUtils.Exception do begin
+
+    IsException := false;
+  finally
+    if IsException then begin
       with SavegameWriteCrashDetective do begin
         Log.Write('Stores', 'SavegameWrite',
           '(!) Exception is raised during game saving. Report:' + #13#10#13#10 +
-          SysUtils.Format('NumSections: %d, Last section: %s. Last data ptr: %x. Last data size: %d. Total bytes written: %d.' + #13#10 + 'Exception (%s): %s', [
+          SysUtils.Format('NumSections: %d, Last section: %s. Last data ptr: 0x%x. Last data size: %d. Total bytes written: %d.', [
             NumSections,
             LastSectionName,
             integer(LastDataPtr),
             LastDataSize,
-            TotalDataSize,
-            e.ClassName,
-            e.Message
+            TotalDataSize
           ])
         );
       end;
 
-      DumpSavegameSectionsOpt := true;
-      Heroes.ShowMessage(COLOR_TAG_RED + Trans.tr('era.debug.game_saving_exception_warning', []) + '{~}');
-    end; // .on Exception
-  end; // .except
+      // Error notification and ability to save game twice is disabled for now. Crash with valid IP address is preferred currently.
+      if FALSE then begin
+        DumpSavegameSectionsOpt := true;
+        Heroes.ShowMessage(COLOR_TAG_RED + Trans.tr('era.debug.game_saving_exception_warning', []) + '{~}');
+      end;
+    end;
+  end; // .try
 
   // Default code
   if pinteger(Context.EBP - 4)^ = 0 then begin
