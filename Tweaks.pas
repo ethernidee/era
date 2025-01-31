@@ -136,7 +136,6 @@ type
   end;
 
 var
-{O} TopLevelExceptionHandlers: DataLib.TList {OF Handler: pointer};
 {O} CLangRng:                  FastRand.TClangRng;
 {O} QualitativeRng:            FastRand.TXoroshiro128Rng;
 {O} BattleDeterministicRng:    TBattleDeterministicRng;
@@ -2530,13 +2529,12 @@ end;
 begin
   Windows.InitializeCriticalSection(InetCriticalSection);
   ExceptionsCritSection.Init;
-  TopLevelExceptionHandlers := DataLib.NewList(not Utils.OWNS_ITEMS);
-  CLangRng                  := FastRand.TClangRng.Create(FastRand.GenerateSecureSeed);
-  QualitativeRng            := FastRand.TXoroshiro128Rng.Create(FastRand.GenerateSecureSeed);
-  BattleDeterministicRng    := TBattleDeterministicRng.Create(@CombatId, @CombatRound, @CombatActionId, @CombatRngFreeParam);
-  GlobalRng                 := QualitativeRng;
-  Mp3TriggerHandledEvent    := Windows.CreateEvent(nil, false, false, nil);
-  ComputerName              := WinUtils.GetComputerNameW;
+  CLangRng               := FastRand.TClangRng.Create(FastRand.GenerateSecureSeed);
+  QualitativeRng         := FastRand.TXoroshiro128Rng.Create(FastRand.GenerateSecureSeed);
+  BattleDeterministicRng := TBattleDeterministicRng.Create(@CombatId, @CombatRound, @CombatActionId, @CombatRngFreeParam);
+  GlobalRng              := QualitativeRng;
+  Mp3TriggerHandledEvent := Windows.CreateEvent(nil, false, false, nil);
+  ComputerName           := WinUtils.GetComputerNameW;
 
   EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
