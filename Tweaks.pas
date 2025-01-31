@@ -1498,35 +1498,6 @@ begin
   Erm.FireErmEvent(TRIGGER_BEFORE_BATTLE_REPLAY);
 end;
 
-procedure OnSavegameWrite (Event: PEvent); stdcall;
-var
-  RngState: array of byte;
-
-begin
-  SetLength(RngState, GlobalRng.GetStateSize);
-  GlobalRng.ReadState(pointer(RngState));
-
-  with Stores.NewRider(RNG_SAVE_SECTION) do begin
-    WriteInt(Length(RngState));
-    Write(Length(RngState), pointer(RngState));
-  end;
-end;
-
-procedure OnSavegameRead (Event: PEvent); stdcall;
-var
-  RngState: array of byte;
-
-begin
-  with Stores.NewRider(RNG_SAVE_SECTION) do begin
-    SetLength(RngState, ReadInt);
-
-    if Length(RngState) = GlobalRng.GetStateSize then begin
-      Read(Length(RngState), pointer(RngState));
-      GlobalRng.WriteState(pointer(RngState));
-    end;
-  end;
-end;
-
 function Hook_PostBattle_OnAddCreaturesExp (Context: ApiJack.PHookContext): longbool; stdcall;
 var
   ExpToAdd: integer;
@@ -2547,11 +2518,4 @@ begin
   EventMan.GetInstance.On('OnBeforeLoadGame', OnBeforeLoadGame);
   EventMan.GetInstance.On('OnBeforeSaveGame', OnBeforeSaveGame);
   EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
-
-  if FALSE then begin
-    (* Save global generator state in saved games *)
-    (* Makes game predictable. Disabled. *)
-    EventMan.GetInstance.On('OnSavegameWrite', OnSavegameWrite);
-    EventMan.GetInstance.On('OnSavegameRead',  OnSavegameRead);
-  end;
 end.
