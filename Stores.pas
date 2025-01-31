@@ -180,7 +180,7 @@ var
 {U} Section: StrLib.TStrBuilder;
 
 begin
-  {!} Assert(Utils.IsValidBuf(Data, DataSize));
+  {!} Assert(Utils.IsValidBuf(Data, DataSize), SysUtils.Format('An attempt to write wrong buffer data at 0x%x of size %d to section "%s"', [integer(Data), DataSize, SectionName]));
   Section := nil;
   // * * * * * //
   if DataSize > 0 then begin
@@ -242,6 +242,12 @@ begin
   inherited Destroy;
 end;
 
+procedure TRider.Flush;
+begin
+  WriteSavegameSection(Self.fWritingBufPos, @Self.fWritingBuf[0], Self.fSectionName);
+  Self.fWritingBufPos := 0;
+end;
+
 procedure TRider.Write (Size: integer; {n} Addr: pbyte);
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Size));
@@ -255,7 +261,7 @@ begin
     // if it's enough space in cache to hold passed data then write data to cache
     if sizeof(Self.fWritingBuf) - Self.fWritingBufPos >= Size then begin
       Utils.CopyMem(Size, Addr, @Self.fWritingBuf[Self.fWritingBufPos]);
-      Inc(fWritingBufPos, Size);
+      Inc(Self.fWritingBufPos, Size);
     end
     // else cache is too small, write directly to section
     else begin
@@ -266,12 +272,12 @@ end;
 
 procedure TRider.WriteByte (Value: byte);
 begin
-  Write(sizeof(Value), @Value);
+  Self.Write(sizeof(Value), @Value);
 end;
 
 procedure TRider.WriteInt (Value: integer);
 begin
-  Write(sizeof(Value), @Value);
+  Self.Write(sizeof(Value), @Value);
 end;
 
 procedure TRider.WriteStr (const Str: string);
@@ -280,10 +286,10 @@ var
 
 begin
   StrLen := Length(Str);
-  WriteInt(StrLen);
+  Self.WriteInt(StrLen);
 
   if StrLen > 0 then begin
-    Write(StrLen, pointer(Str));
+    Self.Write(StrLen, pointer(Str));
   end;
 end;
 
@@ -298,17 +304,11 @@ begin
     StrLen := Windows.LStrLen(Str);
   end;
 
-  WriteInt(StrLen);
+  Self.WriteInt(StrLen);
 
   if StrLen > 0 then begin
-    Write(StrLen, pointer(Str));
+    Self.Write(StrLen, pointer(Str));
   end;
-end;
-
-procedure TRider.Flush;
-begin
-  WriteSaveGameSection(Self.fWritingBufPos, @Self.fWritingBuf[0], Self.fSectionName);
-  Self.fWritingBufPos := 0;
 end;
 
 function TRider.Read (Size: integer; {n} Addr: pbyte): integer;
