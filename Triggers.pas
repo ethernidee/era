@@ -633,7 +633,7 @@ begin
   result := false;
 end;
 
-procedure Hook_ExecuteManager (OrigFunc: pointer; This: pointer); stdcall;
+procedure Splice_ExecuteManager (OrigFunc: pointer; This: pointer); stdcall;
 var
   ExceptionRegistration: TDelphiExceptionRegistration;
   Left:                  boolean;
@@ -692,7 +692,7 @@ begin
   if ShouldFastQuit then begin
     FastQuitToGameMenu(Heroes.MainMenuTarget^);
   end;
-end; // .procedure Hook_ExecuteManager
+end; // .procedure Splice_ExecuteManager
 
 function Hook_LoadSavegame (OrigFunc: pointer; GameMan: Heroes.PGameManager; FileName: pchar; PreventLoading: boolean; Dummy: integer): integer; stdcall;
 const
@@ -1273,7 +1273,7 @@ begin
   ApiJack.Hook(Ptr($402240), @Hook_LeaveChat, nil, 6);
 
   (* Main game cycle (AdvMgr, CombatMgr): OnGameEnter, OnGameLeave, OnWinGame, OnLoseGamer and MapFolder settings*)
-  ApiJack.StdSplice(Ptr($4B0BA0), @Hook_ExecuteManager, ApiJack.CONV_THISCALL, 1);
+  ApiJack.StdSplice(Ptr($4B0BA0), @Splice_ExecuteManager, ApiJack.CONV_THISCALL, 1);
 
   (* Hook LoadSavegame to trigger OnGameEnter and OnGameLeave if game loading is performed inside ExecuteManager function *)
   ApiJack.StdSplice(Ptr($4BEFF0), @Hook_LoadSavegame, ApiJack.CONV_THISCALL, 4);
