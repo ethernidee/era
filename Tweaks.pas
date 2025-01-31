@@ -2507,15 +2507,15 @@ begin
   Mp3TriggerHandledEvent := Windows.CreateEvent(nil, false, false, nil);
   ComputerName           := WinUtils.GetComputerNameW;
 
-  EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
-  EventMan.GetInstance.On('OnAfterCreateWindow', OnAfterCreateWindow);
-  EventMan.GetInstance.On('OnAfterVfsInit', OnAfterVfsInit);
-  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
-  EventMan.GetInstance.On('OnBattleReplay', OnBattleReplay);
-  EventMan.GetInstance.On('OnBeforeBattleReplay', OnBeforeBattleReplay);
+  EventMan.GetInstance.On('$OnLoadEraSettings',      OnLoadEraSettings);
+  EventMan.GetInstance.On('OnAfterCreateWindow',     OnAfterCreateWindow);
+  EventMan.GetInstance.On('OnAfterVfsInit',          OnAfterVfsInit);
+  EventMan.GetInstance.On('OnAfterWoG',              OnAfterWoG);
+  EventMan.GetInstance.On('OnBattleReplay',          OnBattleReplay);
+  EventMan.GetInstance.On('OnBeforeBattleReplay',    OnBeforeBattleReplay);
   EventMan.GetInstance.On('OnBeforeBattleUniversal', OnBeforeBattleUniversal);
   EventMan.GetInstance.On('OnBeforeErmInstructions', OnBeforeErmInstructions);
-  EventMan.GetInstance.On('OnBeforeLoadGame', OnBeforeLoadGame);
-  EventMan.GetInstance.On('OnBeforeSaveGame', OnBeforeSaveGame);
-  EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
+  EventMan.GetInstance.On('OnBeforeLoadGame',        OnBeforeLoadGame);
+  EventMan.GetInstance.On('OnBeforeSaveGame',        OnBeforeSaveGame);
+  EventMan.GetInstance.On('OnGenerateDebugInfo',     OnGenerateDebugInfo);
 end.
