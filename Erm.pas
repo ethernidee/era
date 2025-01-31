@@ -1585,7 +1585,7 @@ begin
     FuncNames  := DataLib.UnserializeDict(ReadStr, not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
   end;
 
-  FreeAndNil(FuncIdToNameMap);
+  SysUtils.FreeAndNil(FuncIdToNameMap);
   FuncIdToNameMap := DataLib.FlipDict(FuncNames);
   RegisterErmEventNames;
 
