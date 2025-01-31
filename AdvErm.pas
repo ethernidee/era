@@ -2424,18 +2424,16 @@ begin
   with Rider do begin
     WriteInt(AssocMem.ItemCount);
 
-    AssocMem.BeginIterate;
-
-    while AssocMem.IterateNext(AssocVarName, pointer(AssocVarValue)) do begin
-      WriteStr(AssocVarName);
-      WriteInt(AssocVarValue.IntValue);
-      WriteStr(AssocVarValue.StrValue);
-      AssocVarValue := nil;
+    with DataLib.IterateDict(AssocMem) do begin
+      while IterNext do begin
+        AssocVarValue := TAssocVar(IterValue);
+        WriteStr(IterKey);
+        WriteInt(AssocVarValue.IntValue);
+        WriteStr(AssocVarValue.StrValue);
+      end;
     end;
-
-    AssocMem.EndIterate;
   end; // .with
-end; // .procedure SaveAssocMem
+end;
 
 procedure SaveHints (Rider: Stores.IRider);
 var
