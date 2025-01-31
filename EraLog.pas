@@ -195,8 +195,6 @@ begin
     pchar(FilePath), Windows.GENERIC_WRITE, Windows.FILE_SHARE_READ or Windows.FILE_SHARE_DELETE, nil, Windows.CREATE_ALWAYS,
     Windows.FILE_ATTRIBUTE_NORMAL, 0
   );
-
-  {!} Assert(Self.fFile <> Windows.INVALID_HANDLE_VALUE, 'Failed to create main log file: ' + FilePath);
 end;
 
 destructor TFileLogger.Destroy;
