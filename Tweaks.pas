@@ -2128,8 +2128,9 @@ begin
     DumpExceptionContext(ExceptionRecord, Context);
     GameExt.GenerateDebugInfoWithoutCleanup;
     Windows.MessageBoxA(Heroes.hWnd^, pchar(Trans.Tr('era.game_crash_message', ['debug_dir', DEBUG_DIR])), '', Windows.MB_OK);
-    Debug.KillThisProcess;
   end;
+
+  Debug.KillThisProcess;
 
   {!} ExceptionsCritSection.Leave;
 end;
@@ -2459,6 +2460,13 @@ begin
 
   (* Remove WoG Service_SetExcFilter call, preventing SetUnhandledExceptionFilter *)
   PatchApi.p.WriteDataPatch(Ptr($77180E), ['90909090909090909090909090']);
+
+  (* Fix advmap objects control word unpacking: right arithmetic shift was used instead of right logical shift *)
+  PatchApi.p.WriteDataPatch(Ptr($4A4CF8), ['E8']);
+  PatchApi.p.WriteDataPatch(Ptr($4A512E), ['E8']);
+  PatchApi.p.WriteDataPatch(Ptr($4A61CC), ['E8']);
+  PatchApi.p.WriteDataPatch(Ptr($4A66AC), ['E8']);
+  PatchApi.p.WriteDataPatch(Ptr($4A795B), ['E8']);
 end; // .procedure OnAfterWoG
 
 procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
