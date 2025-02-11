@@ -183,6 +183,7 @@ const
   WND_MANAGER    = $6992D0;
   SOUND_MANAGER  = $699414;
   COMBAT_MANAGER = $699420;
+  SWAP_MANAGER   = $6A3D90;
 
   (* Colors *)
   RED_COLOR              = 'F2223E';
@@ -1050,7 +1051,6 @@ type
   PGeneralPurposeTextBuf = ^TGeneralPurposeTextBuf;
   TGeneralPurposeTextBuf = array [0..767] of char;
 
-  PPGameManager = ^PGameManager;
   PGameManager  = ^TGameManager;
   TGameManager  = packed record
     _0:      array [1..129904] of byte;
@@ -1092,7 +1092,35 @@ type
     Unk7:           array [$420..$548 - 1] of byte;
   end; // .record TBattleStack
 
-  PPCombatManager = ^PCombatManager;
+  PBaseManager = ^TBaseManager;
+  TBaseManager = packed record
+    VMT:         pointer;
+    NextManager: {n} PBaseManager;
+    PrevManager: {n} PBaseManager;
+    Id:          integer;
+    Priority:    integer;
+    Name:        array [0..31] of char;
+    Status:      integer;
+  end;
+
+  PSwapManager = ^TSwapManager;
+  TSwapManager = packed record
+    Base:               TBaseManager;
+    Parent:             pointer;
+    Border:             pointer;
+    Heroes:             array [0..1] of PHero;
+    SourceHeroInd:      integer; // 0..1
+    TargetHeroInd:      integer; // 0..1
+    SourceSlot:         integer;
+    DestSlot:           integer;
+    IsSlotClicked:      TInt32Bool;
+    _Align1:            byte;
+    IsSamePlayer:       boolean;
+    _Align2:            array [1..2] of byte;
+    ChatMessageHandler: pointer;
+    NetMessageHandler:  pointer;
+  end;
+
   PCombatManager  = ^TCombatManager;
   TCombatManager  = packed record
     Unk1:          array [0..$3C - 1] of byte;
@@ -1225,7 +1253,6 @@ type
     f95C:   integer;
   end;
 
-  PPWndManager = ^PWndManager;
   PWndManager  = ^TWndManager;
   TWndManager  = packed record
     _1:           array [1..55] of byte;
@@ -1295,12 +1322,12 @@ const
   ZvsRandom:   function (MinValue, MaxValue: integer): integer cdecl = Ptr($710509);
   TimeGetTime: function: integer = Ptr($77114A);
 
-  WndManagerPtr:    PPWndManager    = Ptr($6992D0);
+  WndManagerPtr:    ^PWndManager    = Ptr($6992D0);
   MouseManagerPtr:  ^PMouseManager  = Ptr($6992B0);
   InputManagerPtr:  ^PInputManager  = Ptr($699530);
-  GameManagerPtr:   PPGameManager   = Ptr(GAME_MANAGER);
-  CombatManagerPtr: PPCombatManager = Ptr(COMBAT_MANAGER);
-  SwapManagerPtr:   ppointer        = Ptr($6A3D90);
+  GameManagerPtr:   ^PGameManager   = Ptr(GAME_MANAGER);
+  CombatManagerPtr: ^PCombatManager = Ptr(COMBAT_MANAGER);
+  SwapManagerPtr:   ^PSwapManager   = Ptr($6A3D90);
   MainMenuTarget:   pinteger        = Ptr($697728);
 
   CursorHotspotsX:  Utils.PEndlessIntArr = Ptr($67FFA0);
