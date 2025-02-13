@@ -6803,17 +6803,12 @@ begin
   end;
 end; // .function Hook_UN_C
 
-function Hook_CM_H (Context: ApiJack.PHookContext): longbool; stdcall;
+function Splice_SwapManager_Create (OrigFunc: pointer; SwapManager: Heroes.PSwapManager; LeftHero, RightHero: Heroes.PHero): integer; stdcall;
 begin
-  pinteger($2730F60)^ := -1;
-  pinteger($A4AAE8)^  := -1;
+  pinteger($2730F60)^ := LeftHero.Id;
+  pinteger($A4AAE8)^  := RightHero.Id;
 
-  if (Heroes.SwapManagerPtr^ <> nil) and (Heroes.SwapManagerPtr^.Heroes[0] <> nil) and (Heroes.SwapManagerPtr^.Heroes[1] <> nil) then begin
-    pinteger($2730F60)^ := Heroes.SwapManagerPtr^.Heroes[0].Id;
-    pinteger($A4AAE8)^  := Heroes.SwapManagerPtr^.Heroes[1].Id;
-  end;
-
-  result := true;
+  result := PatchApi.Call(THISCALL_, OrigFunc, [SwapManager, LeftHero, RightHero]);
 end;
 
 function Hook_DlgCallback (Context: ApiJack.PHookContext): longbool; stdcall;
@@ -9344,7 +9339,7 @@ begin
   ApiJack.Hook(Ptr($731FF0), @Hook_UN_C);
 
   (* Fix CM:H to always return valid hero IDs from SwapManager even in non-click events *)
-  ApiJack.Hook(Ptr($74F265), @Hook_CM_H);
+  ApiJack.StdSplice(Ptr($5AE850), @Splice_SwapManager_Create, ApiJack.CONV_THISCALL, 3);
 
   (* Fix missing final "break" keyword in CO:A case, leading to automatical CO:N execution in many branches *)
   PatchApi.p.WriteDataPatch(Ptr($76F929), ['0F872A0E']);
