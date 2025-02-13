@@ -2422,7 +2422,7 @@ begin
   ApiJack.StdSplice(Ptr($465E70), @Hook_PlaceBattleObstacles, ApiJack.CONV_THISCALL, 1);
 
   // Fix sequential PRNG calls in network PvP battles
-  ApiJack.Hook(Ptr($75D760), @SequentialRandomRangeFastcall, nil, 6, ApiJack.HOOKTYPE_CALL); // Death Stare WoG-native
+  ApiJack.Hook(Ptr($75D760), @SequentialRandomRangeFastcall, nil, 7, ApiJack.HOOKTYPE_CALL); // Death Stare WoG-native
   ApiJack.Hook(Ptr($75D72E), @SequentialRandomRangeCdecl,    nil, 5, ApiJack.HOOKTYPE_CALL); // Death Stare WoG
   ApiJack.Hook(Ptr($4690CA), @SequentialRand,                nil, 5, ApiJack.HOOKTYPE_CALL); // Phoenix Ressurection native
 
