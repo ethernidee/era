@@ -1079,19 +1079,19 @@ type
     Pos:            integer; // +0x38
     Unk2:           array [$3C..$4C - 1] of byte;
     Num:            integer; // +0x4C
-    Unk2:           array [$50..$58 - 1] of byte;
+    Unk3:           array [$50..$58 - 1] of byte;
     HpLost:         integer; // +0x58
-    Unk3:           array [$5C..$84 - 1] of byte;
+    Unk4:           array [$5C..$84 - 1] of byte;
     Flags:          integer;
-    Unk4:           array [$88..$C0 - 1] of byte;
+    Unk5:           array [$88..$C0 - 1] of byte;
     HitPoints:      integer;
-    Unk5:           array [$C4..$F4 - 1] of byte;
+    Unk6:           array [$C4..$F4 - 1] of byte;
     Side:           integer;
     Index:          integer; // 0..21
-    Unk6:           array [$FC..$198 - 1] of byte;
+    Unk7:           array [$FC..$198 - 1] of byte;
     SpellDurations: array [0..80] of integer; // +0x198 spellID => duration
     SpellLevels:    array [0..80] of integer; // +0x2DC spellID => magic skill level (0..3)
-    Unk7:           array [$420..$548 - 1] of byte;
+    Unk8:           array [$420..$548 - 1] of byte;
 
     function GetId: integer; inline;
   end; // .record TBattleStack
