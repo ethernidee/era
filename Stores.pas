@@ -578,14 +578,49 @@ begin
   result := true;
 end;
 
+function SavegameSectionDumper (Buf: pointer; BufSize: integer; {n} Context: pointer): boolean;
+var
+  SavegameSectionName: ^string;
+
+begin
+  result              := true;
+  SavegameSectionName := Context;
+
+  Files.AppendFileContents(Buf, BufSize, DUMP_SAVEGAME_SECTIONS_DIR + '\' + SavegameSectionName^ + '.data');
+end;
+
+procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
+var
+  SectionName: string;
+
+begin
+  if WritingStorage.ItemCount > 0 then begin
+    if WritingStorage.Locked then begin
+      WritingStorage.EndIterate;
+    end;
+
+    Files.ForcePath(GameExt.GameDir + '\' + DUMP_SAVEGAME_SECTIONS_DIR);
+
+    with DataLib.IterateDict(WritingStorage) do begin
+      while IterNext do begin
+        SectionName := IterKey;
+
+        (IterValue as StrLib.TStrBuilder).PipeThrough(SavegameSectionDumper, @SectionName);
+      end;
+    end;
+  end;
+end;
+
 function Hook_SaveGameWrite (Context: ApiJack.PHookContext): longbool; stdcall;
 var
 {U} StrBuilder:     StrLib.TStrBuilder;
     NumSections:    integer;
+    SectionName:    string;
     SectionNameLen: integer;
     DataLen:        integer;
     BuiltData:      string;
     TotalWritten:   integer; // Trying to fix game diff algorithm in online games
+    SectionsReport: string;
     IsException:    longbool;
 
   procedure GzipWrite (Count: integer; {n} Addr: pointer);
@@ -632,10 +667,12 @@ begin
         GzipWrite(Length(BuiltData), pointer(BuiltData));
 
         if DumpSavegameSectionsOpt then begin
-          Files.WriteFileContents(BuiltData, DUMP_SAVEGAME_SECTIONS_DIR + '\' + IterKey + '.data');
+          Files.WriteFileContents(BuiltData, GameExt.GameDir + '\' + DUMP_SAVEGAME_SECTIONS_DIR + '\' + IterKey + '.data');
         end;
       end; // .while
     end; // .with
+
+    WritingStorage.Clear;
 
     IsException := false;
   finally
@@ -643,15 +680,33 @@ begin
       with SavegameWriteCrashDetective do begin
         Log.Write('Stores', 'SavegameWrite',
           '(!) Exception is raised during game saving. Report:' + #13#10#13#10 +
-          SysUtils.Format('NumSections: %d, Last section: %s. Last data ptr: 0x%x. Last data size: %d. Total bytes written: %d.', [
+          SysUtils.Format('NumSections: %d, Last section: %s. Last data ptr: 0x%x. Last data size: %d. Total sections size: %d. Total bytes written: %d.', [
             NumSections,
             LastSectionName,
             integer(LastDataPtr),
             LastDataSize,
-            TotalDataSize
+            TotalDataSize,
+            TotalWritten
           ])
         );
       end;
+
+      BuiltData := '';
+
+      if WritingStorage.Locked then begin
+        WritingStorage.EndIterate;
+      end;
+
+      SectionsReport := '';
+
+      with DataLib.IterateDict(WritingStorage) do begin
+        while IterNext do begin
+          SectionName    := IterKey;
+          SectionsReport := SectionsReport + IterKey + ': ' + SysUtils.IntToStr((IterValue as StrLib.TStrBuilder).Size) + #13#10;
+        end;
+      end;
+
+      Log.Write('Stores', 'SavegameWrite', 'Sections report:' + #13#10#13#10 + SectionsReport);
 
       // Error notification and ability to save game twice is disabled for now. Crash with valid IP address is preferred currently.
       if FALSE then begin
@@ -755,6 +810,7 @@ end;
 begin
   WritingStorage := AssocArrays.NewStrictAssocArr(StrLib.TStrBuilder);
   ReadingStorage := AssocArrays.NewStrictAssocArr(TStoredData);
-  EventMan.GetInstance.On('$OnLoadEraSettings', OnLoadEraSettings);
-  EventMan.GetInstance.On('OnAfterWoG', OnAfterWoG);
+  EventMan.GetInstance.On('$OnLoadEraSettings',  OnLoadEraSettings);
+  EventMan.GetInstance.On('OnAfterWoG',          OnAfterWoG);
+  EventMan.GetInstance.On('OnGenerateDebugInfo', OnGenerateDebugInfo);
 end.
