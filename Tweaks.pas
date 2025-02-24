@@ -7,6 +7,7 @@ unit Tweaks;
 (***)  interface  (***)
 uses
   Math,
+  PsApi,
   SysUtils,
   Types,
   Windows,
@@ -2117,6 +2118,41 @@ begin
   {!} Debug.ModuleContext.Unlock;
 end; // .procedure DumpExceptionContext
 
+procedure LogMemoryState;
+var
+  MemoryInfo: PsApi.PROCESS_MEMORY_COUNTERS;
+
+begin
+  System.FillChar(MemoryInfo, sizeof(MemoryInfo), #0);
+  MemoryInfo.cb := sizeof(MemoryInfo);
+
+  if (PsApi.GetProcessMemoryInfo(Windows.GetCurrentProcess(), @MemoryInfo, sizeof(MemoryInfo))) then begin
+    Log.Write('ExceptionHandler', 'LogMemoryState', SysUtils.Format(
+      'PageFaultCount: %d'#13#10             +
+      'PeakWorkingSetSize: %d'#13#10         +
+      'WorkingSetSize: %d'#13#10             +
+      'QuotaPeakPagedPoolUsage: %d'#13#10    +
+      'QuotaPagedPoolUsage: %d'#13#10        +
+      'QuotaPeakNonPagedPoolUsage: %d'#13#10 +
+      'QuotaNonPagedPoolUsage: %d'#13#10     +
+      'PagefileUsage: %d'#13#10              +
+      'PeakPagefileUsage: %d'#13#10          +
+      'PagefileUsage: %d',
+    [
+      MemoryInfo.PageFaultCount,
+      MemoryInfo.PeakWorkingSetSize,
+      MemoryInfo.WorkingSetSize,
+      MemoryInfo.QuotaPeakPagedPoolUsage,
+      MemoryInfo.QuotaPagedPoolUsage,
+      MemoryInfo.QuotaPeakNonPagedPoolUsage,
+      MemoryInfo.QuotaNonPagedPoolUsage,
+      MemoryInfo.PagefileUsage,
+      MemoryInfo.PeakPagefileUsage,
+      MemoryInfo.PagefileUsage
+    ]));
+  end;
+end;
+
 procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; Context: Windows.PContext);
 begin
   {!} ExceptionsCritSection.Enter;
@@ -2126,6 +2162,7 @@ begin
     Erm.ErmEnabled^ := false;
     GameExt.ClearDebugDir;
     DumpExceptionContext(ExceptionRecord, Context);
+    LogMemoryState;
     GameExt.GenerateDebugInfoWithoutCleanup;
     Windows.MessageBoxA(Heroes.hWnd^, pchar(Trans.Tr('era.game_crash_message', ['debug_dir', DEBUG_DIR])), '', Windows.MB_OK);
   end;
