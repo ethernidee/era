@@ -2416,7 +2416,6 @@ end; // .procedure SaveSlots
 procedure SaveAssocMem (Rider: Stores.IRider);
 var
 {U} AssocVarValue: TAssocVar;
-    AssocVarName:  string;
 
 begin
   AssocVarValue := nil;
