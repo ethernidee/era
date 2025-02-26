@@ -2401,7 +2401,7 @@ begin
 
         if (NumItems > 0) and (Slot.StorageType = SLOT_STORED) then begin
           if Slot.ItemsType = INT_VAR then begin
-            Write(NumItems * sizeof(integer), @Slot.IntItems[0])
+            Write(NumItems * sizeof(integer), @Slot.IntItems[0]);
           end else begin
             for i := 0 to NumItems - 1 do begin
               WriteStr(Slot.StrItems[i]);
@@ -2416,6 +2416,7 @@ end; // .procedure SaveSlots
 procedure SaveAssocMem (Rider: Stores.IRider);
 var
 {U} AssocVarValue: TAssocVar;
+    AssocVarName:  string;
 
 begin
   AssocVarValue := nil;
@@ -3402,7 +3403,7 @@ end;
 
 function New_ZvsSaveMP3 (OrigFunc: pointer): integer; stdcall;
 begin
-  Heroes.GzipWrite(4, pchar('-MP3'));
+  Heroes.SavegameWriter.Write(4, pchar('-MP3'));
   result := 0;
 end;
 
@@ -3412,12 +3413,12 @@ var
   Buf:    array of byte;
 
 begin
-  Heroes.GzipRead(sizeof(Header), @Header);
+  Heroes.SavegameReader.Read(sizeof(Header), @Header);
 
   // Emulate original WoG Mp3 data loading
   if Header = 'LMP3' then begin
     SetLength(Buf, 200 * 256);
-    Heroes.GzipRead(Length(Buf), pointer(Buf));
+    Heroes.SavegameReader.Read(Length(Buf), pointer(Buf));
   end;
 
   result := 0;
