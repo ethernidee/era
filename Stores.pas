@@ -115,6 +115,10 @@ uses
 
 
 type
+  (* Import *)
+  SavegameWriter = Heroes.SavegameWriter;
+  SavegameReader = Heroes.SavegameReader;
+
   TStoredData = class
     Data:       string;
     ReadingPos: integer;
@@ -626,7 +630,7 @@ var
   procedure GzipWrite (Count: integer; {n} Addr: pointer);
   begin
     Inc(TotalWritten, Count);
-    Heroes.GzipWrite(Count, Addr);
+    SavegameWriter.Write(Count, Addr);
   end;
 
 begin
@@ -729,7 +733,6 @@ end; // .function Hook_SaveGameWrite
 function Hook_SaveGameRead (Context: ApiJack.PHookContext): longbool; stdcall;
 var
 {U} StoredData:      TStoredData;
-    BytesRead:       integer;
     NumSections:     integer;
     SectionNameLen:  integer;
     SectionName:     string;
@@ -738,30 +741,23 @@ var
     SavegameVersion: integer;
     i:               integer;
 
-  procedure ForceGzipRead (Count: integer; {n} Addr: pointer);
-  begin
-    BytesRead := Heroes.GzipRead(Count, Addr);
-    {!} Assert(BytesRead = Count);
-  end;
-
 begin
   StoredData := nil;
   // * * * * * //
   ReadingStorage.Clear;
-  NumSections := 0;
-  BytesRead   := Heroes.GzipRead(sizeof(NumSections), @NumSections);
-  {!} Assert((BytesRead = sizeof(NumSections)) or (BytesRead = 0), 'Failed to read NumSections:integer from saved game');
+  NumSections := SavegameReader.ReadInt;
+  {!} Assert(NumSections >= 0, 'Invalid number of savegame sections: ' + SysUtils.IntToStr(NumSections));
 
   for i := 1 to NumSections do begin
-    ForceGzipRead(sizeof(SectionNameLen), @SectionNameLen);
+    SavegameReader.Read(sizeof(SectionNameLen), @SectionNameLen);
     {!} Assert(SectionNameLen >= 0);
     SetLength(SectionName, SectionNameLen);
-    ForceGzipRead(SectionNameLen, pointer(SectionName));
+    SavegameReader.Read(SectionNameLen, pointer(SectionName));
 
-    ForceGzipRead(sizeof(DataLen), @DataLen);
+    SavegameReader.Read(sizeof(DataLen), @DataLen);
     {!} Assert(DataLen >= 0);
     SetLength(SectionData, DataLen);
-    ForceGzipRead(DataLen, pointer(SectionData));
+    SavegameReader.Read(DataLen, pointer(SectionData));
 
     StoredData                  := TStoredData.Create;
     StoredData.Data             := SectionData; SectionData := '';
