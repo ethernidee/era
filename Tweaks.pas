@@ -97,10 +97,14 @@ procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; 
 
 const
   RNG_SAVE_SECTION      = 'Era.RNG';
-  CRASH_SCREENHOST_PATH = EraSettings.DEBUG_DIR + '\screenshot.jpg';
+  CRASH_SCREENSHOT_PATH = EraSettings.DEBUG_DIR + '\screenshot.jpg';
   CRASH_SAVEGAME_PATH   = EraSettings.DEBUG_DIR + '\savegame.gm1';
 
   DL_GROUP_INDEX_MARKER = 100000; // DL frame index column is DL_GROUP_INDEX_MARKER * groupIndex + frameIndex
+
+  OUT_OF_MEMORY_RESERVE_BLOCK_SIZE = 1024000;
+  OUT_OF_MEMORY_RESERVE_BYTES         = 1 * OUT_OF_MEMORY_RESERVE_BLOCK_SIZE;  // Delphi GetMem reserve
+  OUT_OF_MEMORY_VIRTUAL_RESERVE_BYTES = 15 * OUT_OF_MEMORY_RESERVE_BLOCK_SIZE; // VirtualAlloc reserved, but not commited
 
 type
   TWogMp3Process = procedure; stdcall;
@@ -141,6 +145,8 @@ var
 {O} QualitativeRng:            FastRand.TXoroshiro128Rng;
 {O} BattleDeterministicRng:    TBattleDeterministicRng;
 {U} GlobalRng:                 FastRand.TRng;
+{O} OutOfMemoryReserve:        pointer;
+{O} OutOfMemoryVirtualReserve: pointer;
 
   hTimerEvent:           THandle;
   InetCriticalSection:   Windows.TRTLCriticalSection;
@@ -2120,7 +2126,14 @@ end; // .procedure DumpExceptionContext
 
 procedure LogMemoryState;
 var
-  MemoryInfo: PsApi.PROCESS_MEMORY_COUNTERS;
+  MemoryInfo:              PsApi.PROCESS_MEMORY_COUNTERS;
+  MemoryManagerState:      System.TMemoryManagerState;
+  ReservedSmallBlocksSize: cardinal;
+  TotalSmallBlocksSize:    cardinal;
+  TotalSmallBlocksCount:   cardinal;
+  TotalAllocatedSize:      cardinal;
+  TotalReservedSize:       cardinal;
+  i:                       integer;
 
 begin
   System.FillChar(MemoryInfo, sizeof(MemoryInfo), #0);
@@ -2151,6 +2164,47 @@ begin
       MemoryInfo.PagefileUsage
     ]));
   end;
+
+  System.GetMemoryManagerState(MemoryManagerState);
+
+  ReservedSmallBlocksSize := 0;
+  TotalSmallBlocksSize    := 0;
+  TotalSmallBlocksCount   := 0;
+
+  for i := Low(MemoryManagerState.SmallBlockTypeStates) to High(MemoryManagerState.SmallBlockTypeStates) do begin
+    Inc(ReservedSmallBlocksSize, MemoryManagerState.SmallBlockTypeStates[i].ReservedAddressSpace);
+    Inc(TotalSmallBlocksSize,    MemoryManagerState.SmallBlockTypeStates[i].AllocatedBlockCount * MemoryManagerState.SmallBlockTypeStates[i].UseableBlockSize);
+    Inc(TotalSmallBlocksCount,   MemoryManagerState.SmallBlockTypeStates[i].AllocatedBlockCount);
+  end;
+
+  TotalAllocatedSize := TotalSmallBlocksSize + MemoryManagerState.TotalAllocatedMediumBlockSize + MemoryManagerState.TotalAllocatedLargeBlockSize;
+  TotalReservedSize  := ReservedSmallBlocksSize + MemoryManagerState.ReservedMediumBlockAddressSpace + MemoryManagerState.ReservedLargeBlockAddressSpace;
+
+  Log.Write('ExceptionHandler', 'LogEraMemoryState', SysUtils.Format(
+    'TotalAllocatedSize: %d'#13#10              +
+    'TotalReservedSize: %d'#13#10               +
+    'TotalSmallBlocksCount: %d'#13#10           +
+    'TotalSmallBlocksSize: %d'#13#10            +
+    'ReservedSmallBlocksSize: %d'#13#10         +
+    'AllocatedMediumBlockCount: %d'#13#10       +
+    'TotalAllocatedMediumBlockSize: %d'#13#10   +
+    'ReservedMediumBlockAddressSpace: %d'#13#10 +
+    'AllocatedLargeBlockCount: %d'#13#10        +
+    'TotalAllocatedLargeBlockSize: %d'#13#10    +
+    'ReservedLargeBlockAddressSpace: %d'#13#10,
+  [
+    TotalAllocatedSize,
+    TotalReservedSize,
+    TotalSmallBlocksCount,
+    TotalSmallBlocksSize,
+    ReservedSmallBlocksSize,
+    MemoryManagerState.AllocatedMediumBlockCount,
+    MemoryManagerState.TotalAllocatedMediumBlockSize,
+    MemoryManagerState.ReservedMediumBlockAddressSpace,
+    MemoryManagerState.AllocatedLargeBlockCount,
+    MemoryManagerState.TotalAllocatedLargeBlockSize,
+    MemoryManagerState.ReservedLargeBlockAddressSpace
+  ]));
 end;
 
 procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; Context: Windows.PContext);
@@ -2160,6 +2214,10 @@ begin
   if not IsCrashing then begin
     IsCrashing      := true;
     Erm.ErmEnabled^ := false;
+
+    Windows.VirtualFree(OutOfMemoryVirtualReserve, 0, Windows.MEM_RELEASE);
+    System.FreeMem(OutOfMemoryReserve);
+
     GameExt.ClearDebugDir;
     DumpExceptionContext(ExceptionRecord, Context);
     LogMemoryState;
@@ -2184,7 +2242,7 @@ end;
 
 procedure CaptureCrashScreenshot;
 begin
-  Graph.TakeScreenshot(GameExt.GameDir + '\' + CRASH_SCREENHOST_PATH, 70);
+  Graph.TakeScreenshot(GameExt.GameDir + '\' + CRASH_SCREENSHOT_PATH, 70);
 end;
 
 procedure CopyCrashSavegameToDebugDir;
@@ -2545,6 +2603,8 @@ end;
 begin
   Windows.InitializeCriticalSection(InetCriticalSection);
   ExceptionsCritSection.Init;
+  System.GetMem(OutOfMemoryReserve, OUT_OF_MEMORY_RESERVE_BYTES);
+  OutOfMemoryVirtualReserve := Windows.VirtualAlloc(nil, OUT_OF_MEMORY_VIRTUAL_RESERVE_BYTES, Windows.MEM_RESERVE, Windows.PAGE_READWRITE);
   CLangRng               := FastRand.TClangRng.Create(FastRand.GenerateSecureSeed);
   QualitativeRng         := FastRand.TXoroshiro128Rng.Create(FastRand.GenerateSecureSeed);
   BattleDeterministicRng := TBattleDeterministicRng.Create(@CombatId, @CombatRound, @CombatActionId, @CombatRngFreeParam);
