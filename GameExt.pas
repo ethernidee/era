@@ -38,6 +38,8 @@ type
   TEvent      = EventMan.TEvent;
   PEvent      = EventMan.PEvent;
 
+  TModList = {U} DataLib.TStrList;
+
 const
   (* Command line arguments *)
   CMDLINE_ARG_MODLIST = 'modlist';
@@ -94,6 +96,7 @@ var
   MapDir:  string;
 
 
+function  GetModList: {U} TModList;
 function  PatchExists (const PatchName: string): boolean; stdcall;
 function  PluginExists (const PluginName: string): boolean; stdcall;
 procedure RedirectMemoryBlock (OldAddr: pointer; BlockSize: integer; NewAddr: pointer); stdcall;
@@ -120,6 +123,8 @@ const
   WoGVersionStrRus: ppchar = pointer($7066CF);
 
 var
+{O} GlobalModList: TModList;
+
 {On} ReportedPluginVersions: TStrList;
      VersionsInfo:           string;
 
@@ -211,7 +216,7 @@ begin
   end else begin
     result := +1;
   end;
-end; // .function CompareMemoryBlocks
+end;
 
 function FindMemoryRedirection (Addr: pointer; Size: integer; out {i} BlockInd: integer): boolean;
 var
@@ -298,7 +303,7 @@ begin
     Redirection := MemRedirections[BlockInd];
     result      := Utils.PtrOfs(Redirection.NewAddr, integer(Addr) - integer(Redirection.OldAddr));
   end;
-end; // .function GetRealAddr
+end;
 
 function GetMapDir: string;
 begin
@@ -444,6 +449,30 @@ begin
   SysUtils.FreeAndNil(FileLines);
 end; // .function LoadModsList
 
+procedure ParseSerializedModList (SerializedModList: pointer; ResModList: TModList);
+var
+  NumMods: integer;
+  i:       integer;
+
+begin
+  {!} Assert(SerializedModList <> nil);
+
+  with StrLib.MapBytes(StrLib.BufAsByteSource(SerializedModList, High(integer))) do begin
+    NumMods := ReadInt;
+    {!} Assert(NumMods >= 0);
+    ResModList.SetCount(NumMods);
+
+    for i := 0 to NumMods - 1 do begin
+      ResModList[i] := ReadStrWithLenField;
+    end;
+  end;
+end;
+
+function GetModList: {U} TModList;
+begin
+  result := GlobalModList;
+end;
+
 procedure AssignVersionsInfoToCredits;
 begin
   if ReportedPluginVersions <> nil then begin
@@ -456,9 +485,12 @@ end;
 
 procedure Init (hDll: integer);
 var
-  ModListFilePath: string;
+{O} SerializedModList: pointer; // External from Vfs.dll
+    ModListFilePath:   string;
 
 begin
+  SerializedModList := nil;
+  // * * * * * //
   hEra := hDll;
 
   // Ensure, that Memory manager is thread safe. Hooks and API can be called from multiple threads.
@@ -485,6 +517,9 @@ begin
   end;
 
   VfsImport.MapModsFromListA(pchar(GameDir), pchar(ModsDir), pchar(ModListFilePath));
+  SerializedModList := VfsImport.GetSerializedModListA;
+  ParseSerializedModList(SerializedModList, GlobalModList);
+
   Log.Write('Core', 'ReportModList', #13#10 + VfsImport.GetMappingsReportA);
 
   if EraSettings.GetDebugBoolOpt('Debug.DumpVirtualFileSystem', false) then begin
@@ -513,6 +548,8 @@ begin
   AssignVersionsInfoToCredits;
 
   EventMan.GetInstance.Fire('OnAfterStructRelocations');
+  // * * * * * //
+  VfsImport.MemFree(SerializedModList);
 end; // .procedure Init
 
 procedure AssertHandler (const Mes, FileName: string; LineNumber: integer; Address: pointer);
@@ -544,6 +581,7 @@ begin
   PluginsList            := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
   MemRedirections        := DataLib.NewList(not Utils.OWNS_ITEMS);
   ReportedPluginVersions := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
+  GlobalModList          := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
 
   // Find out path to game directory and force it as current directory
   GameDir := StrLib.ExtractDirPathW(WinUtils.GetExePath());
