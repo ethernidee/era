@@ -247,6 +247,19 @@ type
       6: (longbool: longbool);
   end;
 
+  SavegameWriter = record
+    class procedure Write (Size: integer; {n} Addr: pointer); static;
+    class procedure WriteInt (Value: integer); static;
+    class procedure WriteStrWithLenField (const Str: string); static;
+  end;
+
+  SavegameReader = record
+    class function  TryRead (Count: integer; {n} Addr: pointer): integer; static;
+    class procedure Read (Count: integer; {n} Addr: pointer); static;
+    class function  ReadInt: integer; static;
+    class function  ReadStrWithLenField: string; static;
+  end;
+
   PTxtFile = ^TTxtFile;
   TTxtFile = packed record
     Data:     pointer;
@@ -449,9 +462,7 @@ type
   TMAlloc = function (Size: integer): pointer; cdecl;
   TMFree  = procedure (Addr: pointer); cdecl;
 
-  TGzipWrite  = procedure (Data: pointer; DataSize: integer); cdecl;
-  TGzipRead   = function (Dest: pointer; DataSize: integer): integer; cdecl;
-  TWndProc    = function (hWnd, Msg, wParam, lParam: integer): integer; stdcall;
+  TWndProc = function (hWnd, Msg, wParam, lParam: integer): integer; stdcall;
 
   TGetAdvMapTileVisibility = function (x, y, z: integer): integer; cdecl;
   TGetBattleCellByPos = function (Pos: integer): pointer; cdecl;
@@ -1346,21 +1357,21 @@ const
   BytesPerPixelPtr:           pbyte = Ptr($5FA228 + 3);
   Color16GreenChannelMaskPtr: pword = Ptr($694DB0);
 
-  ZvsGzipWrite:   TGzipWrite = Ptr($704062);
-  ZvsGzipRead:    TGzipRead  = Ptr($7040A7);
-  WndProc:        TWndProc   = Ptr($4F8290);
-  ZvsGetHero:     function (HeroId: integer): {n} PHero cdecl = Ptr($71168D);
-  ZvsGetTowns:    function: {n} PTowns cdecl = Ptr($711BD4);
-  ZvsCountTowns:  function: integer = Ptr($711C0E);
-  ZvsLoadTxtFile: function (FilePath: pchar; var TxtFile: TTxtFile): longbool cdecl = Ptr($777030); // true on error
-  ZvsGetTxtValue: function (Row, Col: integer; TxtFile: PTxtFile): pchar cdecl = Ptr($77710B);
-  ZvsFindNextObjects: function (ObjType, ObjSubtype: integer; var x, y, z: integer; Direction: integer): longbool cdecl = Ptr($72F67B);
-  ZvsFindObjects: function (ObjType, ObjSubtype, ObjectN: integer; var x, y, z: integer): longbool cdecl = Ptr($72F539);
+  ZvsWriteSavegame: function (Data: pointer; DataSize: integer): integer cdecl = Ptr($704062);
+  ZvsReadSavegame:  function (Dest: pointer; DataSize: integer): integer cdecl = Ptr($7040A7);
+  WndProc:          TWndProc = Ptr($4F8290);
+  ZvsGetHero:       function (HeroId: integer): {n} PHero cdecl = Ptr($71168D);
+  ZvsGetTowns:      function: {n} PTowns cdecl = Ptr($711BD4);
+  ZvsCountTowns:    function: integer = Ptr($711C0E);
+  ZvsLoadTxtFile:   function (FilePath: pchar; var TxtFile: TTxtFile): longbool cdecl = Ptr($777030); // true on error
+  ZvsGetTxtValue:   function (Row, Col: integer; TxtFile: PTxtFile): pchar cdecl = Ptr($77710B);
+  ZvsFindNextObjects:     function (ObjType, ObjSubtype: integer; var x, y, z: integer; Direction: integer): longbool cdecl = Ptr($72F67B);
+  ZvsFindObjects:         function (ObjType, ObjSubtype, ObjectN: integer; var x, y, z: integer): longbool cdecl = Ptr($72F539);
   ZvsChangeHeroPortraitN: procedure (DstHeroId, SrcHeroId: integer) cdecl = Ptr($753ABF);
-  ZvsChangeHeroPortrait: procedure (HeroId: integer; {n} LargePortrait, {n} SmallPortrait: pchar) cdecl = Ptr($7539A6);
-  ZvsRedrawMap:   procedure = Ptr($7126EA);
-  a2i:            function (Str: pchar): int cdecl = Ptr($6184D9);
-  a2f:            function (Str: pchar): single cdecl = Ptr($619366);
+  ZvsChangeHeroPortrait:  procedure (HeroId: integer; {n} LargePortrait, {n} SmallPortrait: pchar) cdecl = Ptr($7539A6);
+  ZvsRedrawMap:     procedure = Ptr($7126EA);
+  a2i:              function (Str: pchar): int cdecl = Ptr($6184D9);
+  a2f:              function (Str: pchar): single cdecl = Ptr($619366);
 
 type
   TOpenSmackApiFunc = function (FileHandle: Windows.THandle; BufSize, MinusOne: int): {n} pointer stdcall;
@@ -1415,8 +1426,6 @@ function  MemAlloc (Size: integer): {On} pointer;
 procedure MemFreeAndNil (var p);
 function  RandomRange (Min, Max: integer): integer;
 procedure SRand (Seed: integer);
-procedure GZipWrite (Count: integer; {n} Addr: pointer);
-function  GzipRead (Count: integer; {n} Addr: pointer): integer;
 function  LoadTxt (Name: pchar): {n} PTxtFile; stdcall;
 procedure LoadLod (const LodName: string; Res: PLod);
 function  LoadDef (const DefName: string): {n} PDefItem;
@@ -2123,11 +2132,14 @@ begin
   if Temp <> nil then begin
     MemFree(Temp);
   end;
-end; // .procedure MemFreeAndNil
+end;
 
 function RandomRange (Min, Max: integer): integer;
+type
+  TRandomRangeFunc = function (Dummy, Max, Min: integer): integer; register;
+
 begin
-  result := PatchApi.Call(FASTCALL_, Ptr($50C7C0), [Min, Max]);
+  result := TRandomRangeFunc($50C7C0)(0, Max, Min);
 end;
 
 procedure SRand (Seed: integer);
@@ -2145,16 +2157,61 @@ begin
   result := Utils.PtrOfs(Ptr(BaseAddr), Offset);
 end;
 
-procedure GZipWrite (Count: integer; {n} Addr: pointer);
+class procedure SavegameWriter.Write (Size: integer; {n} Addr: pointer);
 begin
-  {!} Assert(Utils.IsValidBuf(Addr, Count));
-  ZvsGzipWrite(Addr, Count);
+  {!} Assert(Utils.IsValidBuf(Addr, Size));
+  {!} Assert(ZvsWriteSavegame(Addr, Size) = 0, 'Failed to write ' + SysUtils.IntToStr(Size) + ' bytes to savegame');
 end;
 
-function GzipRead (Count: integer; {n} Addr: pointer): integer;
+class procedure SavegameWriter.WriteInt (Value: integer);
+begin
+  SavegameWriter.Write(sizeof(Value), @Value);
+end;
+
+class procedure SavegameWriter.WriteStrWithLenField (const Str: string);
+var
+  StrLen: integer;
+
+begin
+  StrLen := Length(Str);
+  SavegameWriter.WriteInt(StrLen);
+  SavegameWriter.Write(StrLen, pointer(Str));
+end;
+
+class function SavegameReader.TryRead (Count: integer; {n} Addr: pointer): integer;
 begin
   {!} Assert(Utils.IsValidBuf(Addr, Count));
-  result := ZvsGzipRead(Addr, Count) + Count;
+  result := ZvsReadSavegame(Addr, Count) + Count;
+end;
+
+class procedure SavegameReader.Read (Count: integer; {n} Addr: pointer);
+var
+  BytesRead: integer;
+
+begin
+  BytesRead := SavegameReader.TryRead(Count, Addr);
+  {!} Assert(BytesRead = Count, 'Failed to read ' + SysUtils.IntToStr(Count) + ' bytes from savegame. Bytes read: ' + SysUtils.IntToStr(BytesRead));
+end;
+
+class function SavegameReader.ReadInt: integer;
+begin
+  SavegameReader.Read(sizeof(result), @result);
+end;
+
+class function SavegameReader.ReadStrWithLenField: string;
+var
+  StrLen: integer;
+
+begin
+  StrLen := SavegameReader.ReadInt;
+  {!} Assert(StrLen >= 0, 'Invalid string field length read from savegame: ' + SysUtils.IntToStr(StrLen));
+
+  result := '';
+
+  if StrLen > 0 then begin
+    SetLength(result, StrLen);
+    SavegameReader.Read(StrLen, pointer(result));
+  end;
 end;
 
 function LoadTxt (Name: pchar): {n} PTxtFile;
