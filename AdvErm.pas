@@ -2416,7 +2416,6 @@ end; // .procedure SaveSlots
 procedure SaveAssocMem (Rider: Stores.IRider);
 var
 {U} AssocVarValue: TAssocVar;
-    AssocVarName:  string;
 
 begin
   AssocVarValue := nil;
@@ -3042,9 +3041,22 @@ begin
   end; // .if
 end; // .function Hook_InterpolateErmString
 
+function AppendBufToFile (Buf: pointer; BufSize: integer; Context: pointer): boolean;
+var
+  FilePath: ^string;
+
+begin
+  {!} Assert(Utils.IsValidBuf(Buf, BufSize));
+  FilePath := Context;
+  result   := true;
+
+  Files.AppendFileContents(Buf, BufSize, FilePath^);
+end;
+
 procedure DumpErmMemory (const DumpFilePath: string);
 const
   ERM_CONTEXT_LEN = 300;
+  MAX_BUF_SIZE    = 1000000;
 
 type
   TVarType          = (INT_VAR, FLOAT_VAR, STR_VAR, BOOL_VAR);
@@ -3061,28 +3073,33 @@ var
     ErmContextStart:  pchar;
     i:                integer;
 
-  procedure WriteSectionHeader (const Header: string);
-  begin
-    if Buf.Size > 0 then begin
-      Buf.Append(#13#10);
-    end;
-
-    Buf.Append('> ' + Header + #13#10);
-  end;
-
   procedure Append (const Str: string);
   begin
     Buf.Append(Str);
+
+    if Buf.Size >= MAX_BUF_SIZE then begin
+      Buf.PipeThrough(AppendBufToFile, @DumpFilePath);
+      Buf.Clear;
+    end;
+  end;
+
+  procedure WriteSectionHeader (const Header: string);
+  begin
+    if Buf.Size > 0 then begin
+      Append(#13#10);
+    end;
+
+    Append('> ' + Header + #13#10);
   end;
 
   procedure LineEnd;
   begin
-    Buf.Append(#13#10);
+    Append(#13#10);
   end;
 
   procedure Line (const Str: string);
   begin
-    Buf.Append(Str + #13#10);
+    Append(Str + #13#10);
   end;
 
   function ErmStrToWinStr (const Str: string): string;
@@ -3385,7 +3402,7 @@ begin
   end;
 
   DumpVars('Vars z1..z1000', 'z', STR_VAR, @Erm.z[1], 1000, 1);
-  Files.WriteFileContents(Buf.BuildStr, DumpFilePath);
+  Buf.PipeThrough(AppendBufToFile, @DumpFilePath);
   // * * * * * //
   SysUtils.FreeAndNil(Buf);
 end; // .procedure DumpErmMemory
