@@ -15,6 +15,7 @@ uses
   AssocArrays,
   Crypto,
   DataLib,
+  Debug,
   Files,
   Log,
   StrLib,
@@ -156,13 +157,6 @@ type
     fWritingBufPos:   integer; // Starts from zero
     fBytesToReadLeft: integer;
   end; // .class TRider
-
-  TSavegameWriteCrashDetective = record
-    LastSectionName: string;
-    LastDataSize:    integer;
-    TotalDataSize:   integer;
-  end;
-
 
 var
 {O} WritingStorage: {O} TAssocArray {OF SectionName => StrLib.TStrBuilder};
@@ -639,6 +633,13 @@ begin
   if DumpSavegameSectionsOpt then begin
     Files.DeleteDir(GameExt.GameDir    + '\' + DUMP_SAVEGAME_SECTIONS_DIR);
     SysUtils.CreateDir(GameExt.GameDir + '\' + DUMP_SAVEGAME_SECTIONS_DIR);
+  end;
+
+  with SavegameWriteCrashDetective do begin
+    LastSectionName := '';
+    LastDataPtr     := nil;
+    LastDataSize    := 0;
+    TotalDataSize   := 0;
   end;
 
   TotalWritten := 0;
