@@ -525,7 +525,8 @@ type
     Item:    PBinaryTreeItem;
     Field20: integer;
 
-    function  FindItem (const aName: string; var {out} aItem: PBinaryTreeItem): boolean;
+    function  FindItem (const aName: string; var {out} aItem: PBinaryTreeItem): boolean; overload;
+    function  FindItem (aName: pchar; var {out} aItem: PBinaryTreeItem): boolean; overload;
     function  FindNode (const aName: string; var {out} aNode: PBinaryTreeNode): boolean;
     procedure RemoveNode (Node: PBinaryTreeNode);
     procedure AddItem (aItem: PBinaryTreeItem);
@@ -1844,7 +1845,7 @@ begin
 
     result := MapItem.Value;
   end; // .else
-end; // .function TResourceNamer.GetResourceName
+end;
 
 function TResourceNamer.GenerateUniqueResourceName: string;
 begin
@@ -1909,7 +1910,26 @@ begin
       result := true;
     end;
   end;
-end; // .function TBinaryTreeNode.FindItem
+end;
+
+
+function TBinaryTreeNode.FindItem (aName: pchar; var {out} aItem: PBinaryTreeItem): boolean;
+var
+{U} Node: PBinaryTreeNode;
+
+begin
+  Node   := nil;
+  result := false;
+  // * * * * * //
+  if (aName <> nil) and (aName^ <> #0) then begin
+    Node := PBinaryTreeNode(PatchApi.Call(PatchApi.THISCALL_, Ptr($55EE00), [@Self, aName]));
+
+    if (Node <> Self.Parent) and (StrLib.ComparePchars(aName, Node.Name) = 0) then begin
+      aItem  := Node.Item;
+      result := true;
+    end;
+  end;
+end;
 
 function TBinaryTreeNode.FindNode (const aName: string; var {out} aNode: PBinaryTreeNode): boolean;
 var
