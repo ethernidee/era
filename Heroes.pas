@@ -1,16 +1,14 @@
 unit Heroes;
-{
-DESCRIPTION:  Internal game functions and structures
-AUTHOR:       Alexander Shostak (aka Berserker aka EtherniDee aka BerSoft)
-}
+(*
+  Description: Internal game functions and structures.
+  Author:      Alexander Shostak aka Berserker.
+*)
 
 (***)  interface  (***)
 uses
   Math,
   SysUtils,
   Windows,
-
-  PatchApi,
 
   Alg,
   ApiJack,
@@ -1586,7 +1584,7 @@ begin
     aDestPlayerId := 127;
   end;
 
-  PatchApi.Call(FASTCALL_, Ptr($5549E0), [@Self, aDestPlayerId, 0, 1]);
+  ApiJack.CallFast(Ptr($5549E0), int(@Self), aDestPlayerId, 0, 1);
 end;
 
 function TBattleStack.GetId: integer;
@@ -1769,7 +1767,7 @@ end;
 
 procedure TH3Str.SetLen (NewLen: integer);
 begin
-  PatchApi.Call(THISCALL_, Ptr($404B80), [@Self, NewLen]);
+  ApiJack.CallThis(Ptr($404B80), int(@Self), NewLen);
 end;
 
 procedure TH3Str.AssignPchar ({n} Str: pchar; StrLen: integer = -1);
@@ -1782,7 +1780,7 @@ begin
     end;
   end;
 
-  PatchApi.Call(THISCALL_, Ptr($404180), [@Self, Str, StrLen]);
+  ApiJack.CallThis(Ptr($404180), int(@Self), int(Str), StrLen);
 end;
 
 function TWndManager.GetRootDlgId: integer;
@@ -1805,7 +1803,7 @@ end;
 
 procedure TDlgTextLines.Reset;
 begin
-  PatchApi.Call(THISCALL_, Ptr($4B5D70), [@Self, Self.FirstStr, Self.FirstFreeStr]);
+  ApiJack.CallThis(Ptr($4B5D70), int(@Self), int(Self.FirstStr), int(Self.FirstFreeStr));
 end;
 
 procedure TDlgTextLines.AppendLine ({n} Line: pchar; LineLen: integer = -1);
@@ -1815,7 +1813,7 @@ var
 begin
   NewLine.Reset;
   NewLine.AssignPchar(Line, LineLen);
-  PatchApi.Call(THISCALL_, Ptr($4AF250), [@Self, Self.FirstFreeStr, 1, @NewLine]);
+  ApiJack.CallThis(Ptr($4AF250), int(@Self), int(Self.FirstFreeStr), 1, int(@NewLine));
   NewLine.Clear;
 end;
 
@@ -1869,12 +1867,12 @@ end;
 
 procedure TBinaryTreeItem.DecRef;
 begin
-  PatchApi.Call(PatchApi.THISCALL_, Self.VTable[1], [@Self]);
+  ApiJack.CallThis(Self.VTable[1], int(@Self));
 end;
 
 procedure TBinaryTreeItem.Destruct (IsHeapObject: boolean = true);
 begin
-  PatchApi.Call(PatchApi.THISCALL_, Self.VTable[0], [@Self, ord(IsHeapObject)]);
+  ApiJack.CallThis(Self.VTable[0], int(@Self), ord(IsHeapObject));
 end;
 
 function TBinaryTreeItem.IsPcx8: boolean;
@@ -1901,7 +1899,7 @@ begin
   result := false;
   // * * * * * //
   if aName <> '' then begin
-    Node := PBinaryTreeNode(PatchApi.Call(PatchApi.THISCALL_, Ptr($55EE00), [@Self, pchar(aName)]));
+    Node := PBinaryTreeNode(ApiJack.CallThis(Ptr($55EE00), int(@Self), int(pchar(aName))));
 
     if (Node <> Self.Parent) and (SysUtils.AnsiCompareText(aName, Node.Name) = 0) then begin
       aItem  := Node.Item;
@@ -1909,7 +1907,6 @@ begin
     end;
   end;
 end;
-
 
 function TBinaryTreeNode.FindItem (aName: pchar; var {out} aItem: PBinaryTreeItem): boolean;
 var
@@ -1920,7 +1917,7 @@ begin
   result := false;
   // * * * * * //
   if (aName <> nil) and (aName^ <> #0) then begin
-    Node := PBinaryTreeNode(PatchApi.Call(PatchApi.THISCALL_, Ptr($55EE00), [@Self, aName]));
+    Node := PBinaryTreeNode(ApiJack.CallThis(Ptr($55EE00), int(@Self), int(aName)));
 
     if (Node <> Self.Parent) and (StrLib.ComparePchars(aName, Node.Name) = 0) then begin
       aItem  := Node.Item;
@@ -1938,7 +1935,7 @@ begin
   result := false;
   // * * * * * //
   if aName <> '' then begin
-    Node := PBinaryTreeNode(PatchApi.Call(PatchApi.THISCALL_, Ptr($55EE00), [@Self, pchar(aName)]));
+    Node := PBinaryTreeNode(ApiJack.CallThis(Ptr($55EE00), int(@Self), int(pchar(aName))));
 
     if (Node <> Self.Parent) and (SysUtils.AnsiCompareText(aName, Node.Name) = 0) then begin
       aNode  := Node;
@@ -1954,7 +1951,7 @@ var
 begin
   {!} Assert(Node <> nil);
   // * * * * * //
-  PatchApi.Call(PatchApi.THISCALL_, Ptr($55DF20), [@Self, @Temp, Node]);
+  ApiJack.CallThis(Ptr($55DF20), int(@Self), int(@Temp), int(Node));
 end;
 
 procedure TBinaryTreeNode.AddItem (aItem: PBinaryTreeItem);
@@ -1972,8 +1969,8 @@ begin
   NewItem.NameEnd := 0;
   NewItem.Item    := aItem;
 
-  PatchApi.Call(PatchApi.THISCALL_, Ptr($55DDF0), [@Self, @ResPtrs, @NewItem]);
-end; // .procedure TBinaryTreeNode.AddItem
+  ApiJack.CallThis(Ptr($55DDF0), int(@Self), int(@ResPtrs), int(@NewItem));
+end;
 
 function TDefItem.GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
 var
@@ -1994,9 +1991,9 @@ end;
 function TDefItem.DrawInterfaceDefGroupFrame (GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight: integer; Buf: pointer; DstX, DstY, DstW, DstH, ScanlineSize: integer;
                                               DoMirror, UsePaletteSpecialColors: boolean): integer;
 begin
-  result := PatchApi.Call(THISCALL_, Ptr($47B610), [
-    @Self, GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror), ord(UsePaletteSpecialColors)
-  ]);
+  result := ApiJack.CallThis(Ptr($47B610),
+    int(@Self), GroupInd, FrameInd, SrcX, SrcY, SrcWidth, SrcHeight, int(Buf), DstX, DstY, DstW, DstH, ScanlineSize, ord(DoMirror), ord(UsePaletteSpecialColors)
+  );
 end;
 
 procedure TPcx8Item.DrawToBuf (
@@ -2006,7 +2003,7 @@ procedure TPcx8Item.DrawToBuf (
 );
 
 begin
-  PatchApi.Call(THISCALL_, Ptr($44F940), [@Self, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor]);
+  ApiJack.CallThis(Ptr($44F940), int(@Self), SrcX, SrcY, SrcWidth, SrcHeight, int(Buf), DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor);
 end;
 
 procedure TPcx16Item.DrawToBuf (
@@ -2016,7 +2013,7 @@ procedure TPcx16Item.DrawToBuf (
 );
 
 begin
-  PatchApi.Call(THISCALL_, Ptr($44DF80), [@Self, SrcX, SrcY, SrcWidth, SrcHeight, Buf, DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor]);
+  ApiJack.CallThis(Ptr($44DF80), int(@Self), SrcX, SrcY, SrcWidth, SrcHeight, int(Buf), DstX, DstY, DstW, DstH, aScanlineSize, TransparentColor);
 end;
 
 class function TPcx8ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx8Item;
@@ -2055,7 +2052,7 @@ end; // .function TPcx8ItemStatic.Create
 class function TPcx16ItemStatic.Create (const aName: string; aWidth, aHeight: integer): {On} PPcx16Item;
 begin
   result := MemAlloc(Alg.IntRoundToBoundary(sizeof(result^), sizeof(integer)));
-  PatchApi.Call(PatchApi.THISCALL_, Ptr($44DD20), [result, pchar(aName), aWidth, aHeight]);
+  ApiJack.CallThis(Ptr($44DD20), int(result), int(pchar(aName)), aWidth, aHeight);
   {!} Assert(result.RefCount = 0);
 end;
 
@@ -2089,7 +2086,7 @@ end; // .function TPcx16ItemStatic.Create_
 
 class function TPcx16ItemStatic.Load (const aName: string): {U} PPcx16Item;
 begin
-  result := PPcx16Item(PatchApi.Call(PatchApi.FASTCALL_, Ptr($55B1E0), [pchar(aName)]));
+  result := PPcx16Item(ApiJack.CallThis(Ptr($55B1E0), int(pchar(aName))));
   {!} Assert(result <> nil, Format('Failed to load pcx16 image "%s". "dfault24.pcx" is also missing', [aName]));
   {!} Assert(result.IsPcx16(), Format('Loaded image "%s" is not requested pcx16', [aName]));
 end;
@@ -2125,7 +2122,7 @@ end; // .function TPcx24ItemStatic.Create
 procedure TPcx24Item.DrawToPcx16 (SrcX, SrcY, aWidth, aHeight: integer; Pcx16: PPcx16Item; DstX, DstY: integer);
 begin
   {!} Assert(Pcx16 <> nil);
-  PatchApi.Call(PatchApi.THISCALL_, Ptr($44ECA0), [@Self, SrcX, SrcY, Width, Height, Pcx16, DstX, DstY]);
+  ApiJack.CallThis(Ptr($44ECA0), int(@Self), SrcX, SrcY, Width, Height, int(Pcx16), DstX, DstY);
 end;
 
 function MemAlloc (Size: integer): {On} pointer;
@@ -2159,7 +2156,7 @@ end;
 
 procedure SRand (Seed: integer);
 begin
-  PatchApi.Call(THISCALL_, Ptr($50C7B0), [Seed]);
+  ApiJack.CallThis(Ptr($50C7B0), Seed);
 end;
 
 function GetVal (BaseAddr: pointer; Offset: integer): PValue; overload;
@@ -2252,17 +2249,17 @@ end;
 
 function LoadDef (const DefName: string): {n} PDefItem;
 begin
-  result := PDefItem(PatchApi.Call(THISCALL_, Ptr($55C9C0), [pchar(DefName)]));
+  result := PDefItem(ApiJack.CallThis(Ptr($55C9C0), int(pchar(DefName))));
 end;
 
 function LoadPcx8 (const PcxName: string): {n} PPcxItem;
 begin
-  result := PPcxItem(PatchApi.Call(THISCALL_, Ptr($55AA10), [pchar(PcxName)]));
+  result := PPcxItem(ApiJack.CallThis(Ptr($55AA10), int(pchar(PcxName))));
 end;
 
 function LoadPcx16 (const PcxName: string): {n} PPcx16Item;
 begin
-  result := PPcx16Item(PatchApi.Call(THISCALL_, Ptr($55AE50), [pchar(PcxName)]));
+  result := PPcx16Item(ApiJack.CallThis(Ptr($55AE50), int(pchar(PcxName))));
 end;
 
 procedure Rgb96ToHsb (Red, Green, Blue: integer; out Hue, Saturation, Brightness: single); stdcall; assembler; {$STACKFRAMES ON}
@@ -2368,12 +2365,12 @@ end;
 
 function THero.HasArtOnDoll (ArtId: integer): boolean;
 begin
-  result := PatchApi.Call(THISCALL_, Ptr($4D9460), [@Self, ArtId]) <> 0;
+  result := ApiJack.CallThis(Ptr($4D9460), int(@Self), ArtId) <> 0;
 end;
 
 function GetThisPcHumanPlayerId: integer;
 begin
-  result := PatchApi.Call(THISCALL_, Ptr($4CE6E0), [ppointer(GAME_MANAGER)^]);
+  result := ApiJack.CallThis(Ptr($4CE6E0), pinteger(GAME_MANAGER)^);
 end;
 
 function IsThisPcHumanTurn: boolean;
@@ -2408,7 +2405,7 @@ begin
     MustHideHero := false;
   end;
 
-  result := PMapTile(PatchApi.Call(THISCALL_, Ptr($40AF10), [integer(@ExtendedRes), integer(MapTile), 0, 0]));
+  result := PMapTile(ApiJack.CallThis(Ptr($40AF10), int(@ExtendedRes), int(MapTile), 0, 0));
 
   if ExtendedRes.Hero <> nil then begin
     ShowHero(ExtendedRes.Hero);
@@ -2555,7 +2552,7 @@ end; // .procedure RedrawHeroMeetingScreen
 
 procedure HideHero (Hero: PHero);
 begin
-  PatchApi.Call(THISCALL_, Ptr($4D7950), [Hero]);
+  ApiJack.CallThis(Ptr($4D7950), int(Hero));
 end;
 
 procedure ShowHero (Hero: PHero);
@@ -2563,7 +2560,7 @@ const
   TYPE_HERO = 34;
 
 begin
-  PatchApi.Call(THISCALL_, Ptr($4D7840), [Hero, TYPE_HERO, Hero.Id]);
+  ApiJack.CallThis(Ptr($4D7840), int(Hero), TYPE_HERO, Hero.Id);
 end;
 
 procedure ShowBoat (Boat: PBoat);
@@ -2571,7 +2568,7 @@ const
   TYPE_BOAT = 8;
 
 begin
-  PatchApi.Call(THISCALL_, Ptr($4D7840), [Boat, TYPE_BOAT, Boat.Index]);
+  ApiJack.CallThis(Ptr($4D7840), int(Boat), TYPE_BOAT, Boat.Index);
 end;
 
 function IsCampaign: boolean;
@@ -2620,26 +2617,24 @@ end;
 function GetCurrentMp3Track (): string;
 begin
   (* Note, $A8 critsection lock of sound manager is not necessary and can take up to several seconds *)
-  // Windows.EnterCriticalSection(PRtlCriticalSection(pinteger(SOUND_MANAGER)^ + $A8)^);
   Windows.EnterCriticalSection(PRtlCriticalSection(pinteger(SOUND_MANAGER)^ + $C0)^);
   result := pchar(@CurrentMp3Track[0]);
   Windows.LeaveCriticalSection(PRtlCriticalSection(pinteger(SOUND_MANAGER)^ + $C0)^);
- // Windows.LeaveCriticalSection(PRtlCriticalSection(pinteger(SOUND_MANAGER)^ + $A8)^);
 end;
 
 procedure ChangeMp3Theme (const Mp3TrackName: string; DontTrackPos: boolean = false; Loop: boolean = true);
 begin
-  PatchApi.Call(THISCALL_, Ptr($59AFB0), [pinteger(SOUND_MANAGER)^, pchar(Mp3TrackName), ord(DontTrackPos), ord(Loop)]);
+  ApiJack.CallThis(Ptr($59AFB0), pinteger(SOUND_MANAGER)^, int(pchar(Mp3TrackName)), ord(DontTrackPos), ord(Loop));
 end;
 
 procedure PauseMp3Theme;
 begin
-  PatchApi.Call(THISCALL_, Ptr($59B380), [pinteger(SOUND_MANAGER)^]);
+  ApiJack.CallThis(Ptr($59B380), pinteger(SOUND_MANAGER)^);
 end;
 
 procedure ResumeMp3Theme;
 begin
-  PatchApi.Call(THISCALL_, Ptr($59AF00), [pinteger(SOUND_MANAGER)^]);
+  ApiJack.CallThis(Ptr($59AF00), pinteger(SOUND_MANAGER)^);
 end;
 
 procedure PlaySound (FileName: pchar); stdcall; overload;
@@ -2694,7 +2689,7 @@ var
 
 begin
   Opts      := (((TextAlignment + 1) and $0F) shl 20) or ((ord(MsgType) and $0F) shl 16) or (Timeout and $FFFF);
-  PatchApi.Call(FASTCALL_, Ptr($4F7D20), [Text, PicsConfig, -1, -1, Opts]);
+  ApiJack.CallFast(Ptr($4F7D20), int(Text), int(PicsConfig), -1, -1, Opts);
   ResItemId := WndManagerPtr^.DlgResItemId shr 8;
 
   result := -1;
@@ -2708,7 +2703,7 @@ begin
       result := -1;
     end;
   end;
-end; // .function DisplayComplexDialog
+end;
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
 begin
