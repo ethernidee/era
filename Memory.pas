@@ -7,13 +7,28 @@ unit Memory;
 (***)  interface  (***)
 
 uses
-  SysUtils, Math, Windows,
-  Utils, Crypto, AssocArrays, StrLib, DataLib;
+  Math,
+  SysUtils,
+  Windows,
+
+  FastMM4,
+
+  ApiJack,
+  AssocArrays,
+  Concur,
+  Crypto,
+  DataLib,
+  StrLib,
+  Utils,
+
+  EventMan;
 
 
 type
   (* Import *)
   TDict = DataLib.TDict;
+
+  TInt32Bool = integer;
 
   PUniqueStringsItemValue = ^TUniqueStringsItemValue;
   TUniqueStringsItemValue = record
@@ -57,7 +72,9 @@ type
 
 
 var
-  UniqueStrings: TUniqueStrings;
+{O} UniqueStrings: TUniqueStrings;
+
+  GameAllocatedMemorySize: integer = 0;
 
 
 (***)  implementation  (***)
@@ -84,7 +101,7 @@ begin
       FreeMem(Item.ValueChain[j].Str);
     end;
   end;
-end; // .destructor TUniqueStrings.Destroy
+end;
 
 function TUniqueStrings.Find ({n} Str: pchar; out StrLen: integer; out KeyHash: integer; out ItemInd: integer): {n} pchar;
 var
@@ -202,6 +219,85 @@ begin
   end;
 end; // .procedure TUniqueStrings.Grow
 
+const
+  WOG_STATIC_MEM_START = cardinal($77CAD5);
+  WOG_STATIC_MEM_END   = cardinal($77CAD5);
+
+function NewMemAlloc (Size: integer; UseNewHandler: TInt32Bool): {n} pointer; cdecl;
+begin
+  System.GetMem(result, Size);
+  Concur.AtomicAdd(GameAllocatedMemorySize, Size);
+end;
+
+function NewCAlloc (NumItems: cardinal; ItemSize: cardinal): {n} pointer; cdecl;
+var
+  BufSize: integer;
+
+begin
+  BufSize := integer(NumItems * ItemSize);
+  System.GetMem(result, BufSize);
+  Concur.AtomicAdd(GameAllocatedMemorySize, BufSize);
+  System.FillChar(result^, BufSize, #0);
+end;
+
+function NewMemRealloc ({n} Buf: pointer; NewSize: integer): {n} pointer; cdecl;
+var
+  BufSize: integer;
+
+begin
+  BufSize := 0;
+
+  if Buf <> nil then begin
+    BufSize := FastMM4.GetAvailableSpaceInBlock(Buf);
+  end;
+
+  result := Buf;
+
+  System.ReallocMem(result, NewSize);
+  Concur.AtomicAdd(GameAllocatedMemorySize, NewSize - BufSize);
+end;
+
+procedure NewMemFree ({n} Buf: pointer); cdecl;
+var
+  BufSize: integer;
+
+begin
+  // Special check was added, because WoG replaces pointers in game structures with static memory pointers,
+  // which should never be attempted to be freed
+  if (Buf <> nil) and ((cardinal(Buf) < WOG_STATIC_MEM_START) or (cardinal(Buf) > WOG_STATIC_MEM_END)) then begin
+    BufSize := FastMM4.GetAvailableSpaceInBlock(Buf);
+    System.FreeMem(Buf);
+    Concur.AtomicSub(GameAllocatedMemorySize, BufSize);
+  end;
+end;
+
+function NewMemSize ({n} Buf: pointer): integer; cdecl;
+begin
+  result := 0;
+
+  if (Buf <> nil) and ((cardinal(Buf) < WOG_STATIC_MEM_START) or (cardinal(Buf) > WOG_STATIC_MEM_END)) then begin
+    result := FastMM4.GetAvailableSpaceInBlock(Buf);
+  end;
+end;
+
+const
+  FUNC_NH_MALLOC = $61A9E7;
+  FUNC_CALLOC    = $61AA61;
+  FUNC_REALLOC   = $619890;
+  FUNC_FREE      = $619BB0;
+  FUNC_MSIZE     = $61E504;
+
 begin
   UniqueStrings := TUniqueStrings.Create;
+
+  // Prevent WoG from hooking 'free' function
+  pinteger($789DE8)^ := $887668;
+  pinteger($78C420)^ := $887668;
+
+  // Force game to use Era memory manager with separate allocation size counting
+  ApiJack.Hook(Ptr(FUNC_NH_MALLOC), @NewMemAlloc,   nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(Ptr(FUNC_CALLOC),    @NewCAlloc,     nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(Ptr(FUNC_REALLOC),   @NewMemRealloc, nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(Ptr(FUNC_FREE),      @NewMemFree,    nil, 0, ApiJack.HOOKTYPE_JUMP);
+  ApiJack.Hook(Ptr(FUNC_MSIZE),     @NewMemSize,    nil, 0, ApiJack.HOOKTYPE_JUMP);
 end.
