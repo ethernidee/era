@@ -2037,19 +2037,29 @@ var
 {Un} PngFilePath:   TString;
 {On} ImageResource: ResLib.TSharedResource;
 {Un} Image:         TRawImage;
+{Un} CachedItem:    Heroes.PPcx8Item;
      FileNameStr:   string;
 
 begin
   FileNameStr := FileName;
   PngFilePath := PcxPngFileMap[FileNameStr];
+  CachedItem  := nil;
 
   // Create stubs for images, for which there are known png replacements
   if PngFilePath <> nil then begin
     ImageResource := LoadPngResource(PngFilePath.Value);
 
     if ImageResource <> nil then begin
-      Image  := ImageResource.Data as TRawImage;
-      result := TPcx8ItemStatic.Create(FileNameStr, Image.Width, Image.Height);
+      if Heroes.ResourceTree.FindItem(FileName, Heroes.PBinaryTreeItem(CachedItem)) then begin
+        result := CachedItem;
+        result.IncRef;
+      end else begin
+        Image  := ImageResource.Data as TRawImage;
+        result := TPcx8ItemStatic.Create(FileNameStr, Image.Width, Image.Height);
+
+        result.IncRef();
+        Heroes.ResourceTree.AddItem(result);
+      end;
 
       ImageResource.DecRef;
     end else begin
