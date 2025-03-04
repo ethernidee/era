@@ -13,6 +13,7 @@ uses
   PatchApi,
 
   Alg,
+  ApiJack,
   DataLib,
   Debug,
   DlgMes,
@@ -1602,11 +1603,8 @@ begin
 end;
 
 procedure TCombatManager.RedrawGridAndSelection;
-Type
-  TRedrawGridAndSelection = procedure (Dummy1, Dummy2: integer; CombatMgr: PCombatManager); register;
-
 begin
-  TRedrawGridAndSelection(Ptr($4773F0))(0, 0, @Self);
+  ApiJack.CallThis(Ptr($4773F0), int(@Self));
 end;
 
 procedure TInputMessageQueue.Enqueue (InputMsg: PInputMessage);
@@ -2155,11 +2153,8 @@ begin
 end;
 
 function RandomRange (Min, Max: integer): integer;
-type
-  TRandomRangeFunc = function (Dummy, Max, Min: integer): integer; register;
-
 begin
-  result := TRandomRangeFunc($50C7C0)(0, Max, Min);
+  result := ApiJack.CallFast(Ptr($50C7C0), Min, Max);
 end;
 
 procedure SRand (Seed: integer);

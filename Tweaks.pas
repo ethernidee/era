@@ -1237,8 +1237,6 @@ type
   PCallerContext = ^TCallerContext;
   TCallerContext = packed record EDI, ESI, EBP, ESP, EBX, EDX, ECX, EAX: integer; end;
 
-  TRandomRangeFunc = function (Dummy, MinValue, MaxValue: integer): integer; register;
-
 const
   CALLER_CONTEXT_SIZE = sizeof(TCallerContext);
 
@@ -1315,7 +1313,7 @@ begin
   result := SequantialRandomRange(0, High(integer));
 end;
 
-function SequentialRandomRangeFastcall (Dummy, MaxValue, MinValue: integer): integer; register;
+function SequentialRandomRangeFastcall (_1, MaxValue, MinValue: integer): integer; register;
 begin
   asm
     push eax

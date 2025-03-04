@@ -249,9 +249,6 @@ begin
 end; // .function HandleImeInput
 
 function MainWndProc (hWnd, Msg, wParam, lParam: integer): integer; stdcall;
-type
-  TParseKeyUpDownFunc = function (_1, Msg, hWnd: integer; lParam, wParam: integer): integer register;
-
 const
   WM_KEYDOWN          = $100;
   WM_KEYUP            = $101;
@@ -441,12 +438,9 @@ begin
 
   Context.EAX := Erm.RetXVars[EFFECT_VALUE];
   result      := true;
-end; // .function Hook_AI_CalcStackAttackEffect_End
+end;
 
-type
-  TEnterChatFunc = function (Dummy1, Dummy2: integer; Self: pointer): integer register;
-
-function Splice_EnterChat (OrigFunc: TEnterChatFunc; Self: pointer): integer; stdcall;
+function Splice_EnterChat (OrigFunc, Self: pointer): integer; stdcall;
 const
   EVENT_SUBTYPE_ON_ENTER_CHAT = 0;
   BLOCK_CHAT_ARG_IND          = 2;
@@ -457,7 +451,7 @@ begin
   Erm.FireErmEventEx(Erm.TRIGGER_ONCHAT, [EVENT_SUBTYPE_ON_ENTER_CHAT, ord(false)]);
 
   if Erm.RetXVars[BLOCK_CHAT_ARG_IND] = 0 then begin
-    result := OrigFunc(0, 0, Self);
+    result := ApiJack.CallThis(OrigFunc, int(Self));
   end;
 end;
 
