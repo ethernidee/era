@@ -101,32 +101,44 @@ const
   EXTERNAL_BUF_PREFIX_SIZE = sizeof(integer);
 
 
-function AllocExternalBuf (Size: integer): {O} pointer;
-begin
-  {!} Assert(Size >= 0);
-  GetMem(result, Size + EXTERNAL_BUF_PREFIX_SIZE);
-  pinteger(result)^ := Size;
-  Inc(integer(result), EXTERNAL_BUF_PREFIX_SIZE);
-end;
-
 function Externalize (const Str: AnsiString): {O} pointer; overload;
 begin
-  result := AllocExternalBuf(Length(Str) + 1);
+  result := nil;
+  GetMem(result, Length(Str) + 1);
   Utils.CopyMem(Length(Str) + 1, pchar(Str), result);
 end;
 
 function Externalize (const Str: WideString): {O} pointer; overload;
+var
+  BufSize: integer;
+
 begin
-  result := AllocExternalBuf((Length(Str) + 1) * sizeof(WideChar));
-  Utils.CopyMem((Length(Str) + 1) * sizeof(WideChar), PWideChar(Str), result);
+  result  := nil;
+  BufSize := (Length(Str) + 1) * sizeof(Str[1]);
+  GetMem(result, BufSize);
+  Utils.CopyMem(BufSize, PWideChar(Str), result);
 end;
 
-(* Frees buffer, that was transfered to client earlier *)
+function MemAlloc (BufSize: integer): {n} pointer; stdcall;
+begin
+  result := nil;
+  GetMem(result, BufSize);
+end;
+
 procedure MemFree ({On} Buf: pointer); stdcall;
 begin
-  if Buf <> nil then begin
-    FreeMem(Utils.PtrOfs(Buf, -EXTERNAL_BUF_PREFIX_SIZE));
-  end;
+  FreeMem(Buf);
+end;
+
+function MemRealloc (var {On} Buf: pointer; NewBufSize: integer): {n} pointer; stdcall;
+begin
+  result := Buf;
+  ReallocMem(result, NewBufSize);
+end;
+
+function RegisterMemoryConsumer (ConsumerName: pchar): pinteger; stdcall;
+begin
+  result := Memory.RegisterMemoryConsumer(ConsumerName);
 end;
 
 procedure NameColor (Color32: integer; Name: pchar); stdcall;
@@ -1005,7 +1017,9 @@ exports
   IsCampaign,
   IsPatchOverwritten,
   LoadImageAsPcx16,
+  MemAlloc,
   MemFree,
+  MemRealloc,
   MergeIniWithDefault,
   NameColor,
   NameTrigger,
