@@ -13,6 +13,8 @@ uses
   Windows,
   WinSock,
 
+  FastMM4,
+
   Alg,
   ApiJack,
   CFiles,
@@ -41,6 +43,7 @@ uses
   Graph,
   Heroes,
   Lodman,
+  Memory,
   Network,
   Stores,
   Trans,
@@ -50,6 +53,8 @@ type
   (* Import *)
   TStrList = DataLib.TStrList;
   TRect    = Types.TRect;
+
+  pbyte = ^byte;
 
 const
   // f (Value: pchar; MaxResLen: integer; DefValue, Key, SectionName, FileName: pchar): integer; cdecl;
@@ -158,6 +163,7 @@ var
   ComputerName:          string;
   IsCrashing:            boolean;
   CrashSavegameName:     string;
+  ShouldLogMemoryState:  boolean = true;
 
   Mp3TriggerHandledEvent: THandle;
   IsMp3Trigger:           boolean = false;
@@ -2124,46 +2130,52 @@ end; // .procedure DumpExceptionContext
 
 procedure LogMemoryState;
 var
-  MemoryInfo:              PsApi.PROCESS_MEMORY_COUNTERS;
-  MemoryManagerState:      System.TMemoryManagerState;
-  ReservedSmallBlocksSize: cardinal;
-  TotalSmallBlocksSize:    cardinal;
-  TotalSmallBlocksCount:   cardinal;
-  TotalAllocatedSize:      cardinal;
-  TotalReservedSize:       cardinal;
-  i:                       integer;
+{U} MemoryConsumers:          DataLib.TStrList {of Ptr(AllocatedSize: integer)};
+    MemoryInfo:               PsApi.PROCESS_MEMORY_COUNTERS;
+    MemoryManagerState:       FastMM4.TMemoryManagerState;
+    ReservedSmallBlocksSize:  cardinal;
+    TotalSmallBlocksSize:     cardinal;
+    TotalSmallBlocksCount:    cardinal;
+    TotalAllocatedSize:       cardinal;
+    TotalReservedSize:        cardinal;
+    TotalTrackedConsumption:  cardinal;
+    EraMemoryConsumption:     cardinal;
+    GameMemoryConsumption:    cardinal;
+    PluginsMemoryConsumption: cardinal;
+    MemoryConsumptionReport:  string;
+    i:                        integer;
 
 begin
+  MemoryConsumers := nil;
+  // * * * * * //
   System.FillChar(MemoryInfo, sizeof(MemoryInfo), #0);
   MemoryInfo.cb := sizeof(MemoryInfo);
 
   if (PsApi.GetProcessMemoryInfo(Windows.GetCurrentProcess(), @MemoryInfo, sizeof(MemoryInfo))) then begin
-    Log.Write('ExceptionHandler', 'LogMemoryState', SysUtils.Format(
+    Log.Write('LogMemoryState', 'Log process memory state', SysUtils.Format(
+      'Allocated bytes: %d'#13#10            +
+      'Reserved bytes: %d'#13#10             +
+      'Peak allocated bytes: %d'#13#10       +
+      'Peak reserved bytes: %d'#13#10        +
       'PageFaultCount: %d'#13#10             +
-      'PeakWorkingSetSize: %d'#13#10         +
-      'WorkingSetSize: %d'#13#10             +
       'QuotaPeakPagedPoolUsage: %d'#13#10    +
       'QuotaPagedPoolUsage: %d'#13#10        +
       'QuotaPeakNonPagedPoolUsage: %d'#13#10 +
-      'QuotaNonPagedPoolUsage: %d'#13#10     +
-      'PagefileUsage: %d'#13#10              +
-      'PeakPagefileUsage: %d'#13#10          +
-      'PagefileUsage: %d',
+      'QuotaNonPagedPoolUsage: %d',
     [
-      MemoryInfo.PageFaultCount,
-      MemoryInfo.PeakWorkingSetSize,
       MemoryInfo.WorkingSetSize,
+      MemoryInfo.PagefileUsage,
+      MemoryInfo.PeakWorkingSetSize,
+      MemoryInfo.PeakPagefileUsage,
+      MemoryInfo.PageFaultCount,
       MemoryInfo.QuotaPeakPagedPoolUsage,
       MemoryInfo.QuotaPagedPoolUsage,
       MemoryInfo.QuotaPeakNonPagedPoolUsage,
-      MemoryInfo.QuotaNonPagedPoolUsage,
-      MemoryInfo.PagefileUsage,
-      MemoryInfo.PeakPagefileUsage,
-      MemoryInfo.PagefileUsage
+      MemoryInfo.QuotaNonPagedPoolUsage
     ]));
   end;
 
-  System.GetMemoryManagerState(MemoryManagerState);
+  FastMM4.GetMemoryManagerState(MemoryManagerState);
 
   ReservedSmallBlocksSize := 0;
   TotalSmallBlocksSize    := 0;
@@ -2178,7 +2190,7 @@ begin
   TotalAllocatedSize := TotalSmallBlocksSize + MemoryManagerState.TotalAllocatedMediumBlockSize + MemoryManagerState.TotalAllocatedLargeBlockSize;
   TotalReservedSize  := ReservedSmallBlocksSize + MemoryManagerState.ReservedMediumBlockAddressSpace + MemoryManagerState.ReservedLargeBlockAddressSpace;
 
-  Log.Write('ExceptionHandler', 'LogEraMemoryState', SysUtils.Format(
+  Log.Write('LogMemoryState', 'Log Era memory state', SysUtils.Format(
     'TotalAllocatedSize: %d'#13#10              +
     'TotalReservedSize: %d'#13#10               +
     'TotalSmallBlocksCount: %d'#13#10           +
@@ -2189,7 +2201,7 @@ begin
     'ReservedMediumBlockAddressSpace: %d'#13#10 +
     'AllocatedLargeBlockCount: %d'#13#10        +
     'TotalAllocatedLargeBlockSize: %d'#13#10    +
-    'ReservedLargeBlockAddressSpace: %d'#13#10,
+    'ReservedLargeBlockAddressSpace: %d',
   [
     TotalAllocatedSize,
     TotalReservedSize,
@@ -2203,7 +2215,36 @@ begin
     MemoryManagerState.TotalAllocatedLargeBlockSize,
     MemoryManagerState.ReservedLargeBlockAddressSpace
   ]));
-end;
+
+  MemoryConsumers         := Memory.GetMemoryConsumers;
+  MemoryConsumptionReport := '';
+  TotalTrackedConsumption := 0;
+  GameMemoryConsumption   := integer(MemoryConsumers.Values[Memory.GAME_MEM_CONSUMER_INDEX]);
+
+  for i := 0 to MemoryConsumers.Count - 1 do begin
+    Inc(TotalTrackedConsumption, cardinal(MemoryConsumers.Values[i]));
+    MemoryConsumptionReport := MemoryConsumers[i] + ': ' + SysUtils.IntToStr(integer(MemoryConsumers.Values[i]));
+
+    if i < MemoryConsumers.Count - 1 then begin
+      MemoryConsumptionReport := MemoryConsumptionReport + #13#10;
+    end;
+  end;
+
+  PluginsMemoryConsumption := TotalTrackedConsumption - GameMemoryConsumption;
+  EraMemoryConsumption     := TotalAllocatedSize - TotalTrackedConsumption;
+
+  Log.Write('LogMemoryState', 'Log tracked memory consumption', SysUtils.Format(
+    'Game memory consumption: %d'#13#10 +
+    'Era memory consumption: %d'#13#10 +
+    'Plugins memory consumption: %d'#13#10#13#10'Memory consumers:'#13#10'-----------------'#13#10'%s',
+    [
+      GameMemoryConsumption,
+      EraMemoryConsumption,
+      PluginsMemoryConsumption,
+      MemoryConsumptionReport
+    ]
+  ));
+end; // .procedure LogMemoryState
 
 procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; Context: Windows.PContext);
 begin
@@ -2219,6 +2260,7 @@ begin
     GameExt.ClearDebugDir;
     DumpExceptionContext(ExceptionRecord, Context);
     LogMemoryState;
+    ShouldLogMemoryState := false;
     GameExt.GenerateDebugInfoWithoutCleanup;
     Windows.MessageBoxA(Heroes.hWnd^, pchar(Trans.Tr('era.game_crash_message', ['debug_dir', DEBUG_DIR])), '', Windows.MB_OK);
   end;
@@ -2259,6 +2301,10 @@ end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
 begin
+  if ShouldLogMemoryState then begin
+    LogMemoryState;
+  end;
+
   if EraSettings.GetOpt('Debug.CaptureScreenshotOnCrash').Bool(true) then begin
     CaptureCrashScreenshot;
   end;
