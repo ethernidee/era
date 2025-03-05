@@ -24,11 +24,17 @@ uses
   EventMan;
 
 
+const
+  GAME_MEM_CONSUMER_INDEX = 0;
+
+
 type
   (* Import *)
-  TDict = DataLib.TDict;
+  TStrList = DataLib.TStrList;
+  TDict    = DataLib.TDict;
 
   TInt32Bool = integer;
+  pbyte      = ^byte;
 
   PUniqueStringsItemValue = ^TUniqueStringsItemValue;
   TUniqueStringsItemValue = record
@@ -71,13 +77,29 @@ type
   end; // .class TUniqueStrings
 
 
+(* Registers memory consumer (plugin with custom memory manager) and returns address of allocated memory counter, which
+   consumer should atomically increase and decrease in malloc/calloc/realloc/free operations. *)
+function RegisterMemoryConsumer (ConsumerName: string): pinteger;
+
+(* Returns list with memory consumer names and corresponding allocation size *)
+function GetMemoryConsumers: TStrList {of Ptr(AllocatedSize: integer)};
+
+
 var
 {O} UniqueStrings: TUniqueStrings;
 
-  GameAllocatedMemorySize: integer = 0;
-
 
 (***)  implementation  (***)
+
+
+const
+  MAX_MEMORY_CONSUMERS                = 400;
+  GAME_MEM_CONSUMER_NAME              = '<Heroes 3>';
+  TICKETLESS_MEM_CONSUMERS_GROUP_NAME = '<Others>';
+
+var
+  AllocatedMemoryByConsumer: array [0..MAX_MEMORY_CONSUMERS - 1] of integer;
+  MemoryConsumers:           TStrList;
 
 
 constructor TUniqueStrings.Create;
@@ -226,7 +248,7 @@ const
 function NewMemAlloc (Size: integer; UseNewHandler: TInt32Bool): {n} pointer; cdecl;
 begin
   System.GetMem(result, Size);
-  Concur.AtomicAdd(GameAllocatedMemorySize, Size);
+  Concur.AtomicAdd(AllocatedMemoryByConsumer[GAME_MEM_CONSUMER_INDEX], Size);
 end;
 
 function NewCAlloc (NumItems: cardinal; ItemSize: cardinal): {n} pointer; cdecl;
@@ -236,7 +258,7 @@ var
 begin
   BufSize := integer(NumItems * ItemSize);
   System.GetMem(result, BufSize);
-  Concur.AtomicAdd(GameAllocatedMemorySize, BufSize);
+  Concur.AtomicAdd(AllocatedMemoryByConsumer[GAME_MEM_CONSUMER_INDEX], BufSize);
   System.FillChar(result^, BufSize, #0);
 end;
 
@@ -254,7 +276,7 @@ begin
   result := Buf;
 
   System.ReallocMem(result, NewSize);
-  Concur.AtomicAdd(GameAllocatedMemorySize, NewSize - BufSize);
+  Concur.AtomicAdd(AllocatedMemoryByConsumer[GAME_MEM_CONSUMER_INDEX], NewSize - BufSize);
 end;
 
 procedure NewMemFree ({n} Buf: pointer); cdecl;
@@ -267,7 +289,7 @@ begin
   if (Buf <> nil) and ((cardinal(Buf) < WOG_STATIC_MEM_START) or (cardinal(Buf) > WOG_STATIC_MEM_END)) then begin
     BufSize := FastMM4.GetAvailableSpaceInBlock(Buf);
     System.FreeMem(Buf);
-    Concur.AtomicSub(GameAllocatedMemorySize, BufSize);
+    Concur.AtomicSub(AllocatedMemoryByConsumer[GAME_MEM_CONSUMER_INDEX], BufSize);
   end;
 end;
 
@@ -280,6 +302,36 @@ begin
   end;
 end;
 
+function RegisterMemoryConsumer (ConsumerName: string): pinteger;
+var
+  ConsumerIndex: integer;
+
+begin
+  ConsumerIndex := MemoryConsumers.Count;
+
+  if ConsumerIndex > High(AllocatedMemoryByConsumer) then begin
+    result := @AllocatedMemoryByConsumer[High(AllocatedMemoryByConsumer)];
+    exit;
+  end else if ConsumerIndex = High(AllocatedMemoryByConsumer) then begin
+    ConsumerName := TICKETLESS_MEM_CONSUMERS_GROUP_NAME;
+  end;
+
+  MemoryConsumers.Add(ConsumerName);
+  result := @AllocatedMemoryByConsumer[ConsumerIndex];
+end;
+
+function GetMemoryConsumers: TStrList {of Ptr(AllocatedSize: integer)};
+var
+  i: integer;
+
+begin
+  for i := 0 to MemoryConsumers.Count - 1 do begin
+    MemoryConsumers.Values[i] := Ptr(AllocatedMemoryByConsumer[i]);
+  end;
+
+  result := MemoryConsumers;
+end;
+
 const
   FUNC_NH_MALLOC = $61A9E7;
   FUNC_CALLOC    = $61AA61;
@@ -288,7 +340,9 @@ const
   FUNC_MSIZE     = $61E504;
 
 begin
-  UniqueStrings := TUniqueStrings.Create;
+  UniqueStrings   := TUniqueStrings.Create;
+  MemoryConsumers := DataLib.NewStrList(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  MemoryConsumers.Add(GAME_MEM_CONSUMER_NAME);
 
   // Prevent WoG from hooking 'free' function
   pinteger($789DE8)^ := $887668;
