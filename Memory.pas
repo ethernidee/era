@@ -84,6 +84,11 @@ function RegisterMemoryConsumer (ConsumerName: string): pinteger;
 (* Returns list with memory consumer names and corresponding allocation size *)
 function GetMemoryConsumers: TStrList {of Ptr(AllocatedSize: integer)};
 
+// The following functions may be used to replace third-party memory manager and to count allocated size separately
+function  ClientMemAlloc (var AllocatedSize: integer; BufSize: integer): {n} pointer; stdcall;
+procedure ClientMemFree (var AllocatedSize: integer; {On} Buf: pointer); stdcall;
+function  ClientMemRealloc (var AllocatedSize: integer; {On} Buf: pointer; NewBufSize: integer): {n} pointer; stdcall;
+
 
 var
 {O} UniqueStrings: TUniqueStrings;
@@ -300,6 +305,35 @@ begin
   if (Buf <> nil) and ((cardinal(Buf) < WOG_STATIC_MEM_START) or (cardinal(Buf) > WOG_STATIC_MEM_END)) then begin
     result := FastMM4.GetAvailableSpaceInBlock(Buf);
   end;
+end;
+
+function ClientMemAlloc (var AllocatedSize: integer; BufSize: integer): {n} pointer; stdcall;
+begin
+  GetMem(result, BufSize);
+  Concur.AtomicAdd(AllocatedSize, FastMM4.GetAvailableSpaceInBlock(result));
+end;
+
+procedure ClientMemFree (var AllocatedSize: integer; {On} Buf: pointer); stdcall;
+var
+  BufSize: integer;
+
+begin
+  if Buf <> nil then begin
+    BufSize := FastMM4.GetAvailableSpaceInBlock(Buf);
+    FreeMem(Buf);
+    Concur.AtomicSub(AllocatedSize, BufSize);
+  end;
+end;
+
+function ClientMemRealloc (var AllocatedSize: integer; {On} Buf: pointer; NewBufSize: integer): {n} pointer; stdcall;
+var
+  BufSize: integer;
+
+begin
+  BufSize := FastMM4.GetAvailableSpaceInBlock(Buf);
+  result  := Buf;
+  ReallocMem(result, NewBufSize);
+  Concur.AtomicAdd(AllocatedSize, NewBufSize - BufSize);
 end;
 
 function RegisterMemoryConsumer (ConsumerName: string): pinteger;
