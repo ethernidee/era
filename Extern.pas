@@ -119,21 +119,9 @@ begin
   Utils.CopyMem(BufSize, PWideChar(Str), result);
 end;
 
-function MemAlloc (BufSize: integer): {n} pointer; stdcall;
-begin
-  result := nil;
-  GetMem(result, BufSize);
-end;
-
 procedure MemFree ({On} Buf: pointer); stdcall;
 begin
   FreeMem(Buf);
-end;
-
-function MemRealloc ({On} Buf: pointer; NewBufSize: integer): {n} pointer; stdcall;
-begin
-  result := Buf;
-  ReallocMem(result, NewBufSize);
 end;
 
 function RegisterMemoryConsumer (ConsumerName: pchar): pinteger; stdcall;
@@ -1017,9 +1005,10 @@ exports
   IsCampaign,
   IsPatchOverwritten,
   LoadImageAsPcx16,
-  MemAlloc,
   MemFree,
-  MemRealloc,
+  Memory.ClientMemAlloc name '_ClientMemAlloc',
+  Memory.ClientMemFree name '_ClientMemFree',
+  Memory.ClientMemRealloc name '_ClientMemRealloc',
   MergeIniWithDefault,
   NameColor,
   NameTrigger,
@@ -1033,6 +1022,7 @@ exports
   RedirectFile,
   RegisterErmReceiver,
   RegisterHandler,
+  RegisterMemoryConsumer,
   ReportPluginVersion,
   RollbackAppliedPatch,
   SaveIni,
