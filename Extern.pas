@@ -130,7 +130,7 @@ begin
   FreeMem(Buf);
 end;
 
-function MemRealloc (var {On} Buf: pointer; NewBufSize: integer): {n} pointer; stdcall;
+function MemRealloc ({On} Buf: pointer; NewBufSize: integer): {n} pointer; stdcall;
 begin
   result := Buf;
   ReallocMem(result, NewBufSize);
