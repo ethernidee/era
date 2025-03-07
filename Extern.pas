@@ -20,6 +20,7 @@ uses
   Debug,
   DlgMes,
   Ini,
+  Log,
   PatchApi,
   StrLib,
   TypeWrappers,
@@ -877,6 +878,11 @@ begin
   result := MinValue + integer(cardinal(result) mod RangeLen);
 end;
 
+function WriteLog (EventSource, Operation, Description: pchar): TInt32Bool; stdcall;
+begin
+  result := ord(Log.Write(EventSource, Operation, Description));
+end;
+
 function CreatePlugin (Name: pchar) : {On} TPlugin; stdcall;
 var
   PluginName: string;
@@ -1047,6 +1053,7 @@ exports
   trTemp,
   Tweaks.RandomRangeWithFreeParam,
   WriteAtCode,
+  WriteLog,
   WriteSavegameSection,
   WriteStrToIni;
 
