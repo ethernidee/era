@@ -96,6 +96,9 @@ function RandomRangeWithFreeParam (MinValue, MaxValue, FreeParam: integer): inte
 
 procedure ProcessUnhandledException (ExceptionRecord: Windows.PExceptionRecord; Context: Windows.PContext);
 
+(* Writes memory consumption info to main log file *)
+procedure LogMemoryState;
+
 
 (***) implementation (***)
 

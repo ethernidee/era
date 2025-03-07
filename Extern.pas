@@ -1005,6 +1005,7 @@ exports
   IsCampaign,
   IsPatchOverwritten,
   LoadImageAsPcx16,
+  LogMemoryState,
   MemFree,
   Memory.ClientMemAlloc name '_ClientMemAlloc',
   Memory.ClientMemFree name '_ClientMemFree',
