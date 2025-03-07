@@ -107,7 +107,7 @@ const
 
   DL_GROUP_INDEX_MARKER = 100000; // DL frame index column is DL_GROUP_INDEX_MARKER * groupIndex + frameIndex
 
-  OUT_OF_MEMORY_RESERVE_BLOCK_SIZE = 1024000;
+  OUT_OF_MEMORY_RESERVE_BLOCK_SIZE    = 1024000;
   OUT_OF_MEMORY_RESERVE_BYTES         = 1 * OUT_OF_MEMORY_RESERVE_BLOCK_SIZE;  // Delphi GetMem reserve
   OUT_OF_MEMORY_VIRTUAL_RESERVE_BYTES = 15 * OUT_OF_MEMORY_RESERVE_BLOCK_SIZE; // VirtualAlloc reserved, but not commited
 
@@ -2157,21 +2157,21 @@ begin
       'Reserved bytes: %d'#13#10             +
       'Peak allocated bytes: %d'#13#10       +
       'Peak reserved bytes: %d'#13#10        +
-      'PageFaultCount: %d'#13#10             +
-      'QuotaPeakPagedPoolUsage: %d'#13#10    +
-      'QuotaPagedPoolUsage: %d'#13#10        +
-      'QuotaPeakNonPagedPoolUsage: %d'#13#10 +
-      'QuotaNonPagedPoolUsage: %d',
+      'PageFaultCount: %d'#13#10,
+      //'QuotaPeakPagedPoolUsage: %d'#13#10    +
+      //'QuotaPagedPoolUsage: %d'#13#10        +
+      //'QuotaPeakNonPagedPoolUsage: %d'#13#10 +
+      //'QuotaNonPagedPoolUsage: %d',
     [
       MemoryInfo.WorkingSetSize,
       MemoryInfo.PagefileUsage,
       MemoryInfo.PeakWorkingSetSize,
       MemoryInfo.PeakPagefileUsage,
-      MemoryInfo.PageFaultCount,
-      MemoryInfo.QuotaPeakPagedPoolUsage,
-      MemoryInfo.QuotaPagedPoolUsage,
-      MemoryInfo.QuotaPeakNonPagedPoolUsage,
-      MemoryInfo.QuotaNonPagedPoolUsage
+      MemoryInfo.PageFaultCount
+      // MemoryInfo.QuotaPeakPagedPoolUsage,
+      // MemoryInfo.QuotaPagedPoolUsage,
+      // MemoryInfo.QuotaPeakNonPagedPoolUsage,
+      // MemoryInfo.QuotaNonPagedPoolUsage
     ]));
   end;
 
@@ -2223,7 +2223,7 @@ begin
 
   for i := 0 to MemoryConsumers.Count - 1 do begin
     Inc(TotalTrackedConsumption, cardinal(MemoryConsumers.Values[i]));
-    MemoryConsumptionReport := MemoryConsumers[i] + ': ' + SysUtils.IntToStr(integer(MemoryConsumers.Values[i]));
+    MemoryConsumptionReport := MemoryConsumptionReport + MemoryConsumers[i] + ': ' + SysUtils.IntToStr(integer(MemoryConsumers.Values[i]));
 
     if i < MemoryConsumers.Count - 1 then begin
       MemoryConsumptionReport := MemoryConsumptionReport + #13#10;
