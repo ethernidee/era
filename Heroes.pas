@@ -1505,6 +1505,9 @@ function ParseTextTable (const TextTable: string): TTextTableCells;
 (* Show H3 complex dialog with up to 8 pictures and text. Returns 0/1 for question or 0..7 for selected picture or -1 for cancel *)
 function DisplayComplexDialog (Text: pchar; PicsConfig: pointer; MsgType: TMesType = MES_MES; TextAlignment: integer = -1; Timeout: integer = 15000): integer;
 
+(* In-game imported function, not triggering AV false positives *)
+function ShellExecuteA (hWnd: Windows.HWND; Operation, FileName, Parameters, Directory: PAnsiChar; ShowCmd: Integer): Windows.HINST;
+
 
 (***) implementation (***)
 
@@ -2706,6 +2709,14 @@ begin
       result := -1;
     end;
   end;
+end;
+
+function ShellExecuteA (hWnd: Windows.HWND; Operation, FileName, Parameters, Directory: PAnsiChar; ShowCmd: Integer): Windows.HINST;
+type
+  TShellExecuteA = function (hWnd: Windows.HWND; Operation, FileName, Parameters, Directory: PAnsiChar; ShowCmd: Integer): Windows.HINST; stdcall;
+
+begin
+  result := TShellExecuteA(pinteger($63A250)^)(hWnd, Operation, FileName, Parameters, Directory, ShowCmd);
 end;
 
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
