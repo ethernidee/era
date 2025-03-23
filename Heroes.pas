@@ -1710,17 +1710,19 @@ begin
 
   result := MSG_RES_OK;
 
+  // Res = 9999 is timeout/autoclosing
+
   if MesType = MES_QUESTION then begin
-    if Res = 30726 then begin
+    if Res <> 30725 then begin
       result := MSG_RES_CANCEL;
-    end // .if
+    end;
   end else if MesType in [MES_CHOOSE, MES_MAY_CHOOSE] then begin
     case Res of
       30729: result := MSG_RES_LEFTPIC;
       30730: result := MSG_RES_RIGHTPIC;
     else
       result := MSG_RES_CANCEL;
-    end; // .SWITCH Res
+    end;
   end; // .elseif
 end; // .function Msg
 
