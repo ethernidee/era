@@ -3353,6 +3353,10 @@ begin
   // * * * * * //
   WriteSectionHeader('ERA version: ' + GameExt.ERA_VERSION_STR);
 
+  if Erm.LastErmError <> '' then begin
+    WriteSectionHeader('ERM error: ' + Erm.LastErmError);
+  end;
+
   if ErmErrCmdPtr^ <> nil then begin
     ErmContextHeader := 'ERM context';
     PositionLocated  := Erm.AddrToScriptNameAndLine(Erm.ErmErrCmdPtr^, ScriptName, LineN, LinePos);
