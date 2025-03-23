@@ -16,11 +16,13 @@ uses
   CFiles,
   Crypto,
   DataLib,
+  Debug,
   DlgMes,
   FastRand,
   Files,
   Ini,
   Lists,
+  Log,
   StrLib,
   TextScan,
   TypeWrappers,
@@ -827,7 +829,9 @@ var
 {O} GlobalConsts:   TDict {OF Value: integer};
 {O} PacketReader:   {U} Files.TFixedBuf; // Remote event data reader
 
-    ErmTriggerDepth: integer = 0;
+    ErmTriggerDepth:      integer = 0;
+    LastErmError:         string = '';
+    LastErmErrorDumpTime: integer = 0;
 
     FreezedWogOptionWogify: integer = WOGIFY_ALL;
 
@@ -952,6 +956,7 @@ uses
 
 const
   ERM_CMD_CACHE_LIMIT = 30000;
+  MIN_ERM_ERROR_AUTOMATIC_DUMP_INTERVAL_MS = 1000;
 
   (* GetErmParamValue flags *)
   FLAG_STR_EVALS_TO_ADDR_NOT_INDEX = 1; // Indicates, that caller expects string value address, not index
@@ -3322,32 +3327,64 @@ const
   CONTEXT_LEN = 00;
 
 var
-  PositionLocated: boolean;
-  ScriptName:      string;
-  Line:            integer;
-  LinePos:         integer;
-  Question:        string;
+  ErrorLocation:      string;
+  ErrorContext:       string;
+  PositionLocated:    longbool;
+  ScriptName:         string;
+  Line:               integer;
+  LinePos:            integer;
+  Question:           string;
+  ConfirmationResult: integer;
+  CurrentTime:        integer;
 
 begin
-  ErmErrReported  := true;
-  PositionLocated := AddrToScriptNameAndLine(ErrCmd, ScriptName, Line, LinePos);
+  ErmErrReported := true;
 
   if Error = '' then begin
     Error := 'Unknown error';
   end;
 
-  Question := '{~FF3333}' + Error + '{~}';
+  LastErmError    := Error;
+  ErrorLocation   := 'n/a';
+  PositionLocated := AddrToScriptNameAndLine(ErrCmd, ScriptName, Line, LinePos);
 
   if PositionLocated then begin
-    Question := Format('%s'#10'Location: %s:%d:%d', [Question, ScriptName, Line, LinePos]);
+    ErrorLocation := SysUtils.Format('%s:%d:%d', [ScriptName, Line, LinePos]);
   end;
 
-  Question := Question + #10#10'{~g}' + GrabErmCmdContext(ErrCmd) + '{~}' + #10#10 + Trans.tr('era.debug.debug_dump_confirmation', []);
+  ErrorContext := GrabErmCmdContext(ErrCmd);
 
-  if Ask(Question) then begin
+  Log.Write('ErmEngine', 'ReportErmError', SysUtils.Format('Error: %s'#13#10'Location: %s'#13#10'Context:'#13#10#13#10'%s', [Error, ErrorLocation, ErrorContext]));
+
+  if EraSettings.GetDebugBoolOpt('Debug.AbortOnErmError') then begin
+    Log.Write('ErmEngine', 'ReportErmError', 'Aborting because "Debug.AbortOnErmError" option is on');
+
+    Windows.MessageBoxA(
+      Heroes.hWnd^,
+      'The process will be terminated now because ERM error occured and "Debug.AbortOnErmError" option is on',
+      'Fatal error notification',
+      Windows.MB_OK or Windows.MB_ICONEXCLAMATION
+    );
+
+    Debug.GenerateException;
+  end;
+
+  Question           := Trans.tr('era.debug.erm_error_debug_dump_confirmation', ['error', Error, 'location', ErrorLocation, 'context', ErrorContext]);
+  ConfirmationResult := Heroes.Msg(Question, Heroes.MES_QUESTION);
+  CurrentTime        := Heroes.GetTime();
+
+  if
+    (ConfirmationResult = Heroes.MSG_RES_OK) or
+    (
+      (ConfirmationResult = Heroes.MSG_RES_TIMEOUT) and
+      (CurrentTime - LastErmErrorDumpTime >= MIN_ERM_ERROR_AUTOMATIC_DUMP_INTERVAL_MS)
+    )
+  then begin
+    LastErmErrorDumpTime := CurrentTime;
     ZvsDumpErmVars(pchar(Error), ErrCmd);
   end;
 
+  LastErmError   := '';
   ErmErrReported := true;
 end; // .procedure ReportErmError
 
@@ -9165,7 +9202,7 @@ begin
 
       if StrLen >= 0 then begin
         Buf := Heroes.MemAllocFunc(StrLen + 1);
-        Read(StrLen, pbyte(Buf));
+        Read(StrLen, pointer(Buf));
         Buf[StrLen]            := #0;
         ErtStrings[Ptr(Index)] := Buf;
       end;
