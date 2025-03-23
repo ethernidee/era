@@ -210,6 +210,7 @@ const
   MSG_RES_CANCEL    = 2;
   MSG_RES_LEFTPIC   = 0;
   MSG_RES_RIGHTPIC  = 1;
+  MSG_RES_TIMEOUT   = 9999;
 
   (*  Dialog Pictures Types and Subtypes  *)
   NO_PIC_TYPE = -1;
@@ -1332,10 +1333,10 @@ type
   end;
 
 const
-  MAlloc:      TMAlloc = Ptr($617492);
-  MFree:       TMFree  = Ptr($60B0F0);
-  ZvsRandom:   function (MinValue, MaxValue: integer): integer cdecl = Ptr($710509);
-  TimeGetTime: function: integer = Ptr($77114A);
+  MAlloc:    TMAlloc = Ptr($617492);
+  MFree:     TMFree  = Ptr($60B0F0);
+  ZvsRandom: function (MinValue, MaxValue: integer): integer cdecl = Ptr($710509);
+  GetTime:   function: integer = Ptr($77114A);
 
   WndManagerPtr:    ^PWndManager    = Ptr($6992D0);
   MouseManagerPtr:  ^PMouseManager  = Ptr($6992B0);
@@ -1710,9 +1711,9 @@ begin
 
   result := MSG_RES_OK;
 
-  // Res = 9999 is timeout/autoclosing
-
-  if MesType = MES_QUESTION then begin
+  if Res = 9999 then begin
+    result := MSG_RES_TIMEOUT;
+  end else if MesType = MES_QUESTION then begin
     if Res <> 30725 then begin
       result := MSG_RES_CANCEL;
     end;
