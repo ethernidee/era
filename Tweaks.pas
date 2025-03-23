@@ -161,11 +161,13 @@ var
   ExceptionsCritSection: Concur.TCritSection;
   ZvsLibImageTemplate:   string;
   ZvsLibGamePath:        string;
-  IsLocalPlaceObject:    boolean = true;
   DlgLastEvent:          Heroes.TMouseEventInfo;
   ComputerName:          string;
   IsCrashing:            boolean;
   CrashSavegameName:     string;
+  ShowMessageOnCrash:    boolean = true;
+  ExternalCrashHandlerPath: string;
+  IsLocalPlaceObject:    boolean = true;
   ShouldLogMemoryState:  boolean = true;
 
   Mp3TriggerHandledEvent: THandle;
@@ -2265,7 +2267,14 @@ begin
     LogMemoryState;
     ShouldLogMemoryState := false;
     GameExt.GenerateDebugInfoWithoutCleanup;
-    Windows.MessageBoxA(Heroes.hWnd^, pchar(Trans.Tr('era.game_crash_message', ['debug_dir', DEBUG_DIR])), '', Windows.MB_OK);
+
+    if ShowMessageOnCrash then begin
+      Windows.MessageBoxA(Heroes.hWnd^, pchar(Trans.Tr('era.game_crash_message', ['debug_dir', DEBUG_DIR])), '', Windows.MB_OK);
+    end;
+
+    if ExternalCrashHandlerPath <> '' then begin
+      Heroes.ShellExecuteA(0, 'open', pchar(ExternalCrashHandlerPath), pchar(GameExt.GameDir), pchar(GameExt.GameDir), Windows.SW_SHOWNORMAL);
+    end;
   end;
 
   Debug.KillThisProcess;
@@ -2613,10 +2622,12 @@ end; // .procedure OnAfterWoG
 
 procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
 begin
-  CpuTargetLevel          := EraSettings.GetOpt('CpuTargetLevel')    .Int(50);
-  AutoSelectPcIpMaskOpt   := EraSettings.GetOpt('AutoSelectPcIpMask').Str('');
-  UseOnlyOneCpuCoreOpt    := EraSettings.GetOpt('UseOnlyOneCpuCore') .Bool(false);
-  DebugRng                := EraSettings.GetOpt('Debug.Rng')         .Int(0);
+  CpuTargetLevel           := EraSettings.GetOpt('CpuTargetLevel')    .Int(50);
+  AutoSelectPcIpMaskOpt    := EraSettings.GetOpt('AutoSelectPcIpMask').Str('');
+  UseOnlyOneCpuCoreOpt     := EraSettings.GetOpt('UseOnlyOneCpuCore') .Bool(false);
+  DebugRng                 := EraSettings.GetOpt('Debug.Rng')         .Int(0);
+  ShowMessageOnCrash       := EraSettings.GetDebugBoolOpt('Debug.ShowMessageOnCrash', true);
+  ExternalCrashHandlerPath := EraSettings.GetOpt('Debug.ExternalCrashHandlerPath').Str('');
 end;
 
 procedure OnAfterCreateWindow (Event: GameExt.PEvent); stdcall;
