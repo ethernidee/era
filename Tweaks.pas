@@ -2273,7 +2273,7 @@ begin
     end;
 
     if ExternalCrashHandlerPath <> '' then begin
-      Heroes.ShellExecuteA(0, 'open', pchar(ExternalCrashHandlerPath), pchar(GameExt.GameDir), pchar(GameExt.GameDir), Windows.SW_SHOWNORMAL);
+      Heroes.ShellExecuteA(0, 'open', pchar(ExternalCrashHandlerPath), pchar('"' + GameExt.GameDir + '"'), pchar(GameExt.GameDir), Windows.SW_SHOWNORMAL);
     end;
   end;
 
