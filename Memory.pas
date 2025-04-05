@@ -247,7 +247,7 @@ begin
 end; // .procedure TUniqueStrings.Grow
 
 const
-  WOG_STATIC_MEM_START = cardinal($77CAD5);
+  WOG_STATIC_MEM_START = cardinal($700000);
   WOG_STATIC_MEM_END   = cardinal($77CAD5);
 
 function NewMemAlloc (Size: integer; UseNewHandler: TInt32Bool): {n} pointer; cdecl;
