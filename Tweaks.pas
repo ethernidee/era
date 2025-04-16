@@ -148,6 +148,19 @@ type
     function RandomRange (MinValue, MaxValue: integer): integer; override;
   end;
 
+  TExceptionDialogTrackerRec = record
+    ExceptionAddr: pointer;
+    DialogId:      integer;
+  end;
+
+  TExceptionDialogTracker = record
+    Pos:     integer;
+    Records: array [0..14] of TExceptionDialogTrackerRec;
+
+    procedure TrackEvent (ExceptionAddress: pointer);
+    function GetDialogId (ExceptionAddress: pointer): integer;
+  end;
+
 var
 {O} CLangRng:                  FastRand.TClangRng;
 {O} QualitativeRng:            FastRand.TXoroshiro128Rng;
@@ -156,19 +169,21 @@ var
 {O} OutOfMemoryReserve:        pointer;
 {O} OutOfMemoryVirtualReserve: pointer;
 
-  hTimerEvent:           THandle;
-  InetCriticalSection:   Windows.TRTLCriticalSection;
-  ExceptionsCritSection: Concur.TCritSection;
-  ZvsLibImageTemplate:   string;
-  ZvsLibGamePath:        string;
-  DlgLastEvent:          Heroes.TMouseEventInfo;
-  ComputerName:          string;
-  IsCrashing:            boolean;
-  CrashSavegameName:     string;
-  ShowMessageOnCrash:    boolean = true;
+  hTimerEvent:            THandle;
+  InetCriticalSection:    Windows.TRTLCriticalSection;
+  ExceptionsCritSection:  Concur.TCritSection;
+  ZvsLibImageTemplate:    string;
+  ZvsLibGamePath:         string;
+  DlgLastEvent:           Heroes.TMouseEventInfo;
+  ComputerName:           string;
+  IsCrashing:             boolean;
+  CrashSavegameName:      string;
+  ExceptionDialogTracker: TExceptionDialogTracker;
+
+  ShowMessageOnCrash:       boolean = true;
   ExternalCrashHandlerPath: string;
-  IsLocalPlaceObject:    boolean = true;
-  ShouldLogMemoryState:  boolean = true;
+  IsLocalPlaceObject:       boolean = true;
+  ShouldLogMemoryState:     boolean = true;
 
   Mp3TriggerHandledEvent: THandle;
   IsMp3Trigger:           boolean = false;
@@ -2029,109 +2044,215 @@ begin
   {!} Debug.ModuleContext.Unlock;
 end; // .procedure DumpWinPeModuleList
 
-procedure DumpExceptionContext (ExcRec: Windows.PExceptionRecord; Context: Windows.PContext);
+procedure DumpExceptionReasonAndAddress (Output: FilesEx.IFormattedOutput; ExceptionRec: Windows.PExceptionRecord);
+var
+  ExceptionText: string;
+
+begin
+  case ExceptionRec.ExceptionCode of
+    $C0000005: begin
+      if ExceptionRec.ExceptionInformation[0] <> 0 then begin
+        ExceptionText := 'Failed to write data at ' + Format('%x', [integer(ExceptionRec.ExceptionInformation[1])]);
+      end else begin
+        ExceptionText := 'Failed to read data at ' + Format('%x', [integer(ExceptionRec.ExceptionInformation[1])]);
+      end;
+    end;
+
+    $C000008C: ExceptionText := 'Array index is out of bounds';
+    $80000003: ExceptionText := 'Breakpoint encountered';
+    $80000002: ExceptionText := 'Data access misalignment';
+    $C000008D: ExceptionText := 'One of the operands in a floating-point operation is denormal';
+    $C000008E: ExceptionText := 'Attempt to divide a floating-point value by a floating-point divisor of zero';
+    $C000008F: ExceptionText := 'The result of a floating-point operation cannot be represented exactly as a decimal fraction';
+    $C0000090: ExceptionText := 'Invalid floating-point exception';
+    $C0000091: ExceptionText := 'The exponent of a floating-point operation is greater than the magnitude allowed by the corresponding type';
+    $C0000092: ExceptionText := 'The stack overflowed or underflowed as the result of a floating-point operation';
+    $C0000093: ExceptionText := 'The exponent of a floating-point operation is less than the magnitude allowed by the corresponding type';
+    $C000001D: ExceptionText := 'Attempt to execute an illegal instruction';
+    $C0000006: ExceptionText := 'Attempt to access a page that was not present, and the system was unable to load the page';
+    $C0000094: ExceptionText := 'Attempt to divide an integer value by an integer divisor of zero';
+    $C0000095: ExceptionText := 'Integer arithmetic overflow';
+    $C0000026: ExceptionText := 'An invalid exception disposition was returned by an exception handler';
+    $C0000025: ExceptionText := 'Attempt to continue from an exception that isn''t continuable';
+    $C0000096: ExceptionText := 'Attempt to execute a privilaged instruction.';
+    $80000004: ExceptionText := 'Single step exception';
+    $C00000FD: ExceptionText := 'Stack overflow';
+    else       ExceptionText := 'Unknown exception';
+  end; // .switch ExceptionRec.ExceptionCode
+
+  Output.Line(ExceptionText + '.');
+  Output.Line(Format('EIP: %s. Code: %x', [Debug.ModuleContext.AddrToStr(ExceptionRec.ExceptionAddress), ExceptionRec.ExceptionCode]));
+  Output.EmptyLine;
+end;
+
+procedure DumpGameContext (Output: FilesEx.IFormattedOutput; ExceptionAddress: pointer);
+const
+  MAX_TAGS = 10;
+
+var
+  Tags:          Utils.TArrayOfStr;
+  CombatTypeStr: string;
+  TagInd:        integer;
+  DialogId:      integer;
+  DialogName:    string;
+
+begin
+  Tags := nil;
+
+  try
+    DialogId := ExceptionDialogTracker.GetDialogId(ExceptionAddress);
+
+    if DialogId = 0 then begin
+      DialogId := Heroes.GetActiveDialogId;
+    end;
+
+    DialogName := Heroes.GetDialogName(DialogId);
+
+    if DialogName <> '' then begin
+      SetLength(Tags, MAX_TAGS);
+      TagInd := 0;
+
+      if Heroes.IsAiPlayerTurn then begin
+        Tags[TagInd] := 'AI turn';
+        Inc(TagInd);
+      end;
+
+      if Heroes.IsHotSeatGame then begin
+        Tags[TagInd] := 'HotSeat';
+        Inc(TagInd);
+      end else if Heroes.IsNetworkGame then begin
+        Tags[TagInd] := 'Network';
+        Inc(TagInd);
+
+        if (Heroes.DirectPlayHeroesPtr^ <> nil) and DirectPlayHeroesPtr^.IsHost then begin
+          Tags[TagInd] := 'Host';
+          Inc(TagInd);
+        end else begin
+          Tags[TagInd] := 'Client';
+          Inc(TagInd);
+        end;
+      end;
+
+      if (Heroes.CombatManagerPtr^ <> nil) and (CombatManagerPtr^.Status <> 0) then begin
+        Tags[TagInd] := 'Combat';
+        Inc(TagInd);
+
+        case (ord(CombatManagerPtr^.IsHuman[1]) shl 1) or ord(CombatManagerPtr^.IsHuman[0]) of
+          0: CombatTypeStr := 'AI vs AI';
+          1: CombatTypeStr := 'Human vs AI';
+          2: CombatTypeStr := 'AI vs Human';
+          3: CombatTypeStr := 'Human vs Human';
+        end;
+
+        Tags[TagInd] := CombatTypeStr;
+        Inc(TagInd);
+      end;
+
+      Output.Write('> Game context: [' + DialogName + '] dialog');
+
+      if TagInd > 0 then begin
+        SetLength(Tags, TagInd);
+        Output.Write(' (' + StrLib.Join(Tags, ', ') + ')');
+      end;
+
+      Output.EmptyLine;
+      Output.EmptyLine;
+    end;
+  except
+    // Skip exceptions during game context dump
+  end;
+end; // .procedure DumpGameContext
+
+procedure DumpRegisters (Output: FilesEx.IFormattedOutput; Context: Windows.PContext);
+begin
+  Output.Line('> Registers');
+
+  Output.Line('EAX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Eax), Debug.ANALYZE_DATA));
+  Output.Line('ECX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ecx), Debug.ANALYZE_DATA));
+  Output.Line('EDX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Edx), Debug.ANALYZE_DATA));
+  Output.Line('EBX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ebx), Debug.ANALYZE_DATA));
+  Output.Line('ESP: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Esp), Debug.ANALYZE_DATA));
+  Output.Line('EBP: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ebp), Debug.ANALYZE_DATA));
+  Output.Line('ESI: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Esi), Debug.ANALYZE_DATA));
+  Output.Line('EDI: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Edi), Debug.ANALYZE_DATA));
+
+  Output.EmptyLine;
+end;
+
+procedure DumpCallStack (Output: FilesEx.IFormattedOutput; Context: Windows.PContext);
+var
+  RetAddr: integer;
+  Ebp:     integer;
+
+begin
+  Output.Line('> Callstack');
+  Ebp     := Context.Ebp;
+  RetAddr := 1;
+
+  try
+    while (Ebp <> 0) and (RetAddr <> 0) do begin
+      RetAddr := pinteger(Ebp + 4)^;
+
+      if RetAddr <> 0 then begin
+        Output.Line(Debug.ModuleContext.AddrToStr(Ptr(RetAddr)));
+        Ebp := pinteger(Ebp)^;
+      end;
+    end;
+  except
+    // Stop processing callstack
+  end; // .try
+
+  Output.EmptyLine;
+end;
+
+procedure DumpStack (Output: FilesEx.IFormattedOutput; Context: Windows.PContext);
+var
+  Esp:      integer;
+  LineText: string;
+  i:        integer;
+
+begin
+  Output.Line('> Stack');
+  Esp := Context.Esp - sizeof(integer) * 5;
+
+  try
+    for i := 1 to 40 do begin
+      LineText := IntToHex(Esp, 8);
+
+      if Esp = integer(Context.Esp) then begin
+        LineText := LineText + '*';
+      end;
+
+      LineText := LineText + ': ' + Debug.ModuleContext.AddrToStr(ppointer(Esp)^, Debug.ANALYZE_DATA);
+      Inc(Esp, sizeof(integer));
+      Output.Line(LineText);
+    end; // .for
+  except
+    // Stop stack traversing
+  end; // .try
+end;
+
+procedure DumpExceptionContext (ExceptionRec: Windows.PExceptionRecord; Context: Windows.PContext);
 const
   DEBUG_EXCEPTION_CONTEXT_PATH = EraSettings.DEBUG_DIR + '\exception context.txt';
 
 var
-  ExceptionText: string;
-  LineText:      string;
-  Ebp:           integer;
-  Esp:           integer;
-  RetAddr:       integer;
-  i:             integer;
+  Output: FilesEx.IFormattedOutput;
 
 begin
   {!} Debug.ModuleContext.Lock;
   Debug.ModuleContext.UpdateModuleList;
 
-  with FilesEx.WriteFormattedOutput(GameExt.GameDir + '\' + DEBUG_EXCEPTION_CONTEXT_PATH) do begin
-    case ExcRec.ExceptionCode of
-      $C0000005: begin
-        if ExcRec.ExceptionInformation[0] <> 0 then begin
-          ExceptionText := 'Failed to write data at ' + Format('%x', [integer(ExcRec.ExceptionInformation[1])]);
-        end else begin
-          ExceptionText := 'Failed to read data at ' + Format('%x', [integer(ExcRec.ExceptionInformation[1])]);
-        end;
-      end; // .case $C0000005
+  Output := FilesEx.WriteFormattedOutput(GameExt.GameDir + '\' + DEBUG_EXCEPTION_CONTEXT_PATH);
 
-      $C000008C: ExceptionText := 'Array index is out of bounds';
-      $80000003: ExceptionText := 'Breakpoint encountered';
-      $80000002: ExceptionText := 'Data access misalignment';
-      $C000008D: ExceptionText := 'One of the operands in a floating-point operation is denormal';
-      $C000008E: ExceptionText := 'Attempt to divide a floating-point value by a floating-point divisor of zero';
-      $C000008F: ExceptionText := 'The result of a floating-point operation cannot be represented exactly as a decimal fraction';
-      $C0000090: ExceptionText := 'Invalid floating-point exception';
-      $C0000091: ExceptionText := 'The exponent of a floating-point operation is greater than the magnitude allowed by the corresponding type';
-      $C0000092: ExceptionText := 'The stack overflowed or underflowed as the result of a floating-point operation';
-      $C0000093: ExceptionText := 'The exponent of a floating-point operation is less than the magnitude allowed by the corresponding type';
-      $C000001D: ExceptionText := 'Attempt to execute an illegal instruction';
-      $C0000006: ExceptionText := 'Attempt to access a page that was not present, and the system was unable to load the page';
-      $C0000094: ExceptionText := 'Attempt to divide an integer value by an integer divisor of zero';
-      $C0000095: ExceptionText := 'Integer arithmetic overflow';
-      $C0000026: ExceptionText := 'An invalid exception disposition was returned by an exception handler';
-      $C0000025: ExceptionText := 'Attempt to continue from an exception that isn''t continuable';
-      $C0000096: ExceptionText := 'Attempt to execute a privilaged instruction.';
-      $80000004: ExceptionText := 'Single step exception';
-      $C00000FD: ExceptionText := 'Stack overflow';
-      else       ExceptionText := 'Unknown exception';
-    end; // .switch ExcRec.ExceptionCode
-
-    Line(ExceptionText + '.');
-    Line(Format('EIP: %s. Code: %x', [Debug.ModuleContext.AddrToStr(Ptr(Context.Eip)), ExcRec.ExceptionCode]));
-    EmptyLine;
-    Line('> Registers');
-
-    Line('EAX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Eax), Debug.ANALYZE_DATA));
-    Line('ECX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ecx), Debug.ANALYZE_DATA));
-    Line('EDX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Edx), Debug.ANALYZE_DATA));
-    Line('EBX: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ebx), Debug.ANALYZE_DATA));
-    Line('ESP: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Esp), Debug.ANALYZE_DATA));
-    Line('EBP: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Ebp), Debug.ANALYZE_DATA));
-    Line('ESI: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Esi), Debug.ANALYZE_DATA));
-    Line('EDI: ' + Debug.ModuleContext.AddrToStr(Ptr(Context.Edi), Debug.ANALYZE_DATA));
-
-    EmptyLine;
-    Line('> Callstack');
-    Ebp     := Context.Ebp;
-    RetAddr := 1;
-
-    try
-      while (Ebp <> 0) and (RetAddr <> 0) do begin
-        RetAddr := pinteger(Ebp + 4)^;
-
-        if RetAddr <> 0 then begin
-          Line(Debug.ModuleContext.AddrToStr(Ptr(RetAddr)));
-          Ebp := pinteger(Ebp)^;
-        end;
-      end;
-    except
-      // Stop processing callstack
-    end; // .try
-
-    EmptyLine;
-    Line('> Stack');
-    Esp := Context.Esp - sizeof(integer) * 5;
-
-    try
-      for i := 1 to 40 do begin
-        LineText := IntToHex(Esp, 8);
-
-        if Esp = integer(Context.Esp) then begin
-          LineText := LineText + '*';
-        end;
-
-        LineText := LineText + ': ' + Debug.ModuleContext.AddrToStr(ppointer(Esp)^, Debug.ANALYZE_DATA);
-        Inc(Esp, sizeof(integer));
-        Line(LineText);
-      end; // .for
-    except
-      // Stop stack traversing
-    end; // .try
-  end; // .with
+  DumpExceptionReasonAndAddress(Output, ExceptionRec);
+  DumpGameContext(Output, ExceptionRec.ExceptionAddress);
+  DumpRegisters(Output, Context);
+  DumpCallStack(Output, Context);
+  DumpStack(Output, Context);
 
   {!} Debug.ModuleContext.Unlock;
-end; // .procedure DumpExceptionContext
+end;
 
 procedure LogMemoryState;
 var
@@ -2288,6 +2409,67 @@ const
 
 begin
   ProcessUnhandledException(ExceptionPtrs.ExceptionRecord, ExceptionPtrs.ContextRecord);
+
+  result := EXCEPTION_CONTINUE_SEARCH;
+end;
+
+procedure TExceptionDialogTracker.TrackEvent (ExceptionAddress: pointer);
+var
+  ActiveDialogId: integer;
+
+begin
+  ActiveDialogId := 0;
+
+  if Heroes.WndManagerPtr^ <> nil then begin
+    ActiveDialogId := Heroes.WndManagerPtr^.GetCurrentDlgId;
+  end;
+
+  with Self.Records[Self.Pos] do begin
+    ExceptionAddr := ExceptionAddress;
+    DialogId      := ActiveDialogId;
+  end;
+
+  Inc(Self.Pos);
+
+  if Self.Pos > High(Self.Records) then begin
+    Self.Pos := 0;
+  end;
+end;
+
+function TExceptionDialogTracker.GetDialogId (ExceptionAddress: pointer): integer;
+var
+  Pos: integer;
+  i:   integer;
+
+begin
+  result := 0;
+  i      := 0;
+  Pos    := Self.Pos - 1;
+
+  if Pos < 0 then begin
+    Pos := High(Self.Records);
+  end;
+
+  while (i <= High(Self.Records)) and (Self.Records[Pos].ExceptionAddr <> ExceptionAddress) do begin
+    Inc(i);
+    Dec(Pos);
+
+    if Pos < 0 then begin
+      Pos := High(Self.Records);
+    end;
+  end;
+
+  if i <= High(Self.Records) then begin
+    result := Self.Records[Pos].DialogId;
+  end;
+end;
+
+function OnBeforeAnyException (const ExceptionPtrs: TExceptionPointers): integer; stdcall;
+const
+  EXCEPTION_CONTINUE_SEARCH = 0;
+
+begin
+  ExceptionDialogTracker.TrackEvent(ExceptionPtrs.ExceptionRecord.ExceptionAddress);
 
   result := EXCEPTION_CONTINUE_SEARCH;
 end;
@@ -2652,6 +2834,8 @@ begin
   CrashSavegameName := pchar(Erm.x[1]);
 end;
 
+function AddVectoredExceptionHandler (First: integer; Handler: pointer): Windows.THandle; stdcall; external 'kernel32.dll';
+
 procedure OnAfterVfsInit (Event: GameExt.PEvent); stdcall;
 begin
   Windows.SetErrorMode(SEM_NOGPFAULTERRORBOX);
@@ -2669,6 +2853,8 @@ begin
   GlobalRng              := QualitativeRng;
   Mp3TriggerHandledEvent := Windows.CreateEvent(nil, false, false, nil);
   ComputerName           := WinUtils.GetComputerNameW;
+
+  AddVectoredExceptionHandler(1, @OnBeforeAnyException);
 
   EventMan.GetInstance.On('$OnLoadEraSettings',      OnLoadEraSettings);
   EventMan.GetInstance.On('OnAfterCreateWindow',     OnAfterCreateWindow);
