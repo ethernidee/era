@@ -1139,18 +1139,24 @@ type
 
   PCombatManager  = ^TCombatManager;
   TCombatManager  = packed record
-    Unk1:          array [0..$3C - 1] of byte;
+    Unk1:          array [0..$34 - 1] of byte;
+    Status:        integer; // +0x34 1 - active, 0 - inactive
+    Unk2:          array [$38..$3C - 1] of byte;
     Action:        integer; // +0x3C
     Spell:         integer; // +0x40
     TargetPos:     integer; // +0x44
     ActionParam2:  integer; // +0x48
-    Unk2:          array [$4C..$53CC - 1] of byte;
+    Unk3:          array [$4C..$53CC - 1] of byte;
     Heroes:        array [0..1] of PHero; // +0x53CC
-    Unk3:          array [$53CC + sizeof(pointer) * 2..$132B8 - 1] of byte;
+    Unk4:          array [$53D4..$54A4 - 1] of byte;
+    IsHuman:       array [0..1] of boolean;
+    IsLocalHuman:  array [0..1] of boolean;
+    PlayerIds:     array [0..1] of integer;
+    Unk5:          array [$54B0..$132B8 - 1] of byte;
     CurrStackSide: integer; // 0x132B8
     CurrStackInd:  integer; // 0x132BC
     ControlSide:   integer; // 0x132C0, the side, which is really controlling current stack
-    Unk4:          array [$132C0 + 4..$13D68 - 1] of byte;
+    Unk6:          array [$132C0 + 4..$13D68 - 1] of byte;
     IsTactics:     boolean; // 0x13D68
     Align1:        array [1..3] of byte;
     Round:         integer; // 0x13D6C
@@ -1296,6 +1302,13 @@ type
     procedure Send (aDestPlayerId: integer);
   end;
 
+  PDirectPlayHeroes = ^TDirectPlayHeroes;
+  TDirectPlayHeroes = packed record
+    VTable: Utils.PEndlessPtrArr;
+
+    function IsHost: boolean;
+  end;
+
   PWogDlgItem = pointer;
 
   TWogDlgAnimatedDef = packed record
@@ -1354,6 +1367,8 @@ const
   GameDate:            ^PGameDate = Ptr($840CE0);
   IsGameEnd:           pboolean   = Ptr($697308);
   GameEndKind:         pbyte      = Ptr($699560);
+
+  DirectPlayHeroesPtr: ^PDirectPlayHeroes = Ptr($69D858);
 
   BytesPerPixelPtr:           pbyte = Ptr($5FA228 + 3);
   Color16GreenChannelMaskPtr: pword = Ptr($694DB0);
@@ -1444,6 +1459,10 @@ function  GetMapSize: integer;
 function  IsTwoLevelMap: boolean;
 function  IsLocalGame: boolean;
 function  IsNetworkGame: boolean;
+function  IsHotSeatGame: boolean;
+function  GetGameTypeName: string;
+function  GetActiveDialogId: integer;
+function  GetDialogName (DialogId: integer): string;
 function  GetTownManager: PTownManager;
 function  GetPlayer (PlayerId: integer): {n} PPlayer;
 function  IsValidPlayerId (PlayerId: integer): boolean;
@@ -1454,6 +1473,7 @@ function GetThisPcHumanPlayerId: integer;
 
 function  IsThisPcHumanTurn: boolean;
 function  IsThisPcNetworkActiveSide: boolean;
+function  IsAiPlayerTurn: boolean;
 function  GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
 function  PackCoords (x, y, z: integer): integer;
 procedure UnpackCoords (PackedCoords: integer; var x, y, z: integer); overload;
@@ -1512,6 +1532,13 @@ function ShellExecuteA (hWnd: Windows.HWND; Operation, FileName, Parameters, Dir
 (***) implementation (***)
 
 uses GameExt, EventMan;
+
+
+const
+  GAME_TYPE_NAMES: array [0..5] of string = ('Single', 'Network', 'Network', 'HotSeat', 'Network', 'Network');
+
+var
+{O} DialogNamesById: {O} TObjDict {of Ptr(addr) => TString};
 
 
 function TArtInfo.GetTextField (Ind: integer): PValue;
@@ -1589,6 +1616,11 @@ begin
   end;
 
   ApiJack.CallFast(Ptr($5549E0), int(@Self), aDestPlayerId, 0, 1);
+end;
+
+function TDirectPlayHeroes.IsHost: boolean;
+begin
+  result := boolean(ApiJack.CallThis(Self.VTable[36], int(@Self)) and 1);
 end;
 
 function TBattleStack.GetId: integer;
@@ -2303,6 +2335,15 @@ begin
   end;
 end;
 
+function GetActiveDialogId: integer;
+begin
+  result := 0;
+
+  if WndManagerPtr^ <> nil then begin
+    result := WndManagerPtr^.GetCurrentDlgId;
+  end;
+end;
+
 function GetMapSize: integer; assembler; {$W+}
 asm
   MOV EAX, [GAME_MANAGER]
@@ -2323,6 +2364,37 @@ end;
 function IsNetworkGame: boolean;
 begin
   result := (GameType^ <> GAMETYPE_SINGLE) and (GameType^ <> GAMETYPE_HOTSEAT);
+end;
+
+function IsHotSeatGame: boolean;
+begin
+  result := GameType^ = GAMETYPE_HOTSEAT;
+end;
+
+function GetGameTypeName: string;
+begin
+  if (ord(GameType^) < ord(Low(GameType^))) or (ord(GameType^) > ord(High(GameType^))) then begin
+    result := 'Unknown';
+  end else begin
+    result := GAME_TYPE_NAMES[ord(GameType^)];
+  end;
+end;
+
+function GetDialogName (DialogId: integer): string;
+var
+{Un} DialogName: TString;
+
+begin
+  DialogName := nil;
+  result     := '';
+  // * * * * * //
+  if DialogId <> 0 then begin
+    DialogName := TString(DialogNamesById[Ptr(DialogId)]);
+
+    if DialogName <> nil then begin
+      result := DialogName.Value;
+    end;
+  end;
 end;
 
 function GetTownManager: PTownManager;
@@ -2391,6 +2463,11 @@ var
 begin
   ThisPcHumanPlayerId := GetThisPcHumanPlayerId;
   result              := IsValidPlayerId(ThisPcHumanPlayerId) and GetPlayer(ThisPcHumanPlayerId).IsOnActiveNetworkSide;
+end;
+
+function IsAiPlayerTurn: boolean;
+begin
+  result := IsValidPlayerId(CurrentPlayerId^) and not GetPlayer(CurrentPlayerId^).IsHuman;
 end;
 
 function GetObjectEntranceTile (MapTile: PMapTile): PMapTile;
@@ -2719,6 +2796,53 @@ begin
   result := TShellExecuteA(pinteger($63A250)^)(hWnd, Operation, FileName, Parameters, Directory, ShowCmd);
 end;
 
+procedure InitDialogNamesMap;
+begin
+  DialogNamesById[Ptr($402AE0)] := TString.Create('Adventure Map');
+  DialogNamesById[Ptr($405620)] := TString.Create('Adventure Actions');
+  DialogNamesById[Ptr($41B040)] := TString.Create('Adventure Popup');
+  DialogNamesById[Ptr($46F220)] := TString.Create('Combat Settings');
+  DialogNamesById[Ptr($471590)] := TString.Create('Combat Log');
+  DialogNamesById[Ptr($4723E0)] := TString.Create('Combat');
+  DialogNamesById[Ptr($48F9B0)] := TString.Create('Universal');
+  DialogNamesById[Ptr($4913E0)] := TString.Create('Dimension Door');
+  DialogNamesById[Ptr($4917E0)] := TString.Create('Sink Ship');
+  DialogNamesById[Ptr($4E1790)] := TString.Create('Hero');
+  DialogNamesById[Ptr($4E7EA0)] := TString.Create('Hill Fort');
+  DialogNamesById[Ptr($4F9D90)] := TString.Create('Hero LevelUp');
+  DialogNamesById[Ptr($521220)] := TString.Create('Kingdom Overview');
+  DialogNamesById[Ptr($52CA50)] := TString.Create('Puzzle');
+  DialogNamesById[Ptr($52E690)] := TString.Create('Journal');
+  DialogNamesById[Ptr($54FEF0)] := TString.Create('Dwelling');
+  DialogNamesById[Ptr($5605E0)] := TString.Create('Altar of Sacrifice');
+  DialogNamesById[Ptr($5661B0)] := TString.Create('Skeleton Transformer');
+  DialogNamesById[Ptr($569A90)] := TString.Create('Scenario Info');
+  DialogNamesById[Ptr($57D410)] := TString.Create('Saving');
+  DialogNamesById[Ptr($59CBC0)] := TString.Create('Spell Book');
+  DialogNamesById[Ptr($5AE6E0)] := TString.Create('Hero Meeting');
+  DialogNamesById[Ptr($5B3320)] := TString.Create('Adventure Settings');
+  DialogNamesById[Ptr($5C2740)] := TString.Create('Select Town');
+  DialogNamesById[Ptr($5C5CB0)] := TString.Create('Town');
+  DialogNamesById[Ptr($5C9A60)] := TString.Create('Thieves Guild');
+  DialogNamesById[Ptr($5CCCE0)] := TString.Create('Town Hall');
+  DialogNamesById[Ptr($5CE520)] := TString.Create('Mage Guild');
+  DialogNamesById[Ptr($5D1160)] := TString.Create('Leave Creatures');
+  DialogNamesById[Ptr($5D1490)] := TString.Create('Garrison');
+  DialogNamesById[Ptr($5D1E00)] := TString.Create('Blacksmith');
+  DialogNamesById[Ptr($5D2900)] := TString.Create('WoG DL');
+  DialogNamesById[Ptr($5D5F40)] := TString.Create('Building Info');
+  DialogNamesById[Ptr($5D7C80)] := TString.Create('Tavern');
+  DialogNamesById[Ptr($5DCF50)] := TString.Create('Fort');
+  DialogNamesById[Ptr($5E1A20)] := TString.Create('Resource Exchange');
+  DialogNamesById[Ptr($5E3A90)] := TString.Create('Resource Transfer');
+  DialogNamesById[Ptr($5E5A90)] := TString.Create('Buy Artifacts');
+  DialogNamesById[Ptr($5E7FE0)] := TString.Create('Sell Artifacts');
+  DialogNamesById[Ptr($5EA080)] := TString.Create('Freelancers Guild');
+  DialogNamesById[Ptr($5F0B30)] := TString.Create('University');
+  DialogNamesById[Ptr($5F3EC0)] := TString.Create('Monster Info');
+  DialogNamesById[Ptr($5FC0E0)] := TString.Create('World Overview');
+end;
+
 procedure OnAfterStructRelocations (Event: GameExt.PEvent); stdcall;
 begin
   SecSkillNames         := ppointer($4E6C00)^;
@@ -2734,6 +2858,8 @@ begin
 end;
 
 begin
-  ResourceNamer := TResourceNamer.Create;
+  ResourceNamer   := TResourceNamer.Create;
+  DialogNamesById := DataLib.NewObjDict(Utils.OWNS_ITEMS);
+  InitDialogNamesMap;
   EventMan.GetInstance.On('OnAfterStructRelocations', OnAfterStructRelocations);
 end.
