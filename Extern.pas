@@ -834,7 +834,7 @@ end;
 
 function Hash32 (Data: pchar; DataSize: integer): integer; stdcall;
 begin
-  result := Crypto.FastHash(Data, DataSize);
+  result := Crypto.Crc32(Data, DataSize);
 end;
 
 function _SplitMix32 (var Seed: integer): integer;

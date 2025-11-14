@@ -236,7 +236,7 @@ end;
 function TBattleDeterministicRng.Random: integer;
 begin
   Self.UpdateState(Low(result), High(result));
-  result := Crypto.FastHash(@Self.fState, sizeof(Self.fState));
+  result := Crypto.Crc32(@Self.fState, sizeof(Self.fState));
 end;
 
 function TBattleDeterministicRng.RandomRange (MinValue, MaxValue: integer): integer;
@@ -256,7 +256,7 @@ begin
   end;
 
   Self.UpdateState(MinValue, MaxValue);
-  result := Crypto.FastHash(@Self.fState, sizeof(Self.fState));
+  result := Crypto.Crc32(@Self.fState, sizeof(Self.fState));
 
   if (MinValue > Low(integer)) or (MaxValue < High(integer)) then begin
     i                := 2;
@@ -271,7 +271,7 @@ begin
 
     while (cardinal(result) > MaxUnbiasedValue) and (i <= MAX_UNBIAS_ATTEMPTS) do begin
       Inc(Self.fState.fAttemptParam, 39437491);
-      result := Crypto.FastHash(@Self.fState, sizeof(Self.fState));
+      result := Crypto.Crc32(@Self.fState, sizeof(Self.fState));
       Inc(i);
     end;
 
