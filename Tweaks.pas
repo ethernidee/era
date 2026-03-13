@@ -2021,6 +2021,27 @@ begin
   Context.RetAddr := Ptr($4F6D59);
 end; // .function Hook_Show3PicDlg_PrepareDialogStruct
 
+var
+  OldTime:    cardinal = 0;
+  TimePassed: cardinal = 0;
+
+function Hook_HandleRealTimeTimer (Context: ApiJack.PHookContext): longbool; stdcall;
+var
+  Time: cardinal;
+
+begin
+  result          := false;
+  Context.RetAddr := Ptr($4EDCCA);
+  Time            := cardinal(Heroes.GetTime());
+  TimePassed      := cardinal(Time - OldTime);
+
+  if TimePassed >= 60 then begin
+    OldTime         := Time;
+    TimePassed      := cardinal(TimePassed mod 60);
+    Context.RetAddr := Ptr($4EDCBB);
+  end;
+end;
+
 procedure DumpWinPeModuleList;
 const
   DEBUG_WINPE_MODULE_LIST_PATH = EraSettings.DEBUG_DIR + '\pe modules.txt';
@@ -2800,6 +2821,9 @@ begin
   PatchApi.p.WriteDataPatch(Ptr($4A61CC), ['E8']);
   PatchApi.p.WriteDataPatch(Ptr($4A66AC), ['E8']);
   PatchApi.p.WriteDataPatch(Ptr($4A795B), ['E8']);
+
+  (* Fix wrong real timer handling, occuring when PC is active more than 23 days or 2147483 seconds *)
+  ApiJack.Hook(Ptr($4EDCAC), @Hook_HandleRealTimeTimer);
 end; // .procedure OnAfterWoG
 
 procedure OnLoadEraSettings (Event: GameExt.PEvent); stdcall;
