@@ -250,9 +250,19 @@ type
     ParamsConfig: integer;
   end;
 
+  TDllApiInfo = class
+   public
+    {O} ApiEntries: {U} TDict {of command name => API function address};
+        DllHandle:  Windows.THandle;
+
+    constructor Create (DllHandle: Windows.THandle);
+    destructor Destroy; override;
+  end;
+
 var
 (* Cached exported stdcall API of Era.dll and kernel32.dll *)
-{O} ApiCache:       {U} TDict {of command name => API function address};
+{O} ApiCache:       {U} TDict {of Era/kernel32/user32 API function name => API function address};
+{O} DllApiCache:    {O} TDict {of dll name with extension => TDllApiInfo};
     Kernel32Handle: Windows.THandle;
     User32Handle:   Windows.THandle;
 
@@ -377,6 +387,17 @@ end;
 procedure TServiceParam.RetInt (Value: integer);
 begin
   TServiceParamIntReturner(Self.ValReturner)(@Self, Value);
+end;
+
+constructor TDllApiInfo.Create (DllHandle: Windows.THandle);
+begin
+  Self.DllHandle  := DllHandle;
+  Self.ApiEntries := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+end;
+
+destructor TDllApiInfo.Destroy;
+begin
+  SysUtils.FreeAndNil(Self.ApiEntries);
 end;
 
 procedure ErmIntReturner (Param: PServiceParam; Value: integer);
@@ -953,6 +974,49 @@ begin
     end;
   end;
 end;
+
+(* Returns custom DLL API function address by dll and function name. Caches positive results *)
+function GetDllApiAddr (const DllName, ApiName: string): {n} pointer;
+var
+{n} DllApiInfo: TDllApiInfo;
+    DllHandle:  Windows.THandle;
+    Temp:       integer;
+
+begin
+  result     := nil;
+  DllApiInfo := DllApiCache[DllName];
+
+  if DllApiInfo = nil then begin
+    if FindChar('.', DllName, Temp) then begin
+      DllHandle := Windows.LoadLibraryA(pchar(DllName));
+    end else begin
+      DllHandle := Windows.LoadLibraryA(pchar(DllName + '.era'));
+
+      if DllHandle = 0 then begin
+        DllHandle := Windows.LoadLibraryA(pchar(DllName + '.dll'));
+      end;
+    end;
+
+    if DllHandle <> 0 then begin
+      DllApiInfo                     := TDllApiInfo.Create(DllHandle);
+      DllApiInfo.ApiEntries[DllName] := DllApiInfo;
+    end;
+  end;
+
+  if DllApiInfo = nil then begin
+    exit;
+  end;
+
+  result := DllApiInfo.ApiEntries[ApiName];
+
+  if result = nil then begin
+    result := Windows.GetProcAddress(DllApiInfo.DllHandle, pchar(ApiName));
+
+    if result <> nil then begin
+      DllApiInfo.ApiEntries[ApiName] := result;
+    end;
+  end;
+end; // .
 
 function GetAdditionalCmdHandler (CmdId: word): {n} TErmCmdHandler;
 var
@@ -2031,6 +2095,9 @@ end;
 
 function SN_F (NumParams: integer; Params: PServiceParams; var Error: string): boolean;
 var
+    BufPtr:   pchar;
+    Scanner:  pchar;
+    DllName:  string;
     ApiName:  string;
 {n} ApiFunc:  pointer;
     CallConv: integer;
@@ -2043,19 +2110,42 @@ begin
     Error := 'Invalid command syntax. Valid syntax is !!SN:F^API function name^/possible parameters...';
   end else begin
     CallConv := ERA_CALLCONV_CDECL_OR_STDCALL;
+    BufPtr   := Params[0].Value.pc;
+    ApiFunc := nil;
 
-    if (Params[0].Value.pc <> nil) and (Params[0].Value.pc^ = '.') then begin
-      CallConv := ERA_CALLCONV_CDECL_OR_STDCALL + ERA_CALLCONV_FLOAT_RES;
-      ApiName  := pchar(@Params[0].Value.pc[1]);
-    end else begin
-      ApiName  := Params[0].Value.pc;
-    end;
-
-    ApiFunc := GetCombinedApiAddr(ApiName);
-    result  := ApiFunc <> nil;
+    result := BufPtr <> nil;
 
     if not result then begin
-      Error := 'Unknown Era/Kernel32/User32 API function: "' + ApiName + '"';
+      Error := 'Cannot call function with empty name';
+      exit;
+    end;
+
+    // "." prefix changes result to float
+    if BufPtr^ = '.' then begin
+      CallConv := ERA_CALLCONV_CDECL_OR_STDCALL + ERA_CALLCONV_FLOAT_RES;
+      Inc(BufPtr);
+    end;
+
+    // Support "DllName:FuncName" syntax for arbitrary DLL or *.era plugin
+    Scanner := BufPtr;
+
+    while not (Scanner^ in [#0, ':']) do begin
+      Inc(Scanner);
+    end;
+
+    if Scanner^ = ':' then begin
+      DllName := StrLib.BufToStr(BufPtr, integer(Scanner) - integer(BufPtr));
+      ApiName := pchar(@Scanner[1]);
+      ApiFunc := GetDllApiAddr(DllName, ApiName);
+    end else begin
+      ApiName := BufPtr;
+      ApiFunc := GetCombinedApiAddr(ApiName);
+    end;
+
+    result := ApiFunc <> nil;
+
+    if not result then begin
+      Error := 'The requested API function was not found: "' + BufPtr + '"';
     end else begin
       CallProc(integer(ApiFunc), CallConv, @Params[1].Value.v, NumParams - 1, sizeof(Params[0]));
     end;
@@ -3671,6 +3761,7 @@ begin
   Kernel32Handle := Windows.LoadLibraryW('kernel32.dll');
   User32Handle   := Windows.LoadLibraryW('user32.dll');
   ApiCache       := DataLib.NewDict(not Utils.OWNS_ITEMS, DataLib.CASE_SENSITIVE);
+  DllApiCache    := DataLib.NewDict(Utils.OWNS_ITEMS, DataLib.CASE_INSENSITIVE);
 
   New(Mp3TriggerContext);
   Slots             := AssocArrays.NewStrictObjArr(TSlot);
