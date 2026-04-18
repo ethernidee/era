@@ -262,7 +262,7 @@ type
 var
 (* Cached exported stdcall API of Era.dll and kernel32.dll *)
 {O} ApiCache:       {U} TDict {of Era/kernel32/user32 API function name => API function address};
-{O} DllApiCache:    {O} TDict {of dll name with extension => TDllApiInfo};
+{O} DllApiCache:    {O} TDict {of dll name => TDllApiInfo};
     Kernel32Handle: Windows.THandle;
     User32Handle:   Windows.THandle;
 
@@ -998,8 +998,8 @@ begin
     end;
 
     if DllHandle <> 0 then begin
-      DllApiInfo                     := TDllApiInfo.Create(DllHandle);
-      DllApiInfo.ApiEntries[DllName] := DllApiInfo;
+      DllApiInfo           := TDllApiInfo.Create(DllHandle);
+      DllApiCache[DllName] := DllApiInfo;
     end;
   end;
 
