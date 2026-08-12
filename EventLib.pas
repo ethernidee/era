@@ -11,6 +11,11 @@ uses
 
 
 type
+  POnBeforeFastQuitToGameMenuEvent = ^TOnBeforeFastQuitToGameMenuEvent;
+  TOnBeforeFastQuitToGameMenuEvent = packed record
+    TargetScreen: integer;
+  end;
+
   POnBeforeLoadGameEvent = ^TOnBeforeLoadGameEvent;
   TOnBeforeLoadGameEvent = packed record
     FileName: pchar;

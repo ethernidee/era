@@ -631,7 +631,34 @@ procedure Splice_ExecuteManager (OrigFunc: pointer; This: pointer); stdcall;
 var
   ExceptionRegistration: TDelphiExceptionRegistration;
   Left:                  boolean;
+  IsFastQuit:            boolean;
   ShouldFastQuit:        boolean;
+  FastQuitEvent:         EventLib.TOnBeforeFastQuitToGameMenuEvent;
+
+  procedure NormalizeFastQuitState;
+  const
+    ADV_MANAGER_PTR          = $6992B8;
+    IN_COMBAT_FLAG           = $699590;
+    ADV_DISPOSAL_MODE        = $699598;
+    MON_ATTACK_OBJ_INDEX_OFS = $218;
+    MON_ATTACK_FRAME_OFS     = $21C;
+    MON_ATTACK_FLIP_OFS      = $220;
+
+  var
+    AdvManager: pointer;
+
+  begin
+    pboolean(IN_COMBAT_FLAG)^    := false;
+    pinteger(ADV_DISPOSAL_MODE)^ := 0;
+
+    AdvManager := ppointer(ADV_MANAGER_PTR)^;
+
+    if AdvManager <> nil then begin
+      pinteger(integer(AdvManager) + MON_ATTACK_OBJ_INDEX_OFS)^ := -1;
+      pinteger(integer(AdvManager) + MON_ATTACK_FRAME_OFS)^     := -1;
+      pinteger(integer(AdvManager) + MON_ATTACK_FLIP_OFS)^      := 0;
+    end;
+  end;
 
   function Leave: boolean;
   begin
@@ -651,6 +678,15 @@ var
           end;
 
           Erm.FireErmEvent(Erm.TRIGGER_ONGAMELEAVE);
+
+          if IsFastQuit then begin
+            try
+              EventMan.GetInstance.Fire('OnBeforeFastQuitToGameMenu', @FastQuitEvent, sizeof(FastQuitEvent));
+            finally
+              NormalizeFastQuitState;
+            end;
+          end;
+
           EventMan.GetInstance.Fire('OnGameLeft');
         end;
       end;
@@ -662,7 +698,9 @@ var
 begin
   Inc(MainGameLoopDepth);
   Left           := false;
+  IsFastQuit     := false;
   ShouldFastQuit := false;
+  FastQuitEvent.TargetScreen := 0;
 
   try
     EnhanceExceptionHandler(@ExceptionRegistration);
@@ -677,6 +715,8 @@ begin
     if (ExceptionRecord.ExceptionCode = EXCEPTION_CODE_ERA) and (ExceptionArgs[0] = EXCEPTION_ERA_FAST_QUIT_TO_GAME_MENU) then begin
       Erm.PerformCleanupOnExceptions := false;
       Heroes.MainMenuTarget^         := ExceptionArgs[1];
+      IsFastQuit                     := true;
+      FastQuitEvent.TargetScreen     := ExceptionArgs[1];
       ShouldFastQuit                 := not Leave;
     end else begin
       Tweaks.ProcessUnhandledException(ExceptionRecord, ExceptionContext);
