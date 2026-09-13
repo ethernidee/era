@@ -1422,33 +1422,45 @@ end;
 
 function DrawCharacterToPcx (Font: Heroes.PFontItem; Ch: integer; Canvas: Heroes.PPcx16Item; x, y: integer; ColorInd: integer): Heroes.PPcx16Item;
 var
-  CharWidth:       integer;
-  FontHeight:      integer;
-  CharPixelPtr:    pbyte;
-  OutRowStartPtr:  pword;
-  OutPixelPtr:     pword;
-  BytesPerPixel:   integer;
-  CharPixel:       integer;
-  Color32:         integer;
-  CurrColor32:     integer;
-  ShadowColor32:   integer;
-  ColorOpacity:    integer;
-  i, j:            integer;
-  c:               char;
+{n} Palette32Colors: Heroes.PPalette32Colors;
+    CharWidth:       integer;
+    FontHeight:      integer;
+    CharPixelPtr:    pbyte;
+    OutRowStartPtr:  pword;
+    OutPixelPtr:     pword;
+    BytesPerPixel:   integer;
+    CharPixel:       integer;
+    Color32:         integer;
+    CurrColor32:     integer;
+    ShadowColor32:   integer;
+    ColorOpacity:    integer;
+    i, j:            integer;
+    c:               char;
 
 begin
-  result := Heroes.PPcx16Item(Ch); // Vanilla code. Like error marker?
+  Palette32Colors := nil;
+  result          := Heroes.PPcx16Item(Ch); // Vanilla code. Like error marker?
 
   if (Ch >= 0) and (Ch <= 255) then begin
-    BytesPerPixel := Heroes.BytesPerPixelPtr^;
-    c             := chr(Ch);
-    CharWidth     := Font.CharInfos[c].Width;
-    FontHeight    := Font.Height;
-    ShadowColor32 := GraphTypes.Color16To32(Font.Palette16.Colors[32]);
-    CurrColor32   := CurrColor;
+    BytesPerPixel   := Heroes.BytesPerPixelPtr^;
+    c               := chr(Ch);
+    CharWidth       := Font.CharInfos[c].Width;
+    FontHeight      := Font.Height;
+    Palette32Colors := Font.GetPalette32Colors;
+    ShadowColor32   := GraphTypes.Color16To32(Font.Palette16.Colors[32]);
+
+    if Palette32Colors <> nil then begin
+      ShadowColor32 := Palette32Colors[32].Value;
+    end;
+
+    CurrColor32 := CurrColor;
 
     if CurrColor32 = DEF_COLOR then begin
       CurrColor32 := GraphTypes.Color16To32(Font.Palette16.Colors[ColorInd]);
+
+      if Palette32Colors <> nil then begin
+        CurrColor32 := Palette32Colors[ColorInd].Value;
+      end;
     end;
 
     if (CharWidth > 0) and (FontHeight > 0) then begin

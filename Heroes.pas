@@ -35,9 +35,10 @@ const
   PCX24_BYTES_PER_COLOR = PCX24_COLOR_DEPTH div 8;
 
   (* Resource types in resource tree *)
-  RES_TYPE_PCX_8  = $10;
-  RES_TYPE_PCX_24 = $11;
-  RES_TYPE_PCX_16 = $12;
+  RES_TYPE_PCX_8      = $10;
+  RES_TYPE_PCX_24     = $11;
+  RES_TYPE_PCX_16     = $12;
+  RES_TYPE_PALETTE_32 = $61;
 
   (* Text alignment in dialogs *)
   TEXT_ALIGN_LEFT   = 0;
@@ -545,17 +546,34 @@ type
     Red:   byte;
   end;
 
+  PPalette32Color = ^TPalette32Color;
+  TPalette32Color = packed record
+   case boolean of
+    false: (
+      Alpha: byte;
+      Blue:  byte;
+      Green: byte;
+      Red:   byte;
+    );
+    true: (Value: integer);
+  end;
+
   PPalette16Colors = ^TPalette16Colors;
   TPalette16Colors = array [0..255] of TPalette16Color;
 
   PPalette24Colors = ^TPalette24Colors;
   TPalette24Colors = array [0..255] of TPalette24Color;
 
+  PPalette32Colors = ^TPalette32Colors;
+  TPalette32Colors = array [0..255] of TPalette32Color;
+
   {$ALIGN OFF}
   PPalette16 = ^TPalette16;
   TPalette16 = object (TBinaryTreeItem)
    public
     Colors: TPalette16Colors;
+
+    procedure Init; // constructor
   end;
   {$ALIGN ON}
 
@@ -564,6 +582,8 @@ type
   TPalette24 = object (TBinaryTreeItem)
    public
     Colors: TPalette24Colors;
+
+    procedure Init; // constructor
   end;
   {$ALIGN ON}
 
@@ -582,6 +602,8 @@ type
     CharDataOffsets: array [#0..#255] of integer;
     Palette16:       TPalette16;
     CharsDataPtr:    Utils.PEndlessByteArr;
+
+    function GetPalette32Colors: {n} PPalette32Colors;
   end; // .object TFontItem
   {$ALIGN ON}
 
@@ -1669,6 +1691,16 @@ begin
   Self.Enqueue(@InputMessage);
 end;
 
+procedure TPalette16.Init;
+begin
+  ApiJack.CallThis(Ptr($522B40), int(@Self));
+end;
+
+procedure TPalette24.Init;
+begin
+  ApiJack.CallThis(Ptr($523320), int(@Self));
+end;
+
 procedure SendNetData (DestPlayerId, MsgId: integer; {n} Data: pointer; DataSize: integer);
 var
   NetDataBuf: Utils.TArrayOfByte;
@@ -2010,6 +2042,15 @@ begin
   ApiJack.CallThis(Ptr($55DDF0), int(@Self), int(@ResPtrs), int(@NewItem));
 end;
 
+function TFontItem.GetPalette32Colors: {n} PPalette32Colors;
+begin
+  result := nil;
+  // * * * * * //
+  if Self.Palette16.ItemType = RES_TYPE_PALETTE_32 then begin
+    result := ppointer(@Self.Palette16.Colors[254])^;
+  end;
+end;
+
 function TDefItem.GetFrame (GroupInd, FrameInd: integer): {n} PDefFrame;
 var
 {U} DefGroup: PDefGroup;
@@ -2079,11 +2120,8 @@ begin
     result.PicSize         := result.BufSize;
     result.Buffer          := MemAlloc(result.BufSize);
 
-    System.FillChar(result.Palette16, sizeof(TBinaryTreeItem), #0);
-    result.Palette16.RefCount := -1;
-
-    System.FillChar(result.Palette24, sizeof(TBinaryTreeItem), #0);
-    result.Palette24.RefCount := -1;
+    result.Palette16.Init;
+    result.Palette24.Init;
   end; // .if
 end; // .function TPcx8ItemStatic.Create
 
