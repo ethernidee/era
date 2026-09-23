@@ -49,6 +49,7 @@ const
   ERM_SCRIPTS_SECTION      = 'Era.ErmScripts';
   ERT_STRINGS_SECTION      = 'Era.ErtStrings';
   GLOBAL_CONSTS_SECTION    = 'Era.GlobalConsts';
+  ERM_W_SECTION            = 'Era.ErmW';
   FUNC_NAMES_SECTION       = 'Era.FuncNames';
   ERM_SCRIPTS_PATH         = 'Data\s';
   ERS_FILES_PATH           = 'Data\s';
@@ -357,12 +358,12 @@ type
   TErmCmdParam = packed record
     Value:    integer;
     {
-    [4 bits]  Type:             TErmValType;  // ex: y5;  y5 - type
-    [4 bits]  IndexedPartType:  TErmValType;  // ex: vy5; y5 - indexed part;
-    [3 bits]  CheckType:        TErmCheckType;
-    [1 bit]   NeedsInterpolation: boolean; // For I-type determines, if string has % character
-    [1 bit]   HasCurrDayModifier: boolean; // true if "c" modifier was used before parameter
-    [1 bit]   CanBeFastIntEvaled: boolean; // true if it's v/y/x variable with valid known index
+    [4 bits]  Type:               TErmValType;  // ex: y5;  y5 - type
+    [4 bits]  IndexedPartType:    TErmValType;  // ex: vy5; y5 - indexed part;
+    [3 bits]  CheckType:          TErmCheckType;
+    [1 bit]   NeedsInterpolation: boolean;      // For I-type determines, if string has % character
+    [1 bit]   HasCurrDayModifier: boolean;      // true if "c" modifier was used before parameter
+    [1 bit]   CanBeFastIntEvaled: boolean;      // true if it's v/y/x variable with valid known index
     }
     ValType:  integer;
 
@@ -538,8 +539,10 @@ type
 
   PErmVVars      = ^TErmVVars;
   TErmVVars      = array [1..10000] of integer;
+  POldWVars      = ^TOldWVars;
+  TOldWVars      = array [0..155, 1..200] of integer;
   PWVars         = ^TWVars;
-  TWVars         = array [0..255, 1..200] of integer;
+  TWVars         = array [0..High(integer) div (200 * sizeof(integer)) - 1, 1..200] of integer;
   TErmZVar       = array [0..511] of char;
   PErmZVars      = ^TErmZVars;
   TErmZVars      = array [1..1000] of TErmZVar;
@@ -686,7 +689,6 @@ const
   MULTI_PURPOSE_DLG_CUSTOM_DATA_ID = 846251802; // Unique ZVS custom data ID for exported multipurpose dialog ID
 
 type
-
   PZvsCustomDlgData = ^TZvsCustomDlgData;
   TZvsCustomDlgData = packed record
     ItemType:      integer;
@@ -705,19 +707,22 @@ type
   PZvsCustomDlgDataArr = ^TZvsCustomDlgDataArr;
   TZvsCustomDlgDataArr = packed array [0..1000] of TZvsCustomDlgData;
 
+var
+  w: PWVars = Ptr($A4AB10); // New w-variables, supporting real number of heroes, which may be extended by plugins. By default point to a static WoG buffer.
+
 const
   (* WoG vars *)
   QuickVars: PErmQuickVars = Ptr($27718D0);
-  v:  PErmVVars = Ptr($887668);
-  w:  PWVars    = Ptr($A4AB10);
-  z:  PErmZVars = Ptr($9273E8);
-  y:  PErmYVars = Ptr($A48D80);
-  x:  PErmXVars = Ptr($91DA38);
-  f:  PErmFlags = Ptr($91F2E0);
-  e:  PErmEVars = Ptr($A48F18);
-  nz: PErmNZVars = Ptr($A46D28);
-  ny: PErmNYVars = Ptr($A46A30);
-  ne: PErmNEVars = Ptr($27F93B8);
+  v:    PErmVVars  = Ptr($887668);
+  OldW: POldWVars  = Ptr($A4AB10); // TODO: Reuse this array of [156][200] of integers for other purposes in the future as a static buffer and remove Saver(ERMVarH,sizeof(ERMVarH)
+  z:    PErmZVars  = Ptr($9273E8);
+  y:    PErmYVars  = Ptr($A48D80);
+  x:    PErmXVars  = Ptr($91DA38);
+  f:    PErmFlags  = Ptr($91F2E0);
+  e:    PErmEVars  = Ptr($A48F18);
+  nz:   PErmNZVars = Ptr($A46D28);
+  ny:   PErmNYVars = Ptr($A46A30);
+  ne:   PErmNEVars = Ptr($27F93B8);
 
   ZvsIsGameLoading:           PBOOLEAN               = Ptr($A46BC0);
   ZvsTriggerIfs:              PZvsTriggerIfs         = Ptr($A46D18);
@@ -967,6 +972,8 @@ const
 
   FIRST_LOCAL_ERT_INDEX = 1000000000;
   LAST_LOCAL_ERT_INDEX  = 2000000000;
+
+  MAX_HEROES_FOR_W_VARS = 65536;
 
 type
   PCachedSubCmdParams = ^TCachedSubCmdParams;
@@ -4400,8 +4407,8 @@ begin
         PARAM_VARTYPE_W: begin
           ValType := VALTYPE_INT;
 
-          if (result < Low(w^[0])) or (result > High(w^[0])) then begin
-            ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(w^[0]), High(w^[0])]));
+          if (result < Low(w[0])) or (result > High(w[0])) then begin
+            ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [result, Low(w[0]), High(w[0])]));
             ResValType := VALTYPE_ERROR; result := 0; exit;
           end;
 
@@ -4619,8 +4626,8 @@ begin
       PARAM_VARTYPE_W: begin
         ValType := VALTYPE_INT;
 
-        if (Value < Low(w^[0])) or (Value > High(w^[0])) then begin
-          ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [Value, Low(w^[0]), High(w^[0])]));
+        if (Value < Low(w[0])) or (Value > High(w[0])) then begin
+          ShowErmError(Format('Invalid v-var index %d. Expected %d..%d', [Value, Low(w[0]), High(w[0])]));
           result := false; exit;
         end;
 
@@ -9226,16 +9233,54 @@ begin
   end;
 end;
 
+procedure DoSaveErmHeroVars;
+begin
+  with Stores.NewRider(ERM_W_SECTION) do begin
+    WriteInt(Heroes.NumHeroes^);
+    Write(Heroes.NumHeroes^ * sizeof(w[0]), @w[0]);
+  end;
+end;
+
+procedure DoLoadErmHeroVars;
+var
+  SavegameNumHeroes: integer;
+  NumHeroesToCopy:   integer;
+
+begin
+  with Stores.NewRider(ERM_W_SECTION) do begin
+    SavegameNumHeroes := Math.Min(MAX_HEROES_FOR_W_VARS, ReadInt);
+    {!} Assert(SavegameNumHeroes >= 0, 'Invalid maximum number of heroes stored in savegame: ' + SysUtils.IntToStr(SavegameNumHeroes));
+
+    // Temporal legacy support for old version savegame
+    if SavegameNumHeroes = 0 then begin
+      // Copy data from old static buffer the the new, larger dynamic one if necessary
+      if w <> pointer(OldW) then begin
+        {!} Assert(Heroes.NumHeroes^ > Length(OldW^));
+        Utils.ZeroMem(Heroes.NumHeroes^ * sizeof(w[0]), @w[0]);
+        Utils.CopyMem(Length(OldW^) * sizeof(w[0]), @OldW[0], @w[0]);
+      end;
+    end
+    // New version savegame
+    else begin
+      Utils.ZeroMem(Heroes.NumHeroes^ * sizeof(w[0]), @w[0]);
+      NumHeroesToCopy := Alg.ToRange(SavegameNumHeroes, 0, Heroes.NumHeroes^);
+      Read(NumHeroesToCopy * sizeof(w[0]), @w[0]);
+    end;
+  end;
+end;
+
 procedure OnSavegameWrite (Event: PEvent); stdcall;
 begin
   DoSaveErtStrings;
   DoSaveGlobalConsts;
+  DoSaveErmHeroVars;
 end;
 
 procedure OnSavegameRead (Event: PEvent); stdcall;
 begin
   DoLoadErtStrings;
   DoLoadGlobalConsts;
+  DoLoadErmHeroVars;
 end;
 
 procedure OnGenerateDebugInfo (Event: PEvent); stdcall;
@@ -9636,6 +9681,14 @@ begin
   MonNamesTablesBack[1]      := MonNamesPluralTableBack;
   MonNamesTablesBack[2]      := MonNamesSpecialtyTableBack;
   SpellSettingsTable         := GameExt.GetRealAddr(SpellSettingsTable);
+
+  // Use static WoG array for hero variables unless maximum hero number exceeds array capacity.
+  // In this case create new dynamical array for exact required number of heroes
+  w := pointer(OldW);
+
+  if Heroes.NumHeroes^ > Length(OldW^) then begin
+    GetMem(w, Heroes.NumHeroes^ * sizeof(OldW[0]));
+  end;
 end; // .procedure OnAfterStructRelocations
 
 begin

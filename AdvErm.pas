@@ -3489,10 +3489,10 @@ begin
   DumpVars('Vars v1..v10000', 'v', INT_VAR, @Erm.v[1], 10000, 1);
   WriteSectionHeader('Hero vars w1..w200');
 
-  for i := 0 to High(Erm.w^) do begin
+  for i := 0 to Heroes.NumHeroes^ - 1 do begin
     LineEnd;
     Line('; Hero #' + IntToStr(i));
-    DumpVars('', 'w', INT_VAR, @Erm.w[i, 1], 200, 1);
+    DumpVars('', 'w', INT_VAR, @Erm.w[i, 1], Length(Erm.w[0]), 1);
   end;
 
   DumpVars('Vars z1..z1000', 'z', STR_VAR, @Erm.z[1], 1000, 1);
